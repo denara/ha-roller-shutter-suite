@@ -1,0 +1,59 @@
+# Home Assistant names that are known to be deprecated and must not be
+# referenced by this integration or its tests. Read by
+# scripts/check_deprecated_names.py; the format is explained there.
+#
+# This list is meant to grow: whoever learns of a deprecation that concerns this
+# integration adds it here, with the source. It is a second net, not the first:
+# the log guard of the Home Assistant tests catches what Home Assistant reports
+# at runtime, this list also catches names that Home Assistant keeps as silent
+# compatibility shims.
+#
+# kind = "identifier": the name is unusual enough to be forbidden wherever it
+#   appears as a variable, attribute, imported name or keyword argument.
+# kind = "module": importing the module (or anything below it) is forbidden.
+# kind = "attribute": the name is common (`hass.config_entries` is fine), so it
+#   is forbidden only as an attribute of the class named in `owner`: on the
+#   class itself and on variables and parameters annotated with it.
+
+[[deprecated]]
+kind = "identifier"
+name = "show_advanced_options"
+reason = "FlowHandler.show_advanced_options is deprecated since 2026-05-26 and removed in Home Assistant Core 2027.6."
+replacement = "Group additional options in sections of the form."
+
+[[deprecated]]
+kind = "identifier"
+name = "get_astral_location"
+reason = "homeassistant.helpers.sun.get_astral_location is deprecated and breaks in Home Assistant 2027.7."
+replacement = "get_astral_observer, or the astral library directly in the domain core."
+
+[[deprecated]]
+kind = "identifier"
+name = "get_location_astral_event_next"
+reason = "Belongs to the deprecated location-based sun helpers of homeassistant.helpers.sun."
+replacement = "The observer-based helpers of homeassistant.helpers.sun."
+
+[[deprecated]]
+kind = "module"
+name = "voluptuous"
+reason = "Home Assistant Core 2026.9 depends on probatio and no longer lists voluptuous."
+replacement = "probatio"
+
+[[deprecated]]
+kind = "attribute"
+owner = "DeviceEntry"
+name = "config_entries"
+reason = "A device belongs to exactly one config entry since Home Assistant 2026.8; the property is a silent compatibility shim in Core 2026.9.2."
+replacement = "DeviceEntry.config_entry_id"
+
+[[deprecated]]
+kind = "identifier"
+name = "config_entries_subentries"
+reason = "Silent compatibility shim of DeviceEntry in Core 2026.9.2; a device belongs to one config entry and at most one subentry."
+replacement = "DeviceEntry.config_entry_id and DeviceEntry.config_subentry_id"
+
+[[deprecated]]
+kind = "identifier"
+name = "primary_config_entry"
+reason = "Silent compatibility shim of DeviceEntry in Core 2026.9.2; a device belongs to one config entry."
+replacement = "DeviceEntry.config_entry_id"
