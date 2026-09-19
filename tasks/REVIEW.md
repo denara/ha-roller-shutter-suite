@@ -21,6 +21,7 @@ A reviewer agent has a fresh context. It reviews exactly one pull request agains
   - there is no new warning filter anywhere: `filterwarnings` is still exactly `["error"]` in every pytest configuration, no `pytest.mark.filterwarnings`, no `warnings.simplefilter` or `catch_warnings` in tests or code that hides a deprecation;
   - `tests/foreign_warnings.toml` is unchanged, or every new entry concerns a warning that originates outside this integration, has a module pattern, a category, a reason and an upstream link, and the pull request description asks the project owner explicitly to approve it;
   - no deprecated Home Assistant name is referenced; no log message was reworded to slip past the guard.
+- **Coverage is not bought:** the thresholds are 100 % for flow modules, 90 % for the Home Assistant side and 95 % for the domain core, lines and branches. Every `# pragma: no cover` or `# pragma: no branch` carries a justification on the same line; read each one the guard lists and judge whether the reason holds. The coverage configuration excludes nothing beyond the documented set.
 - **Pure domain core:** nothing under `core/` imports `homeassistant` or anything from the integration outside `core/`; the core reads no clock.
 - **Missing data is not good news:** no code path turns `unavailable` or `unknown` into a default value.
 - **Honest wording:** no reason code, entity name, log message or documentation claims that a curtain has arrived; with a calculated position only "the actuator did not react" can be known.
