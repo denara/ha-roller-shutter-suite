@@ -84,7 +84,7 @@ def _full_state() -> WindowState:
                 "storm",
                 status=ProtectionEventStatus.ACTIVE,
                 active_since=NOW - timedelta(hours=1),
-                released=False,
+                released_at=NOW - timedelta(minutes=30),
                 remembered_position=Position(100),
                 remembered_owner=PositionOwner.ENGINE,
             ),
@@ -266,6 +266,7 @@ def test_every_persisted_part_round_trips(value: Any) -> None:
             "storm", status=ProtectionEventStatus.ACTIVE, active_since=NAIVE
         ),
         lambda: ProtectionEventState("storm", ended_at=NAIVE),
+        lambda: ProtectionEventState("storm", released_at=NAIVE),
         lambda: ShadingEpisodeState(active_since=NAIVE),
         lambda: ShadingEpisodeState(rain_lock_until=NAIVE),
         lambda: SolarHeatingEpisodeState(NAIVE),
@@ -315,6 +316,7 @@ def test_datetime_with_a_tzinfo_that_gives_no_offset_is_rejected() -> None:
         ("person_at_window", "ends_at"),
         ("protection_events", 0, "active_since"),
         ("protection_events", 1, "ended_at"),
+        ("protection_events", 0, "released_at"),
         ("shading_episode", "active_since"),
         ("shading_episode", "rain_lock_until"),
         ("solar_heating_episode", "active_since"),
@@ -554,20 +556,29 @@ def test_protection_event_state_is_consistent() -> None:
 @pytest.mark.parametrize("active", [True, False], ids=["active", "inactive"])
 @pytest.mark.parametrize("released", [True, False], ids=["released", "not released"])
 @pytest.mark.parametrize("ended", [True, False], ids=["ended at", "no end"])
-def test_ended_at_of_a_protection_event_in_every_combination(
-    *, active: bool, released: bool, ended: bool
+@pytest.mark.parametrize("zone", ["offset", "repeated hour"])
+def test_end_and_release_of_a_protection_event_in_every_combination(
+    *, active: bool, released: bool, ended: bool, zone: str
 ) -> None:
-    """Only an active event that was not released refuses an "ended at"."""
+    """Only "active" and "ended at" exclude each other; the release is separate."""
+    if zone == "offset":
+        release, end = LOCAL, LOCAL + timedelta(hours=1)
+    else:
+        paris = ZoneInfo("Europe/Paris")
+        release = datetime(2026, 10, 25, 2, 30, tzinfo=paris, fold=0)
+        end = datetime(2026, 10, 25, 2, 30, tzinfo=paris, fold=1)
+    # Compare in UTC: across zones, a time in the repeated hour never compares equal.
+    release_utc, end_utc = release.astimezone(UTC), end.astimezone(UTC)
     arguments: dict[str, Any] = {
         "status": (
             ProtectionEventStatus.ACTIVE if active else ProtectionEventStatus.INACTIVE
         ),
-        "active_since": NOW - timedelta(hours=13) if active else None,
-        "released": released,
-        "ended_at": LOCAL if ended else None,
+        "active_since": NOW - timedelta(days=200) if active else None,
+        "released_at": release if released else None,
+        "ended_at": end if ended else None,
     }
-    if active and ended and not released:
-        with pytest.raises(ValueError, match="unless the watchdog released it"):
+    if active and ended:
+        with pytest.raises(ValueError, match="has not ended"):
             ProtectionEventState("storm", **arguments)
         return
 
@@ -575,9 +586,59 @@ def test_ended_at_of_a_protection_event_in_every_combination(
     restored = ProtectionEventState.from_data(json.loads(json.dumps(event.to_data())))
 
     assert restored == event
-    assert (event.ended_at is not None) is ended
+    assert hash(restored) == hash(event)
+    assert event.released is released
+    assert "released" not in event.to_data()
+    if released:
+        assert event.released_at == release_utc
+        assert event.released_at is not None
+        assert event.released_at.utcoffset() == timedelta(0)
+        assert event.return_clock_start == release_utc
+    elif ended:
+        assert event.return_clock_start == end_utc
+    else:
+        assert event.return_clock_start is None
+
+
+def test_inactive_protection_event_is_not_active_since_a_time() -> None:
+    """The start time belongs to an active event only."""
     with pytest.raises(ValueError, match="not active since"):
         ProtectionEventState("storm", active_since=NOW)
+
+
+def test_released_is_a_read_only_view_of_the_release_time() -> None:
+    """One source of truth: there is no flag that could contradict the time."""
+    event: Any = ProtectionEventState(
+        "storm",
+        status=ProtectionEventStatus.ACTIVE,
+        active_since=NOW,
+        released_at=NOW,
+    )
+    construct: Any = ProtectionEventState
+
+    assert event.released is True
+    with pytest.raises(AttributeError):
+        event.released = False
+    with pytest.raises(TypeError):
+        construct("storm", released=True)
+
+
+@pytest.mark.parametrize(
+    ("value", "message"),
+    [
+        (NAIVE_TEXT, "released_at: .*timezone-aware"),
+        (True, "released_at: expected a string"),
+        ("soon", "released_at"),
+    ],
+)
+def test_malformed_release_time_in_persisted_data_is_rejected(
+    value: object, message: str
+) -> None:
+    """The release time is read as strictly as every other timestamp."""
+    with pytest.raises(ValueError, match=message):
+        WindowState.from_data(_changed(("protection_events", 0, "released_at"), value))
+    with pytest.raises(ValueError, match="unknown key 'released'"):
+        WindowState.from_data(_changed(("protection_events", 0, "released"), True))
 
 
 def test_command_backoff_is_persisted_as_facts() -> None:
@@ -662,8 +723,8 @@ def test_parts_of_the_state_check_their_types() -> None:
         ProtectionEventState("")
     with pytest.raises(TypeError, match="status"):
         ProtectionEventState("storm", status=bad)
-    with pytest.raises(TypeError, match="released"):
-        ProtectionEventState("storm", released=bad)
+    with pytest.raises(TypeError, match="release"):
+        ProtectionEventState("storm", released_at=bad)
     with pytest.raises(TypeError, match="remembered position"):
         ProtectionEventState("storm", remembered_position=bad)
     with pytest.raises(TypeError, match="remembered owner"):

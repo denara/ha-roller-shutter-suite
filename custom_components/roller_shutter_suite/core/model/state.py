@@ -270,14 +270,20 @@ class PersonAtWindowDam:
 class ProtectionEventState:
     """What is persisted per protection event.
 
-    An active event has ``active_since``. It has no ``ended_at``, with one
-    exception: an event that the watchdog released (``released`` is true) is
-    still active, because its trigger is, and its ``ended_at`` is the time of
-    the release, from which the waiting time of the return runs. An inactive
-    event has no ``active_since``; its ``ended_at`` is the time its last
-    activation ended, or ``None`` if it never was active or the return after
-    the event has been completed. The end time is persisted, not a deadline: the waiting
-    time after the end is configuration and is applied when it is evaluated.
+    - An active event has ``active_since`` and no ``ended_at``.
+    - An inactive event has no ``active_since``; its ``ended_at`` is the time
+      its last activation ended, or ``None`` if it never was active or the
+      return after the event has been completed.
+    - ``released_at`` is the time at which the watchdog released the event. A
+      released event is still active as long as its trigger is; an inactive
+      event can still carry ``released_at`` if it was released before its
+      trigger ended. ``released`` is the read-only view "``released_at`` is
+      set"; there is no second flag that could contradict it.
+
+    End and release are persisted as times, not as deadlines: the waiting time
+    of the return is configuration and is applied when it is evaluated. It
+    runs from :attr:`return_clock_start`: the release if there was one,
+    otherwise the end.
 
     The remembered position and owner are those the window had when the event
     started; a position that was not known is ``None``.
@@ -287,7 +293,7 @@ class ProtectionEventState:
     status: ProtectionEventStatus = ProtectionEventStatus.INACTIVE
     active_since: datetime | None = None
     ended_at: datetime | None = None
-    released: bool = False
+    released_at: datetime | None = None
     remembered_position: Position | None = None
     remembered_owner: PositionOwner | None = None
 
@@ -308,18 +314,33 @@ class ProtectionEventState:
         if self.status is ProtectionEventStatus.ACTIVE:
             if self.active_since is None:
                 raise ValueError("an active protection event states since when")
-            if self.ended_at is not None and not self.released:
-                raise ValueError(
-                    "an active protection event has not ended, unless the "
-                    "watchdog released it"
-                )
+            if self.ended_at is not None:
+                raise ValueError("an active protection event has not ended")
         elif self.active_since is not None:
             raise ValueError("an inactive protection event is not active since a time")
-        require_type(self.released, bool, "the released flag of an event")
+        object.__setattr__(
+            self,
+            "released_at",
+            to_utc_or_none(self.released_at, "the release of a protection event"),
+        )
         if self.remembered_position is not None:
             require_type(self.remembered_position, Position, "the remembered position")
         if self.remembered_owner is not None:
             require_type(self.remembered_owner, PositionOwner, "the remembered owner")
+
+    @property
+    def released(self) -> bool:
+        """Return whether the watchdog released the event."""
+        return self.released_at is not None
+
+    @property
+    def return_clock_start(self) -> datetime | None:
+        """Return the time from which the waiting time of the return runs.
+
+        It is the release if the watchdog released the event, otherwise the
+        end of the event; ``None`` if there is neither.
+        """
+        return self.released_at if self.released_at is not None else self.ended_at
 
     def to_data(self) -> JsonObject:
         """Return plain data for persistence."""
@@ -328,7 +349,7 @@ class ProtectionEventState:
             "status": self.status.value,
             "active_since": datetime_data(self.active_since),
             "ended_at": datetime_data(self.ended_at),
-            "released": self.released,
+            "released_at": datetime_data(self.released_at),
             "remembered_position": _position_data(self.remembered_position),
             "remembered_owner": (
                 None if self.remembered_owner is None else self.remembered_owner.value
@@ -344,7 +365,7 @@ class ProtectionEventState:
             "status",
             "active_since",
             "ended_at",
-            "released",
+            "released_at",
             "remembered_position",
             "remembered_owner",
         )
@@ -353,7 +374,7 @@ class ProtectionEventState:
             status=read(content, "status", as_enum(ProtectionEventStatus)),
             active_since=read(content, "active_since", optional(as_datetime)),
             ended_at=read(content, "ended_at", optional(as_datetime)),
-            released=read(content, "released", as_bool),
+            released_at=read(content, "released_at", optional(as_datetime)),
             remembered_position=read(
                 content, "remembered_position", optional(_as_position)
             ),
