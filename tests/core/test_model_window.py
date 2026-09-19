@@ -7,12 +7,17 @@ from typing import Any
 import pytest
 
 from custom_components.roller_shutter_suite.core.model import (
+    DEFAULT_TOLERANCE_CALCULATED,
+    DEFAULT_TOLERANCE_MEASURED,
+    MIN_TOLERANCE,
     CapabilityProfile,
     CoveringType,
     MemberConfig,
     MemberObservation,
+    MemberState,
     MovementState,
     Observation,
+    OwnCommand,
     Position,
     PositionReference,
     PositionSource,
@@ -22,10 +27,12 @@ from custom_components.roller_shutter_suite.core.model import (
     SunPosition,
     TemperatureTier,
     TransitReporting,
+    TravelDirection,
     WindowCapabilities,
     WindowConfig,
     WindowObservation,
     WindowState,
+    WishClass,
     WorldSnapshot,
 )
 
@@ -77,6 +84,31 @@ def test_capability_profile_of_a_polled_platform_with_a_measuring_drive() -> Non
     assert profile.position_updates is PositionUpdates.LIVE
 
 
+def test_tolerance_defaults_follow_the_position_source() -> None:
+    """Section 8.3: 2 for a calculated position, 3 for a measured one, minimum 1."""
+    assert (
+        MIN_TOLERANCE,
+        DEFAULT_TOLERANCE_CALCULATED,
+        DEFAULT_TOLERANCE_MEASURED,
+    ) == (
+        1,
+        2,
+        3,
+    )
+    assert _profile().tolerance == DEFAULT_TOLERANCE_CALCULATED
+    assert (
+        _profile(position_source=PositionSource.MEASURED).tolerance
+        == DEFAULT_TOLERANCE_MEASURED
+    )
+    assert _profile(stated_tolerance=MIN_TOLERANCE).tolerance == MIN_TOLERANCE
+    assert (
+        _profile(
+            position_source=PositionSource.MEASURED, stated_tolerance=MIN_TOLERANCE
+        ).tolerance
+        == MIN_TOLERANCE
+    )
+
+
 def test_a_cover_without_position_feedback_is_a_valid_profile() -> None:
     """Feature N2: open and close only, no position, no stop."""
     profile = _profile(
@@ -100,6 +132,10 @@ def test_a_cover_without_position_feedback_is_a_valid_profile() -> None:
         ({"position_source": "measured"}, TypeError, "position source"),
         ({"reports_transit_states": True}, TypeError, "transit reporting"),
         ({"position_updates": "live"}, TypeError, "position updates"),
+        ({"stated_tolerance": 0}, ValueError, "within 1 and 100"),
+        ({"stated_tolerance": 101}, ValueError, "within 1 and 100"),
+        ({"stated_tolerance": 2.0}, TypeError, "tolerance must be an integer"),
+        ({"stated_tolerance": True}, TypeError, "tolerance must be an integer"),
     ],
 )
 def test_capability_profile_is_validated(
@@ -227,6 +263,16 @@ def test_window_capabilities_are_the_lowest_common_denominator() -> None:
     assert _window().capabilities == WindowCapabilities(True, True, True, True)
 
 
+def test_window_capabilities_validate_their_flags() -> None:
+    """An object that exists is valid: flags are booleans."""
+    bad: Any = 1
+    for position in range(4):
+        flags: list[Any] = [True, True, True, True]
+        flags[position] = bad
+        with pytest.raises(TypeError, match="the capability"):
+            WindowCapabilities(*flags)
+
+
 @pytest.mark.parametrize(
     ("changes", "error", "message"),
     [
@@ -289,17 +335,132 @@ def _observed(*members: tuple[str, Observation]) -> WindowObservation:
     )
 
 
-def test_window_view_shows_the_first_member_and_moves_with_any_member() -> None:
-    """Position of the first member; moving while any member moves."""
+TOLERANCES = {LEFT: 2, RIGHT: 2}
+
+
+def _resting(left: int | None, right: int | None) -> WindowObservation:
+    def observation(value: int | None) -> Observation:
+        position = None if value is None else Position(value)
+        return Observation(MovementState.RESTING, position)
+
+    return _observed((LEFT, observation(left)), (RIGHT, observation(right)))
+
+
+def _both(left: int | None, right: int | None) -> dict[str, Position]:
+    """Return the last commanded targets; ``None`` means never commanded."""
+    commanded = {LEFT: left, RIGHT: right}
+    return {
+        member: Position(value)
+        for member, value in commanded.items()
+        if value is not None
+    }
+
+
+def test_window_reports_movement_as_soon_as_one_member_does() -> None:
+    """Whether the movement has settled is the tracker's knowledge, not this view's."""
     window = _observed(
         (LEFT, Observation(MovementState.RESTING, Position(20))),
         (RIGHT, Observation(MovementState.MOVING_DOWN, Position(70))),
     )
 
-    assert window.position == Position(20)
-    assert window.moving is True
+    assert window.reports_movement is True
     assert window.available is True
     assert isinstance(window.members, tuple)
+    assert not hasattr(window, "moving")
+    assert _resting(20, 20).reports_movement is False
+
+
+def test_window_has_its_common_target_as_position_when_every_member_is_there() -> None:
+    """Every member within its own tolerance of its last commanded target."""
+    assert _resting(30, 31).position(_both(30, 30), TOLERANCES) == Position(30)
+    assert _resting(28, 32).position(_both(30, 30), TOLERANCES) == Position(30)
+
+
+def test_window_has_no_position_while_a_member_is_not_at_its_target() -> None:
+    """No member speaks for the window, the first one included."""
+    assert _resting(30, 70).position(_both(30, 30), TOLERANCES) is None
+    assert _resting(70, 30).position(_both(30, 30), TOLERANCES) is None
+    assert _resting(30, 33).position(_both(30, 30), TOLERANCES) is None
+
+
+def test_tolerance_is_per_member() -> None:
+    """A measured member may be three off, a calculated one only two."""
+    tolerances = {LEFT: 2, RIGHT: 3}
+
+    assert _resting(30, 33).position(_both(30, 30), tolerances) == Position(30)
+    assert _resting(33, 30).position(_both(30, 30), tolerances) is None
+
+
+def test_window_with_different_targets_per_member_has_no_single_position() -> None:
+    """Members shaded to 21 and 36 are where they should be; there is no one number."""
+    assert _resting(21, 36).position(_both(21, 36), TOLERANCES) is None
+    assert _resting(21, 22).position(_both(21, 22), TOLERANCES) is None
+
+
+def test_window_that_was_never_commanded_needs_members_that_agree() -> None:
+    """No last own command for any member: the same position within tolerance."""
+    assert _resting(50, 50).position({}, TOLERANCES) == Position(50)
+    assert _resting(50, 52).position({}, TOLERANCES) == Position(51)
+    assert _resting(50, 51).position({}, TOLERANCES) == Position(51)
+    assert _resting(50, 53).position({}, TOLERANCES) is None
+    assert _resting(50, 52).position({}, {LEFT: 3, RIGHT: 1}) is None
+
+
+def test_window_with_only_some_members_commanded_has_no_position() -> None:
+    """The fallback is for a window that was never commanded, not for a partial one."""
+    assert _resting(60, 60).position(_both(None, 60), TOLERANCES) is None
+    assert _resting(60, 60).position(_both(60, None), TOLERANCES) is None
+
+
+def test_window_has_no_position_when_a_member_reports_none() -> None:
+    """A member without feedback or an unavailable member: no window position."""
+    assert _resting(None, 30).position(_both(30, 30), TOLERANCES) is None
+    assert _resting(30, None).position({}, TOLERANCES) is None
+
+
+def test_window_position_needs_consistent_arguments() -> None:
+    """Commanded targets name members of the window; every member has a tolerance."""
+    with pytest.raises(ValueError, match="not a member of this window"):
+        _resting(1, 1).position({"cover.example_other": Position(1)}, TOLERANCES)
+    with pytest.raises(ValueError, match="no tolerance given"):
+        _resting(1, 1).position({}, {LEFT: 2})
+
+
+def test_snapshot_takes_the_commanded_targets_from_the_persisted_state() -> None:
+    """The last own command per member is persisted; the snapshot combines the two."""
+
+    def commanded(member: str, target: int) -> MemberState:
+        command = OwnCommand(
+            command_id=f"command-{member}",
+            target=Position(target),
+            direction=TravelDirection.DOWN,
+            time=NOW,
+            wish_class=WishClass.COMFORT,
+        )
+        return MemberState(member, last_own_command=command)
+
+    state = WindowState(members=[commanded(LEFT, 30), commanded(RIGHT, 30)])
+    partly = WindowState(members=[commanded(LEFT, 30), MemberState(RIGHT)])
+
+    assert state.commanded_targets == {LEFT: Position(30), RIGHT: Position(30)}
+    assert partly.commanded_targets == {LEFT: Position(30)}
+    assert WindowState().commanded_targets == {}
+    assert _snapshot(observation=_resting(30, 31), state=state).window_position(
+        TOLERANCES
+    ) == Position(30)
+    assert (
+        _snapshot(observation=_resting(30, 50), state=state).window_position(TOLERANCES)
+        is None
+    )
+    assert (
+        _snapshot(observation=_resting(30, 30), state=partly).window_position(
+            TOLERANCES
+        )
+        is None
+    )
+    assert _snapshot(observation=_resting(30, 30)).window_position(TOLERANCES) == (
+        Position(30)
+    )
 
 
 def test_window_is_available_while_one_member_is() -> None:
@@ -310,8 +471,8 @@ def test_window_is_available_while_one_member_is() -> None:
     )
 
     assert window.available is True
-    assert window.moving is False
-    assert window.position is None
+    assert window.reports_movement is False
+    assert window.position({}, TOLERANCES) is None
 
 
 def test_window_is_unavailable_when_all_members_are() -> None:
@@ -322,7 +483,7 @@ def test_window_is_unavailable_when_all_members_are() -> None:
     )
 
     assert window.available is False
-    assert window.position is None
+    assert window.position({}, TOLERANCES) is None
 
 
 def test_window_observation_is_validated() -> None:
@@ -381,7 +542,7 @@ def test_world_snapshot_carries_everything_a_recompute_may_look_at() -> None:
     assert snapshot.sun == SunPosition(azimuth=180.0, elevation=35.0)
     assert snapshot.sources["outdoor_temperature"] == SourceValue.of(4.5)
     assert snapshot.sources["window_contact"].has_value is False
-    assert snapshot.observation.position == Position(100)
+    assert snapshot.window_position({LEFT: 2}) == Position(100)
     assert snapshot.state == WindowState()
     assert snapshot == _snapshot()
 

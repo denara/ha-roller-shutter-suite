@@ -64,11 +64,11 @@ class FakeActuator:
 
     def __init__(self) -> None:
         """Start without commands."""
-        self.commands: list[tuple[str, Position]] = []
+        self.commands: list[tuple[str, str, Position]] = []
 
-    def move_to(self, member_id: str, target: Position) -> None:
+    def move_to(self, command_id: str, member_id: str, target: Position) -> None:
         """Remember the command."""
-        self.commands.append((member_id, target))
+        self.commands.append((command_id, member_id, target))
 
 
 class FakeStorage:
@@ -138,13 +138,19 @@ def test_sun_port() -> None:
 
 
 def test_actuator_port() -> None:
-    """Commands go to a member, as a position."""
+    """Commands go to a member, as a position, under an identifier."""
     fake = FakeActuator()
     actuator: Actuator = fake
 
-    actuator.move_to("cover.example_window", Position(0))
+    actuator.move_to("command-1", "cover.example_window", Position(0))
 
-    assert fake.commands == [("cover.example_window", Position(0))]
+    assert fake.commands == [("command-1", "cover.example_window", Position(0))]
+    assert list(inspect.signature(Actuator.move_to).parameters) == [
+        "self",
+        "command_id",
+        "member_id",
+        "target",
+    ]
 
 
 def test_storage_port_keeps_window_state_as_plain_data() -> None:

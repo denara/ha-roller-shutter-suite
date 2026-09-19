@@ -30,6 +30,7 @@ from custom_components.roller_shutter_suite.core.model import (
     ShadingEpisodeState,
     SimulatedState,
     SolarHeatingEpisodeState,
+    TravelDirection,
     WindowState,
     WishClass,
 )
@@ -43,6 +44,17 @@ LEFT = "cover.example_left"
 RIGHT = "cover.example_right"
 
 
+def _command(target: Any, time: Any, wish_class: Any, **more: Any) -> OwnCommand:
+    arguments: dict[str, Any] = {
+        "command_id": "command-1",
+        "target": target,
+        "direction": TravelDirection.DOWN,
+        "time": time,
+        "wish_class": wish_class,
+    }
+    return OwnCommand(**(arguments | more))
+
+
 def _full_state() -> WindowState:
     """Return a state that uses every field of section 11."""
     return WindowState(
@@ -50,9 +62,13 @@ def _full_state() -> WindowState:
         members=[
             MemberState(
                 LEFT,
-                last_own_command=OwnCommand(Position(30), LOCAL, WishClass.COMFORT),
+                last_own_command=_command(
+                    Position(30), LOCAL, WishClass.COMFORT, context_id="context-1"
+                ),
                 last_observation=Observation(MovementState.RESTING, Position(30)),
                 position_reference=PositionReference.UNCERTAIN,
+                command_attempts=2,
+                last_attempt_at=LOCAL,
             ),
             MemberState(RIGHT, last_observation=Observation(MovementState.UNAVAILABLE)),
         ],
@@ -72,7 +88,7 @@ def _full_state() -> WindowState:
                 remembered_position=Position(100),
                 remembered_owner=PositionOwner.ENGINE,
             ),
-            ProtectionEventState("hail", released=True),
+            ProtectionEventState("hail", ended_at=NOW - timedelta(minutes=10)),
         ],
         fire_unacknowledged=True,
         shading_episode=ShadingEpisodeState(
@@ -95,7 +111,7 @@ def _full_state() -> WindowState:
         frost_waiver_until=NOW + timedelta(hours=18),
         simulated=SimulatedState(
             commands=[
-                MemberCommand(LEFT, OwnCommand(Position(0), NOW, WishClass.PROTECTION))
+                MemberCommand(LEFT, _command(Position(0), NOW, WishClass.PROTECTION))
             ],
             last_comfort_movement=NOW - timedelta(minutes=1),
         ),
@@ -150,22 +166,67 @@ def test_window_state_data_is_plain_and_versioned() -> None:
     assert data["owner"] == "user"
 
 
-def test_round_trip_keeps_the_point_in_time_of_a_named_time_zone() -> None:
-    """A datetime in a named zone comes back as the same instant, and aware."""
+def test_persisted_instants_are_kept_in_utc() -> None:
+    """A datetime in a named zone is the same instant afterwards, in UTC."""
     armed_at = datetime(2026, 7, 1, 21, 45, tzinfo=ZoneInfo("Europe/Paris"))
     dam = ManualOverrideDam(armed_at, OverrideEndRule.NEXT_PART_OF_DAY)
 
     restored = ManualOverrideDam.from_data(dam.to_data())
 
+    assert dam.armed_at == armed_at
+    assert dam.armed_at.utcoffset() == timedelta(0)
+    assert dam.armed_at.hour == armed_at.hour - 2
     assert restored == dam
-    assert restored.armed_at.utcoffset() == timedelta(hours=2)
+    assert restored.armed_at.utcoffset() == timedelta(0)
+
+
+@pytest.mark.parametrize("fold", [0, 1], ids=["first pass", "second pass"])
+def test_round_trip_in_the_repeated_hour_of_a_clock_change(fold: int) -> None:
+    """02:30 exists twice on the last Sunday of October; both survive as equal."""
+    zone = ZoneInfo("Europe/Paris")
+    repeated = datetime(2026, 10, 25, 2, 30, tzinfo=zone, fold=fold)
+    state = WindowState(
+        members=[
+            MemberState(
+                LEFT,
+                _command(Position(0), repeated, WishClass.COMFORT),
+                command_attempts=1,
+                last_attempt_at=repeated,
+            )
+        ],
+        manual_override=ManualOverrideDam(
+            repeated, OverrideEndRule.FIXED_MINUTES, ends_at=repeated
+        ),
+        person_at_window=PersonAtWindowDam(repeated),
+        protection_events=[
+            ProtectionEventState(
+                "storm", status=ProtectionEventStatus.ACTIVE, active_since=repeated
+            ),
+            ProtectionEventState("hail", ended_at=repeated),
+        ],
+        shading_episode=ShadingEpisodeState(repeated, repeated),
+        solar_heating_episode=SolarHeatingEpisodeState(repeated),
+        external_request=ExternalRequest(Position(1), "scene", expires_at=repeated),
+        last_comfort_movement=repeated,
+        held_frost=HeldInput(value=True, seen_at=repeated),
+        frost_waiver_until=repeated,
+        simulated=SimulatedState(last_comfort_movement=repeated),
+    )
+
+    restored = WindowState.from_data(json.loads(json.dumps(state.to_data())))
+
+    assert restored == state
+    assert hash(restored) == hash(state)
+    assert state.last_comfort_movement is not None
+    assert state.last_comfort_movement.utcoffset() == timedelta(0)
+    assert state.last_comfort_movement.hour == fold
 
 
 @pytest.mark.parametrize(
     "value",
     [
-        OwnCommand(Position(0), NOW, WishClass.FIRE),
-        MemberCommand(LEFT, OwnCommand(Position(0), NOW, WishClass.FIRE)),
+        _command(Position(0), NOW, WishClass.FIRE),
+        MemberCommand(LEFT, _command(Position(0), NOW, WishClass.FIRE)),
         Observation(MovementState.MOVING_UP),
         Observation(MovementState.RESTING, Position(0)),
         MemberState(LEFT),
@@ -197,17 +258,21 @@ def test_every_persisted_part_round_trips(value: Any) -> None:
 @pytest.mark.parametrize(
     "build",
     [
-        lambda: OwnCommand(Position(0), NAIVE, WishClass.COMFORT),
+        lambda: _command(Position(0), NAIVE, WishClass.COMFORT),
         lambda: ManualOverrideDam(NAIVE, OverrideEndRule.NEXT_PART_OF_DAY),
         lambda: ManualOverrideDam(NOW, OverrideEndRule.FIXED_MINUTES, ends_at=NAIVE),
         lambda: PersonAtWindowDam(NAIVE),
-        lambda: ProtectionEventState("storm", active_since=NAIVE),
+        lambda: ProtectionEventState(
+            "storm", status=ProtectionEventStatus.ACTIVE, active_since=NAIVE
+        ),
+        lambda: ProtectionEventState("storm", ended_at=NAIVE),
         lambda: ShadingEpisodeState(active_since=NAIVE),
         lambda: ShadingEpisodeState(rain_lock_until=NAIVE),
         lambda: SolarHeatingEpisodeState(NAIVE),
         lambda: ExternalRequest(Position(1), "scene", expires_at=NAIVE),
         lambda: HeldInput(value=True, seen_at=NAIVE),
         lambda: SimulatedState(last_comfort_movement=NAIVE),
+        lambda: MemberState(LEFT, command_attempts=1, last_attempt_at=NAIVE),
         lambda: WindowState(last_comfort_movement=NAIVE),
         lambda: WindowState(frost_waiver_until=NAIVE),
     ],
@@ -244,6 +309,7 @@ def test_datetime_with_a_tzinfo_that_gives_no_offset_is_rejected() -> None:
         ("manual_override", "ends_at"),
         ("person_at_window", "ends_at"),
         ("protection_events", 0, "active_since"),
+        ("protection_events", 1, "ended_at"),
         ("shading_episode", "active_since"),
         ("shading_episode", "rain_lock_until"),
         ("solar_heating_episode", "active_since"),
@@ -251,6 +317,7 @@ def test_datetime_with_a_tzinfo_that_gives_no_offset_is_rejected() -> None:
         ("held_frost", "seen_at"),
         ("held_season", "seen_at"),
         ("members", 0, "last_own_command", "time"),
+        ("members", 0, "last_attempt_at"),
         ("simulated", "last_comfort_movement"),
         ("simulated", "commands", 0, "command", "time"),
     ],
@@ -295,6 +362,10 @@ def _changed(path: tuple[str | int, ...], value: object) -> Any:
         (("members", 0, "last_observation", "position"), 30.0, "expected an integer"),
         (("members", 0, "last_observation", "position"), True, "expected an integer"),
         (("fire_unacknowledged",), 1, "expected true or false"),
+        (("members", 0, "command_attempts"), -1, "must not be negative"),
+        (("members", 0, "command_attempts"), 1.0, "expected an integer"),
+        (("members", 0, "command_attempts"), 0, "belong together"),
+        (("members", 0, "last_attempt_at"), None, "belong together"),
         (("fire_unacknowledged",), None, "expected true or false"),
         (("last_comfort_movement",), "yesterday", "last_comfort_movement"),
         (("latched_day_types", 0, "day"), "2026-13-01", "day"),
@@ -320,6 +391,37 @@ def test_error_names_the_path_of_the_broken_key() -> None:
 
     with pytest.raises(ValueError, match=r"members: last_own_command: target: "):
         WindowState.from_data(data)
+
+
+@pytest.mark.parametrize(
+    ("path", "message"),
+    [
+        (("surprise",), "unknown key 'surprise'"),
+        (("members", 0, "surprise"), "members: unknown key 'surprise'"),
+        (
+            ("members", 0, "last_own_command", "surprise"),
+            "members: last_own_command: unknown key 'surprise'",
+        ),
+        (("members", 0, "last_observation", "surprise"), "last_observation: unknown"),
+        (("manual_override", "surprise"), "manual_override: unknown key"),
+        (("person_at_window", "surprise"), "person_at_window: unknown key"),
+        (("protection_events", 0, "surprise"), "protection_events: unknown key"),
+        (("shading_episode", "surprise"), "shading_episode: unknown key"),
+        (("solar_heating_episode", "surprise"), "solar_heating_episode: unknown key"),
+        (("external_request", "surprise"), "external_request: unknown key"),
+        (("latched_day_types", 0, "surprise"), "latched_day_types: unknown key"),
+        (("held_frost", "surprise"), "held_frost: unknown key"),
+        (("simulated", "surprise"), "simulated: unknown key"),
+        (("simulated", "commands", 0, "surprise"), "commands: unknown key"),
+    ],
+    ids=lambda value: ".".join(map(str, value)) if isinstance(value, tuple) else None,
+)
+def test_unknown_key_in_persisted_data_is_rejected(
+    path: tuple[str | int, ...], message: str
+) -> None:
+    """A key the code does not know means code and data disagree: fail loudly."""
+    with pytest.raises(ValueError, match=message):
+        WindowState.from_data(_changed(path, 1))
 
 
 def test_missing_key_is_rejected() -> None:
@@ -384,7 +486,7 @@ def test_window_state_lists_are_validated() -> None:
                 LatchedDayType(date(2026, 3, day), DayType.WORKDAY) for day in (1, 2, 3)
             ]
         )
-    command = OwnCommand(Position(0), NOW, WishClass.COMFORT)
+    command = _command(Position(0), NOW, WishClass.COMFORT)
     with pytest.raises(ValueError, match="occurs twice"):
         SimulatedState([MemberCommand(LEFT, command), MemberCommand(LEFT, command)])
 
@@ -406,16 +508,105 @@ def test_window_state_types_are_checked() -> None:
         SimulatedState([bad])
 
 
+@pytest.mark.parametrize(
+    "field",
+    [
+        "manual_override",
+        "person_at_window",
+        "shading_episode",
+        "solar_heating_episode",
+        "external_request",
+        "held_frost",
+        "held_season",
+        "simulated",
+    ],
+)
+def test_single_object_fields_of_the_window_state_check_their_type(field: str) -> None:
+    """A wrong object is refused on construction, not later when it is saved."""
+    wrong: Any = {"ends_at": NOW}
+    with pytest.raises(TypeError, match=field):
+        WindowState(**{field: wrong})
+
+
+def test_protection_event_state_is_consistent() -> None:
+    """Active: since when, not ended. Inactive: not active since; maybe ended at."""
+    ended = ProtectionEventState("storm", ended_at=NOW)
+
+    assert ended.status is ProtectionEventStatus.INACTIVE
+    assert ended.ended_at == NOW
+    assert ProtectionEventState("storm").ended_at is None
+    with pytest.raises(ValueError, match="states since when"):
+        ProtectionEventState("storm", status=ProtectionEventStatus.ACTIVE)
+    with pytest.raises(ValueError, match="has not ended"):
+        ProtectionEventState(
+            "storm",
+            status=ProtectionEventStatus.ACTIVE,
+            active_since=NOW,
+            ended_at=NOW,
+        )
+    with pytest.raises(ValueError, match="not active since"):
+        ProtectionEventState("storm", active_since=NOW)
+
+
+def test_command_backoff_is_persisted_as_facts() -> None:
+    """Attempts and the time of the last one; never the time of the next retry."""
+    bad: Any = 1.5
+    fresh = MemberState(LEFT)
+    retried = MemberState(LEFT, command_attempts=3, last_attempt_at=LOCAL)
+
+    assert (fresh.command_attempts, fresh.last_attempt_at) == (0, None)
+    assert retried.last_attempt_at == LOCAL
+    assert retried.last_attempt_at is not None
+    assert retried.last_attempt_at.utcoffset() == timedelta(0)
+    assert MemberState.from_data(retried.to_data()) == retried
+    assert set(retried.to_data()) >= {"command_attempts", "last_attempt_at"}
+    assert not [key for key in retried.to_data() if "retry" in key or "next" in key]
+    with pytest.raises(ValueError, match="must not be negative"):
+        MemberState(LEFT, command_attempts=-1)
+    with pytest.raises(ValueError, match="belong together"):
+        MemberState(LEFT, command_attempts=1)
+    with pytest.raises(ValueError, match="belong together"):
+        MemberState(LEFT, last_attempt_at=NOW)
+    with pytest.raises(TypeError, match="must be an integer"):
+        MemberState(LEFT, command_attempts=bad, last_attempt_at=NOW)
+    with pytest.raises(TypeError, match="must be an integer"):
+        MemberState(LEFT, command_attempts=True, last_attempt_at=NOW)
+
+
+def test_own_command_carries_what_the_tracker_remembers() -> None:
+    """Identifier, target, direction, time, wish class and the context."""
+    bad: Any = 1
+    command = OwnCommand(
+        command_id="command-7",
+        target=Position(100),
+        direction=TravelDirection.UP,
+        time=LOCAL,
+        wish_class=WishClass.FIRE,
+    )
+
+    assert command.context_id is None
+    assert command.direction is TravelDirection.UP
+    assert command.time == LOCAL
+    assert command.time.utcoffset() == timedelta(0)
+    assert [value.value for value in TravelDirection] == ["up", "down"]
+    with pytest.raises(ValueError, match="must not be empty"):
+        _command(Position(0), NOW, WishClass.COMFORT, command_id="")
+    with pytest.raises(TypeError, match="direction"):
+        _command(Position(0), NOW, WishClass.COMFORT, direction="down")
+    with pytest.raises(TypeError, match="context"):
+        _command(Position(0), NOW, WishClass.COMFORT, context_id=bad)
+
+
 def test_parts_of_the_state_check_their_types() -> None:
     """Wrong types are refused where the value is created."""
     bad: Any = 1.5
-    command = OwnCommand(Position(0), NOW, WishClass.COMFORT)
+    command = _command(Position(0), NOW, WishClass.COMFORT)
     with pytest.raises(TypeError, match="target"):
-        OwnCommand(bad, NOW, WishClass.COMFORT)
+        _command(bad, NOW, WishClass.COMFORT)
     with pytest.raises(TypeError, match="time of a command"):
-        OwnCommand(Position(0), bad, WishClass.COMFORT)
+        _command(Position(0), bad, WishClass.COMFORT)
     with pytest.raises(TypeError, match="wish class"):
-        OwnCommand(Position(0), NOW, bad)
+        _command(Position(0), NOW, bad)
     with pytest.raises(ValueError, match="must not be empty"):
         MemberCommand("", command)
     with pytest.raises(TypeError, match="command of a member"):

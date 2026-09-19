@@ -17,18 +17,26 @@ from .model import JsonObject, Position, SunPosition
 
 
 class Clock(Protocol):
-    """The only source of the current time."""
+    """The only source of the current time.
+
+    The zone of the datetime that :meth:`now` returns is **the local zone of
+    the installation**. It becomes the zone of ``WorldSnapshot.time``, and
+    everything that is local by nature is read from it: fixed times of the
+    schedule, local midnight, and the local dates handed to the sun port.
+    """
 
     def now(self) -> datetime:
-        """Return the current time as a timezone-aware datetime."""
+        """Return the current time, timezone-aware, in the installation's zone."""
 
 
 class Sun(Protocol):
     """Sun times and sun positions for the location of the installation.
 
-    Every datetime that goes in or comes out is timezone-aware. The methods
-    that look for a moment on a day return ``None`` if the day has none, for
-    example no sunrise during the polar night.
+    Every datetime that goes in or comes out is timezone-aware. A ``date``
+    argument is a local date: a calendar day in the local zone of the
+    installation, the zone of ``Clock.now()``. The methods that look for a
+    moment on a day return ``None`` if the day has none, for example no
+    sunrise during the polar night.
     """
 
     def position(self, at: datetime) -> SunPosition:
@@ -53,8 +61,14 @@ class Sun(Protocol):
 class Actuator(Protocol):
     """Sends commands to the members of a window."""
 
-    def move_to(self, member_id: str, target: Position) -> None:
-        """Command one member to a position.
+    def move_to(self, command_id: str, member_id: str, target: Position) -> None:
+        """Command one member to a position; return without waiting.
+
+        ``command_id`` is the identifier the engine gave this command (the
+        ``command_id`` of its ``OwnCommand``). The adapter hands the result of
+        the command back to the engine together with this identifier, so a
+        result is matched to its command and a late result of an older command
+        is never attributed to a newer one.
 
         The adapter translates the position into what the member supports
         (set position, open or close) and checks dry-run a second time before

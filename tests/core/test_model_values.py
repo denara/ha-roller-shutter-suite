@@ -150,12 +150,40 @@ def test_source_value_equality_and_hash() -> None:
     assert SourceValue.of(1) != SourceValue.of(1.0)
     assert SourceValue[bool].unknown() == SourceValue[float].unknown()
     assert SourceValue[bool].unknown() != SourceValue[bool].unavailable()
-    assert SourceValue.of("on") != "on"
+    assert SourceValue.of("on") != SourceValue.of("off")
+    assert SourceValue.of("on") != None  # noqa: E711 - the operator is the subject
+    assert SourceValue.of("on") != ("on",)
     assert hash(SourceValue.of(2.5)) == hash(SourceValue.of(2.5))
     assert {SourceValue.of(True), SourceValue.of(1), SourceValue.of(True)} == {
         SourceValue.of(1),
         SourceValue.of(True),
     }
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        SourceValue.of("open"),
+        SourceValue[str].unknown(),
+        SourceValue[str].unavailable(),
+    ],
+    ids=["value", "unknown", "unavailable"],
+)
+@pytest.mark.parametrize("plain", ["open", "closed", True, 0, 1.5])
+def test_source_value_does_not_compare_with_a_plain_value(
+    source: SourceValue[str], plain: object
+) -> None:
+    """``contact != "open"`` must not read a missing contact as good news."""
+    with pytest.raises(TypeError, match="does not compare with a plain value"):
+        _ = source == plain
+    with pytest.raises(TypeError, match="does not compare with a plain value"):
+        _ = source != plain
+    with pytest.raises(TypeError, match="does not compare with a plain value"):
+        _ = plain == source
+    with pytest.raises(TypeError, match="does not compare with a plain value"):
+        _ = plain != source
+    with pytest.raises(TypeError, match="does not compare with a plain value"):
+        _ = source in [plain]
 
 
 def test_source_value_is_immutable() -> None:

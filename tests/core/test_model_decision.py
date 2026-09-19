@@ -7,8 +7,10 @@ from typing import Any
 import pytest
 
 from custom_components.roller_shutter_suite.core.model import (
+    CONSTRAINT_REASONS,
     FULLY_CLOSED,
     FULLY_OPEN,
+    GATE_RULE_REASONS,
     Constraint,
     ConstraintResult,
     Decision,
@@ -24,7 +26,11 @@ from custom_components.roller_shutter_suite.core.model import (
     WishClass,
     WishKind,
 )
-from custom_components.roller_shutter_suite.core.reasons import ReasonCode
+from custom_components.roller_shutter_suite.core.reasons import (
+    ReasonCategory,
+    ReasonCode,
+    codes_of,
+)
 
 LATER = datetime(2026, 3, 1, 18, 30, tzinfo=UTC)
 NAIVE = datetime(2026, 3, 1, 18, 30)  # noqa: DTZ001 - the rejected case
@@ -167,7 +173,7 @@ def test_wish_with_a_position_but_no_reason_is_rejected() -> None:
 
 def test_wish_kind_and_payload_have_to_fit() -> None:
     """A target needs a position; the other kinds must not carry one."""
-    with pytest.raises(ValueError, match="needs a position"):
+    with pytest.raises(ValueError, match="needs either one position"):
         Wish(Layer.SLEEP, WishKind.TARGET, ReasonCode.SLEEP_MODE)
     for kind in (WishKind.LEAVE_ALONE, WishKind.NO_OPINION):
         for payload in (
@@ -195,51 +201,43 @@ def test_wish_types_are_checked() -> None:
 
 def test_shading_wish_carries_ray_height_and_member_positions() -> None:
     """Decision 9: one decision (ray height), one position per member."""
-    wish = Wish.target(
+    wish = Wish.target_per_member(
         Layer.SHADING,
         ReasonCode.SHADING_GEOMETRIC,
-        Position(21),
-        member_positions=[
-            MemberTarget(LEFT, Position(21)),
-            MemberTarget(RIGHT, Position(36)),
-        ],
+        [MemberTarget(LEFT, Position(21)), MemberTarget(RIGHT, Position(36))],
         ray_height=RAY_HEIGHT,
     )
 
-    assert wish.position == Position(21)
+    assert wish.kind is WishKind.TARGET
+    assert wish.position is None
     assert wish.member_positions == _targets(21, 36)
     assert wish.ray_height == RAY_HEIGHT
     assert isinstance(wish.member_positions, tuple)
 
 
 def test_member_positions_of_a_wish_are_validated() -> None:
-    """The window's position is the first member's; members are unique and set."""
-    with pytest.raises(ValueError, match="first member"):
-        Wish.target(
+    """One position for all or one per member, never both; members unique and set."""
+    with pytest.raises(ValueError, match="needs either one position"):
+        Wish(
             Layer.SHADING,
+            WishKind.TARGET,
             ReasonCode.SHADING_GEOMETRIC,
-            Position(50),
+            position=Position(21),
             member_positions=_targets(21, 36),
         )
+    with pytest.raises(ValueError, match="needs either one position"):
+        Wish.target_per_member(Layer.SHADING, ReasonCode.SHADING_GEOMETRIC, [])
     with pytest.raises(ValueError, match="occurs twice"):
-        Wish.target(
+        Wish.target_per_member(
             Layer.SHADING,
             ReasonCode.SHADING_GEOMETRIC,
-            Position(21),
-            member_positions=[
-                MemberTarget(LEFT, Position(21)),
-                MemberTarget(LEFT, Position(36)),
-            ],
+            [MemberTarget(LEFT, Position(21)), MemberTarget(LEFT, Position(36))],
         )
     with pytest.raises(ValueError, match="position for every member"):
-        Wish.target(
+        Wish.target_per_member(
             Layer.SHADING,
             ReasonCode.SHADING_GEOMETRIC,
-            Position(21),
-            member_positions=[
-                MemberTarget(LEFT, Position(21)),
-                MemberTarget(RIGHT, None),
-            ],
+            [MemberTarget(LEFT, Position(21)), MemberTarget(RIGHT, None)],
         )
     with pytest.raises(ValueError, match="finite"):
         Wish.target(
@@ -351,12 +349,47 @@ def test_gate_defer_until_a_point_in_time() -> None:
 
 
 def test_gate_defer_until_a_condition_without_a_known_time() -> None:
-    """Waiting for a member to become available has no point in time."""
+    """Waiting for a member has no end time, but a latest re-evaluation."""
     outcome = GateOutcome.defer(
-        GateRule.NO_MEMBER_CAN_EXECUTE, ReasonCode.COVER_UNAVAILABLE, None
+        GateRule.NO_MEMBER_CAN_EXECUTE,
+        ReasonCode.COVER_UNAVAILABLE,
+        reevaluate_no_later_than=LATER,
     )
 
     assert outcome.until is None
+    assert outcome.reevaluate_no_later_than == LATER
+    assert (
+        GateOutcome.defer(
+            GateRule.PERSON_AT_WINDOW_DAM, ReasonCode.PERSON_AT_WINDOW, LATER
+        ).reevaluate_no_later_than
+        is None
+    )
+
+
+def test_gate_deferral_needs_exactly_one_of_the_two_times() -> None:
+    """Nothing waits forever: a deferral without any time is refused."""
+    with pytest.raises(ValueError, match="either the time at which it ends"):
+        GateOutcome.defer(GateRule.NO_MEMBER_CAN_EXECUTE, ReasonCode.COVER_UNAVAILABLE)
+    with pytest.raises(ValueError, match="either the time at which it ends"):
+        GateOutcome.defer(
+            GateRule.STAGGERING,
+            ReasonCode.STAGGERED,
+            LATER,
+            reevaluate_no_later_than=LATER,
+        )
+    with pytest.raises(ValueError, match="timezone-aware"):
+        GateOutcome.defer(
+            GateRule.NO_MEMBER_CAN_EXECUTE,
+            ReasonCode.COVER_UNAVAILABLE,
+            reevaluate_no_later_than=NAIVE,
+        )
+    with pytest.raises(ValueError, match="only a deferral"):
+        GateOutcome(
+            GateKind.SUPPRESS,
+            ReasonCode.PAUSED,
+            rule=GateRule.PAUSE,
+            reevaluate_no_later_than=LATER,
+        )
 
 
 def test_gate_suppress() -> None:
@@ -423,11 +456,19 @@ def test_gate_rejects_a_naive_deferral() -> None:
         ),
         (
             {"kind": GateKind.SEND, "reason": ReasonCode.SENT, "until": LATER},
-            "no deferral",
+            "only a deferral",
         ),
         (
             {"kind": GateKind.SEND, "reason": ReasonCode.SENT, "dry_run": True},
             "never sends",
+        ),
+        (
+            {
+                "kind": GateKind.SEND,
+                "reason": ReasonCode.SENT,
+                "would_send": _targets(0),
+            },
+            "no would-be command",
         ),
         (
             {
@@ -454,7 +495,7 @@ def test_gate_rejects_a_naive_deferral() -> None:
                 "rule": GateRule.DRY_RUN,
                 "dry_run": True,
             },
-            "belong together",
+            "'dry_run' does not give the reason 'paused'",
         ),
         (
             {
@@ -463,7 +504,7 @@ def test_gate_rejects_a_naive_deferral() -> None:
                 "rule": GateRule.PAUSE,
                 "dry_run": True,
             },
-            "belong together",
+            "'pause' does not give the reason 'dry_run'",
         ),
         (
             {
@@ -499,6 +540,7 @@ def test_gate_rejects_a_naive_deferral() -> None:
                 "kind": GateKind.DEFER,
                 "reason": ReasonCode.DRY_RUN,
                 "rule": GateRule.DRY_RUN,
+                "until": LATER,
                 "dry_run": True,
                 "would_send": _targets(0),
             },
@@ -594,21 +636,20 @@ def test_decision_evening_closing_with_a_tilted_window() -> None:
     assert hash(decision) == hash(dataclasses.replace(decision))
 
 
-def test_decision_shows_the_target_of_the_first_member() -> None:
-    """Decision 9: per-member targets; the window shows the first member's."""
+def test_decision_with_different_member_targets_shows_no_window_target() -> None:
+    """Per-member targets are the detail; there is no common target to show."""
     decision = Decision(
-        winning_wish=Wish.target(
+        winning_wish=Wish.target_per_member(
             Layer.SHADING,
             ReasonCode.SHADING_GEOMETRIC,
-            Position(21),
-            member_positions=_targets(21, 36),
+            _targets(21, 36),
             ray_height=RAY_HEIGHT,
         ),
         targets=_targets(21, 36),
         gate=GateOutcome.send(),
     )
 
-    assert decision.target == Position(21)
+    assert decision.target is None
     assert [target.position for target in decision.targets] == [
         Position(21),
         Position(36),
@@ -795,3 +836,207 @@ def test_decision_types_are_checked() -> None:
         Decision(winning_wish=_night_wish(), targets=[bad])
     with pytest.raises(TypeError, match="gate outcome"):
         Decision(winning_wish=_night_wish(), targets=_targets(0), gate=bad)
+
+
+# --- The displayed target -------------------------------------------------------------
+
+
+def test_decision_shows_the_common_target_of_its_members() -> None:
+    """The same target for all members is the target of the window."""
+    decision = Decision(
+        winning_wish=Wish.target(Layer.SLEEP, ReasonCode.SLEEP_MODE, Position(10)),
+        targets=_targets(10, 10),
+        gate=GateOutcome.send(),
+    )
+
+    assert decision.target == Position(10)
+
+
+def test_decision_with_a_pinned_member_shows_no_window_target() -> None:
+    """One member stays, the other moves: no common target, whoever is first."""
+    moving_first = (MemberTarget(LEFT, Position(60)), MemberTarget(RIGHT, None))
+    for targets in (_targets(None, 60), moving_first):
+        decision = Decision(
+            winning_wish=Wish.target(
+                Layer.SCHEDULE,
+                ReasonCode.SCHEDULE_DAY,
+                Position(60),
+                direction=Direction.RAISE_ONLY,
+            ),
+            constraints=[
+                ConstraintResult(Constraint.DIRECTION, ReasonCode.ONLY_RAISE, targets)
+            ],
+            targets=targets,
+            gate=GateOutcome.send(),
+        )
+
+        assert decision.target is None
+
+
+# --- Reason codes are tied to their group -------------------------------------------------
+
+
+def _codes_outside(*categories: ReasonCategory) -> list[ReasonCode]:
+    return [code for code in ReasonCode if code.category not in categories]
+
+
+@pytest.mark.parametrize("reason", _codes_outside(ReasonCategory.LAYER))
+def test_wish_for_a_target_takes_only_codes_of_winning_layers(
+    reason: ReasonCode,
+) -> None:
+    """``command_failed``, ``paused`` or ``inactive`` are not reasons for a target."""
+    with pytest.raises(ValueError, match="must be a code of the group 'layer'"):
+        Wish.target(Layer.SCHEDULE, reason, FULLY_OPEN)
+
+
+@pytest.mark.parametrize(
+    "reason", _codes_outside(ReasonCategory.LAYER, ReasonCategory.LAYER_INACTIVE)
+)
+def test_other_wishes_and_layer_reasons_take_only_layer_codes(
+    reason: ReasonCode,
+) -> None:
+    """No constraint, gate or event-only code explains what a layer did."""
+    with pytest.raises(ValueError, match="must be a code of the group"):
+        Wish.no_opinion(Layer.SLEEP, reason)
+    with pytest.raises(ValueError, match="must be a code of the group"):
+        Wish.leave_alone(Layer.FIRE, reason)
+    with pytest.raises(ValueError, match="must be a code of the group"):
+        LayerReason(Layer.SLEEP, reason)
+
+
+@pytest.mark.parametrize(
+    "reason", codes_of(ReasonCategory.LAYER) + codes_of(ReasonCategory.LAYER_INACTIVE)
+)
+def test_every_layer_code_explains_a_layer(reason: ReasonCode) -> None:
+    """A safety layer holds the window with ``input_unavailable``, for example."""
+    assert Wish.leave_alone(Layer.PROTECTION, reason).reason is reason
+    assert Wish.no_opinion(Layer.PROTECTION, reason).reason is reason
+    assert LayerReason(Layer.PROTECTION, reason).reason is reason
+
+
+@pytest.mark.parametrize("reason", _codes_outside(ReasonCategory.CONSTRAINT))
+def test_constraint_result_takes_only_constraint_codes(reason: ReasonCode) -> None:
+    """The group "constraints" and nothing else."""
+    with pytest.raises(ValueError, match="must be a code of the group 'constraint'"):
+        ConstraintResult(Constraint.FROST_PROTECTION, reason, _targets(90))
+
+
+def test_every_constraint_code_belongs_to_exactly_one_constraint() -> None:
+    """Sections 2.2 and 5: the pairing of constraint and reason is fixed."""
+    paired = [code for codes in CONSTRAINT_REASONS.values() for code in codes]
+
+    assert set(CONSTRAINT_REASONS) == set(Constraint)
+    assert sorted(paired) == sorted(codes_of(ReasonCategory.CONSTRAINT))
+    for constraint, codes in CONSTRAINT_REASONS.items():
+        for code in codes:
+            assert ConstraintResult(constraint, code, _targets(50)).reason is code
+    with pytest.raises(ValueError, match="does not report the reason 'frost_limit'"):
+        ConstraintResult(
+            Constraint.VENTILATION_FLOOR, ReasonCode.FROST_LIMIT, _targets(90)
+        )
+
+
+@pytest.mark.parametrize(
+    "reason",
+    [
+        code
+        for code in _codes_outside(ReasonCategory.GATE)
+        if code is not ReasonCode.CAPABILITY_MISSING
+    ],
+)
+def test_gate_outcome_takes_only_gate_codes_and_the_capability_reason(
+    reason: ReasonCode,
+) -> None:
+    """``fire_alarm`` or ``command_failed`` never explain a gate outcome."""
+    with pytest.raises(ValueError, match="must be a code of the group 'gate'"):
+        GateOutcome.suppress(GateRule.PAUSE, reason)
+
+
+def test_every_gate_code_belongs_to_exactly_one_rule() -> None:
+    """Sections 2.3 and 5: the pairing of rule and reason is fixed."""
+    paired = [code for codes in GATE_RULE_REASONS.values() for code in codes]
+    expected = [
+        code for code in codes_of(ReasonCategory.GATE) if code is not ReasonCode.SENT
+    ] + [ReasonCode.CAPABILITY_MISSING]
+
+    assert set(GATE_RULE_REASONS) == set(GateRule)
+    assert sorted(paired) == sorted(expected)
+    for rule, codes in GATE_RULE_REASONS.items():
+        if rule is GateRule.DRY_RUN:
+            continue
+        for code in codes:
+            assert GateOutcome.suppress(rule, code).reason is code
+
+
+def test_gate_rule_and_reason_have_to_fit() -> None:
+    """The rule ``pause`` cannot carry the reason ``maintenance_lock``."""
+    with pytest.raises(
+        ValueError, match="'pause' does not give the reason 'maintenance_lock'"
+    ):
+        GateOutcome.suppress(GateRule.PAUSE, ReasonCode.MAINTENANCE_LOCK)
+    with pytest.raises(ValueError, match="does not give the reason"):
+        GateOutcome.suppress(GateRule.PAUSE, ReasonCode.CAPABILITY_MISSING)
+
+
+# --- The same members everywhere in a decision -------------------------------------------------
+
+
+def _other(position: int) -> tuple[MemberTarget, ...]:
+    return (MemberTarget("cover.example_other", Position(position)),)
+
+
+@pytest.mark.parametrize(
+    ("arguments", "message"),
+    [
+        (
+            {
+                "winning_wish": Wish.target(
+                    Layer.SLEEP, ReasonCode.SLEEP_MODE, Position(30)
+                ),
+                "constraints": [
+                    ConstraintResult(
+                        Constraint.VENTILATION_FLOOR,
+                        ReasonCode.VENTILATION_FLOOR,
+                        _other(30),
+                    )
+                ],
+                "targets": _targets(30),
+                "gate": GateOutcome.send(),
+            },
+            "every constraint result names the same members",
+        ),
+        (
+            {
+                "winning_wish": Wish.target(
+                    Layer.SLEEP, ReasonCode.SLEEP_MODE, Position(30)
+                ),
+                "constraints": [
+                    ConstraintResult(
+                        Constraint.VENTILATION_FLOOR,
+                        ReasonCode.VENTILATION_FLOOR,
+                        tuple(reversed(_targets(30, 30))),
+                    )
+                ],
+                "targets": _targets(30, 30),
+                "gate": GateOutcome.send(),
+            },
+            "in the same order",
+        ),
+        (
+            {
+                "winning_wish": Wish.target_per_member(
+                    Layer.SHADING, ReasonCode.SHADING_FIXED, _targets(30, 30)
+                ),
+                "targets": _targets(30),
+                "gate": GateOutcome.send(),
+            },
+            "the member positions of the winning wish name the same members",
+        ),
+    ],
+)
+def test_decision_names_the_same_members_everywhere(
+    arguments: dict[str, Any], message: str
+) -> None:
+    """Wish, constraint results and targets speak about one set of members."""
+    with pytest.raises(ValueError, match=message):
+        Decision(**arguments)
