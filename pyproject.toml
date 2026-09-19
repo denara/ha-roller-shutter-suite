@@ -27,6 +27,12 @@ package = false
 target-version = "py314"
 line-length = 88
 
+[tool.ruff.format]
+# ruff also formats code blocks in Markdown. These files are maintained by the
+# orchestrator and must not be edited by work blocks, so a work block must not
+# be able to fail on them either.
+exclude = ["TASKS.md", "tasks/", "docs/project-brief.md"]
+
 [tool.ruff.lint]
 select = [
   "A", # flake8-builtins
@@ -91,17 +97,19 @@ testpaths = ["tests"]
 pythonpath = ["."]
 addopts = ["--import-mode=importlib", "--strict-markers", "--strict-config"]
 asyncio_mode = "auto"
-filterwarnings = [
-  # Every warning is an error. Exceptions for third-party noise go below this
-  # line, each as narrow as possible (message, category and module) and with a
-  # comment that says where the warning comes from. There are none at present.
-  "error",
-]
+# Every warning is an error, and this list stays exactly like this. The only
+# way to exempt a warning of another package is tests/foreign_warnings.toml,
+# which tests/conftest.py turns into filters; scripts/check_log_guard.py fails
+# the build on any other filter.
+filterwarnings = ["error"]
 
 [tool.coverage.run]
-# Measured on request with `uv run pytest --cov`; no threshold is enforced yet.
+# Measured with `uv run pytest --cov`. The thresholds per part of the code are
+# enforced by scripts/check_coverage.py; see docs/dev/contributing.md.
 source = ["custom_components/roller_shutter_suite"]
 branch = true
+# Paths in reports are relative to the repository, never absolute.
+relative_files = true
 
 [tool.coverage.report]
 show_missing = true
@@ -109,8 +117,14 @@ exclude_also = ["if TYPE_CHECKING:"]
 
 [tool.mypy]
 python_version = "3.14"
-files = ["custom_components/roller_shutter_suite"]
+files = ["custom_components/roller_shutter_suite", "scripts", "tests"]
 explicit_package_bases = true
 strict = true
 warn_unreachable = true
 enable_error_code = ["ignore-without-code", "redundant-self", "truthy-iterable"]
+
+[[tool.mypy.overrides]]
+# The test plugin ships no type marker. Its code is annotated, so mypy reads
+# the annotations from the installed package instead of treating it as Any.
+module = ["pytest_homeassistant_custom_component.*"]
+follow_untyped_imports = true

@@ -9,6 +9,8 @@ __pycache__/
 .ruff_cache/
 .mypy_cache/
 .coverage
+coverage.json
+report.xml
 htmlcov/
 
 # Claude Code: everything in .claude/ is local (settings contain user paths and
