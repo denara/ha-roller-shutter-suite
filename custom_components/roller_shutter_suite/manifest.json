@@ -1,0 +1,14 @@
+{
+  "domain": "roller_shutter_suite",
+  "name": "Roller Shutter Suite",
+  "codeowners": ["@denara"],
+  "config_flow": true,
+  "dependencies": [],
+  "documentation": "https://github.com/denara/ha-roller-shutter-suite",
+  "integration_type": "hub",
+  "iot_class": "calculated",
+  "issue_tracker": "https://github.com/denara/ha-roller-shutter-suite/issues",
+  "requirements": [],
+  "single_config_entry": true,
+  "version": "0.0.1"
+}

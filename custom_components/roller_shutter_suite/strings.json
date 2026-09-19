@@ -1,0 +1,10 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "description": "Do you want to set up Roller Shutter Suite? There is nothing to configure yet.",
+        "title": "Set up Roller Shutter Suite"
+      }
+    }
+  }
+}
