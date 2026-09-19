@@ -73,8 +73,39 @@ ignore = [
 [tool.ruff.lint.flake8-tidy-imports.banned-api]
 "voluptuous".msg = "Schemas are written with probatio"
 
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = [
+  "S101", # pytest tests are written with assert
+]
+
 [tool.ruff.lint.isort]
 known-first-party = ["custom_components"]
+
+[tool.pytest.ini_options]
+# This configuration applies to `uv run pytest` and to every run that includes
+# tests/ha. A run of tests/core alone uses tests/core/pytest.ini instead, which
+# keeps the Home Assistant test plugin out; see docs/dev/testing.md.
+testpaths = ["tests"]
+# The repository root is on the import path, so tests import the integration
+# as `custom_components.roller_shutter_suite`.
+pythonpath = ["."]
+addopts = ["--import-mode=importlib", "--strict-markers", "--strict-config"]
+asyncio_mode = "auto"
+filterwarnings = [
+  # Every warning is an error. Exceptions for third-party noise go below this
+  # line, each as narrow as possible (message, category and module) and with a
+  # comment that says where the warning comes from. There are none at present.
+  "error",
+]
+
+[tool.coverage.run]
+# Measured on request with `uv run pytest --cov`; no threshold is enforced yet.
+source = ["custom_components/roller_shutter_suite"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+exclude_also = ["if TYPE_CHECKING:"]
 
 [tool.mypy]
 python_version = "3.14"
