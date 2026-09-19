@@ -2,9 +2,17 @@
 
 Each test provokes a report on purpose, checks that the guard collected it and
 then clears the list, because a report that stays in the list fails the test.
+
+The second half shows that raising a log level does not blind the guard. Four
+ordinary ways of doing that are tried. For each, the report is still collected
+while the level is raised, and the check that runs at the end of every test
+names the state as a blind spot, which would fail a test that leaves it behind.
+This is the only file that may use the fixtures and the helper of the guard.
 """
 
 import logging
+from collections.abc import Callable, Iterator
+from contextlib import AbstractContextManager, contextmanager
 
 import pytest
 from homeassistant.core import HomeAssistant
@@ -12,6 +20,7 @@ from homeassistant.helpers import frame
 from homeassistant.loader import async_get_integration
 
 from custom_components.roller_shutter_suite.const import DOMAIN
+from tests.ha.conftest import log_guard_blind_spots
 
 
 async def test_usage_report_is_collected(
@@ -149,3 +158,106 @@ def test_reports_about_other_integrations_are_ignored(
     )
 
     assert integration_reports == []
+
+
+FRAME_LOGGER = "homeassistant.helpers.frame"
+
+
+@contextmanager
+def _root_level_through_caplog(caplog: pytest.LogCaptureFixture) -> Iterator[None]:
+    """``caplog.set_level`` without a logger raises the level of the root logger."""
+    root = logging.getLogger()
+    before = root.level
+    caplog.set_level(logging.ERROR)
+    try:
+        yield
+    finally:
+        root.setLevel(before)
+
+
+@contextmanager
+def _caplog_at_level(caplog: pytest.LogCaptureFixture) -> Iterator[None]:
+    with caplog.at_level(logging.ERROR):
+        yield
+
+
+@contextmanager
+def _logging_disabled(caplog: pytest.LogCaptureFixture) -> Iterator[None]:
+    logging.disable(logging.WARNING)
+    try:
+        yield
+    finally:
+        logging.disable(logging.NOTSET)
+
+
+@contextmanager
+def _frame_logger_level(caplog: pytest.LogCaptureFixture) -> Iterator[None]:
+    logger = logging.getLogger(FRAME_LOGGER)
+    before = logger.level
+    logger.setLevel(logging.ERROR)
+    try:
+        yield
+    finally:
+        logger.setLevel(before)
+
+
+RAISED_LEVELS = [
+    pytest.param(_root_level_through_caplog, id="caplog.set_level"),
+    pytest.param(_caplog_at_level, id="caplog.at_level"),
+    pytest.param(_logging_disabled, id="logging.disable"),
+    pytest.param(_frame_logger_level, id="setLevel on the frame logger"),
+]
+type RaisedLevel = Callable[[pytest.LogCaptureFixture], AbstractContextManager[None]]
+
+
+@pytest.mark.parametrize("raised_level", RAISED_LEVELS)
+async def test_report_is_collected_while_a_log_level_is_raised(
+    hass: HomeAssistant,
+    caplog: pytest.LogCaptureFixture,
+    integration_reports: list[str],
+    raised_level: RaisedLevel,
+) -> None:
+    """Home Assistant still creates the record, and the guard still gets it."""
+    await async_get_integration(hass, DOMAIN)
+
+    with raised_level(caplog):
+        frame.report_usage(
+            "does something that is only an example",
+            integration_domain=DOMAIN,
+            breaks_in_ha_version="2099.1",
+        )
+
+    assert len(integration_reports) == 1
+    integration_reports.clear()
+
+
+@pytest.mark.parametrize("raised_level", RAISED_LEVELS)
+def test_raised_log_level_is_a_blind_spot_at_the_end_of_a_test(
+    caplog: pytest.LogCaptureFixture,
+    log_guard_collector: logging.Handler,
+    raised_level: RaisedLevel,
+) -> None:
+    """A test that ends in such a state fails, whatever it logged."""
+    assert log_guard_blind_spots(log_guard_collector) == []
+
+    with raised_level(caplog):
+        assert log_guard_blind_spots(log_guard_collector) != []
+
+    assert log_guard_blind_spots(log_guard_collector) == []
+
+
+def test_removed_handler_and_cut_off_logger_are_blind_spots(
+    log_guard_collector: logging.Handler,
+) -> None:
+    """Taking the handler away or cutting a logger off is noticed as well."""
+    root = logging.getLogger()
+    root.removeHandler(log_guard_collector)
+    assert len(log_guard_blind_spots(log_guard_collector)) == 1
+    root.addHandler(log_guard_collector)
+
+    logger = logging.getLogger("homeassistant.helpers")
+    logger.propagate = False
+    assert len(log_guard_blind_spots(log_guard_collector)) == 2  # noqa: PLR2004
+    logger.propagate = True
+
+    assert log_guard_blind_spots(log_guard_collector) == []
