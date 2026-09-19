@@ -30,6 +30,13 @@ GitHub Actions workflows under `.github/workflows/`, running on push, on pull re
    - *Core purity:* nothing under `custom_components/roller_shutter_suite/core/` imports `homeassistant` or anything from the integration outside `core/`. Implemented by parsing the syntax tree, not by text search.
    - *Deprecated helpers:* a list of Home Assistant names known to be deprecated (start with those named in the brief: `show_advanced_options`, `get_astral_location`, `get_location_astral_event_next`, `voluptuous` imports, `DeviceEntry.config_entries`) fails the build when referenced. The list lives in one file and is meant to grow.
    - *Instance data:* fails when a tracked file contains patterns typical for real installations. The pattern list is generic (for example serial-number-like entity IDs, coordinates with many decimals, private IP addresses) and must itself contain no instance data.
+- Carried over from the review of T02:
+  - *No weakened log guard:* a guard fails the build when any test file other than `tests/ha/test_report_guard.py` requests the `integration_reports` fixture or clears the collected reports, and when the `filterwarnings` list in `pyproject.toml` or `tests/core/pytest.ini` contains an entry that ignores a deprecation category or names `homeassistant` or this integration. The rule behind it is in `tasks/README.md` ("No deprecation, ever").
+  - Widen the log guard in `tests/ha/conftest.py` so it also catches usage reports of Home Assistant that name this integration without the word "deprecated" (for example "will stop working", "breaks in", "please report" style messages of the frame helper). Read the message formats in the Core source at the tested tag and extend the guard's self-test accordingly.
+  - The core purity guard forbids both directions: nothing under `core/` imports `homeassistant`, and nothing under `core/` imports from the integration outside `core/` (the test-side stand-in module cannot guarantee the second).
+  - `tests/core/conftest.py` compares resolved paths when it decides whether the core configuration is active; the pytest configuration test compares all shared keys, not only the three that exist today.
+  - `mypy` also checks `tests/`.
+  - A note in `docs/dev/testing.md`: recorder fixtures have to be requested before the autouse fixture that enables custom integrations, as the test plugin's README asks.
 - Carried over from the review of T01:
   - CI installs with `uv sync --locked`, so a lock file that does not match `pyproject.toml` fails the build.
   - The version number exists in `pyproject.toml` and in `manifest.json`. A guard fails the build when the two differ (or one becomes the single source; say which and why).
