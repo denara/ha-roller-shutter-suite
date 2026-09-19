@@ -1,0 +1,26 @@
+# Warnings of other packages that the tests may ignore. This is the ONLY place
+# where a warning can be exempted; the pytest configuration stays
+# `filterwarnings = ["error"]`, and tests/conftest.py installs exactly the
+# entries of this file as filters for every test folder.
+#
+# Every entry must be approved by the project owner. A pull request that adds
+# one asks for that approval explicitly in its description.
+#
+# An entry is allowed only for a warning whose origin lies outside this
+# integration. A deprecation that this integration causes is fixed, never
+# listed here. scripts/check_foreign_warnings.py validates the file: all four
+# fields, an https link, and a module pattern that matches neither this
+# integration nor the Home Assistant helpers that report deprecated usage.
+#
+# Format of an entry:
+#
+#   [[warning]]
+#   # Regular expression, matched against the start of the name of the module
+#   # that triggers the warning.
+#   module = "^some_package\\.submodule"
+#   # Built-in warning class, or the dotted path of another one.
+#   category = "DeprecationWarning"
+#   reason = "What the warning is and why this integration cannot avoid it."
+#   upstream = "https://github.com/some-project/some-package/issues/1"
+#
+# The list is empty.

@@ -1,0 +1,136 @@
+# Home Assistant names that are known to be deprecated and must not be
+# referenced by this integration or its tests. Read by
+# scripts/check_deprecated_names.py.
+#
+# This list is meant to grow: whoever learns of a deprecation that concerns this
+# integration adds it here. It is a second net, not the first: the log guard of
+# the Home Assistant tests catches what Home Assistant reports at runtime, this
+# list also catches names that Home Assistant keeps as silent compatibility
+# shims, and code that no test reaches.
+#
+# Every entry has these fields:
+#
+#   kind         how the name is matched, see below
+#   name         the deprecated name
+#   behavior     "silent": Home Assistant logs nothing, only this list can catch
+#                it. "logs": Home Assistant logs a report, the log guard catches
+#                it too when a test reaches the code.
+#   reason       why it is deprecated and when it breaks
+#   replacement  what to use instead; the guard prints it
+#   source       where this was verified. Verify against the Core source at the
+#                tested version before adding an entry; add nothing unverified.
+#
+# kind = "identifier": the name is unusual enough to be forbidden wherever it
+#   appears as a variable, attribute, imported name, keyword argument or
+#   definition.
+# kind = "module": importing the module (or anything below it) is forbidden.
+# kind = "attribute": reading `.name` from any object is forbidden, except from
+#   the objects in `allowed_receivers`. A receiver is given by its last name:
+#   "hass" allows `hass.name`, `self.hass.name` and `entry.hass.name`. Use this
+#   kind when the name is also a legitimate attribute of something else.
+# kind = "mapping": `<object>.name[...]` and `<object>.name.<anything>` are
+#   forbidden, iterating `<object>.name` and `len()` are not.
+#   `allowed_receivers` works as above.
+
+[[deprecated]]
+kind = "identifier"
+name = "show_advanced_options"
+behavior = "logs"
+reason = "FlowHandler.show_advanced_options is deprecated since 2026-05-26 and breaks in Home Assistant 2027.6."
+replacement = "Group additional options in sections of the form."
+source = "homeassistant/data_entry_flow.py, Core 2026.9.2 (breaks in 2027.6); the date is from the project brief, section 6"
+
+[[deprecated]]
+kind = "identifier"
+name = "get_astral_location"
+behavior = "logs"
+reason = "homeassistant.helpers.sun.get_astral_location is deprecated and breaks in Home Assistant 2027.7."
+replacement = "get_astral_observer, or the astral library directly in the domain core."
+source = "homeassistant/helpers/sun.py, Core 2026.9.2"
+
+[[deprecated]]
+kind = "identifier"
+name = "get_location_astral_event_next"
+behavior = "logs"
+reason = "homeassistant.helpers.sun.get_location_astral_event_next is deprecated and breaks in Home Assistant 2027.7."
+replacement = "The observer-based helpers of homeassistant.helpers.sun."
+source = "homeassistant/helpers/sun.py, Core 2026.9.2"
+
+[[deprecated]]
+kind = "module"
+name = "voluptuous"
+behavior = "silent"
+reason = "Home Assistant Core 2026.9 depends on probatio and no longer lists voluptuous as a requirement."
+replacement = "probatio"
+source = "Package metadata of homeassistant 2026.9.2; project brief, section 6"
+
+[[deprecated]]
+kind = "attribute"
+name = "config_entries"
+# `hass.config_entries` is the config entry manager, and
+# `homeassistant.config_entries` is a module. Everything else that has an
+# attribute of this name is a device entry as far as this integration goes.
+allowed_receivers = ["hass", "_hass", "homeassistant"]
+behavior = "silent"
+reason = "A device belongs to exactly one config entry since Home Assistant 2026.8; DeviceEntry.config_entries is a compatibility shim."
+replacement = "DeviceEntry.config_entry_id"
+source = "homeassistant/helpers/device_registry.py, Core 2026.9.2: the property returns a value and reports nothing"
+
+[[deprecated]]
+kind = "identifier"
+name = "config_entries_subentries"
+behavior = "silent"
+reason = "A device belongs to one config entry and at most one subentry; DeviceEntry.config_entries_subentries is a compatibility shim."
+replacement = "DeviceEntry.config_entry_id and DeviceEntry.config_subentry_id"
+source = "homeassistant/helpers/device_registry.py, Core 2026.9.2: the property returns a value and reports nothing"
+
+[[deprecated]]
+kind = "identifier"
+name = "primary_config_entry"
+behavior = "silent"
+reason = "A device belongs to one config entry; DeviceEntry.primary_config_entry is a compatibility shim."
+replacement = "DeviceEntry.config_entry_id"
+source = "homeassistant/helpers/device_registry.py, Core 2026.9.2: the property returns a value and reports nothing"
+
+[[deprecated]]
+kind = "identifier"
+name = "async_get_device"
+behavior = "logs"
+reason = "DeviceRegistry.async_get_device is deprecated because identifiers and connections are no longer unique across config entries; it breaks in Home Assistant 2027.8."
+replacement = "async_get_device_by_identifier, async_get_device_by_connection or async_get_devices"
+source = "homeassistant/helpers/device_registry.py, Core 2026.9.2: the method calls report_usage"
+
+[[deprecated]]
+kind = "mapping"
+name = "devices"
+behavior = "logs"
+reason = "Using DeviceRegistry.devices as a mapping (subscription, .get(), .values(), .items() and the other lookup methods) is deprecated and breaks in Home Assistant 2027.9."
+replacement = "Iterate registry.devices, or use async_get, async_entries_for_config_entry and similar helpers."
+source = "homeassistant/helpers/device_registry.py, Core 2026.9.2: the view returned by the property calls report_usage"
+
+[[deprecated]]
+kind = "identifier"
+name = "deleted_devices"
+behavior = "logs"
+reason = "DeviceRegistry.deleted_devices is an internal detail of the registry; reading it is deprecated and breaks in Home Assistant 2027.9."
+replacement = "Nothing; the integration has no need for deleted devices."
+source = "homeassistant/helpers/device_registry.py, Core 2026.9.2: the property calls report_usage"
+
+[[deprecated]]
+kind = "identifier"
+name = "async_is_composite_device_id"
+behavior = "logs"
+reason = "DeviceRegistry.async_is_composite_device_id is deprecated and breaks in Home Assistant 2027.9."
+replacement = "async_get with include_composite_devices=False"
+source = "homeassistant/helpers/device_registry.py, Core 2026.9.2: the method calls report_usage"
+
+[[deprecated]]
+kind = "attribute"
+name = "suggested_area"
+# Passing `suggested_area` in DeviceInfo is a dictionary key, not an attribute,
+# and is not matched. Nothing legitimate has an attribute of this name.
+allowed_receivers = []
+behavior = "logs"
+reason = "Reading DeviceEntry.suggested_area is deprecated; removal was announced for Home Assistant 2026.9, the property is still present and logs."
+replacement = "Nothing; use the device's area_id if the area is needed."
+source = "homeassistant/helpers/device_registry.py, Core 2026.9.2: the property is wrapped in deprecated_function"

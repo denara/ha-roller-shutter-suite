@@ -215,6 +215,7 @@ Home Assistant calls the update listeners after `async_add_subentry`, `async_upd
 async def _async_reload_on_update(hass: HomeAssistant, entry: ConfigEntry) -> None:
     hass.config_entries.async_schedule_reload(entry.entry_id)
 
+
 # in async_setup_entry, after the platforms are forwarded:
 entry.async_on_unload(entry.add_update_listener(_async_reload_on_update))
 ```

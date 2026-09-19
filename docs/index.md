@@ -18,4 +18,5 @@ Roller Shutter Suite is a custom integration for Home Assistant that controls ro
 - [Project brief](project-brief.md): goals, feature catalog and architectural guardrails
 - [Development setup](../README.md#development)
 - [Testing](dev/testing.md): the two test folders, how to run them, how to add a scenario, and how to run the Home Assistant tests on Windows
+- [Contributing](dev/contributing.md): every check that CI runs and how to run it locally, the guards, the workflows and the recommended repository settings
 - [Configuration flow findings](dev/config-flow-findings.md): what config subentry flows can do, the pattern for inherited values in forms, reloading exactly once, cover groups, and the module layout for configuration steps
