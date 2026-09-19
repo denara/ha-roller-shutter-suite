@@ -1,0 +1,112 @@
+# The whole test suite against the newest Home Assistant release instead of the
+# locked version, so a deprecation that a new release introduces is seen before
+# users see it. A message found here is fixed before the next release of the
+# integration.
+#
+# This workflow is NOT a required check and does not block pull requests, which
+# are tested against the locked versions (workflow "Test"). It fails visibly:
+# a red run, and the summary page names what Home Assistant logged.
+#
+# Rules for every workflow of this repository, because it is public (see
+# docs/dev/contributing.md): read-only permissions, no pull_request_target, no
+# secrets, every action pinned to a full commit SHA, no uploaded raw output.
+name: Newest Home Assistant
+
+on:
+  schedule:
+    # Mondays, 05:17 UTC.
+    - cron: "17 5 * * 1"
+  workflow_dispatch:
+  # A change of this workflow or of its summary script is tried out at once.
+  push:
+    paths:
+      - .github/workflows/newest-home-assistant.yml
+      - scripts/summarize_test_report.py
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  UV_VERSION: "0.12.17"
+
+jobs:
+  release:
+    name: Newest release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: false
+
+      - name: Install the locked environment
+        run: uv sync --locked
+
+      # Every release of the test plugin pins exactly one Home Assistant
+      # version, and a new plugin release follows each Home Assistant release.
+      # Upgrading the plugin therefore installs the newest Home Assistant
+      # together with the plugin that matches it.
+      - name: Replace Home Assistant and the test plugin by the newest release
+        run: uv pip install --upgrade pytest-homeassistant-custom-component
+
+      - name: Run the whole suite with the log guard
+        run: uv run --no-sync pytest --junitxml=report.xml
+
+      - name: Write the summary
+        if: always()
+        run: |
+          version="$(uv run --no-sync python -c 'from importlib.metadata import version; print(version("homeassistant"))')"
+          uv run --no-sync python scripts/summarize_test_report.py report.xml \
+            "Home Assistant ${version} (newest release)" >> "$GITHUB_STEP_SUMMARY"
+
+  beta:
+    name: Current beta (optional)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    # Informational. No release of the test plugin matches a beta, so this job
+    # combines the newest plugin with a newer Home Assistant, and it can fail
+    # for reasons that have nothing to do with this integration. Its failure
+    # is shown on the job but does not turn the run red.
+    continue-on-error: true
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: false
+
+      - name: Install the locked environment
+        run: uv sync --locked
+
+      # Outside a beta phase the newest pre-release is older than the newest
+      # release; then this installs the release and repeats the first job.
+      - name: Replace Home Assistant by the newest version including betas
+        run: |
+          uv pip install --upgrade pytest-homeassistant-custom-component
+          uv pip install --upgrade --prerelease=allow homeassistant
+
+      - name: Run the whole suite with the log guard
+        run: uv run --no-sync pytest --junitxml=report.xml
+
+      - name: Write the summary
+        if: always()
+        run: |
+          version="$(uv run --no-sync python -c 'from importlib.metadata import version; print(version("homeassistant"))')"
+          uv run --no-sync python scripts/summarize_test_report.py report.xml \
+            "Home Assistant ${version} (newest version including betas)" >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,117 @@
+# Static checks, guards and tests with the locked dependency versions.
+#
+# Rules for every workflow of this repository, because it is public (see
+# docs/dev/contributing.md): read-only permissions, no pull_request_target, no
+# secrets, every action pinned to a full commit SHA, no uploaded raw output.
+name: Test
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  UV_VERSION: "0.12.17"
+
+jobs:
+  checks:
+    name: Static checks and guards
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        with:
+          version: ${{ env.UV_VERSION }}
+          # No cache: nothing a pull request writes may reach a later run.
+          enable-cache: false
+
+      # --locked fails when uv.lock does not match pyproject.toml.
+      - name: Install the locked environment
+        run: uv sync --locked
+
+      - name: ruff check
+        run: uv run --no-sync ruff check
+
+      - name: ruff format
+        run: uv run --no-sync ruff format --check
+
+      - name: mypy
+        run: uv run --no-sync mypy
+
+      - name: "Guard: the domain core is pure"
+        run: uv run --no-sync python scripts/check_core_purity.py
+
+      - name: "Guard: no deprecated Home Assistant names"
+        run: uv run --no-sync python scripts/check_deprecated_names.py
+
+      - name: "Guard: no instance data"
+        run: uv run --no-sync python scripts/check_instance_data.py
+
+      - name: "Guard: one version number"
+        run: uv run --no-sync python scripts/check_versions.py
+
+      - name: "Guard: the log guard is not weakened"
+        run: uv run --no-sync python scripts/check_log_guard.py
+
+      - name: "Guard: only foreign warnings are exempted"
+        run: uv run --no-sync python scripts/check_foreign_warnings.py
+
+  tests:
+    name: Tests and coverage
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: false
+
+      - name: Install the locked environment
+        run: uv sync --locked
+
+      # Separate steps, so a failure is attributable. The core run is also the
+      # proof that the core works without Home Assistant.
+      - name: Tests of the domain core
+        run: uv run --no-sync pytest tests/core --cov --cov-report=
+
+      - name: Tests of the guard scripts
+        run: uv run --no-sync pytest tests/scripts
+
+      - name: Tests of the Home Assistant layer
+        run: uv run --no-sync pytest tests/ha --cov --cov-append --cov-report=
+
+      - name: Coverage thresholds
+        run: |
+          uv run --no-sync coverage json -q -o coverage.json
+          uv run --no-sync python scripts/check_coverage.py coverage.json
+
+      # The coverage table goes to the summary page of the run. It contains
+      # paths relative to the repository and numbers, nothing else. No
+      # artifact is uploaded.
+      - name: Coverage summary
+        if: always()
+        run: |
+          {
+            echo "## Coverage"
+            echo
+            uv run --no-sync coverage report --format=markdown
+          } >> "$GITHUB_STEP_SUMMARY"
