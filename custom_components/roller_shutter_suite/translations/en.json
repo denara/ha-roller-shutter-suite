@@ -2,8 +2,382 @@
   "config": {
     "step": {
       "user": {
-        "description": "Do you want to set up Roller Shutter Suite? There is nothing to configure yet.",
-        "title": "Set up Roller Shutter Suite"
+        "title": "Set up Roller Shutter Suite",
+        "description": "Do you want to set up Roller Shutter Suite? The house starts with default values that you can change afterwards."
+      },
+      "features": {
+        "title": "Features",
+        "description": "Choose what is switched on here. Only the features that are switched on get a page of their own.",
+        "data": {
+          "enable_daily_routine": "Daily routine",
+          "enable_shading": "Shading",
+          "enable_buttons": "Wall buttons"
+        },
+        "data_description": {
+          "enable_daily_routine": "Open in the morning and close in the evening.",
+          "enable_shading": "Lower the shutter while the sun shines on the window.",
+          "enable_buttons": "Operate the shutter with wall buttons through Home Assistant."
+        }
+      },
+      "feature_daily_routine": {
+        "title": "Daily routine",
+        "description": "When and how far the shutter moves in the morning and in the evening.",
+        "data": {
+          "open_in_morning": "Open in the morning",
+          "morning_position": "Morning position",
+          "evening_position": "Evening position"
+        },
+        "data_description": {
+          "open_in_morning": "Switch off for rooms that stay dark in the morning.",
+          "morning_position": "100 % is fully open, 0 % fully closed.",
+          "evening_position": "100 % is fully open, 0 % fully closed."
+        },
+        "sections": {
+          "expert": {
+            "name": "Expert values",
+            "description": "Sensible defaults apply. Change them only if you know why.",
+            "data": {
+              "random_offset": "Random offset"
+            },
+            "data_description": {
+              "random_offset": "Moves each trigger by up to this many minutes. 0 switches it off."
+            }
+          }
+        }
+      },
+      "feature_shading": {
+        "title": "Shading",
+        "description": "How the window is shaded.",
+        "data": {
+          "shading_position": "Shading position",
+          "use_forecast": "Use the forecast"
+        },
+        "data_description": {
+          "shading_position": "Where the shutter goes while shading.",
+          "use_forecast": "Shade early on days that are forecast to be hot."
+        }
+      },
+      "feature_buttons": {
+        "title": "Wall buttons",
+        "description": "What the wall buttons of this window do.",
+        "data": {
+          "hold_to_move": "Hold to move",
+          "double_press_position": "Position on double press"
+        },
+        "data_description": {
+          "hold_to_move": "The shutter moves while the button is held and stops on release.",
+          "double_press_position": "100 % is fully open, 0 % fully closed."
+        }
+      }
+    },
+    "abort": {
+      "reconfigure_successful": "The values of the house were saved."
+    },
+    "error": {
+      "evening_above_morning": "The evening position must not be more open than the morning position."
+    }
+  },
+  "config_subentries": {
+    "group": {
+      "entry_type": "Group",
+      "initiate_flow": {
+        "user": "Add group",
+        "reconfigure": "Change group"
+      },
+      "step": {
+        "basics": {
+          "title": "Group",
+          "description": "A group holds values that several windows share, for example a façade or a floor.",
+          "data": {
+            "name": "Name"
+          }
+        },
+        "features": {
+          "title": "Features",
+          "description": "Choose what this level decides itself. \"Inherit\" follows the level above; the entry shows what that means at present. Only the features that are switched on get a page of their own.",
+          "data": {
+            "enable_daily_routine": "Daily routine",
+            "enable_shading": "Shading",
+            "enable_buttons": "Wall buttons"
+          },
+          "data_description": {
+            "enable_daily_routine": "Open in the morning and close in the evening.",
+            "enable_shading": "Lower the shutter while the sun shines on the window.",
+            "enable_buttons": "Operate the shutter with wall buttons through Home Assistant."
+          }
+        },
+        "feature_daily_routine": {
+          "title": "Daily routine",
+          "description": "When and how far the shutter moves in the morning and in the evening.",
+          "data": {
+            "open_in_morning": "Open in the morning",
+            "morning_position": "Morning position",
+            "evening_position": "Evening position"
+          },
+          "data_description": {
+            "open_in_morning": "Switch off for rooms that stay dark in the morning.",
+            "morning_position": "100 % is fully open, 0 % fully closed. Leave empty to inherit. Inherited at present: {morning_position_inherited} (from {morning_position_source}).",
+            "evening_position": "100 % is fully open, 0 % fully closed. Leave empty to inherit. Inherited at present: {evening_position_inherited} (from {evening_position_source})."
+          },
+          "sections": {
+            "expert": {
+              "name": "Expert values",
+              "description": "Sensible defaults apply. Change them only if you know why.",
+              "data": {
+                "random_offset": "Random offset"
+              },
+              "data_description": {
+                "random_offset": "Moves each trigger by up to this many minutes. 0 switches it off. Leave empty to inherit. Inherited at present: {random_offset_inherited} (from {random_offset_source})."
+              }
+            }
+          }
+        },
+        "feature_shading": {
+          "title": "Shading",
+          "description": "How the window is shaded.",
+          "data": {
+            "shading_position": "Shading position",
+            "shading_position_unavailable": "Shading position: not available",
+            "use_forecast": "Use the forecast"
+          },
+          "data_description": {
+            "shading_position": "Where the shutter goes while shading. Leave empty to inherit. Inherited at present: {shading_position_inherited} (from {shading_position_source}).",
+            "shading_position_unavailable": "{limited_by_set_position} cannot be sent to a position, only opened and closed. Shading therefore closes the shutter completely.",
+            "use_forecast": "Shade early on days that are forecast to be hot."
+          }
+        },
+        "feature_buttons": {
+          "title": "Wall buttons",
+          "description": "What the wall buttons of this window do.",
+          "data": {
+            "hold_to_move": "Hold to move",
+            "hold_to_move_unavailable": "Hold to move: not available",
+            "double_press_position": "Position on double press"
+          },
+          "data_description": {
+            "hold_to_move": "The shutter moves while the button is held and stops on release.",
+            "hold_to_move_unavailable": "{limited_by_stop} cannot be stopped, so hold-to-move and stop-on-press are unavailable.",
+            "double_press_position": "100 % is fully open, 0 % fully closed. Leave empty to inherit. Inherited at present: {double_press_position_inherited} (from {double_press_position_source})."
+          }
+        }
+      },
+      "abort": {
+        "reconfigure_successful": "The group was saved."
+      },
+      "error": {
+        "evening_above_morning": "The evening position must not be more open than the morning position."
+      }
+    },
+    "window": {
+      "entry_type": "Window",
+      "initiate_flow": {
+        "user": "Add window",
+        "reconfigure": "Change window"
+      },
+      "step": {
+        "basics": {
+          "title": "Window",
+          "description": "Choose the cover of this window. If several covers are always moved together, choose all of them or a cover group.",
+          "data": {
+            "name": "Name",
+            "covers": "Covers",
+            "group_id": "Group"
+          },
+          "data_description": {
+            "covers": "A cover can belong to one window only.",
+            "group_id": "The window inherits its values from this group. Leave empty to inherit from the house directly."
+          }
+        },
+        "members": {
+          "title": "Members of the cover group",
+          "description": "{groups} is a cover group. The window will store and move its members individually:\n\n{members}",
+          "menu_options": {
+            "members_accept": "Continue with these covers",
+            "basics": "Choose other covers"
+          }
+        },
+        "features": {
+          "title": "Features",
+          "description": "Choose what this level decides itself. \"Inherit\" follows the level above; the entry shows what that means at present. Only the features that are switched on get a page of their own.",
+          "data": {
+            "enable_daily_routine": "Daily routine",
+            "enable_shading": "Shading",
+            "enable_buttons": "Wall buttons"
+          },
+          "data_description": {
+            "enable_daily_routine": "Open in the morning and close in the evening.",
+            "enable_shading": "Lower the shutter while the sun shines on the window.",
+            "enable_buttons": "Operate the shutter with wall buttons through Home Assistant."
+          }
+        },
+        "feature_daily_routine": {
+          "title": "Daily routine",
+          "description": "When and how far the shutter moves in the morning and in the evening.",
+          "data": {
+            "open_in_morning": "Open in the morning",
+            "morning_position": "Morning position",
+            "evening_position": "Evening position"
+          },
+          "data_description": {
+            "open_in_morning": "Switch off for rooms that stay dark in the morning.",
+            "morning_position": "100 % is fully open, 0 % fully closed. Leave empty to inherit. Inherited at present: {morning_position_inherited} (from {morning_position_source}).",
+            "evening_position": "100 % is fully open, 0 % fully closed. Leave empty to inherit. Inherited at present: {evening_position_inherited} (from {evening_position_source})."
+          },
+          "sections": {
+            "expert": {
+              "name": "Expert values",
+              "description": "Sensible defaults apply. Change them only if you know why.",
+              "data": {
+                "random_offset": "Random offset"
+              },
+              "data_description": {
+                "random_offset": "Moves each trigger by up to this many minutes. 0 switches it off. Leave empty to inherit. Inherited at present: {random_offset_inherited} (from {random_offset_source})."
+              }
+            }
+          }
+        },
+        "feature_shading": {
+          "title": "Shading",
+          "description": "How the window is shaded.",
+          "data": {
+            "shading_position": "Shading position",
+            "shading_position_unavailable": "Shading position: not available",
+            "use_forecast": "Use the forecast"
+          },
+          "data_description": {
+            "shading_position": "Where the shutter goes while shading. Leave empty to inherit. Inherited at present: {shading_position_inherited} (from {shading_position_source}).",
+            "shading_position_unavailable": "{limited_by_set_position} cannot be sent to a position, only opened and closed. Shading therefore closes the shutter completely.",
+            "use_forecast": "Shade early on days that are forecast to be hot."
+          }
+        },
+        "feature_buttons": {
+          "title": "Wall buttons",
+          "description": "What the wall buttons of this window do.",
+          "data": {
+            "hold_to_move": "Hold to move",
+            "hold_to_move_unavailable": "Hold to move: not available",
+            "double_press_position": "Position on double press"
+          },
+          "data_description": {
+            "hold_to_move": "The shutter moves while the button is held and stops on release.",
+            "hold_to_move_unavailable": "{limited_by_stop} cannot be stopped, so hold-to-move and stop-on-press are unavailable.",
+            "double_press_position": "100 % is fully open, 0 % fully closed. Leave empty to inherit. Inherited at present: {double_press_position_inherited} (from {double_press_position_source})."
+          }
+        }
+      },
+      "error": {
+        "no_covers": "The selection contains no cover.",
+        "cover_in_use": "{cover} already belongs to the window \"{window}\". A cover can belong to one window only.",
+        "evening_above_morning": "The evening position must not be more open than the morning position."
+      },
+      "abort": {
+        "reconfigure_successful": "The window was saved."
+      }
+    },
+    "pattern_lab": {
+      "entry_type": "Pattern lab (spike)",
+      "initiate_flow": {
+        "user": "Try an inheritance pattern",
+        "reconfigure": "Reopen the pattern"
+      },
+      "step": {
+        "user": {
+          "title": "Inheritance patterns",
+          "menu_options": {
+            "pattern_a": "(a) Empty means inherit",
+            "pattern_b": "(b) A switch per value",
+            "pattern_c": "(c) A list of own values"
+          }
+        },
+        "pattern_b": {
+          "title": "(b) A switch per value",
+          "description": "Each value shows what applies at present. Switch on \"own value\" to change it.",
+          "data": {
+            "override_open_in_morning": "Own value for: open in the morning",
+            "open_in_morning": "Open in the morning",
+            "override_morning_position": "Own value for: morning position",
+            "morning_position": "Morning position",
+            "override_random_offset": "Own value for: random offset",
+            "random_offset": "Random offset"
+          }
+        },
+        "pattern_c": {
+          "title": "(c) A list of own values",
+          "description": "Everything that is not listed is inherited. Inherited at present: morning position {morning_position_inherited} (from {morning_position_source}), random offset {random_offset_inherited} (from {random_offset_source}).",
+          "data": {
+            "overridden": "Values this level sets itself"
+          }
+        },
+        "pattern_c_values": {
+          "title": "Own values",
+          "data": {
+            "open_in_morning": "Open in the morning",
+            "morning_position": "Morning position",
+            "random_offset": "Random offset"
+          }
+        },
+        "pattern_a": {
+          "title": "Daily routine",
+          "description": "When and how far the shutter moves in the morning and in the evening.",
+          "data": {
+            "open_in_morning": "Open in the morning",
+            "morning_position": "Morning position",
+            "evening_position": "Evening position"
+          },
+          "data_description": {
+            "open_in_morning": "Switch off for rooms that stay dark in the morning.",
+            "morning_position": "100 % is fully open, 0 % fully closed. Leave empty to inherit. Inherited at present: {morning_position_inherited} (from {morning_position_source}).",
+            "evening_position": "100 % is fully open, 0 % fully closed. Leave empty to inherit. Inherited at present: {evening_position_inherited} (from {evening_position_source})."
+          },
+          "sections": {
+            "expert": {
+              "name": "Expert values",
+              "description": "Sensible defaults apply. Change them only if you know why.",
+              "data": {
+                "random_offset": "Random offset"
+              },
+              "data_description": {
+                "random_offset": "Moves each trigger by up to this many minutes. 0 switches it off. Leave empty to inherit. Inherited at present: {random_offset_inherited} (from {random_offset_source})."
+              }
+            }
+          }
+        }
+      },
+      "error": {
+        "changed_without_override": "You changed this value, but \"own value\" is switched off."
+      },
+      "abort": {
+        "reconfigure_successful": "Saved."
+      }
+    }
+  },
+  "selector": {
+    "inherited_switch": {
+      "options": {
+        "inherit_on": "Inherit (at present: on)",
+        "inherit_off": "Inherit (at present: off)",
+        "on": "On",
+        "off": "Off"
+      }
+    },
+    "lab_setting": {
+      "options": {
+        "open_in_morning": "Open in the morning",
+        "morning_position": "Morning position",
+        "random_offset": "Random offset"
+      }
+    }
+  },
+  "issues": {
+    "dangling_group": {
+      "title": "The group of window \"{window}\" no longer exists",
+      "description": "The window \"{window}\" referred to a group that was removed. It inherits its values from the house until you change the window and choose a group or save it without one."
+    }
+  },
+  "entity": {
+    "sensor": {
+      "effective_morning_position": {
+        "name": "Effective morning position"
       }
     }
   }

@@ -1,0 +1,26 @@
+{
+  "switch": {
+    "label": "Wandtaster",
+    "description": "Den Rollladen mit Wandtastern über Home Assistant bedienen."
+  },
+  "step": {
+    "title": "Wandtaster",
+    "description": "Was die Wandtaster dieses Fensters tun."
+  },
+  "fields": {
+    "hold_to_move": {
+      "label": "Halten zum Fahren",
+      "description": "Der Rollladen fährt, solange die Taste gehalten wird, und stoppt beim Loslassen."
+    },
+    "double_press_position": {
+      "label": "Position bei Doppeldruck",
+      "description": "100 % ist ganz offen, 0 % ganz geschlossen."
+    }
+  },
+  "unavailable": {
+    "hold_to_move": {
+      "label": "Halten zum Fahren: nicht verfügbar",
+      "description": "{limited_by_stop} kann nicht gestoppt werden, deshalb sind Halten zum Fahren und Stopp bei Tastendruck nicht verfügbar."
+    }
+  }
+}

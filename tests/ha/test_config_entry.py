@@ -5,6 +5,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
+from custom_components.roller_shutter_suite.config_flow import default_settings
 from custom_components.roller_shutter_suite.const import DOMAIN, ENTRY_TITLE
 
 
@@ -23,7 +24,7 @@ async def test_user_flow_creates_entry_that_sets_up(hass: HomeAssistant) -> None
 
     assert result["type"] is FlowResultType.CREATE_ENTRY
     assert result["title"] == ENTRY_TITLE
-    assert result["data"] == {}
+    assert result["data"] == {"settings": default_settings()}
     assert result["result"].state is ConfigEntryState.LOADED
 
 

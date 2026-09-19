@@ -1,0 +1,26 @@
+{
+  "switch": {
+    "label": "Shading",
+    "description": "Lower the shutter while the sun shines on the window."
+  },
+  "step": {
+    "title": "Shading",
+    "description": "How the window is shaded."
+  },
+  "fields": {
+    "shading_position": {
+      "label": "Shading position",
+      "description": "Where the shutter goes while shading."
+    },
+    "use_forecast": {
+      "label": "Use the forecast",
+      "description": "Shade early on days that are forecast to be hot."
+    }
+  },
+  "unavailable": {
+    "shading_position": {
+      "label": "Shading position: not available",
+      "description": "{limited_by_set_position} cannot be sent to a position, only opened and closed. Shading therefore closes the shutter completely."
+    }
+  }
+}

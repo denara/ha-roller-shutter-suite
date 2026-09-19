@@ -1,0 +1,31 @@
+{
+  "switch": {
+    "label": "Daily routine",
+    "description": "Open in the morning and close in the evening."
+  },
+  "step": {
+    "title": "Daily routine",
+    "description": "When and how far the shutter moves in the morning and in the evening."
+  },
+  "fields": {
+    "open_in_morning": {
+      "label": "Open in the morning",
+      "description": "Switch off for rooms that stay dark in the morning."
+    },
+    "morning_position": {
+      "label": "Morning position",
+      "description": "100 % is fully open, 0 % fully closed."
+    },
+    "evening_position": {
+      "label": "Evening position",
+      "description": "100 % is fully open, 0 % fully closed."
+    },
+    "random_offset": {
+      "label": "Random offset",
+      "description": "Moves each trigger by up to this many minutes. 0 switches it off."
+    }
+  },
+  "errors": {
+    "evening_above_morning": "The evening position must not be more open than the morning position."
+  }
+}

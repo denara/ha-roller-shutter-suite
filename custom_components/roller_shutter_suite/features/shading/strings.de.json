@@ -1,0 +1,26 @@
+{
+  "switch": {
+    "label": "Beschattung",
+    "description": "Den Rollladen senken, solange die Sonne auf das Fenster scheint."
+  },
+  "step": {
+    "title": "Beschattung",
+    "description": "Wie das Fenster beschattet wird."
+  },
+  "fields": {
+    "shading_position": {
+      "label": "Beschattungsposition",
+      "description": "Wohin der Rollladen beim Beschatten fährt."
+    },
+    "use_forecast": {
+      "label": "Vorhersage verwenden",
+      "description": "An Tagen, für die Hitze vorhergesagt ist, früh beschatten."
+    }
+  },
+  "unavailable": {
+    "shading_position": {
+      "label": "Beschattungsposition: nicht verfügbar",
+      "description": "{limited_by_set_position} kann nicht auf eine Position gefahren werden, nur geöffnet und geschlossen. Beim Beschatten wird der Rollladen deshalb ganz geschlossen."
+    }
+  }
+}

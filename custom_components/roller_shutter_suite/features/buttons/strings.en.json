@@ -1,0 +1,26 @@
+{
+  "switch": {
+    "label": "Wall buttons",
+    "description": "Operate the shutter with wall buttons through Home Assistant."
+  },
+  "step": {
+    "title": "Wall buttons",
+    "description": "What the wall buttons of this window do."
+  },
+  "fields": {
+    "hold_to_move": {
+      "label": "Hold to move",
+      "description": "The shutter moves while the button is held and stops on release."
+    },
+    "double_press_position": {
+      "label": "Position on double press",
+      "description": "100 % is fully open, 0 % fully closed."
+    }
+  },
+  "unavailable": {
+    "hold_to_move": {
+      "label": "Hold to move: not available",
+      "description": "{limited_by_stop} cannot be stopped, so hold-to-move and stop-on-press are unavailable."
+    }
+  }
+}

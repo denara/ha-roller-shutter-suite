@@ -1,0 +1,159 @@
+{
+  "_templates": {
+    "inherit_hint": "Leer lassen, um zu erben. Geerbt wird derzeit: {inherited} (von {source}).",
+    "features_title": "Funktionen",
+    "features_description": "Wähle, was hier eingeschaltet ist. Nur eingeschaltete Funktionen bekommen eine eigene Seite.",
+    "features_description_inheriting": "Wähle, was diese Ebene selbst festlegt. „Erben“ folgt der Ebene darüber; der Eintrag zeigt, was das derzeit bedeutet. Nur eingeschaltete Funktionen bekommen eine eigene Seite.",
+    "expert_name": "Expertenwerte",
+    "expert_description": "Es gelten sinnvolle Vorgaben. Ändere sie nur, wenn du weißt, warum."
+  },
+  "config": {
+    "step": {
+      "user": {
+        "title": "Roller Shutter Suite einrichten",
+        "description": "Möchtest du Roller Shutter Suite einrichten? Das Haus startet mit Vorgabewerten, die du danach ändern kannst."
+      }
+    },
+    "abort": {
+      "reconfigure_successful": "Die Werte des Hauses wurden gespeichert."
+    }
+  },
+  "config_subentries": {
+    "group": {
+      "entry_type": "Gruppe",
+      "initiate_flow": {
+        "user": "Gruppe hinzufügen",
+        "reconfigure": "Gruppe ändern"
+      },
+      "step": {
+        "basics": {
+          "title": "Gruppe",
+          "description": "Eine Gruppe hält Werte, die sich mehrere Fenster teilen, zum Beispiel eine Fassade oder ein Stockwerk.",
+          "data": {
+            "name": "Name"
+          }
+        }
+      },
+      "abort": {
+        "reconfigure_successful": "Die Gruppe wurde gespeichert."
+      }
+    },
+    "window": {
+      "entry_type": "Fenster",
+      "initiate_flow": {
+        "user": "Fenster hinzufügen",
+        "reconfigure": "Fenster ändern"
+      },
+      "step": {
+        "basics": {
+          "title": "Fenster",
+          "description": "Wähle den Rollladen dieses Fensters. Werden mehrere Rollläden immer gemeinsam bewegt, wähle alle oder eine Rollladengruppe.",
+          "data": {
+            "name": "Name",
+            "covers": "Rollläden",
+            "group_id": "Gruppe"
+          },
+          "data_description": {
+            "covers": "Ein Rollladen kann nur zu einem Fenster gehören.",
+            "group_id": "Das Fenster erbt seine Werte von dieser Gruppe. Leer lassen, um direkt vom Haus zu erben."
+          }
+        },
+        "members": {
+          "title": "Mitglieder der Rollladengruppe",
+          "description": "{groups} ist eine Rollladengruppe. Das Fenster speichert und bewegt ihre Mitglieder einzeln:\n\n{members}",
+          "menu_options": {
+            "members_accept": "Mit diesen Rollläden fortfahren",
+            "basics": "Andere Rollläden wählen"
+          }
+        }
+      },
+      "error": {
+        "no_covers": "Die Auswahl enthält keinen Rollladen.",
+        "cover_in_use": "{cover} gehört bereits zum Fenster „{window}“. Ein Rollladen kann nur zu einem Fenster gehören."
+      },
+      "abort": {
+        "reconfigure_successful": "Das Fenster wurde gespeichert."
+      }
+    },
+    "pattern_lab": {
+      "entry_type": "Musterlabor (Spike)",
+      "initiate_flow": {
+        "user": "Ein Vererbungsmuster ausprobieren",
+        "reconfigure": "Muster erneut öffnen"
+      },
+      "step": {
+        "user": {
+          "title": "Vererbungsmuster",
+          "menu_options": {
+            "pattern_a": "(a) Leer bedeutet erben",
+            "pattern_b": "(b) Ein Schalter je Wert",
+            "pattern_c": "(c) Eine Liste eigener Werte"
+          }
+        },
+        "pattern_b": {
+          "title": "(b) Ein Schalter je Wert",
+          "description": "Jeder Wert zeigt, was derzeit gilt. Schalte „eigener Wert“ ein, um ihn zu ändern.",
+          "data": {
+            "override_open_in_morning": "Eigener Wert für: morgens öffnen",
+            "open_in_morning": "Morgens öffnen",
+            "override_morning_position": "Eigener Wert für: Morgenposition",
+            "morning_position": "Morgenposition",
+            "override_random_offset": "Eigener Wert für: Zufallsversatz",
+            "random_offset": "Zufallsversatz"
+          }
+        },
+        "pattern_c": {
+          "title": "(c) Eine Liste eigener Werte",
+          "description": "Alles, was nicht aufgeführt ist, wird geerbt. Geerbt wird derzeit: Morgenposition {morning_position_inherited} (von {morning_position_source}), Zufallsversatz {random_offset_inherited} (von {random_offset_source}).",
+          "data": {
+            "overridden": "Werte, die diese Ebene selbst festlegt"
+          }
+        },
+        "pattern_c_values": {
+          "title": "Eigene Werte",
+          "data": {
+            "open_in_morning": "Morgens öffnen",
+            "morning_position": "Morgenposition",
+            "random_offset": "Zufallsversatz"
+          }
+        }
+      },
+      "error": {
+        "changed_without_override": "Du hast diesen Wert geändert, aber „eigener Wert“ ist ausgeschaltet."
+      },
+      "abort": {
+        "reconfigure_successful": "Gespeichert."
+      }
+    }
+  },
+  "selector": {
+    "inherited_switch": {
+      "options": {
+        "inherit_on": "Erben (derzeit: ein)",
+        "inherit_off": "Erben (derzeit: aus)",
+        "on": "Ein",
+        "off": "Aus"
+      }
+    },
+    "lab_setting": {
+      "options": {
+        "open_in_morning": "Morgens öffnen",
+        "morning_position": "Morgenposition",
+        "random_offset": "Zufallsversatz"
+      }
+    }
+  },
+  "issues": {
+    "dangling_group": {
+      "title": "Die Gruppe des Fensters „{window}“ gibt es nicht mehr",
+      "description": "Das Fenster „{window}“ verwies auf eine Gruppe, die entfernt wurde. Es erbt seine Werte vom Haus, bis du das Fenster änderst und eine Gruppe wählst oder es ohne Gruppe speicherst."
+    }
+  },
+  "entity": {
+    "sensor": {
+      "effective_morning_position": {
+        "name": "Wirksame Morgenposition"
+      }
+    }
+  }
+}

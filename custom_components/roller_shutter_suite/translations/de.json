@@ -2,8 +2,382 @@
   "config": {
     "step": {
       "user": {
-        "description": "Möchtest du Roller Shutter Suite einrichten? Es gibt noch nichts zu konfigurieren.",
-        "title": "Roller Shutter Suite einrichten"
+        "title": "Roller Shutter Suite einrichten",
+        "description": "Möchtest du Roller Shutter Suite einrichten? Das Haus startet mit Vorgabewerten, die du danach ändern kannst."
+      },
+      "features": {
+        "title": "Funktionen",
+        "description": "Wähle, was hier eingeschaltet ist. Nur eingeschaltete Funktionen bekommen eine eigene Seite.",
+        "data": {
+          "enable_daily_routine": "Tagesablauf",
+          "enable_shading": "Beschattung",
+          "enable_buttons": "Wandtaster"
+        },
+        "data_description": {
+          "enable_daily_routine": "Morgens öffnen und abends schließen.",
+          "enable_shading": "Den Rollladen senken, solange die Sonne auf das Fenster scheint.",
+          "enable_buttons": "Den Rollladen mit Wandtastern über Home Assistant bedienen."
+        }
+      },
+      "feature_daily_routine": {
+        "title": "Tagesablauf",
+        "description": "Wann und wie weit der Rollladen morgens und abends fährt.",
+        "data": {
+          "open_in_morning": "Morgens öffnen",
+          "morning_position": "Morgenposition",
+          "evening_position": "Abendposition"
+        },
+        "data_description": {
+          "open_in_morning": "Ausschalten für Räume, die morgens dunkel bleiben.",
+          "morning_position": "100 % ist ganz offen, 0 % ganz geschlossen.",
+          "evening_position": "100 % ist ganz offen, 0 % ganz geschlossen."
+        },
+        "sections": {
+          "expert": {
+            "name": "Expertenwerte",
+            "description": "Es gelten sinnvolle Vorgaben. Ändere sie nur, wenn du weißt, warum.",
+            "data": {
+              "random_offset": "Zufallsversatz"
+            },
+            "data_description": {
+              "random_offset": "Verschiebt jeden Auslöser um bis zu so viele Minuten. 0 schaltet ihn aus."
+            }
+          }
+        }
+      },
+      "feature_shading": {
+        "title": "Beschattung",
+        "description": "Wie das Fenster beschattet wird.",
+        "data": {
+          "shading_position": "Beschattungsposition",
+          "use_forecast": "Vorhersage verwenden"
+        },
+        "data_description": {
+          "shading_position": "Wohin der Rollladen beim Beschatten fährt.",
+          "use_forecast": "An Tagen, für die Hitze vorhergesagt ist, früh beschatten."
+        }
+      },
+      "feature_buttons": {
+        "title": "Wandtaster",
+        "description": "Was die Wandtaster dieses Fensters tun.",
+        "data": {
+          "hold_to_move": "Halten zum Fahren",
+          "double_press_position": "Position bei Doppeldruck"
+        },
+        "data_description": {
+          "hold_to_move": "Der Rollladen fährt, solange die Taste gehalten wird, und stoppt beim Loslassen.",
+          "double_press_position": "100 % ist ganz offen, 0 % ganz geschlossen."
+        }
+      }
+    },
+    "abort": {
+      "reconfigure_successful": "Die Werte des Hauses wurden gespeichert."
+    },
+    "error": {
+      "evening_above_morning": "Die Abendposition darf nicht weiter offen sein als die Morgenposition."
+    }
+  },
+  "config_subentries": {
+    "group": {
+      "entry_type": "Gruppe",
+      "initiate_flow": {
+        "user": "Gruppe hinzufügen",
+        "reconfigure": "Gruppe ändern"
+      },
+      "step": {
+        "basics": {
+          "title": "Gruppe",
+          "description": "Eine Gruppe hält Werte, die sich mehrere Fenster teilen, zum Beispiel eine Fassade oder ein Stockwerk.",
+          "data": {
+            "name": "Name"
+          }
+        },
+        "features": {
+          "title": "Funktionen",
+          "description": "Wähle, was diese Ebene selbst festlegt. „Erben“ folgt der Ebene darüber; der Eintrag zeigt, was das derzeit bedeutet. Nur eingeschaltete Funktionen bekommen eine eigene Seite.",
+          "data": {
+            "enable_daily_routine": "Tagesablauf",
+            "enable_shading": "Beschattung",
+            "enable_buttons": "Wandtaster"
+          },
+          "data_description": {
+            "enable_daily_routine": "Morgens öffnen und abends schließen.",
+            "enable_shading": "Den Rollladen senken, solange die Sonne auf das Fenster scheint.",
+            "enable_buttons": "Den Rollladen mit Wandtastern über Home Assistant bedienen."
+          }
+        },
+        "feature_daily_routine": {
+          "title": "Tagesablauf",
+          "description": "Wann und wie weit der Rollladen morgens und abends fährt.",
+          "data": {
+            "open_in_morning": "Morgens öffnen",
+            "morning_position": "Morgenposition",
+            "evening_position": "Abendposition"
+          },
+          "data_description": {
+            "open_in_morning": "Ausschalten für Räume, die morgens dunkel bleiben.",
+            "morning_position": "100 % ist ganz offen, 0 % ganz geschlossen. Leer lassen, um zu erben. Geerbt wird derzeit: {morning_position_inherited} (von {morning_position_source}).",
+            "evening_position": "100 % ist ganz offen, 0 % ganz geschlossen. Leer lassen, um zu erben. Geerbt wird derzeit: {evening_position_inherited} (von {evening_position_source})."
+          },
+          "sections": {
+            "expert": {
+              "name": "Expertenwerte",
+              "description": "Es gelten sinnvolle Vorgaben. Ändere sie nur, wenn du weißt, warum.",
+              "data": {
+                "random_offset": "Zufallsversatz"
+              },
+              "data_description": {
+                "random_offset": "Verschiebt jeden Auslöser um bis zu so viele Minuten. 0 schaltet ihn aus. Leer lassen, um zu erben. Geerbt wird derzeit: {random_offset_inherited} (von {random_offset_source})."
+              }
+            }
+          }
+        },
+        "feature_shading": {
+          "title": "Beschattung",
+          "description": "Wie das Fenster beschattet wird.",
+          "data": {
+            "shading_position": "Beschattungsposition",
+            "shading_position_unavailable": "Beschattungsposition: nicht verfügbar",
+            "use_forecast": "Vorhersage verwenden"
+          },
+          "data_description": {
+            "shading_position": "Wohin der Rollladen beim Beschatten fährt. Leer lassen, um zu erben. Geerbt wird derzeit: {shading_position_inherited} (von {shading_position_source}).",
+            "shading_position_unavailable": "{limited_by_set_position} kann nicht auf eine Position gefahren werden, nur geöffnet und geschlossen. Beim Beschatten wird der Rollladen deshalb ganz geschlossen.",
+            "use_forecast": "An Tagen, für die Hitze vorhergesagt ist, früh beschatten."
+          }
+        },
+        "feature_buttons": {
+          "title": "Wandtaster",
+          "description": "Was die Wandtaster dieses Fensters tun.",
+          "data": {
+            "hold_to_move": "Halten zum Fahren",
+            "hold_to_move_unavailable": "Halten zum Fahren: nicht verfügbar",
+            "double_press_position": "Position bei Doppeldruck"
+          },
+          "data_description": {
+            "hold_to_move": "Der Rollladen fährt, solange die Taste gehalten wird, und stoppt beim Loslassen.",
+            "hold_to_move_unavailable": "{limited_by_stop} kann nicht gestoppt werden, deshalb sind Halten zum Fahren und Stopp bei Tastendruck nicht verfügbar.",
+            "double_press_position": "100 % ist ganz offen, 0 % ganz geschlossen. Leer lassen, um zu erben. Geerbt wird derzeit: {double_press_position_inherited} (von {double_press_position_source})."
+          }
+        }
+      },
+      "abort": {
+        "reconfigure_successful": "Die Gruppe wurde gespeichert."
+      },
+      "error": {
+        "evening_above_morning": "Die Abendposition darf nicht weiter offen sein als die Morgenposition."
+      }
+    },
+    "window": {
+      "entry_type": "Fenster",
+      "initiate_flow": {
+        "user": "Fenster hinzufügen",
+        "reconfigure": "Fenster ändern"
+      },
+      "step": {
+        "basics": {
+          "title": "Fenster",
+          "description": "Wähle den Rollladen dieses Fensters. Werden mehrere Rollläden immer gemeinsam bewegt, wähle alle oder eine Rollladengruppe.",
+          "data": {
+            "name": "Name",
+            "covers": "Rollläden",
+            "group_id": "Gruppe"
+          },
+          "data_description": {
+            "covers": "Ein Rollladen kann nur zu einem Fenster gehören.",
+            "group_id": "Das Fenster erbt seine Werte von dieser Gruppe. Leer lassen, um direkt vom Haus zu erben."
+          }
+        },
+        "members": {
+          "title": "Mitglieder der Rollladengruppe",
+          "description": "{groups} ist eine Rollladengruppe. Das Fenster speichert und bewegt ihre Mitglieder einzeln:\n\n{members}",
+          "menu_options": {
+            "members_accept": "Mit diesen Rollläden fortfahren",
+            "basics": "Andere Rollläden wählen"
+          }
+        },
+        "features": {
+          "title": "Funktionen",
+          "description": "Wähle, was diese Ebene selbst festlegt. „Erben“ folgt der Ebene darüber; der Eintrag zeigt, was das derzeit bedeutet. Nur eingeschaltete Funktionen bekommen eine eigene Seite.",
+          "data": {
+            "enable_daily_routine": "Tagesablauf",
+            "enable_shading": "Beschattung",
+            "enable_buttons": "Wandtaster"
+          },
+          "data_description": {
+            "enable_daily_routine": "Morgens öffnen und abends schließen.",
+            "enable_shading": "Den Rollladen senken, solange die Sonne auf das Fenster scheint.",
+            "enable_buttons": "Den Rollladen mit Wandtastern über Home Assistant bedienen."
+          }
+        },
+        "feature_daily_routine": {
+          "title": "Tagesablauf",
+          "description": "Wann und wie weit der Rollladen morgens und abends fährt.",
+          "data": {
+            "open_in_morning": "Morgens öffnen",
+            "morning_position": "Morgenposition",
+            "evening_position": "Abendposition"
+          },
+          "data_description": {
+            "open_in_morning": "Ausschalten für Räume, die morgens dunkel bleiben.",
+            "morning_position": "100 % ist ganz offen, 0 % ganz geschlossen. Leer lassen, um zu erben. Geerbt wird derzeit: {morning_position_inherited} (von {morning_position_source}).",
+            "evening_position": "100 % ist ganz offen, 0 % ganz geschlossen. Leer lassen, um zu erben. Geerbt wird derzeit: {evening_position_inherited} (von {evening_position_source})."
+          },
+          "sections": {
+            "expert": {
+              "name": "Expertenwerte",
+              "description": "Es gelten sinnvolle Vorgaben. Ändere sie nur, wenn du weißt, warum.",
+              "data": {
+                "random_offset": "Zufallsversatz"
+              },
+              "data_description": {
+                "random_offset": "Verschiebt jeden Auslöser um bis zu so viele Minuten. 0 schaltet ihn aus. Leer lassen, um zu erben. Geerbt wird derzeit: {random_offset_inherited} (von {random_offset_source})."
+              }
+            }
+          }
+        },
+        "feature_shading": {
+          "title": "Beschattung",
+          "description": "Wie das Fenster beschattet wird.",
+          "data": {
+            "shading_position": "Beschattungsposition",
+            "shading_position_unavailable": "Beschattungsposition: nicht verfügbar",
+            "use_forecast": "Vorhersage verwenden"
+          },
+          "data_description": {
+            "shading_position": "Wohin der Rollladen beim Beschatten fährt. Leer lassen, um zu erben. Geerbt wird derzeit: {shading_position_inherited} (von {shading_position_source}).",
+            "shading_position_unavailable": "{limited_by_set_position} kann nicht auf eine Position gefahren werden, nur geöffnet und geschlossen. Beim Beschatten wird der Rollladen deshalb ganz geschlossen.",
+            "use_forecast": "An Tagen, für die Hitze vorhergesagt ist, früh beschatten."
+          }
+        },
+        "feature_buttons": {
+          "title": "Wandtaster",
+          "description": "Was die Wandtaster dieses Fensters tun.",
+          "data": {
+            "hold_to_move": "Halten zum Fahren",
+            "hold_to_move_unavailable": "Halten zum Fahren: nicht verfügbar",
+            "double_press_position": "Position bei Doppeldruck"
+          },
+          "data_description": {
+            "hold_to_move": "Der Rollladen fährt, solange die Taste gehalten wird, und stoppt beim Loslassen.",
+            "hold_to_move_unavailable": "{limited_by_stop} kann nicht gestoppt werden, deshalb sind Halten zum Fahren und Stopp bei Tastendruck nicht verfügbar.",
+            "double_press_position": "100 % ist ganz offen, 0 % ganz geschlossen. Leer lassen, um zu erben. Geerbt wird derzeit: {double_press_position_inherited} (von {double_press_position_source})."
+          }
+        }
+      },
+      "error": {
+        "no_covers": "Die Auswahl enthält keinen Rollladen.",
+        "cover_in_use": "{cover} gehört bereits zum Fenster „{window}“. Ein Rollladen kann nur zu einem Fenster gehören.",
+        "evening_above_morning": "Die Abendposition darf nicht weiter offen sein als die Morgenposition."
+      },
+      "abort": {
+        "reconfigure_successful": "Das Fenster wurde gespeichert."
+      }
+    },
+    "pattern_lab": {
+      "entry_type": "Musterlabor (Spike)",
+      "initiate_flow": {
+        "user": "Ein Vererbungsmuster ausprobieren",
+        "reconfigure": "Muster erneut öffnen"
+      },
+      "step": {
+        "user": {
+          "title": "Vererbungsmuster",
+          "menu_options": {
+            "pattern_a": "(a) Leer bedeutet erben",
+            "pattern_b": "(b) Ein Schalter je Wert",
+            "pattern_c": "(c) Eine Liste eigener Werte"
+          }
+        },
+        "pattern_b": {
+          "title": "(b) Ein Schalter je Wert",
+          "description": "Jeder Wert zeigt, was derzeit gilt. Schalte „eigener Wert“ ein, um ihn zu ändern.",
+          "data": {
+            "override_open_in_morning": "Eigener Wert für: morgens öffnen",
+            "open_in_morning": "Morgens öffnen",
+            "override_morning_position": "Eigener Wert für: Morgenposition",
+            "morning_position": "Morgenposition",
+            "override_random_offset": "Eigener Wert für: Zufallsversatz",
+            "random_offset": "Zufallsversatz"
+          }
+        },
+        "pattern_c": {
+          "title": "(c) Eine Liste eigener Werte",
+          "description": "Alles, was nicht aufgeführt ist, wird geerbt. Geerbt wird derzeit: Morgenposition {morning_position_inherited} (von {morning_position_source}), Zufallsversatz {random_offset_inherited} (von {random_offset_source}).",
+          "data": {
+            "overridden": "Werte, die diese Ebene selbst festlegt"
+          }
+        },
+        "pattern_c_values": {
+          "title": "Eigene Werte",
+          "data": {
+            "open_in_morning": "Morgens öffnen",
+            "morning_position": "Morgenposition",
+            "random_offset": "Zufallsversatz"
+          }
+        },
+        "pattern_a": {
+          "title": "Tagesablauf",
+          "description": "Wann und wie weit der Rollladen morgens und abends fährt.",
+          "data": {
+            "open_in_morning": "Morgens öffnen",
+            "morning_position": "Morgenposition",
+            "evening_position": "Abendposition"
+          },
+          "data_description": {
+            "open_in_morning": "Ausschalten für Räume, die morgens dunkel bleiben.",
+            "morning_position": "100 % ist ganz offen, 0 % ganz geschlossen. Leer lassen, um zu erben. Geerbt wird derzeit: {morning_position_inherited} (von {morning_position_source}).",
+            "evening_position": "100 % ist ganz offen, 0 % ganz geschlossen. Leer lassen, um zu erben. Geerbt wird derzeit: {evening_position_inherited} (von {evening_position_source})."
+          },
+          "sections": {
+            "expert": {
+              "name": "Expertenwerte",
+              "description": "Es gelten sinnvolle Vorgaben. Ändere sie nur, wenn du weißt, warum.",
+              "data": {
+                "random_offset": "Zufallsversatz"
+              },
+              "data_description": {
+                "random_offset": "Verschiebt jeden Auslöser um bis zu so viele Minuten. 0 schaltet ihn aus. Leer lassen, um zu erben. Geerbt wird derzeit: {random_offset_inherited} (von {random_offset_source})."
+              }
+            }
+          }
+        }
+      },
+      "error": {
+        "changed_without_override": "Du hast diesen Wert geändert, aber „eigener Wert“ ist ausgeschaltet."
+      },
+      "abort": {
+        "reconfigure_successful": "Gespeichert."
+      }
+    }
+  },
+  "selector": {
+    "inherited_switch": {
+      "options": {
+        "inherit_on": "Erben (derzeit: ein)",
+        "inherit_off": "Erben (derzeit: aus)",
+        "on": "Ein",
+        "off": "Aus"
+      }
+    },
+    "lab_setting": {
+      "options": {
+        "open_in_morning": "Morgens öffnen",
+        "morning_position": "Morgenposition",
+        "random_offset": "Zufallsversatz"
+      }
+    }
+  },
+  "issues": {
+    "dangling_group": {
+      "title": "Die Gruppe des Fensters „{window}“ gibt es nicht mehr",
+      "description": "Das Fenster „{window}“ verwies auf eine Gruppe, die entfernt wurde. Es erbt seine Werte vom Haus, bis du das Fenster änderst und eine Gruppe wählst oder es ohne Gruppe speicherst."
+    }
+  },
+  "entity": {
+    "sensor": {
+      "effective_morning_position": {
+        "name": "Wirksame Morgenposition"
       }
     }
   }

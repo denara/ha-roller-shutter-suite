@@ -1,0 +1,159 @@
+{
+  "_templates": {
+    "inherit_hint": "Leave empty to inherit. Inherited at present: {inherited} (from {source}).",
+    "features_title": "Features",
+    "features_description": "Choose what is switched on here. Only the features that are switched on get a page of their own.",
+    "features_description_inheriting": "Choose what this level decides itself. \"Inherit\" follows the level above; the entry shows what that means at present. Only the features that are switched on get a page of their own.",
+    "expert_name": "Expert values",
+    "expert_description": "Sensible defaults apply. Change them only if you know why."
+  },
+  "config": {
+    "step": {
+      "user": {
+        "title": "Set up Roller Shutter Suite",
+        "description": "Do you want to set up Roller Shutter Suite? The house starts with default values that you can change afterwards."
+      }
+    },
+    "abort": {
+      "reconfigure_successful": "The values of the house were saved."
+    }
+  },
+  "config_subentries": {
+    "group": {
+      "entry_type": "Group",
+      "initiate_flow": {
+        "user": "Add group",
+        "reconfigure": "Change group"
+      },
+      "step": {
+        "basics": {
+          "title": "Group",
+          "description": "A group holds values that several windows share, for example a façade or a floor.",
+          "data": {
+            "name": "Name"
+          }
+        }
+      },
+      "abort": {
+        "reconfigure_successful": "The group was saved."
+      }
+    },
+    "window": {
+      "entry_type": "Window",
+      "initiate_flow": {
+        "user": "Add window",
+        "reconfigure": "Change window"
+      },
+      "step": {
+        "basics": {
+          "title": "Window",
+          "description": "Choose the cover of this window. If several covers are always moved together, choose all of them or a cover group.",
+          "data": {
+            "name": "Name",
+            "covers": "Covers",
+            "group_id": "Group"
+          },
+          "data_description": {
+            "covers": "A cover can belong to one window only.",
+            "group_id": "The window inherits its values from this group. Leave empty to inherit from the house directly."
+          }
+        },
+        "members": {
+          "title": "Members of the cover group",
+          "description": "{groups} is a cover group. The window will store and move its members individually:\n\n{members}",
+          "menu_options": {
+            "members_accept": "Continue with these covers",
+            "basics": "Choose other covers"
+          }
+        }
+      },
+      "error": {
+        "no_covers": "The selection contains no cover.",
+        "cover_in_use": "{cover} already belongs to the window \"{window}\". A cover can belong to one window only."
+      },
+      "abort": {
+        "reconfigure_successful": "The window was saved."
+      }
+    },
+    "pattern_lab": {
+      "entry_type": "Pattern lab (spike)",
+      "initiate_flow": {
+        "user": "Try an inheritance pattern",
+        "reconfigure": "Reopen the pattern"
+      },
+      "step": {
+        "user": {
+          "title": "Inheritance patterns",
+          "menu_options": {
+            "pattern_a": "(a) Empty means inherit",
+            "pattern_b": "(b) A switch per value",
+            "pattern_c": "(c) A list of own values"
+          }
+        },
+        "pattern_b": {
+          "title": "(b) A switch per value",
+          "description": "Each value shows what applies at present. Switch on \"own value\" to change it.",
+          "data": {
+            "override_open_in_morning": "Own value for: open in the morning",
+            "open_in_morning": "Open in the morning",
+            "override_morning_position": "Own value for: morning position",
+            "morning_position": "Morning position",
+            "override_random_offset": "Own value for: random offset",
+            "random_offset": "Random offset"
+          }
+        },
+        "pattern_c": {
+          "title": "(c) A list of own values",
+          "description": "Everything that is not listed is inherited. Inherited at present: morning position {morning_position_inherited} (from {morning_position_source}), random offset {random_offset_inherited} (from {random_offset_source}).",
+          "data": {
+            "overridden": "Values this level sets itself"
+          }
+        },
+        "pattern_c_values": {
+          "title": "Own values",
+          "data": {
+            "open_in_morning": "Open in the morning",
+            "morning_position": "Morning position",
+            "random_offset": "Random offset"
+          }
+        }
+      },
+      "error": {
+        "changed_without_override": "You changed this value, but \"own value\" is switched off."
+      },
+      "abort": {
+        "reconfigure_successful": "Saved."
+      }
+    }
+  },
+  "selector": {
+    "inherited_switch": {
+      "options": {
+        "inherit_on": "Inherit (at present: on)",
+        "inherit_off": "Inherit (at present: off)",
+        "on": "On",
+        "off": "Off"
+      }
+    },
+    "lab_setting": {
+      "options": {
+        "open_in_morning": "Open in the morning",
+        "morning_position": "Morning position",
+        "random_offset": "Random offset"
+      }
+    }
+  },
+  "issues": {
+    "dangling_group": {
+      "title": "The group of window \"{window}\" no longer exists",
+      "description": "The window \"{window}\" referred to a group that was removed. It inherits its values from the house until you change the window and choose a group or save it without one."
+    }
+  },
+  "entity": {
+    "sensor": {
+      "effective_morning_position": {
+        "name": "Effective morning position"
+      }
+    }
+  }
+}

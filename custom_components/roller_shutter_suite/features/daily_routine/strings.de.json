@@ -1,0 +1,31 @@
+{
+  "switch": {
+    "label": "Tagesablauf",
+    "description": "Morgens öffnen und abends schließen."
+  },
+  "step": {
+    "title": "Tagesablauf",
+    "description": "Wann und wie weit der Rollladen morgens und abends fährt."
+  },
+  "fields": {
+    "open_in_morning": {
+      "label": "Morgens öffnen",
+      "description": "Ausschalten für Räume, die morgens dunkel bleiben."
+    },
+    "morning_position": {
+      "label": "Morgenposition",
+      "description": "100 % ist ganz offen, 0 % ganz geschlossen."
+    },
+    "evening_position": {
+      "label": "Abendposition",
+      "description": "100 % ist ganz offen, 0 % ganz geschlossen."
+    },
+    "random_offset": {
+      "label": "Zufallsversatz",
+      "description": "Verschiebt jeden Auslöser um bis zu so viele Minuten. 0 schaltet ihn aus."
+    }
+  },
+  "errors": {
+    "evening_above_morning": "Die Abendposition darf nicht weiter offen sein als die Morgenposition."
+  }
+}
