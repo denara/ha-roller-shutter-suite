@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Approved by the project owner on 2026-09-19. All thirteen decisions were accepted as recommended; the boxes keep the reasons and the rejected alternatives. |
+| Status | Approved by the project owner on 2026-09-19. All fourteen decisions were accepted as recommended; the boxes keep the reasons and the rejected alternatives. |
 | Refines | [project-brief.md](project-brief.md), where the brief refers to "the domain design specification" or "D00" |
 | Audience | Implementing agents and maintainers |
 
@@ -105,7 +105,7 @@ The gate rules are evaluated in this order; the first rule that applies decides.
 | 4 | Operating mode (E9) | `off`: protection and comfort. `protection only`: comfort. | Suppress. |
 | 5 | Pause (E4) | comfort | Suppress. |
 | 6 | Person-at-the-window dam (guardrail 3) | protection and comfort | Defer until the dam ends. |
-| 7 | Manual override dam (E1, E2) | comfort | Defer or suppress, depending on the end rule of the dam. |
+| 7 | Manual override dam (E1, E2) | comfort, except the return to the manual position after a protection event ([section 10.2](#102-return-after-a-protection-event-d5)) | Defer or suppress, depending on the end rule of the dam. |
 | 8 | Movement in flight | comfort | Same target as the pending own command: suppress as duplicate. Different target: defer until the members have come to rest. Protection retargets at once. |
 | 9 | Motor protection (E10) | comfort | Change below the minimum: suppress. Inside the minimum interval since the last own comfort movement: defer until it has passed. |
 | 10 | Command backoff (N1) | protection and comfort | Defer until the next retry time. |
@@ -169,7 +169,7 @@ Both dams are armed by the movement tracker ([section 8](#8-observing-a-movement
 
 ### 3.1 Manual override dam
 
-- **Holds back:** comfort. Protection and fire pass, which is why no rule "protection ignores the override" is needed.
+- **Holds back:** comfort. Protection and fire pass, which is why no rule "protection ignores the override" is needed. One comfort wish passes too: the return to the manual position after a protection event (`protection_return_manual`, [section 10.2](#102-return-after-a-protection-event-d5)), because it restores exactly what the dam protects.
 - **Armed when** an external movement is detected while no protection wish is winning. A movement the integration commanded itself never arms it, whatever layer it came from.
 - **Remembers** the position the person chose, with the time.
 - **Ends** by the configured rule (E2): after fixed minutes; when the shading episode ends (only if it was armed during one); at the next boundary between parts of the day (default); when the room has been empty for the configured time; or at once through the "resume automation" button or action. When it ends, the window is recomputed; nothing is replayed.
@@ -369,7 +369,7 @@ Rules for option (d):
 - **Configuration.** The user selects one or more cover entities. If a selected entity is a Home Assistant cover group, the configuration resolves it into its members, recursively, and shows the result before it is saved; the members are stored, never the group entity. Members are listed only where they differ: measurements, travel times, and what the capability profile found.
 - **Validation.** "A cover belongs to at most one window" applies per member. A group whose members are partly used by another window is refused with an explanation that names the member.
 - **Commands** go to every available member. Inside a window, the staggering gap applies between members as it does between windows, because the rule exists per motor; it can be switched off per window. Fire is never staggered.
-- **Observation** is per member, each with its own tracker, capability profile, travel times and command verification. The window is moving as soon as one member moves and until the last member has settled. **The window has a logical position only when every member stands at its own target within its tolerance; otherwise it has none**, and the members' values are shown individually. It is never the position of the first member: with unequal members that would state as the window's position a value that only one of them has. Where no targets are known (nothing commanded yet, or after a restart), the window has a position only if all members report the same position within tolerance. The window-level capabilities are the lowest common denominator; F7 explains which member limits what.
+- **Observation** is per member, each with its own tracker, capability profile, travel times and command verification. The window is moving as soon as one member moves and until the last member has settled. **The window has a logical position only when every member stands at its own target within its tolerance; otherwise it has none**, and the members' values are shown individually. It is never the position of the first member: with unequal members that would state as the window's position a value that only one of them has. The members' targets are their last commanded targets, which are part of the persisted state (section 11), so this rule holds across a restart and a reload. Only for a window whose members have **never been commanded** does the fallback apply: it has a position if all members report the same position within tolerance. If some members have a last command and others have none, the window has no position. The window-level capabilities are the lowest common denominator; F7 explains which member limits what.
 - **A member that is unavailable:** the others are commanded; the status shows `member_unavailable` with the member; when it returns it is brought to the common target, and that is an own movement. If all members are unavailable, the window is unavailable.
 
 > **Decision 8 — A single member moved by hand.** Recommendation: the override applies to the **whole window**. The other members stay where they are; nothing follows the hand-moved one. When the dam ends, the recompute brings all members to the common target. Reason: the person's intent is about the room, not about one motor; and one window must keep one status. *Rejected:* an override per member (four dams, four end times and a status that can no longer be stated in one sentence); and letting the other members follow the hand-moved one (a hand movement that triggers three motors is the kind of surprise the integration exists to remove).
@@ -401,6 +401,8 @@ The trigger has three states. **Active** and **inactive** come from a value of t
 
 ### 10.2 Return after a protection event (D5)
 
+> **Decision 14 — The return to the manual position and the override dam.** The return is a wish of class comfort from the protection layer with the reason `protection_return_manual`. As a comfort wish the manual override dam would hold it back, and that dam has to be armed for the return to happen at all. Decided: the manual override dam lets exactly this wish pass, under four conditions. (a) Only if the override is still armed when the waiting time after the protection event has passed; otherwise there is no return wish and the window is evaluated normally. (b) The person-at-the-window dam still holds the return back. (c) All constraints apply to it: lockout protection, the ventilation floor, frost protection, the direction of the wish. (d) The waiting time of this section has passed first; the end time of the event is persisted for that (section 11). Every other gate rule applies as to any comfort wish: maintenance lock, operating mode, pause, movement in flight, motor protection, backoff, staggering, dry-run. *Rejected:* a fourth wish class for the return. It would widen every table of constraints and gate rules for the sake of a single case.
+
 When an event starts, the window remembers its position and the owner of that position. When the event has ended and its waiting time has passed without a new activation, the window is recomputed. Only if the remembered owner was `user` **and** the manual override dam is still armed (decision 4), the remembered position is restored one to one; a remembered position that is unknown is skipped. Fire never returns automatically.
 
 ### 10.3 Watchdog (D9)
@@ -415,7 +417,8 @@ Locks: a maintenance lock or a pause that lasts longer than seven days is **repo
 
 Persisted per window, versioned, all timestamps timezone-aware (naive ones are rejected at the boundary):
 
-- owner of the position; per member the last own command (target, time, wish class) and the last observation;
+- owner of the position; per member the last own command (target, direction, time, wish class, context ID) and the last observation. The last commanded target per member is what the window-level position of section 9 is judged against, and what lets a reload during a movement continue the same expectation instead of seeing a manual movement or sending the command again;
+- per member the **command backoff as facts**: the number of attempts of the current command and the time of the last attempt. The next retry time is not stored; it is computed from these two facts with the current settings. A reload right after a failed attempt therefore cannot trigger an immediate second command;
 - manual override dam: armed at, end rule with its absolute end if it has one, remembered position;
 - person-at-the-window dam: ends at;
 - per protection event: state, active since, **ended at**, released flag, remembered position and owner. The end time is persisted, not a remaining duration or a deadline: the waiting time of section 10.2 is configuration and is applied to the end time whenever it is evaluated, so it survives a restart and follows a changed setting;
@@ -493,5 +496,6 @@ Doors kept open, as places in the model and nothing more: covering type (C15); a
 | 11 | Inputs of F2 | Light entities per window; dark = sun elevation below a threshold, or the brightness source |
 | 12 | New windows start in dry-run | Yes |
 | 13 | Frost protection | Limits opening to the frost position; inherited source; waiver until the next morning; movements by hand exempt; optional release by sun, built with C10; preventive only |
+| 14 | Return to the manual position after a protection event | A comfort wish that the manual override dam lets pass, under four conditions; no fourth wish class |
 
 Also worth a look, because they are proposals stated as rules: the position reference flag, the hint event and the reference run as an action of F1 (section 8.4); the default of one hour before a blind protection source or a blind blocking contact is reported (section 10.1); dry-run as the last gate rule with simulated commands (section 2.3); the final layer order of section 2.1, which follows the brief's starting order except for decisions 1 and 2; the order of the gate rules in section 2.3; the latch of the day type (section 6.3); an unavailable blocking contact counts as open (section 2.2, constraint 3); an unavailable window contact sets no ventilation floor (constraint 4); fire needs an acknowledgement before the window returns to normal operation (section 2.4); the staggering gap also applies between the members of one window (section 9); members of a window without position feedback are mapped to open or close at 50 (section 8.1).
