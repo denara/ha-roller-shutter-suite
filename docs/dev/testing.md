@@ -13,10 +13,12 @@ The domain core is plain Python and imports nothing from Home Assistant. That ke
 
 Two details make that check work:
 
-- The Home Assistant test plugin imports `homeassistant` as soon as pytest loads it. `tests/core/pytest.ini` switches the plugin off. pytest uses the configuration file closest to the paths it is given, so `uv run pytest tests/core` uses that file, and every run that includes `tests/ha` uses `pyproject.toml`. The settings that both files share (warnings as errors, import mode, `asyncio_mode`) must stay identical.
+- The Home Assistant test plugin imports `homeassistant` as soon as pytest loads it. `tests/core/pytest.ini` switches the plugin off. pytest uses the configuration file closest to the paths it is given, so `uv run pytest tests/core` uses that file, and every run that includes `tests/ha` uses `pyproject.toml`. The settings that both files share (warnings as errors, import mode, `asyncio_mode`) must stay identical; `tests/core/test_pytest_configuration.py` fails when they differ or when the core file no longer switches the plugin off.
 - Importing `custom_components.roller_shutter_suite.core` would normally execute the integration's `__init__.py` first, which belongs to the Home Assistant layer. In a core run, `tests/core/conftest.py` registers an empty stand-in for the integration package, so the core is found without executing that file. Core tests import the core under its real name, for example `from custom_components.roller_shutter_suite.core import ...`.
 
-In a run of everything, `homeassistant` is loaded before the first test, so nothing can be proven there; the check stays passive and the core tests simply run along. The proof is the run of `tests/core` alone.
+In a run of everything, `homeassistant` is loaded before the first test, so nothing can be proven there; the check stays passive and the core tests simply run along. The proof is the run of `tests/core` alone. Every run prints a line "core purity proof: active" or "core purity proof: passive", so a log shows which one it was. A run that uses `tests/core/pytest.ini` but finds `homeassistant` already imported is refused with an error instead of going passive.
+
+The check covers `homeassistant` only. That the core imports nothing from the rest of the integration is not proven by these tests; a static import guard (block T03) enforces that.
 
 ## Running the tests
 
@@ -45,7 +47,7 @@ Coverage is measured for `custom_components/roller_shutter_suite` with branch co
   - `homeassistant.helpers.frame.report_usage` logs "Detected that custom integration '…' …" on the logger `homeassistant.helpers.frame`.
   - `homeassistant.helpers.deprecation` (deprecated functions, classes, constants, aliases and arguments) logs "The deprecated … was used from …" on the logger of the module that owns the deprecated name.
 
-  A fixture in `tests/ha/conftest.py` is active for every test under `tests/ha/`. It fails the test when such a message names this integration. Home Assistant logs some of these reports only once per process, so usually only the first test that reaches the deprecated call fails.
+  A fixture in `tests/ha/conftest.py` is active for every test under `tests/ha/`. It fails the test when such a message names this integration. Every test that reaches the deprecated call fails, not only the first one: Home Assistant remembers the usage reports it has already logged, but the test plugin clears that memory after every test, and the deprecation helper for functions logs on every call anyway.
 
   A test that provokes a report on purpose requests the `integration_reports` fixture, asserts on the list and clears it; `tests/ha/test_report_guard.py` shows how.
 
@@ -78,6 +80,8 @@ For behavior of the Home Assistant layer:
 ## Running the Home Assistant tests on Windows
 
 The Home Assistant test harness does not run on native Windows, because Home Assistant imports modules that exist only on POSIX systems. The core tests run everywhere, so `uv run pytest tests/core` works in a Windows shell.
+
+The same holds for the test discovery of an IDE: started from the repository root on native Windows it fails, because pytest cannot import the Home Assistant plugin there. Point the IDE's test runner at the folder `tests/core`, which works natively, and run everything else through WSL as described below.
 
 For the Home Assistant tests, use WSL 2 with a current Ubuntu LTS distribution, and use it for `uv` and the tests only:
 
