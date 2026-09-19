@@ -6,7 +6,7 @@ from datetime import datetime
 from types import MappingProxyType
 
 from ._validation import require_aware, require_identifier, require_type
-from .observation import WindowObservation
+from .observation import MembersAtTargets, WindowObservation
 from .state import WindowState
 from .values import AnySourceValue, Position, SourceValue, SunPosition
 
@@ -48,9 +48,21 @@ class WorldSnapshot:
     def window_position(self, tolerances: Mapping[str, int]) -> Position | None:
         """Return the logical position of the window, or ``None`` if it has none.
 
-        The observed members are compared with the last commanded targets of
-        the persisted state; the rules are those of
-        ``WindowObservation.position``. ``tolerances`` gives the tolerance of
-        every member (``CapabilityProfile.tolerance``).
+        The rules are those of ``WindowObservation.position``: all members
+        report the same position within tolerance. ``tolerances`` gives the
+        tolerance of every member (``CapabilityProfile.tolerance``).
         """
-        return self.observation.position(self.state.commanded_targets, tolerances)
+        return self.observation.position(tolerances)
+
+    def members_at_commanded_targets(
+        self, tolerances: Mapping[str, int]
+    ) -> MembersAtTargets:
+        """Say whether every member stands at its own last commanded target.
+
+        The observed members are compared with the last commanded targets of
+        the persisted state (``WindowState.commanded_targets``); the rules are
+        those of ``WindowObservation.members_at_commanded_targets``.
+        """
+        return self.observation.members_at_commanded_targets(
+            self.state.commanded_targets, tolerances
+        )

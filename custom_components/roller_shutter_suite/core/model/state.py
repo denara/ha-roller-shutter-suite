@@ -90,9 +90,9 @@ class ProtectionEventStatus(StrEnum):
 class MemberState:
     """What is persisted per member.
 
-    The last own command stays here with its target: the position of the
-    window and the comparison after a restart both need the last commanded
-    target of every member.
+    The last own command stays here with its target: the question whether
+    the members stand where they were commanded to, and the comparison after
+    a restart, both need the last commanded target of every member.
 
     The command backoff is persisted as facts: ``command_attempts`` is the
     number of attempts of the current command, ``last_attempt_at`` the time of

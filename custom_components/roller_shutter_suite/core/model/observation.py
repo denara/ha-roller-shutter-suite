@@ -110,8 +110,8 @@ class WindowObservation:
     The window is available while at least one member is, and it reports a
     movement as soon as one member does. Whether a movement has *settled* is
     the tracker's knowledge and not part of this view. The position of the
-    window is not a property, because it depends on the members' last
-    commanded targets and tolerances: see :meth:`position`.
+    window is not a property, because it depends on the members'
+    tolerances: see :meth:`position`.
     """
 
     members: tuple[MemberObservation, ...]
@@ -139,20 +139,10 @@ class WindowObservation:
         return any(member.observation.moving for member in self.members)
 
     def _reports(
-        self, commanded: Mapping[str, Position], tolerances: Mapping[str, int]
-    ) -> list[tuple[int, Position | None, int]] | None:
-        """Validate the arguments; return (report, target, tolerance) per member.
-
-        ``None`` means that a member reports no position.
-        """
-        known = {member.member_id for member in self.members}
-        for member_id in commanded:
-            if member_id not in known:
-                raise ValueError(
-                    f"a commanded target names {member_id!r}, which is not a "
-                    "member of this window"
-                )
-        rows: list[tuple[int, Position | None, int]] | None = []
+        self, tolerances: Mapping[str, int]
+    ) -> list[tuple[str, Position | None, int]]:
+        """Validate the tolerances; return (member, report, tolerance) per member."""
+        rows: list[tuple[str, Position | None, int]] = []
         for member in self.members:
             if member.member_id not in tolerances:
                 raise ValueError(f"no tolerance given for {member.member_id!r}")
@@ -164,14 +154,41 @@ class WindowObservation:
                     f"the tolerance of {member.member_id!r} is below the minimum "
                     f"of {MIN_TOLERANCE}"
                 )
-            reported = member.observation.position
-            if reported is None:
-                rows = None
-            elif rows is not None:
-                rows.append(
-                    (reported.value, commanded.get(member.member_id), tolerance)
-                )
+            rows.append((member.member_id, member.observation.position, tolerance))
         return rows
+
+    def position(self, tolerances: Mapping[str, int]) -> Position | None:
+        """Return the position of the window, or ``None`` if it has none.
+
+        The window has a position, one number, as soon as all members report
+        the same position within tolerance, whatever was commanded last.
+        Otherwise it has none; the members' values stay available
+        individually. No member speaks for the window.
+
+        1. Every member reports a position. A member without position feedback
+           or an unavailable member means that the window has no position.
+        2. The highest and the lowest report differ by no more than the
+           tolerance. If the members have different tolerances, the smallest
+           one applies.
+        3. The position is the mean of the reports, rounded half up.
+
+        A window with a single member therefore has a position whenever its
+        member reports one, also right after a movement by hand.
+        ``tolerances`` gives the tolerance of every member, at least 1
+        (``CapabilityProfile.tolerance``).
+
+        A position may be returned while a member still reports a movement.
+        Rest is not required here: "settled" is knowledge of the movement
+        tracker. Whether the members are where they were commanded to is a
+        separate statement: :meth:`members_at_commanded_targets`.
+        """
+        rows = self._reports(tolerances)
+        reports = [reported.value for _, reported, _ in rows if reported is not None]
+        if len(reports) != len(rows):
+            return None
+        if max(reports) - min(reports) > min(tolerance for _, _, tolerance in rows):
+            return None
+        return Position((2 * sum(reports) + len(reports)) // (2 * len(reports)))
 
     def members_at_commanded_targets(
         self, commanded: Mapping[str, Position], tolerances: Mapping[str, int]
@@ -184,72 +201,37 @@ class WindowObservation:
         position. This is what tells "everything is where it should be" apart
         from "something is off" when :meth:`position` returns ``None``.
 
-        The answer is "cannot be judged" as soon as one member cannot be
-        compared: it reports no position (no position feedback, or
-        unavailable), or it was never commanded, be it all members or only
-        some. This takes precedence over a "no" of another member, because
-        the question is about the window as a whole.
-
-        Arguments as for :meth:`position`. A member that still reports a
-        movement is compared like any other; whether a movement has settled
-        is the tracker's knowledge.
-        """
-        rows = self._reports(commanded, tolerances)
-        if rows is None or any(target is None for _, target, _ in rows):
-            return MembersAtTargets.CANNOT_BE_JUDGED
-        for reported, target, tolerance in rows:
-            if target is not None and abs(reported - target.value) > tolerance:
-                return MembersAtTargets.NO
-        return MembersAtTargets.YES
-
-    def position(
-        self, commanded: Mapping[str, Position], tolerances: Mapping[str, int]
-    ) -> Position | None:
-        """Return the logical position of the window, or ``None`` if it has none.
-
-        A window has a position only when every member stands at its own last
-        commanded target within its own tolerance. No member speaks for the
-        window; the members' values stay available individually in any case.
-
         ``commanded`` maps a member to the target of its last own command as
         the persisted state has it (``WindowState.commanded_targets``); a
-        member that was never commanded has no entry. ``tolerances`` gives the
-        tolerance of every member, at least 1. ``WorldSnapshot.window_position``
-        calls this with the persisted state of the snapshot.
+        member that was never commanded has no entry. A member can be judged
+        if it reports a position and has a last commanded target.
 
-        1. Every member reports a position; otherwise there is none.
-        2. If no member was ever commanded, the window has a position only if
-           all members report the same position within tolerance: the highest
-           and the lowest report differ by no more than the smallest
-           tolerance. It is then the mean of the reports, rounded half up.
-        3. If some members have a last command and others do not, there is
-           none.
-        4. Otherwise :meth:`members_at_commanded_targets` has to answer "yes",
-           or there is none. The position is the common target. If the
-           members' targets differ (shading with unequal glass), there is no
-           single number, so there is none.
+        - "no": a member that can be judged stands outside its tolerance. One
+          "no" refutes "all members are at their targets", so it takes
+          precedence over members that cannot be judged.
+        - "cannot be judged": no member says "no", but at least one cannot be
+          judged: it reports no position (no position feedback, or
+          unavailable) or was never commanded.
+        - "yes": every member can be judged and stands at its target.
 
-        A position may be returned while a member still reports a movement,
-        if its report is inside the tolerance already. Rest is not required
-        here: "settled" is knowledge of the movement tracker.
-
-        Rules 1 to 4 were decided by the project owner, except two readings
-        of this block: the rounded mean as the value in rule 2, and "none"
-        for members that stand at different targets in rule 4.
+        A member that still reports a movement is compared like any other;
+        whether a movement has settled is the tracker's knowledge.
         """
-        rows = self._reports(commanded, tolerances)
-        if rows is None:
-            return None
-        if not commanded:
-            reports = [reported for reported, _, _ in rows]
-            if max(reports) - min(reports) > min(limit for _, _, limit in rows):
-                return None
-            return Position((2 * sum(reports) + len(reports)) // (2 * len(reports)))
-        at_targets = self.members_at_commanded_targets(commanded, tolerances)
-        targets = set(commanded.values())
-        if at_targets is not MembersAtTargets.YES or len(targets) != 1:
-            return None
-        return next(iter(targets))
+        known = {member.member_id for member in self.members}
+        for member_id in commanded:
+            if member_id not in known:
+                raise ValueError(
+                    f"a commanded target names {member_id!r}, which is not a "
+                    "member of this window"
+                )
+        answer = MembersAtTargets.YES
+        for member_id, reported, tolerance in self._reports(tolerances):
+            target = commanded.get(member_id)
+            if reported is None or target is None:
+                answer = MembersAtTargets.CANNOT_BE_JUDGED
+            elif abs(reported.value - target.value) > tolerance:
+                return MembersAtTargets.NO
+        return answer
 
 
 # ---------------------------------------------------------------------------

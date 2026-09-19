@@ -371,108 +371,56 @@ def test_window_reports_movement_as_soon_as_one_member_does() -> None:
     assert _resting(20, 20).reports_movement is False
 
 
-def test_window_has_its_common_target_as_position_when_every_member_is_there() -> None:
-    """Every member within its own tolerance of its last commanded target."""
-    assert _resting(30, 31).position(_both(30, 30), TOLERANCES) == Position(30)
-    assert _resting(28, 32).position(_both(30, 30), TOLERANCES) == Position(30)
+def test_window_has_a_position_as_soon_as_its_members_agree() -> None:
+    """One number: the mean of the reports, rounded half up."""
+    assert _resting(50, 50).position(TOLERANCES) == Position(50)
+    assert _resting(50, 52).position(TOLERANCES) == Position(51)
+    assert _resting(50, 51).position(TOLERANCES) == Position(51)
+    assert _resting(52, 50).position(TOLERANCES) == Position(51)
 
 
-def test_window_has_no_position_while_a_member_is_not_at_its_target() -> None:
+def test_window_has_no_position_while_its_members_differ() -> None:
     """No member speaks for the window, the first one included."""
-    assert _resting(30, 70).position(_both(30, 30), TOLERANCES) is None
-    assert _resting(70, 30).position(_both(30, 30), TOLERANCES) is None
-    assert _resting(30, 33).position(_both(30, 30), TOLERANCES) is None
+    assert _resting(30, 70).position(TOLERANCES) is None
+    assert _resting(70, 30).position(TOLERANCES) is None
+    assert _resting(50, 53).position(TOLERANCES) is None
 
 
-def test_tolerance_is_per_member() -> None:
-    """A measured member may be three off, a calculated one only two."""
-    tolerances = {LEFT: 2, RIGHT: 3}
-
-    assert _resting(30, 33).position(_both(30, 30), tolerances) == Position(30)
-    assert _resting(33, 30).position(_both(30, 30), tolerances) is None
-
-
-def test_window_with_different_targets_per_member_has_no_single_position() -> None:
-    """Members shaded to 21 and 36 are where they should be; there is no one number."""
-    assert _resting(21, 36).position(_both(21, 36), TOLERANCES) is None
-    assert _resting(21, 22).position(_both(21, 22), TOLERANCES) is None
+def test_the_smallest_tolerance_applies_when_members_have_different_ones() -> None:
+    """A measured member (3) next to a calculated one (2): 2 decides."""
+    assert _resting(50, 52).position({LEFT: 3, RIGHT: 2}) == Position(51)
+    assert _resting(50, 53).position({LEFT: 3, RIGHT: 2}) is None
+    assert _resting(50, 52).position({LEFT: 3, RIGHT: 1}) is None
 
 
-def test_window_that_was_never_commanded_needs_members_that_agree() -> None:
-    """No last own command for any member: the same position within tolerance."""
-    assert _resting(50, 50).position({}, TOLERANCES) == Position(50)
-    assert _resting(50, 52).position({}, TOLERANCES) == Position(51)
-    assert _resting(50, 51).position({}, TOLERANCES) == Position(51)
-    assert _resting(50, 53).position({}, TOLERANCES) is None
-    assert _resting(50, 52).position({}, {LEFT: 3, RIGHT: 1}) is None
+def test_window_position_does_not_depend_on_what_was_commanded() -> None:
+    """The signature takes no targets; the snapshot ignores the last commands too."""
+    state = WindowState(members=[_commanded(LEFT, 100), _commanded(RIGHT, 100)])
 
-
-def test_window_with_only_some_members_commanded_has_no_position() -> None:
-    """The fallback is for a window that was never commanded, not for a partial one."""
-    assert _resting(60, 60).position(_both(None, 60), TOLERANCES) is None
-    assert _resting(60, 60).position(_both(60, None), TOLERANCES) is None
-
-
-def test_members_at_their_own_different_targets() -> None:
-    """The view says yes where the position has no single number to give."""
-    window = _resting(21, 36)
-
-    assert (
-        window.members_at_commanded_targets(_both(21, 36), TOLERANCES)
-        is MembersAtTargets.YES
+    assert _snapshot(observation=_resting(40, 41), state=state).window_position(
+        TOLERANCES
+    ) == Position(41)
+    assert _snapshot(observation=_resting(40, 41)).window_position(TOLERANCES) == (
+        Position(41)
     )
-    assert window.position(_both(21, 36), TOLERANCES) is None
 
 
-@pytest.mark.parametrize(
-    ("window", "commanded", "answer", "position"),
-    [
-        (_resting(30, 31), _both(30, 30), MembersAtTargets.YES, Position(30)),
-        (_resting(21, 38), _both(21, 36), MembersAtTargets.YES, None),
-        (_resting(30, 70), _both(30, 30), MembersAtTargets.NO, None),
-        (_resting(21, 40), _both(21, 36), MembersAtTargets.NO, None),
-        (_resting(30, 30), {}, MembersAtTargets.CANNOT_BE_JUDGED, Position(30)),
-        (_resting(30, 80), {}, MembersAtTargets.CANNOT_BE_JUDGED, None),
-        (_resting(30, 30), _both(30, None), MembersAtTargets.CANNOT_BE_JUDGED, None),
-        (_resting(None, 30), _both(30, 30), MembersAtTargets.CANNOT_BE_JUDGED, None),
-        (_resting(None, 70), _both(30, 30), MembersAtTargets.CANNOT_BE_JUDGED, None),
-        (
-            _observed(
-                (LEFT, Observation(MovementState.UNAVAILABLE)),
-                (RIGHT, Observation(MovementState.RESTING, Position(30))),
-            ),
-            _both(30, 30),
-            MembersAtTargets.CANNOT_BE_JUDGED,
-            None,
-        ),
-    ],
-    ids=[
-        "common target",
-        "different targets",
-        "one member off",
-        "one member off its own target",
-        "never commanded, agreeing",
-        "never commanded, differing",
-        "partly commanded",
-        "no position feedback",
-        "no position feedback and another member off",
-        "unavailable",
-    ],
-)
-def test_the_three_answers_of_the_view_and_the_position_built_on_it(
-    window: WindowObservation,
-    commanded: dict[str, Position],
-    answer: MembersAtTargets,
-    position: Position | None,
-) -> None:
-    """Yes, no, cannot be judged; the position follows from the same logic."""
-    assert window.members_at_commanded_targets(commanded, TOLERANCES) is answer
-    assert window.position(commanded, TOLERANCES) == position
-    assert [value.value for value in MembersAtTargets] == [
-        "yes",
-        "no",
-        "cannot_be_judged",
-    ]
+def test_single_member_window_has_a_position_right_after_a_movement_by_hand() -> None:
+    """Last own command 100, a person moves the shutter to 40: the position is 40."""
+    window = _observed((LEFT, Observation(MovementState.RESTING, Position(40))))
+    state = WindowState(members=[_commanded(LEFT, 100)])
+    snapshot = _snapshot(observation=window, state=state)
+
+    assert window.position({LEFT: 2}) == Position(40)
+    assert snapshot.window_position({LEFT: 2}) == Position(40)
+    assert snapshot.members_at_commanded_targets({LEFT: 2}) is MembersAtTargets.NO
+
+
+def test_window_has_no_position_when_a_member_reports_none() -> None:
+    """A member without feedback or an unavailable member: no window position."""
+    assert _resting(None, 30).position(TOLERANCES) is None
+    assert _resting(30, None).position(TOLERANCES) is None
+    assert _resting(None, None).position(TOLERANCES) is None
 
 
 def test_a_member_that_still_reports_movement_is_compared_like_any_other() -> None:
@@ -483,7 +431,100 @@ def test_a_member_that_still_reports_movement_is_compared_like_any_other() -> No
     )
 
     assert window.reports_movement is True
-    assert window.position(_both(30, 30), TOLERANCES) == Position(30)
+    assert window.position(TOLERANCES) == Position(31)
+    assert (
+        window.members_at_commanded_targets(_both(30, 30), TOLERANCES)
+        is MembersAtTargets.YES
+    )
+
+
+def test_members_at_their_own_different_targets() -> None:
+    """The view says yes where the window has no single number to give."""
+    window = _resting(21, 36)
+
+    assert (
+        window.members_at_commanded_targets(_both(21, 36), TOLERANCES)
+        is MembersAtTargets.YES
+    )
+    assert window.position(TOLERANCES) is None
+
+
+UNAVAILABLE_LEFT_RIGHT_AT_30 = _observed(
+    (LEFT, Observation(MovementState.UNAVAILABLE)),
+    (RIGHT, Observation(MovementState.RESTING, Position(30))),
+)
+UNAVAILABLE_LEFT_RIGHT_AT_70 = _observed(
+    (LEFT, Observation(MovementState.UNAVAILABLE)),
+    (RIGHT, Observation(MovementState.RESTING, Position(70))),
+)
+
+
+@pytest.mark.parametrize(
+    ("window", "commanded", "answer"),
+    [
+        (_resting(30, 31), _both(30, 30), MembersAtTargets.YES),
+        (_resting(21, 38), _both(21, 36), MembersAtTargets.YES),
+        (_resting(30, 70), _both(30, 30), MembersAtTargets.NO),
+        (_resting(21, 40), _both(21, 36), MembersAtTargets.NO),
+        (_resting(30, 30), {}, MembersAtTargets.CANNOT_BE_JUDGED),
+        (_resting(30, 30), _both(30, None), MembersAtTargets.CANNOT_BE_JUDGED),
+        (_resting(30, 30), _both(None, 30), MembersAtTargets.CANNOT_BE_JUDGED),
+        (_resting(None, 30), _both(30, 30), MembersAtTargets.CANNOT_BE_JUDGED),
+        (
+            UNAVAILABLE_LEFT_RIGHT_AT_30,
+            _both(30, 30),
+            MembersAtTargets.CANNOT_BE_JUDGED,
+        ),
+        # One member says no, another cannot be judged: "no" wins, in either order.
+        (_resting(None, 70), _both(30, 30), MembersAtTargets.NO),
+        (_resting(70, None), _both(30, 30), MembersAtTargets.NO),
+        (_resting(70, 30), _both(30, None), MembersAtTargets.NO),
+        (_resting(30, 70), _both(None, 30), MembersAtTargets.NO),
+        (UNAVAILABLE_LEFT_RIGHT_AT_70, _both(30, 30), MembersAtTargets.NO),
+    ],
+    ids=[
+        "common target",
+        "different targets",
+        "one member off",
+        "one member off its own target",
+        "never commanded",
+        "second member never commanded",
+        "first member never commanded",
+        "no position feedback",
+        "unavailable",
+        "first cannot be judged, second says no",
+        "first says no, second cannot be judged",
+        "first says no, second never commanded",
+        "first never commanded, second says no",
+        "first unavailable, second says no",
+    ],
+)
+def test_the_three_answers_about_the_commanded_targets(
+    window: WindowObservation,
+    commanded: dict[str, Position],
+    answer: MembersAtTargets,
+) -> None:
+    """Yes, no, cannot be judged; a single "no" refutes "all are at their targets"."""
+    assert window.members_at_commanded_targets(commanded, TOLERANCES) is answer
+    assert [value.value for value in MembersAtTargets] == [
+        "yes",
+        "no",
+        "cannot_be_judged",
+    ]
+
+
+def test_tolerance_of_the_view_is_per_member() -> None:
+    """Each member is compared with its own target within its own tolerance."""
+    tolerances = {LEFT: 2, RIGHT: 3}
+
+    assert (
+        _resting(30, 33).members_at_commanded_targets(_both(30, 30), tolerances)
+        is MembersAtTargets.YES
+    )
+    assert (
+        _resting(33, 30).members_at_commanded_targets(_both(30, 30), tolerances)
+        is MembersAtTargets.NO
+    )
 
 
 @pytest.mark.parametrize(
@@ -494,61 +535,61 @@ def test_tolerances_are_validated(tolerance: Any, error: type[Exception]) -> Non
     """A tolerance below the minimum is refused, by the view and by the position."""
     tolerances = {LEFT: 2, RIGHT: tolerance}
     with pytest.raises(error, match="tolerance"):
-        _resting(30, 30).position(_both(30, 30), tolerances)
+        _resting(30, 30).position(tolerances)
     with pytest.raises(error, match="tolerance"):
         _resting(30, 30).members_at_commanded_targets(_both(30, 30), tolerances)
     with pytest.raises(error, match="tolerance"):
-        _resting(None, 30).position({}, tolerances)
+        _resting(None, 30).position(tolerances)
 
 
-def test_window_has_no_position_when_a_member_reports_none() -> None:
-    """A member without feedback or an unavailable member: no window position."""
-    assert _resting(None, 30).position(_both(30, 30), TOLERANCES) is None
-    assert _resting(30, None).position({}, TOLERANCES) is None
-
-
-def test_window_position_needs_consistent_arguments() -> None:
+def test_window_views_need_consistent_arguments() -> None:
     """Commanded targets name members of the window; every member has a tolerance."""
     with pytest.raises(ValueError, match="not a member of this window"):
-        _resting(1, 1).position({"cover.example_other": Position(1)}, TOLERANCES)
+        _resting(1, 1).members_at_commanded_targets(
+            {"cover.example_other": Position(1)}, TOLERANCES
+        )
     with pytest.raises(ValueError, match="no tolerance given"):
-        _resting(1, 1).position({}, {LEFT: 2})
+        _resting(1, 1).position({LEFT: 2})
+    with pytest.raises(ValueError, match="no tolerance given"):
+        _resting(1, 1).members_at_commanded_targets({}, {LEFT: 2})
+
+
+def _commanded(member: str, target: int) -> MemberState:
+    command = OwnCommand(
+        command_id=f"command-{member}",
+        target=Position(target),
+        direction=TravelDirection.DOWN,
+        time=NOW,
+        wish_class=WishClass.COMFORT,
+    )
+    return MemberState(member, last_own_command=command)
 
 
 def test_snapshot_takes_the_commanded_targets_from_the_persisted_state() -> None:
     """The last own command per member is persisted; the snapshot combines the two."""
-
-    def commanded(member: str, target: int) -> MemberState:
-        command = OwnCommand(
-            command_id=f"command-{member}",
-            target=Position(target),
-            direction=TravelDirection.DOWN,
-            time=NOW,
-            wish_class=WishClass.COMFORT,
-        )
-        return MemberState(member, last_own_command=command)
-
-    state = WindowState(members=[commanded(LEFT, 30), commanded(RIGHT, 30)])
-    partly = WindowState(members=[commanded(LEFT, 30), MemberState(RIGHT)])
+    state = WindowState(members=[_commanded(LEFT, 30), _commanded(RIGHT, 30)])
+    partly = WindowState(members=[_commanded(LEFT, 30), MemberState(RIGHT)])
 
     assert state.commanded_targets == {LEFT: Position(30), RIGHT: Position(30)}
     assert partly.commanded_targets == {LEFT: Position(30)}
     assert WindowState().commanded_targets == {}
-    assert _snapshot(observation=_resting(30, 31), state=state).window_position(
-        TOLERANCES
-    ) == Position(30)
     assert (
-        _snapshot(observation=_resting(30, 50), state=state).window_position(TOLERANCES)
-        is None
+        _snapshot(
+            observation=_resting(30, 31), state=state
+        ).members_at_commanded_targets(TOLERANCES)
+        is MembersAtTargets.YES
     )
     assert (
-        _snapshot(observation=_resting(30, 30), state=partly).window_position(
-            TOLERANCES
-        )
-        is None
+        _snapshot(
+            observation=_resting(30, 50), state=state
+        ).members_at_commanded_targets(TOLERANCES)
+        is MembersAtTargets.NO
     )
-    assert _snapshot(observation=_resting(30, 30)).window_position(TOLERANCES) == (
-        Position(30)
+    assert (
+        _snapshot(
+            observation=_resting(30, 30), state=partly
+        ).members_at_commanded_targets(TOLERANCES)
+        is MembersAtTargets.CANNOT_BE_JUDGED
     )
 
 
@@ -561,7 +602,7 @@ def test_window_is_available_while_one_member_is() -> None:
 
     assert window.available is True
     assert window.reports_movement is False
-    assert window.position({}, TOLERANCES) is None
+    assert window.position(TOLERANCES) is None
 
 
 def test_window_is_unavailable_when_all_members_are() -> None:
@@ -572,7 +613,7 @@ def test_window_is_unavailable_when_all_members_are() -> None:
     )
 
     assert window.available is False
-    assert window.position({}, TOLERANCES) is None
+    assert window.position(TOLERANCES) is None
 
 
 def test_window_observation_is_validated() -> None:
