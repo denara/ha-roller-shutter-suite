@@ -197,19 +197,20 @@ def fail_on_logged_deprecation(
     It also fails the test when the guard could not have seen a report.
     """
     yield
+    problems: list[str] = []
+    if log_guard_collector.reports:
+        problems.append(
+            "Home Assistant logged a deprecation or usage report about "
+            f"'{DOMAIN}':\n" + "\n".join(log_guard_collector.reports)
+        )
     if blind_spots := log_guard_blind_spots(log_guard_collector):
-        pytest.fail(
+        problems.append(
             "The log guard could not see every report of Home Assistant at the "
             "end of this test:\n"
             + "\n".join(blind_spots)
             + "\nTo capture less in a test, pass the logger you mean: "
             "caplog.set_level(level, logger='...') with a logger outside "
-            "Home Assistant and this integration.",
-            pytrace=False,
+            "Home Assistant and this integration."
         )
-    if log_guard_collector.reports:
-        pytest.fail(
-            "Home Assistant logged a deprecation or usage report about "
-            f"'{DOMAIN}':\n" + "\n".join(log_guard_collector.reports),
-            pytrace=False,
-        )
+    if problems:
+        pytest.fail("\n".join(problems), pytrace=False)
