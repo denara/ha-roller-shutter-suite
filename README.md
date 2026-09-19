@@ -44,6 +44,14 @@ uv run ruff format --check
 uv run mypy
 ```
 
+Run the tests:
+
+```sh
+uv run pytest
+```
+
+The Home Assistant tests do not run on native Windows. [Testing](docs/dev/testing.md) explains the two test folders and the way through WSL.
+
 Work is planned in blocks: see [`TASKS.md`](TASKS.md) and the [`tasks/`](tasks/) folder.
 
 ## License
