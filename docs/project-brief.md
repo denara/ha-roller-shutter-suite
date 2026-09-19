@@ -191,7 +191,7 @@ These are decisions and constraints, not a design. The design is part of the imp
 
 ### Safety and behavior
 
-- Fire opens everything, immediately and unstaggered, and never returns automatically (D3). The only exception is a window under maintenance lock, which does not move; the fire event is fired regardless. **[REVIEW]**
+- Fire opens everything, immediately and unstaggered, and never returns automatically (D3). The only exceptions are a window under maintenance lock and a window in dry-run (E11), which do not move; the fire event is fired regardless. **[REVIEW]**
 - Never an intermediate position during storm: a half-lowered shutter offers the wind a surface and can be torn out of its guide rails [OWN]. Whether hail means "up" or "down" is disputed between glass and curtain types, so the direction is configurable per event (D2).
 - An open door blocks closing even during storm, so nobody is locked out in bad weather; with an active tamper contact this trust is withdrawn (B2, F6).
 - Missing data is not good news. `unavailable` and `unknown` must never be evaluated as "no warning", "no rain" or "window closed" (D6) [OWN].
