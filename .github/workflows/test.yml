@@ -22,6 +22,9 @@ env:
 
 jobs:
   checks:
+    # This name is a required status check of the branch protection. A renamed
+    # job silently drops out of the required checks; tests/scripts/test_workflows.py
+    # fails when the name changes.
     name: Static checks and guards
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -69,7 +72,14 @@ jobs:
       - name: "Guard: only foreign warnings are exempted"
         run: uv run --no-sync python scripts/check_foreign_warnings.py
 
+      # Lists every coverage pragma with its reason; read the list in a review.
+      - name: "Guard: coverage exclusions are justified"
+        run: uv run --no-sync python scripts/check_coverage_exclusions.py
+
   tests:
+    # This name is a required status check of the branch protection. A renamed
+    # job silently drops out of the required checks; tests/scripts/test_workflows.py
+    # fails when the name changes.
     name: Tests and coverage
     runs-on: ubuntu-24.04
     timeout-minutes: 20

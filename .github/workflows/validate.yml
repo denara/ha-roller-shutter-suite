@@ -23,6 +23,9 @@ concurrency:
 
 jobs:
   hassfest:
+    # This name is a required status check of the branch protection. A renamed
+    # job silently drops out of the required checks; tests/scripts/test_workflows.py
+    # fails when the name changes.
     name: hassfest
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -41,6 +44,9 @@ jobs:
         uses: home-assistant/actions/hassfest@58bff37c8947f690ace498be413a9b78d6f30f93 # master, 2026-09-10
 
   hacs:
+    # This name is a required status check of the branch protection. A renamed
+    # job silently drops out of the required checks; tests/scripts/test_workflows.py
+    # fails when the name changes.
     name: HACS
     runs-on: ubuntu-24.04
     timeout-minutes: 10

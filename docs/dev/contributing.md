@@ -37,6 +37,7 @@ uv run python scripts/check_instance_data.py
 uv run python scripts/check_versions.py
 uv run python scripts/check_log_guard.py
 uv run python scripts/check_foreign_warnings.py
+uv run python scripts/check_coverage_exclusions.py
 ```
 
 Tests:
@@ -66,14 +67,15 @@ Each guard is a small script under `scripts/` with a description at its top, and
 | Script | Fails when |
 |---|---|
 | `check_core_purity.py` | a module under `custom_components/roller_shutter_suite/core/` imports `homeassistant`, or imports anything of the integration outside `core/`. The core is plain Python and gets all its inputs handed in. |
-| `check_deprecated_names.py` | the integration or a test references a Home Assistant name that is known to be deprecated. The names are listed in `scripts/deprecated_names.toml`. Add a name there when you learn of a deprecation that concerns this integration, with the reason and the replacement. |
-| `check_instance_data.py` | a tracked file contains something that looks like data of a real installation or a real computer: a private IP address, a hardware address, a coordinate with many decimals, an entity ID with a serial number in it, a path with a drive letter or a home directory, an e-mail address. The script reports file, line and kind, never the text itself. It needs git to list the tracked files. |
+| `check_deprecated_names.py` | the integration or a test references a Home Assistant name that is known to be deprecated. The names are listed in `scripts/deprecated_names.toml`, and the message tells you what to use instead. See [Deprecated names](#deprecated-names). |
+| `check_instance_data.py` | a tracked file contains something that looks like data of a real installation or a real computer: a private IP address, an IPv6 address, a hardware address, a host name ending in `.local`, a pair of coordinates or a coordinate next to a latitude or longitude key, an entity ID with a serial number in it, a path with a drive letter or a home directory, an e-mail address. The script reports file, line and kind, never the text itself. It needs git to list the tracked files. |
 | `check_versions.py` | `pyproject.toml` and `manifest.json` state different versions. Both files need the version (uv requires one, Home Assistant and HACS read the other), so a release changes both. |
-| `check_log_guard.py` | anything weakens the rule that warnings and logged deprecations are errors: a test other than `tests/ha/test_report_guard.py` uses the `integration_reports` fixture, `filterwarnings` in a pytest configuration is anything but exactly `error`, or a test or the integration filters or catches warnings. |
-| `check_foreign_warnings.py` | an entry of `tests/foreign_warnings.toml` is incomplete, has no `https` link, or has a module pattern that matches this integration, its tests, or the Home Assistant helpers that report deprecated usage. |
+| `check_log_guard.py` | anything weakens the rule that warnings and logged deprecations are errors. A test other than `tests/ha/test_report_guard.py` uses the fixtures of the log guard, or any file outside `tests/ha/conftest.py` defines a function with the name of one of them. `filterwarnings` in a pytest configuration is anything but exactly `error`. `addopts` or a `pytest` command line in a workflow carries `-W`, `-o`/`--override-ini`, `-c`, `-p no:warnings`, `-p no:logging` or `--disable-warnings`, or a workflow sets `PYTHONWARNINGS`. A test or the integration filters or catches warnings, with the `warnings` module or with `pytest.warns`, `pytest.deprecated_call` or the `recwarn` fixture. |
+| `check_foreign_warnings.py` | an entry of `tests/foreign_warnings.toml` is incomplete, has no `https` link, names the category `Warning` (which covers everything), or has a module pattern that contains a colon or matches this integration, its tests, or the Home Assistant helpers that report deprecated usage. |
 | `check_coverage.py` | coverage is below a threshold; see below. |
+| `check_coverage_exclusions.py` | a coverage pragma has no reason, or the coverage configuration was changed; see below. |
 
-The instance data guard looks for shapes, so it can be wrong in both directions. If it flags a made-up example, change the example (use `cover.example_window`, addresses from the documentation ranges, `someone@example.com`). It cannot recognize a real room name or a real device name; reading what you publish stays your job.
+The instance data guard looks for shapes, so it can be wrong in both directions. If it flags a made-up example, change the example (use `cover.example_window`, addresses from the documentation ranges such as `192.0.2.7` and `2001:db8::1`, `homeassistant.local`, `someone@example.com`). A single number with many decimals is not reported, because constants look like that; two of them next to each other are, because that is what coordinates look like. It cannot recognize a real room name or a real device name; reading what you publish stays your job.
 
 ### No deprecation, ever
 
@@ -82,6 +84,16 @@ The integration must not use deprecated Home Assistant functionality and must no
 This can be demonstrated only for the Home Assistant versions the tests ran against and for the code the tests reach. That is why coverage has a threshold and why a scheduled run tests against the newest Home Assistant release.
 
 If a warning comes from another package and cannot be avoided, the only way out is an entry in `tests/foreign_warnings.toml`. The file explains the format. Every entry has to be approved by the project owner: say so explicitly in your pull request and include the link to the upstream issue.
+
+A test must not catch a warning to get past this rule: `pytest.warns`, `pytest.deprecated_call` and `recwarn` are refused like `warnings.catch_warnings`. Fix the cause of the warning.
+
+A test must not end with a raised log level for Home Assistant or the integration either. The log guard makes Home Assistant create its reports whatever the log levels are, and at the end of each test it fails the test if it finds a state that would have hidden a report: `caplog.set_level(logging.ERROR)` without a logger, `logging.disable(logging.WARNING)`, a raised level on a logger of Home Assistant or of the integration, or its handler removed. To capture less in a test, name the logger you mean: `caplog.set_level(logging.ERROR, logger="some.other.package")`.
+
+### Deprecated names
+
+Some deprecated parts of Home Assistant are compatibility shims that log nothing, `DeviceEntry.config_entries` for example. No test can notice them, so the static list `scripts/deprecated_names.toml` is the only net. Each entry says how the name is matched, whether Home Assistant logs a report or stays silent, why the name is deprecated, what replaces it, and where that was verified. Add an entry when you learn of a deprecation that concerns this integration, and verify it in the Core source of the tested version first.
+
+The script does not know types. For names that are common, it reports the attribute on every object except the ones on the entry's allow-list: `.config_entries` is fine on `hass` (also `self.hass`, `entry.hass`, `self._hass`) and on the module `homeassistant`, and is reported everywhere else. If the script flags an attribute of your own that only shares the name, rename yours; it is cheaper than a hole in the net.
 
 ### Coverage
 
@@ -93,7 +105,13 @@ Lines and branches are measured separately, and both have to reach the threshold
 | Everything under `custom_components/roller_shutter_suite/` except `core/` | 90 % |
 | Everything under `custom_components/roller_shutter_suite/core/` | 95 % |
 
-A module that no test imports counts as not covered. The thresholds are changed by the project owner only. Do not write tests that merely execute lines; a test asserts a behavior.
+A module that no test imports counts as not covered. The thresholds are confirmed by the project owner and changed by nobody else. Do not write tests that merely execute lines; a test asserts a behavior.
+
+Excluding code from the measurement is possible, but only in the open:
+
+- A `# pragma: no cover` or `# pragma: no branch` under `custom_components/` needs its reason on the same line, in the form `# pragma: no cover - <reason>`, with a reason of at least three words that says why the code cannot be tested. A pragma without a reason fails the build.
+- `scripts/check_coverage_exclusions.py` prints every pragma with file, line and reason on every run, also when it passes. A reviewer reads that list in the log of the job "Static checks and guards" and judges the reasons.
+- The coverage configuration in `pyproject.toml` is pinned: the measured source, branch measurement, no `omit`, no `exclude_lines`, no `partial_branches`, and `exclude_also` with the single entry `if TYPE_CHECKING:` (imports for the type checker never run). Any other value fails the build, and so does a second coverage configuration file. Whoever has a good reason to change the set changes `EXPECTED` in the script in the same pull request, where the reviewer sees it.
 
 ## Workflows on GitHub
 
@@ -102,6 +120,8 @@ A module that no test imports counts as not covered. The thresholds are changed 
 | Validate (`validate.yml`) | every push, every pull request, weekly, by hand | `hassfest` and the HACS validation |
 | Test (`test.yml`) | every push, every pull request, by hand | static checks, guards, tests and coverage thresholds with the locked versions |
 | Newest Home Assistant (`newest-home-assistant.yml`) | weekly, by hand, and when the workflow itself changes | the whole test suite against the newest Home Assistant release with the matching test plugin; a second, optional job does the same with the newest version including betas |
+
+GitHub switches scheduled workflows of a public repository off after 60 days without activity in the repository, and says so by e-mail; switch them on again under **Actions**.
 
 "Newest Home Assistant" does not block pull requests. When it fails, the summary page of the run names the tests that failed and what Home Assistant logged. Such a finding is fixed before the next release of the integration. To start it by hand, open **Actions** > **Newest Home Assistant** > **Run workflow**. The optional beta job may fail without turning the run red, because no release of the test plugin matches a beta.
 
@@ -112,7 +132,9 @@ The repository is public, so every workflow follows these rules. A change to a w
 - `permissions: contents: read` at the top of the workflow. A job gets more only if it cannot work otherwise, and the pull request says why.
 - The triggers are `push`, `pull_request`, `schedule` and `workflow_dispatch`. Never `pull_request_target`, and no `workflow_run` that handles code of a pull request with more rights.
 - No secrets. The only token is the one GitHub injects, with the read-only permission above.
-- Every action is pinned to a full commit SHA, with the version as a comment behind it; this includes GitHub's own actions. Two actions offer no current version tags (`home-assistant/actions` and `hacs/action`); they are pinned to a commit of their main branch, and the comment names the branch and the date. To update a pin, look up the commit of the new tag in the action's repository and change SHA and comment together.
+- Every action is pinned to a full commit SHA, with the version as a comment behind it; this includes GitHub's own actions. Two actions offer no current version tags (`home-assistant/actions` and `hacs/action`); they are pinned to a commit of their main branch, and the comment names the branch and the date.
+- Dependabot (`.github/dependabot.yml`) keeps the pinned action SHAs current, including the two actions that are pinned to a branch head, with one grouped pull request per week. Python dependencies are updated deliberately by hand, because the Home Assistant version the tests run against is a decision, not a routine update. If Dependabot leaves one of the two branch-pinned actions alone for long, look up the head commit of its branch and change SHA and comment together.
+- The two validators run a container image with a floating tag, which the actions do not let us pin. That is a conscious decision: both are meant to follow Home Assistant and HACS as they change, and the jobs have a read-only token, no secrets and no persisted credentials.
 - `persist-credentials: false` on every checkout.
 - No dependency cache, so nothing a pull request writes can reach a later run.
 - Nothing prints the environment, and no artifact is uploaded. Reports go to the summary page of the run, with paths relative to the repository.
@@ -125,18 +147,21 @@ Under **General** > **Pull Requests**:
 
 - Enable **Automatically delete head branches**. Every block of work has a branch of its own that is no longer needed after the merge.
 
-Under **Branches** (or **Rules** > **Rulesets**), a rule for `main`:
+Under **Branches** (or **Rules** > **Rulesets**), a rule for `main` with exactly these settings:
 
-- **Require a pull request before merging.** Nobody pushes to `main` directly.
-- **Require status checks to pass before merging**, with **Require branches to be up to date before merging**, and these required checks:
+- **Require a pull request before merging**, with **zero** required approvals. The verdict of the reviewer agent is a comment, and the project owner merges.
+- **Require status checks to pass before merging**, with these four required checks:
   - `hassfest`
   - `HACS`
   - `Static checks and guards`
   - `Tests and coverage`
-- Do **not** add `Newest release` or `Current beta (optional)` to the required checks. They test against versions that change without any change in this repository, so they must not block a pull request.
-- **Do not allow force pushes** and **do not allow deletions**.
-- Apply the rule to administrators as well.
+- **Require linear history.**
+- **Do not allow force pushes.**
+- The rule **applies to administrators** as well ("Do not allow bypassing the above settings").
 
+The four names are the `name:` of the jobs in `validate.yml` and `test.yml`. GitHub does not notice when a required job is renamed; the check then simply never arrives. `tests/scripts/test_workflows.py` fails when one of the names changes, so change the branch protection in the same breath.
+
+Do **not** add `Newest release` or `Current beta (optional)` to the required checks. They test against versions that change without any change in this repository, so they must not block a pull request.
 Under **Actions** > **General**:
 
 - **Workflow permissions:** "Read repository contents and packages permissions".
