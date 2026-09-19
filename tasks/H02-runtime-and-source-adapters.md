@@ -44,6 +44,7 @@ Runtime and adapter modules, tests, `docs/dev/runtime.md` (life cycle of a windo
 - No decision is made for a window before its cover is available; when the cover appears later, the window starts working without a reload.
 - Adding, reloading and removing one window leaves the listeners and timers of other windows untouched; after unload no listener or timer remains (checked in the test).
 - A burst of ten state changes within a second causes one recompute.
+- **A reload is harmless.** Every configuration change reloads the whole config entry and therefore every window. A reload while a movement is in flight, while a dam is armed or while a gate outcome is deferred produces **no false manual detection and no duplicate command**: the pending own command, its expectation deadline, the dams and the deferral survive the reload (in this block through the interface to the storage port with an in-memory implementation; the real storage is block H05). The test covers a member with a report delay of 60 seconds, whose end report arrives long after the reload.
 - Time in tests is controlled; no test sleeps.
 
 ## Required tests
