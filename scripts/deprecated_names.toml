@@ -30,7 +30,7 @@ replacement = "get_astral_observer, or the astral library directly in the domain
 [[deprecated]]
 kind = "identifier"
 name = "get_location_astral_event_next"
-reason = "Belongs to the deprecated location-based sun helpers of homeassistant.helpers.sun."
+reason = "homeassistant.helpers.sun.get_location_astral_event_next is deprecated and breaks in Home Assistant 2027.7."
 replacement = "The observer-based helpers of homeassistant.helpers.sun."
 
 [[deprecated]]
