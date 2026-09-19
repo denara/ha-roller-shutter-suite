@@ -421,7 +421,7 @@ Persisted per window, versioned, all timestamps timezone-aware (naive ones are r
 - per member the **command backoff as facts**: the number of attempts of the current command and the time of the last attempt. The next retry time is not stored; it is computed from these two facts with the current settings. A reload right after a failed attempt therefore cannot trigger an immediate second command;
 - manual override dam: armed at, end rule with its absolute end if it has one, remembered position;
 - person-at-the-window dam: ends at;
-- per protection event: state, active since, **ended at**, released flag, remembered position and owner. The end time is persisted, not a remaining duration or a deadline: the waiting time of section 10.2 is configuration and is applied to the end time whenever it is evaluated, so it survives a restart and follows a changed setting;
+- per protection event: state, active since, **ended at**, released flag, remembered position and owner. For an event that the watchdog released (section 10.3) "ended at" is the time of the release: the trigger is still active, but the return of section 10.2 and its waiting time run from that moment. An active event that is not released has no "ended at". The end time is persisted, not a remaining duration or a deadline: the waiting time of section 10.2 is configuration and is applied to the end time whenever it is evaluated, so it survives a restart and follows a changed setting;
 - fire: unacknowledged flag;
 - episodes: as listed in [section 7](#7-episodes);
 - external request: position, reason, expires at;
