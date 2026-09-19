@@ -24,7 +24,7 @@ The vocabulary and the rules come from the [domain design specification](../arch
 
 ## Rules that hold for every type
 
-- **Immutable and compared by value.** Every type is a frozen data class or an enumeration. Two objects with the same content are equal, and all types except the world snapshot can be used in sets and as dictionary keys.
+- **Immutable and compared by value.** Every type is a frozen data class or an enumeration. Two objects with the same content are equal. All types can be used in sets and as dictionary keys, with two exceptions: a source value, on purpose (see below), and the world snapshot, which holds a mapping of source values.
 - **Validated on construction.** An object that exists is valid. A position of 101, a naive datetime or a wish without a reason code raises an error where it is created, not later where it is used.
 - **100 is open.** A position is an integer from 0 to 100; 100 is fully open, 0 is fully closed.
 - **Timestamps are timezone-aware.** A datetime without a time zone is rejected, also when persisted data is read back.
@@ -32,7 +32,7 @@ The vocabulary and the rules come from the [domain design specification](../arch
 - **Local time has one source.** The local zone of the installation is the zone of `Clock.now()` and of `WorldSnapshot.time`, which keeps its zone. Fixed times of the schedule and "local midnight" are read from it, and the `date` arguments of the sun port are local dates in that zone.
 - **Positions of members are on the motor scale**: what a member is commanded to and what it reports. The glass calibration of shading is applied before, by the shading layer.
 - **No free text in a decision.** Reasons are codes from the closed list in `reasons`, and each place accepts only the codes of its group: a wish for a target only codes of winning layers; other wishes and layer reasons also the codes that say why a layer did not act; a constraint result only the codes of its constraint (`CONSTRAINT_REASONS`); a gate outcome only the codes of its rule (`GATE_RULE_REASONS`, the group "gate" plus `capability_missing`). Codes that exist for events only never appear in a decision.
-- **Missing data is not good news.** A source value that is unknown or unavailable has no truth value, does not convert to a number, and has no accessor that returns a default. Comparing a source value with a plain value (`contact != "open"`) raises an error too, because it would be true for a missing contact.
+- **Missing data is not good news.** A source value that is unknown or unavailable has no truth value, does not convert to a number, and has no accessor that returns a default. Comparing a source value with a plain value (`contact != "open"`) raises an error too, because it would be true for a missing contact. A source value is not hashable either: a lookup in a set or a dictionary asks the hash before it asks equality, so `contact in {"open", "tilted"}` would silently answer "not contained"; without a hash it raises.
 
 ## The types
 
@@ -87,19 +87,22 @@ A window has one or more members: the covers that are always moved together. Eve
 | `MovementState` | The state class of an observation: `resting`, `moving_up`, `moving_down` or `unavailable`. |
 | `Observation` | A normalized report of one member: state class and position, if it reports one. An unavailable member has no position. |
 | `MemberObservation` | The current observation of one named member. |
-| `WindowObservation` | The observed members of a window and the view over them: available while one member is; `reports_movement` as soon as one member reports a movement (whether it has settled is the tracker's knowledge); and `position(commanded, tolerances)`, see below. |
+| `WindowObservation` | The observed members of a window and the view over them: available while one member is; `reports_movement` as soon as one member reports a movement (whether it has settled is the tracker's knowledge); `position(tolerances)`; and `members_at_commanded_targets(commanded, tolerances)`, see below. |
 | `WorldSnapshot` | Everything one recompute may look at: the time, the sun position, the source values by key, the observed window, and the persisted window state. |
 
-**The position of a window.** A window has a position only when every member stands at its own last commanded target within its own tolerance; otherwise it has none, and the members' values are there individually. No member speaks for the window. The last commanded targets come from the persisted state (`WindowState.commanded_targets`, the target of each member's last own command); `WorldSnapshot.window_position(tolerances)` puts the two together, and `WindowObservation.position(commanded, tolerances)` holds the rules:
+**The position of a window.** The window has a position, one number, as soon as all members report the same position within tolerance, whatever was commanded last. Otherwise it has none, and the members' values are there individually. No member speaks for the window. `WindowObservation.position(tolerances)` holds the rules, and `WorldSnapshot.window_position(tolerances)` calls it:
 
-1. Every member reports a position; otherwise the window has none.
-2. A window whose members were never commanded has a position only if all members report the same position within tolerance; it is then the mean of the reports. This applies to a window that was never commanded, not to every restart: after a restart the last commands are still there.
-3. If some members have a last command and others do not, the window has no position.
-4. Otherwise every member is within its tolerance of its own target, and the position is the common target. Members that stand at different targets (shading with unequal glass) give the window no single number, so it has none.
+1. Every member reports a position. A member without position feedback or an unavailable member means that the window has no position.
+2. The highest and the lowest report differ by no more than the tolerance. If the members have different tolerances, the smallest one applies.
+3. The position is the mean of the reports, rounded half up.
 
-A position can be returned while a member still reports a movement, if its report is inside the tolerance already; whether a movement has settled is the tracker's knowledge.
+A window with one member therefore has a position whenever its member reports one, also right after somebody moved it by hand. A position can be returned while a member still reports a movement; whether a movement has settled is the tracker's knowledge.
 
-"No position" alone would mean two opposite things: every member is exactly where it should be, only at different targets, or something is off. `WindowObservation.members_at_commanded_targets(commanded, tolerances)` tells them apart with three answers (`MembersAtTargets`): `yes`, every member stands at its own last commanded target within its own tolerance, also when the targets differ; `no`; and `cannot_be_judged`, when a member reports no position (no feedback, or unavailable) or when not every member was commanded. The position is built on this view, so there is one piece of logic.
+**Are the members where they were commanded to?** That is a separate statement. Members shaded to different targets are exactly where they should be, and the window still has no single position; a window moved by hand has a position and is not where it was commanded to. `WindowObservation.members_at_commanded_targets(commanded, tolerances)` answers with `MembersAtTargets`, comparing each member with the target of its own last command (from the persisted state, `WindowState.commanded_targets`) within its own tolerance; `WorldSnapshot.members_at_commanded_targets(tolerances)` puts the two together.
+
+- `no`: a member that can be judged stands outside its tolerance. A single "no" refutes "all members are at their targets", so it wins over members that cannot be judged.
+- `cannot_be_judged`: nobody says "no", but at least one member cannot be judged: it reports no position (no feedback, or unavailable), or it was never commanded.
+- `yes`: every member can be judged and stands at its target, also when the targets differ.
 
 ### Persisted window state
 
@@ -114,7 +117,7 @@ A position can be returned while a member still reports a movement, if its repor
 | `MemberState` | Per member: the last own command with its target, the last observation, the position reference flag, and the command backoff as facts: the number of attempts of the current command and the time of the last attempt (no attempts without a last own command). The time of the next retry is never stored; it is computed from the two facts with the current settings, so a reload right after a failed attempt does not send a second command at once. |
 | `ManualOverrideDam` | The armed manual override: armed at, end rule (`OverrideEndRule`), absolute end if the rule has one, and the position the person chose. |
 | `PersonAtWindowDam` | The armed person-at-the-window dam: when it ends. |
-| `ProtectionEventState` | Per protection event: active or inactive (`ProtectionEventStatus`), active since, ended at, released by the watchdog, and the position and owner remembered from before the event. An active event has "active since" and no "ended at", unless the watchdog released it: it is then still active, and "ended at" is the time of the release, from which the waiting time runs. An inactive one may have an "ended at". The end time is stored, not a deadline: the waiting time after the end is configuration and is applied when it is evaluated. |
+| `ProtectionEventState` | Per protection event: active or inactive (`ProtectionEventStatus`), active since, ended at, released at, and the position and owner remembered from before the event. An active event has "active since" and no "ended at"; an inactive one may have an "ended at". "Released at" is the time at which the watchdog released the event; the event stays active as long as its trigger is, and an inactive event can still carry it. `released` is a read-only view of it. Times are stored, not deadlines: the waiting time of the return is configuration, and it runs from `return_clock_start`, the release if there was one, otherwise the end. |
 | `ShadingEpisodeState` | Active since, and the end of the rain lock. |
 | `SolarHeatingEpisodeState` | Active since, and the "opened once" flag. |
 | `ExternalRequest` | A position requested by an automation, the text the caller gave as reason, and the expiry. |
