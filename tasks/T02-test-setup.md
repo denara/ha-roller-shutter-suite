@@ -29,6 +29,12 @@ The project owner has seen integrations break on deprecated patterns. The test s
 - First tests: config entry sets up, a second entry is refused, entry unloads; translation files have identical key sets (English, German, `strings.json`).
 - Coverage measurement configured, no threshold enforced yet.
 - A short `docs/dev/testing.md`: how to run core tests only, Home Assistant tests only, everything; how to add a scenario; why the two folders exist.
+- A section **"Running the Home Assistant tests on Windows"** in `docs/dev/testing.md`. Known from T01: the Home Assistant test harness does not run on native Windows (Home Assistant imports modules that exist only on POSIX systems), while the core tests run everywhere. The section describes the supported way, neutrally and without any machine-specific path or drive letter:
+  - Use WSL 2 with a current Ubuntu LTS distribution for `uv` and the tests only. Git and the GitHub CLI stay on the Windows side, where the commit identity and the login are configured; nothing is committed or pushed from inside WSL.
+  - The virtual environment lives in the Linux file system, not on the mounted Windows drive, because test runs on a mounted drive are very slow: set `UV_PROJECT_ENVIRONMENT` to a directory under the Linux home, one environment per checkout or worktree.
+  - The exact commands to run core tests, Home Assistant tests and everything from a Windows shell through WSL.
+  - The authoritative result is the CI run on Linux. A local run speeds up work; it does not replace CI.
+- The repository ships an empty `custom_components/__init__.py` if that is what it takes for the test plugin to find the integration (the plugin brings a `custom_components` package of its own, which otherwise shadows the repository's folder). Verify the cause first and document it in the file or in `docs/dev/testing.md`.
 
 ## Out of scope
 
@@ -44,6 +50,8 @@ Test folders, configuration, fixtures, first tests, `docs/dev/testing.md`.
 - `uv run pytest` passes with warnings as errors.
 - A deliberately used deprecated Home Assistant API in the integration makes a test fail, either through a warning or through the log fixture (demonstrate once with a concrete example, describe it in the pull request, do not commit it).
 - The translation parity test fails when a key is missing in one language (demonstrate once).
+- The Home Assistant tests were actually run on Linux (WSL or CI) and the pull request says where. A block is not verified because a local run was green; from T03 on, CI decides.
+- `docs/dev/testing.md` contains no drive letter, user name or path of a real machine.
 
 ## Required tests
 

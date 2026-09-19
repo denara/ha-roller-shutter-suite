@@ -30,6 +30,11 @@ GitHub Actions workflows under `.github/workflows/`, running on push, on pull re
    - *Core purity:* nothing under `custom_components/roller_shutter_suite/core/` imports `homeassistant` or anything from the integration outside `core/`. Implemented by parsing the syntax tree, not by text search.
    - *Deprecated helpers:* a list of Home Assistant names known to be deprecated (start with those named in the brief: `show_advanced_options`, `get_astral_location`, `get_location_astral_event_next`, `voluptuous` imports, `DeviceEntry.config_entries`) fails the build when referenced. The list lives in one file and is meant to grow.
    - *Instance data:* fails when a tracked file contains patterns typical for real installations. The pattern list is generic (for example serial-number-like entity IDs, coordinates with many decimals, private IP addresses) and must itself contain no instance data.
+- Carried over from the review of T01:
+  - CI installs with `uv sync --locked`, so a lock file that does not match `pyproject.toml` fails the build.
+  - The version number exists in `pyproject.toml` and in `manifest.json`. A guard fails the build when the two differ (or one becomes the single source; say which and why).
+  - `ruff format` also formats Markdown. Exclude `TASKS.md`, `tasks/` and `docs/project-brief.md` from the format check: block agents must not edit them, so they must not be able to fail on them.
+  - The entry title "Roller Shutter Suite" is a fixed product name in every language; do not flag it as untranslated.
 - Branch protection is a manual setting; describe the recommended settings (required checks, automatic branch deletion) in `docs/dev/contributing.md`.
 
 ## Out of scope
