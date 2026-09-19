@@ -20,7 +20,7 @@ from typing import Any
 
 import pytest
 
-from scripts.check_foreign_warnings import load_entries
+from tests.conftest import unapproved_filters
 
 REPOSITORY_ROOT = Path(__file__).parents[2]
 PLUGIN_SWITCH = ["-p", "no:homeassistant"]
@@ -111,12 +111,5 @@ def test_normalization_keeps_real_differences_visible() -> None:
 def test_filters_in_effect_are_the_approved_list(
     pytestconfig: pytest.Config,
 ) -> None:
-    """Warnings are errors, except the entries of ``foreign_warnings.toml``.
-
-    This looks at the running configuration, so a filter from a command line
-    option, a plugin or a ``conftest.py`` is seen as well.
-    """
-    expected = ["error", *(entry.as_filter() for entry in load_entries())]
-
-    assert pytestconfig.getini("filterwarnings") == expected
-    assert not pytestconfig.getoption("pythonwarnings")
+    """Warnings are errors, except the entries of ``foreign_warnings.toml``."""
+    assert unapproved_filters(pytestconfig) == []

@@ -34,6 +34,27 @@ def install_foreign_warning_filters(config: pytest.Config) -> None:
             config.addinivalue_line("filterwarnings", entry.as_filter())
 
 
+def unapproved_filters(config: pytest.Config) -> list[str]:
+    """Return what differs between the filters in effect and the approved list.
+
+    This looks at the running configuration, so a filter from a command line
+    option, a plugin or any ``conftest.py`` is seen. Every test folder has a
+    test that calls it, because CI runs the folders one by one and a
+    ``conftest.py`` is only loaded for the folder it lies in.
+    """
+    expected = ["error", *(entry.as_filter() for entry in load_entries())]
+    found = [
+        f"filter in effect: {line!r}"
+        for line in config.getini("filterwarnings")
+        if line not in expected
+    ]
+    if config.getini("filterwarnings")[:1] != expected[:1]:
+        found.append("the first filter is not 'error'")
+    if config.getoption("pythonwarnings"):
+        found.append("a -W option was given on the command line")
+    return found
+
+
 def pytest_configure(config: pytest.Config) -> None:
     """Install the filters before the first test runs."""
     install_foreign_warning_filters(config)
