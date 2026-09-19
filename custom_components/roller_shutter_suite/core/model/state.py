@@ -34,7 +34,7 @@ from ._validation import (
     to_utc_or_none,
 )
 from .observation import MemberCommand, Observation, OwnCommand
-from .values import Position, as_position, position_data
+from .values import Position, _as_position, _position_data
 
 WINDOW_STATE_SCHEMA_VERSION: Final = 1
 """Version of the plain data layout written by :meth:`WindowState.to_data`."""
@@ -130,6 +130,11 @@ class MemberState:
             "last_attempt_at",
             to_utc_or_none(self.last_attempt_at, "the time of the last attempt"),
         )
+        if self.command_attempts > 0 and self.last_own_command is None:
+            raise ValueError(
+                "command attempts are attempts of the current command; without "
+                "a last own command there are none"
+            )
         if (self.command_attempts == 0) != (self.last_attempt_at is None):
             raise ValueError(
                 "the number of command attempts and the time of the last attempt "
@@ -218,7 +223,7 @@ class ManualOverrideDam:
             "armed_at": self.armed_at.isoformat(),
             "end_rule": self.end_rule.value,
             "ends_at": datetime_data(self.ends_at),
-            "remembered_position": position_data(self.remembered_position),
+            "remembered_position": _position_data(self.remembered_position),
         }
 
     @classmethod
@@ -232,7 +237,7 @@ class ManualOverrideDam:
             end_rule=read(content, "end_rule", as_enum(OverrideEndRule)),
             ends_at=read(content, "ends_at", optional(as_datetime)),
             remembered_position=read(
-                content, "remembered_position", optional(as_position)
+                content, "remembered_position", optional(_as_position)
             ),
         )
 
@@ -265,10 +270,13 @@ class PersonAtWindowDam:
 class ProtectionEventState:
     """What is persisted per protection event.
 
-    An active event has ``active_since`` and no ``ended_at``. An inactive event
-    has no ``active_since``; its ``ended_at`` is the time its last activation
-    ended, or ``None`` if it never was active or the return after the event
-    has been completed. The end time is persisted, not a deadline: the waiting
+    An active event has ``active_since``. It has no ``ended_at``, with one
+    exception: an event that the watchdog released (``released`` is true) is
+    still active, because its trigger is, and its ``ended_at`` is the time of
+    the release, from which the waiting time of the return runs. An inactive
+    event has no ``active_since``; its ``ended_at`` is the time its last
+    activation ended, or ``None`` if it never was active or the return after
+    the event has been completed. The end time is persisted, not a deadline: the waiting
     time after the end is configuration and is applied when it is evaluated.
 
     The remembered position and owner are those the window had when the event
@@ -300,8 +308,11 @@ class ProtectionEventState:
         if self.status is ProtectionEventStatus.ACTIVE:
             if self.active_since is None:
                 raise ValueError("an active protection event states since when")
-            if self.ended_at is not None:
-                raise ValueError("an active protection event has not ended")
+            if self.ended_at is not None and not self.released:
+                raise ValueError(
+                    "an active protection event has not ended, unless the "
+                    "watchdog released it"
+                )
         elif self.active_since is not None:
             raise ValueError("an inactive protection event is not active since a time")
         require_type(self.released, bool, "the released flag of an event")
@@ -318,7 +329,7 @@ class ProtectionEventState:
             "active_since": datetime_data(self.active_since),
             "ended_at": datetime_data(self.ended_at),
             "released": self.released,
-            "remembered_position": position_data(self.remembered_position),
+            "remembered_position": _position_data(self.remembered_position),
             "remembered_owner": (
                 None if self.remembered_owner is None else self.remembered_owner.value
             ),
@@ -344,7 +355,7 @@ class ProtectionEventState:
             ended_at=read(content, "ended_at", optional(as_datetime)),
             released=read(content, "released", as_bool),
             remembered_position=read(
-                content, "remembered_position", optional(as_position)
+                content, "remembered_position", optional(_as_position)
             ),
             remembered_owner=read(
                 content, "remembered_owner", optional(as_enum(PositionOwner))
@@ -458,7 +469,7 @@ class ExternalRequest:
         """Rebuild the request from plain data."""
         content = as_object(data, "position", "reason", "expires_at")
         return cls(
-            position=read(content, "position", as_position),
+            position=read(content, "position", _as_position),
             reason=read(content, "reason", as_str),
             expires_at=read(content, "expires_at", optional(as_datetime)),
         )

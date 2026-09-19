@@ -272,7 +272,12 @@ def test_every_persisted_part_round_trips(value: Any) -> None:
         lambda: ExternalRequest(Position(1), "scene", expires_at=NAIVE),
         lambda: HeldInput(value=True, seen_at=NAIVE),
         lambda: SimulatedState(last_comfort_movement=NAIVE),
-        lambda: MemberState(LEFT, command_attempts=1, last_attempt_at=NAIVE),
+        lambda: MemberState(
+            LEFT,
+            _command(Position(0), NOW, WishClass.COMFORT),
+            command_attempts=1,
+            last_attempt_at=NAIVE,
+        ),
         lambda: WindowState(last_comfort_movement=NAIVE),
         lambda: WindowState(frost_waiver_until=NAIVE),
     ],
@@ -544,6 +549,33 @@ def test_protection_event_state_is_consistent() -> None:
             active_since=NOW,
             ended_at=NOW,
         )
+
+
+@pytest.mark.parametrize("active", [True, False], ids=["active", "inactive"])
+@pytest.mark.parametrize("released", [True, False], ids=["released", "not released"])
+@pytest.mark.parametrize("ended", [True, False], ids=["ended at", "no end"])
+def test_ended_at_of_a_protection_event_in_every_combination(
+    *, active: bool, released: bool, ended: bool
+) -> None:
+    """Only an active event that was not released refuses an "ended at"."""
+    arguments: dict[str, Any] = {
+        "status": (
+            ProtectionEventStatus.ACTIVE if active else ProtectionEventStatus.INACTIVE
+        ),
+        "active_since": NOW - timedelta(hours=13) if active else None,
+        "released": released,
+        "ended_at": LOCAL if ended else None,
+    }
+    if active and ended and not released:
+        with pytest.raises(ValueError, match="unless the watchdog released it"):
+            ProtectionEventState("storm", **arguments)
+        return
+
+    event = ProtectionEventState("storm", **arguments)
+    restored = ProtectionEventState.from_data(json.loads(json.dumps(event.to_data())))
+
+    assert restored == event
+    assert (event.ended_at is not None) is ended
     with pytest.raises(ValueError, match="not active since"):
         ProtectionEventState("storm", active_since=NOW)
 
@@ -552,7 +584,8 @@ def test_command_backoff_is_persisted_as_facts() -> None:
     """Attempts and the time of the last one; never the time of the next retry."""
     bad: Any = 1.5
     fresh = MemberState(LEFT)
-    retried = MemberState(LEFT, command_attempts=3, last_attempt_at=LOCAL)
+    command = _command(Position(0), NOW, WishClass.COMFORT)
+    retried = MemberState(LEFT, command, command_attempts=3, last_attempt_at=LOCAL)
 
     assert (fresh.command_attempts, fresh.last_attempt_at) == (0, None)
     assert retried.last_attempt_at == LOCAL
@@ -564,7 +597,9 @@ def test_command_backoff_is_persisted_as_facts() -> None:
     with pytest.raises(ValueError, match="must not be negative"):
         MemberState(LEFT, command_attempts=-1)
     with pytest.raises(ValueError, match="belong together"):
-        MemberState(LEFT, command_attempts=1)
+        MemberState(LEFT, command, command_attempts=1)
+    with pytest.raises(ValueError, match="without a last own command"):
+        MemberState(LEFT, command_attempts=1, last_attempt_at=NOW)
     with pytest.raises(ValueError, match="belong together"):
         MemberState(LEFT, last_attempt_at=NOW)
     with pytest.raises(TypeError, match="must be an integer"):
