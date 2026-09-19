@@ -12,9 +12,9 @@ Status values: `planned` (file exists, dependencies open) · `ready` (can start)
 
 | ID | Block | Depends on | Status |
 |---|---|---|---|
-| [D00](tasks/D00-domain-design-spec.md) | Domain design specification (`docs/architecture.md`) | — | ready |
-| [T01](tasks/T01-repository-scaffolding.md) | Repository scaffolding | — | ready |
-| [T02](tasks/T02-test-setup.md) | Test setup | T01 | planned |
+| [D00](tasks/D00-domain-design-spec.md) | Domain design specification (`docs/architecture.md`) | — | in review (pull request 2) |
+| [T01](tasks/T01-repository-scaffolding.md) | Repository scaffolding | — | done |
+| [T02](tasks/T02-test-setup.md) | Test setup | T01 | ready |
 | [T03](tasks/T03-continuous-integration.md) | Continuous integration | T01, T02 | planned |
 | [S1](tasks/S1-spike-cover-behavior.md) | Spike: cover behavior and movement attribution | history data from the owner | in progress (stage 1 done; open points need approved commands) |
 | [S2](tasks/S2-spike-subentries-inheritance-ux.md) | Spike: subentries, sections and inheritance in the UI | T02 | planned |
