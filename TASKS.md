@@ -48,25 +48,25 @@ Files are written after D00, S1 and S2 are approved. IDs and cuts may still chan
 
 | ID | Block | Features | Depends on |
 |---|---|---|---|
-| C06 | Movement tracking, manual detection, override dam | E1, E2, E3 | C03, S1 |
+| C06 | Movement tracking, manual detection, override dam; tolerance by position source, position reference flag | E1, E2, E3 | C03, S1 |
 | C07 | Protection events, fire, person-at-window dam, watchdog | D1–D6, D8, D9, guardrail 3; door for C13 | C03 |
 | C08 | Window interaction and tamper | B1–B4, B9, F6 | C03 |
 | C09 | Sun geometry and glass calibration | C1, C2, C7 | C01 |
-| C10 | Shading episodes, conditions, solar heating | C3–C6, C8, C9, C12, C14; doors for C3b, C10, C11 | C03, C09 |
+| C10 | Shading episodes, conditions, solar heating; frost release by sun | C3–C6, C8, C9, C12, C14, A12 (part); doors for C3b, C10, C11 | C03, C09 |
 | C11 | Sleep mode and privacy | A9, F2 | C03 |
 | C12 | Persistence model and restart reconciliation | E6, D5, N5 | C06, C07, C10 |
 | H05 | Storage and restart recovery | E6, N4, N5 | C12, H02 |
 | H06 | Control entities (pause, maintenance lock, mode, resume) | E4, E9, E2 (button) | H02 |
-| H07 | Actions for automations | F1, A11 | H02 |
-| H08 | Wiring: protection events, fire, watchdog repairs | D1–D6, D8, D9 | C07, H03, H05 |
-| H09 | Wiring: window interaction and tamper | B1–B4, B9, F6 | C08, H03 |
+| H07 | Actions for automations, including fire acknowledgement and reference run | F1, A11 | H02 |
+| H08 | Wiring: protection events, fire, watchdog and blind-source repairs | D1–D6, D8, D9 | C07, H03, H05 |
+| H09 | Wiring: window interaction, tamper, blind-contact repair | B1–B4, B9, F6 | C08, H03 |
 | H10 | Wiring: manual detection and override | E1–E3 | C06, H03, H05 |
 | H11 | Wiring: shading (sun, forecast, radiation, indoor temperature) | C1–C9, C12, C14 | C10, H03 |
 | H12 | Capability-aware configuration and repairs | F7 | H01, H03 |
 | H13 | Roof window profile | F3 | C09, C10, H11 |
 | H14 | Wall buttons | F5 | S3, C07, H07, H12 |
-| H15 | Command verification | N1 | S1, H03 |
-| H16 | Wiring: sleep mode, privacy, frost source | A9, F2, A12 | C11, H06 |
+| H15 | Command verification: detects that an actuator did not react, never that a curtain arrived | N1 | S1, H03 |
+| H16 | Wiring: sleep mode, privacy, frost source and frost waiver | A9, F2, A12 | C11, H06 |
 | R01 | Release audit (quality scale checklist, translation parity, documentation consistency, HACS) | G7, G8 | all |
 
 Milestones after M1: **M2** protection and manual override armed on the pilot window (C06, C07, C12, H05–H08, H10, H15) · **M3** window interaction and shading (C08–C11, H09, H11, H16) · **M4** capabilities, roof windows, buttons, release (H12–H14, R01).

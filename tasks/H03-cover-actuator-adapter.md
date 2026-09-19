@@ -27,7 +27,7 @@ This is the only place in the integration that is allowed to move a cover (G1). 
 - **Configuration step "Movement"** contributed in the modular layout of H01: minimum change and minimum interval of the motor protection (E10), staggering gap (E13), with inheritance; expert values in a collapsed section.
 - **Own-command bookkeeping:** remember target, time and an own context per command, exposed to the core through the window state, so that C06 can later build the expectation window. No detection logic here.
 - **Observation:** map the cover's state and position to the core's window state (position or none, moving, available), including covers that never report transit states. Identical repeated state writes, attribute-only writes that precede the resting state by milliseconds, and a rewritten unchanged state with a new change time must not reach the core as separate movements or changes; the rules are in `docs/architecture.md` ("Observing a movement").
-- Errors of the service call are caught, logged with the window's name, and reported to the core as a failed command. Retry, backoff and the repair issue are block H15 (command verification, after S1).
+- Errors of the service call are caught, logged with the window's name, and reported to the core as a failed command (`command_failed`). Nothing in this adapter, its logs or its documentation claims that a curtain has arrived: on many installations the reported position is calculated from run time (architecture document, "Calculated positions and drift"). Retry, backoff and the repair issue are block H15 (command verification, after S1).
 
 ## Out of scope
 

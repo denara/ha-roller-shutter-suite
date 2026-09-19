@@ -61,7 +61,7 @@ Layers are evaluated in this order; the first one that returns a target position
 
 | # | Layer | Class | Wish |
 |---|---|---|---|
-| 1 | Fire (D3) | fire | Open fully. |
+| 1 | Fire (D3) | fire | While the alarm is active: open fully. After the alarm has ended and until a person acknowledges it: **leave alone** (`fire_unacknowledged`). |
 | 2 | Protection events (D1, D2, D8), by rank | protection | The event's end position: fully open or fully closed, never in between. Several active events: the highest rank wins; ranks are unique. Hail ranks above storm by default. |
 | 3 | Sleep / night mode (A9) | comfort | Night position. By winning, it keeps shading, solar heating and privacy from acting. |
 | 4 | External request (F1, A11) | comfort | The requested position until the request expires or is cleared. |
@@ -73,7 +73,7 @@ Unknown or unavailable input never becomes a guess. Each layer states, per input
 
 > **Decision 1 — Window interaction as constraints, not as a layer.** The brief's starting order lists "window interaction (B1, B4, B9)" as a layer between sleep mode and privacy. Recommendation: express it as constraints ([section 2.2](#22-constraints)). An open or tilted window does not want a position of its own; it sets a **floor** under whatever the comfort layers want. With a floor, B1 (raise to the ventilation position), B9 (evening closing stops at the ventilation position) and "back after closing the window" are the same rule, and the return needs no memory: when the window closes, the floor disappears and the recompute yields the full closing. *Rejected:* a layer that returns the ventilation position. It would have to know what the layers below wanted in order not to lower an open shutter, and it would need remembered state for the way back.
 
-> **Decision 2 — Position of the external request layer.** Recommendation: below sleep mode, above privacy and shading. An alarm clock automation (A11) that wants to open a bedroom shutter therefore also has to end sleep mode for that room, which is what waking up means. *Rejected:* above sleep mode. Any automation could then defeat the sleep switch, and the person who set it would not know why.
+> **Decision 2 — Position of the external request layer.** Recommendation: below sleep mode, above privacy and shading. An alarm clock automation (A11) that wants to open a bedroom shutter therefore also has to end sleep mode for that room, which is what waking up means. The documentation of F1 has to state this plainly: an automation that wants to open a window in a room with active sleep mode (an alarm clock) must end the sleep mode of that room first; otherwise its request is accepted, waits below the sleep layer, and nothing moves. *Rejected:* above sleep mode. Any automation could then defeat the sleep switch, and the person who set it would not know why.
 
 ### 2.2 Constraints
 
@@ -86,12 +86,12 @@ Constraints are applied to the winning wish in this order. Each one names the cl
 | 3 | Lockout protection (B2) | comfort and protection | While a blocking contact reports open: never lower. Void while the tamper contact (F6) is active. A blocking contact that is unavailable counts as **open**, because the opposite could lock somebody out. |
 | 4 | Ventilation floor (B1, B9) | comfort | While the window contact reports tilted or open: not lower than the ventilation position (tilted) or the open-window position (open). An unavailable window contact sets no floor. |
 | 5 | Rain while ventilating (B4) | comfort | While the ventilation floor applies and rain has lasted the configured time: the floor drops to the rain position, and returns the configured time after the rain ends. |
-| 6 | Frost protection (A12) | comfort; protection too if configured; never fire | While frost is active: do not close below the frost position, and do not raise a window that is below the frost position (it may be frozen to the sill). |
-| 7 | No intermediate position during a protection event | protection | The target stays an end position. If constraint 3 or 6 prevents the end position, the window is left alone rather than driven halfway. |
+| 6 | Frost protection (A12) | own movements of class comfort; protection too if configured; never fire; never a movement by hand | While frost is active and not waived: do not **open** further than the frost position (default 90). Closing is not limited. Details in [section 2.6](#26-frost-protection). |
+| 7 | No intermediate position during a protection event | protection | The target stays an end position. If lockout protection prevents it, the window is left alone rather than driven halfway. If frost protection is configured to apply to protection movements, the frost position counts as the open end position. |
 
 Fire is subject to no constraint at all.
 
-> **Decision 3 — Frost when the temperature is unavailable.** "Missing data is not good news", and frost is the warning here. Recommendation: hold the last known frost state for at most 24 hours; after that the constraint becomes inactive and a repair issue names the source. *Rejected:* treating "unavailable" as frost for an unlimited time (a dead sensor would freeze all comfort movements for weeks, and users would learn to disable the feature); treating it as "no frost" at once (contradicts D6's principle).
+> **Decision 3 — Frost when the temperature is unavailable.** "Missing data is not good news", and frost is the warning here. Recommendation: hold the last known frost state for at most 24 hours; after that the constraint becomes inactive and a repair issue names the source. *Rejected:* treating "unavailable" as frost for an unlimited time (a dead sensor would limit all openings for weeks, and users would learn to disable the feature); treating it as "no frost" at once (contradicts D6's principle).
 
 ### 2.3 The gate
 
@@ -100,33 +100,42 @@ The gate rules are evaluated in this order; the first rule that applies decides.
 | # | Rule | Applies to | Outcome |
 |---|---|---|---|
 | 1 | Maintenance lock (E4) | fire, protection, comfort | Suppress. The only state in which nothing moves at all *(decided)*. |
-| 2 | Dry-run (E11) | fire, protection, comfort | Suppress, and record what would have been sent *(decided)*. |
-| 3 | No member can execute the command (all unavailable, or the capability is missing) | all | Defer until a member is available, or suppress with the capability reason. |
-| 4 | Target reached (within tolerance, or no position feedback and the last own command already had this target) | all | Nothing to do. |
-| 5 | Operating mode (E9) | `off`: protection and comfort. `protection only`: comfort. | Suppress. |
-| 6 | Pause (E4) | comfort | Suppress. |
-| 7 | Person-at-the-window dam (guardrail 3) | protection and comfort | Defer until the dam ends. |
-| 8 | Manual override dam (E1, E2) | comfort | Defer or suppress, depending on the end rule of the dam. |
-| 9 | Movement in flight | comfort | Same target as the pending own command: suppress as duplicate. Different target: defer until the members have come to rest. Protection retargets at once. |
-| 10 | Motor protection (E10) | comfort | Change below the minimum: suppress. Inside the minimum interval since the last own comfort movement: defer until it has passed. |
-| 11 | Command backoff (N1) | protection and comfort | Defer until the next retry time. |
-| 12 | Staggering (E13) | protection and comfort | Defer by the window's slot in a collective movement. |
+| 2 | No member can execute the command (all unavailable, or the capability is missing) | all | Defer until a member is available, or suppress with the capability reason. |
+| 3 | Target reached (within tolerance, or no position feedback and the last own command already had this target) | all | Nothing to do. |
+| 4 | Operating mode (E9) | `off`: protection and comfort. `protection only`: comfort. | Suppress. |
+| 5 | Pause (E4) | comfort | Suppress. |
+| 6 | Person-at-the-window dam (guardrail 3) | protection and comfort | Defer until the dam ends. |
+| 7 | Manual override dam (E1, E2) | comfort | Defer or suppress, depending on the end rule of the dam. |
+| 8 | Movement in flight | comfort | Same target as the pending own command: suppress as duplicate. Different target: defer until the members have come to rest. Protection retargets at once. |
+| 9 | Motor protection (E10) | comfort | Change below the minimum: suppress. Inside the minimum interval since the last own comfort movement: defer until it has passed. |
+| 10 | Command backoff (N1) | protection and comfort | Defer until the next retry time. |
+| 11 | Staggering (E13) | protection and comfort | Defer by the window's slot in a collective movement. |
+| 12 | Dry-run (E11) | fire, protection, comfort | The last barrier before sending. Whatever reaches it would have been sent: suppress it and record the would-be command *(decided: dry-run never moves anything, not even at fire)*. |
 | — | none applied | | Send. |
 
 Pause, operating mode and maintenance lock exist on global, group and window level. The effective value for a window is the **most restrictive** of the three: a window is paused if any level is paused, locked if any level is locked, and its mode is the most restrictive mode of the three levels.
+
+**Dry-run is the last rule on purpose.** A window in dry-run runs next to another controller that still moves the same window, and the owner judges the integration by what it *would* have done. If dry-run were an early rule, every decision would read `dry_run` and nothing else. As the last rule, the decision record of a dry-run window shows the complete hypothetical outcome: either "would have sent position X because …" or "would have held back because of rule N". For this to work in dry-run:
+
+- The gate rules that depend on own commands (movement in flight, motor protection, command backoff) are evaluated against **simulated** commands: a would-be send is remembered with target and time, in a state that is separate from the real one. The real motor protection clock is never touched. When a window is armed, the simulated state is discarded.
+- "Target reached" compares with the real position. In parallel operation this is the most useful line of all: it means the other controller has put the window where the integration wanted it.
+- **Movements are observed and logged, but arm no dam and do not change the owner of the position.** In dry-run the integration never commands, so every movement is foreign; next to a controller that is still active, the manual override dam would be armed permanently and the record would show nothing but `manual_override`. Arming a window starts from a clean state: no dam, owner `unknown`.
+- The adapter checks dry-run a second time before any command (defense in depth); that does not change.
 
 ### 2.4 The fire bypass
 
 The fire bypass is a named construct of the gate, not a set of exceptions spread over the rules. A wish of class `fire` **skips** these gate rules:
 
-- 5 operating mode, 6 pause, 7 person-at-the-window dam, 8 manual override dam, 9 movement in flight (fire retargets at once), 10 motor protection, 11 command backoff, 12 staggering.
+- 4 operating mode, 5 pause, 6 person-at-the-window dam, 7 manual override dam, 8 movement in flight (fire retargets at once), 9 motor protection, 10 command backoff, 11 staggering.
 
 It does **not** skip:
 
-- 1 maintenance lock and 2 dry-run *(decided)*. In both cases the fire event is fired immediately, with the reason code that says why nothing moved.
-- 3 and 4, which describe what is physically possible or already true.
+- 1 maintenance lock and 12 dry-run *(decided)*. In both cases the fire event is fired immediately, with the reason code that says why nothing moved.
+- 2 and 3, which describe what is physically possible or already true.
 
-Fire is also exempt from every constraint, including frost and the sleep-room exception. Fire never returns automatically: when the alarm ends, the fire layer keeps its wish until a person acknowledges it (an action or a button); only then does the recompute fall through to the lower layers.
+Fire is also exempt from every constraint, including frost and the sleep-room exception.
+
+Fire never returns automatically, and it never fights a person. While the alarm is **active**, the wish is "open". When the alarm has **ended** and nobody has acknowledged it yet, the wish is "leave alone": it still wins and therefore holds back every lower layer, but it moves nothing. Without this distinction the integration would, after a false alarm, reopen every shutter somebody closes by hand, because fire skips both dams. Only the acknowledgement (an action or a button) lets the recompute fall through to the lower layers again. A movement by hand in the unacknowledged phase is observed like any other and arms the manual override dam, so the comfort logic does not undo it right after the acknowledgement.
 
 ### 2.5 Operating modes
 
@@ -136,6 +145,21 @@ Fire is also exempt from every constraint, including frost and the sleep-room ex
 | protection only | — | moves | opens |
 | off | — | — | opens |
 | maintenance lock | — | — | event only, no movement |
+
+### 2.6 Frost protection
+
+Frost protection is **preventive**. The integration cannot detect a curtain that is frozen in place ([section 8](#8-observing-a-movement): on many installations the reported position is calculated, not measured). It can only avoid the movement that does the damage, and the documentation has to say exactly that.
+
+> **Decision 13 — Frost protection (A12).** Recommendation, following the source of the feature (issue 24 of the blueprint repository):
+>
+> - **Basic behavior.** While frost is active, own movements open only up to the frost position (default 90), so the curtain does not run into a frozen end stop. Closing is never limited. "Do not raise a closed window at all" exists as a separate option that is **off** by default (`frost_hold`).
+> - **Frost is active** when the frost source is below its threshold (default 0 °C, with hysteresis). The frost source is an ordinary inherited setting, so it can be chosen per group or façade. This matters because false alarms are normal: a regional value or a sensor on the shaded side says little about a sunlit façade.
+> - **Waiver by the operator.** The operator can lift frost protection explicitly, per window, per group and globally, **until the next morning trigger** of the window. A window is waived if any of the three levels is waived. The waiver is persisted, shown in the window's status, and fires a warning event when it starts and when it ends (`frost_protection_waived`, `frost_waiver_ended`).
+> - **Test movement.** The limit applies only to movements the integration starts itself. A movement by hand, from a locally linked button or from a button on the Home Assistant path (F5), is never limited. This lets the operator check selectively whether a curtain is actually stuck.
+> - **Release by sun** (optional, off by default). If the window has been in direct sun for a configurable time (sun inside the field of view and above the minimum elevation, and the radiation or weather condition of shading says "sunny"), the limit is lifted for this window and a warning event is fired (`frost_released_by_sun`). It needs the geometry and the radiation signal and is therefore **not** part of block C03. Proposal: it is built with the shading conditions in block C10 and wired in H16, as part of A12. *Alternative for the owner:* status "Not yet".
+> - After a frost phase, a waiver or a release by sun, positions may be inaccurate until the next end position ([section 8.4](#84-calculated-positions-and-drift)).
+>
+> *Rejected:* limiting closing ("do not close below a frost position"), which does not address the damage mechanism, a curtain running into a frozen end stop; and blocking all comfort movements during frost, which punishes every false alarm with a dark or a bright house.
 
 ---
 
@@ -149,6 +173,8 @@ Both dams are armed by the movement tracker ([section 8](#8-observing-a-movement
 - **Armed when** an external movement is detected while no protection wish is winning. A movement the integration commanded itself never arms it, whatever layer it came from.
 - **Remembers** the position the person chose, with the time.
 - **Ends** by the configured rule (E2): after fixed minutes; when the shading episode ends (only if it was armed during one); at the next boundary between parts of the day (default); when the room has been empty for the configured time; or at once through the "resume automation" button or action. When it ends, the window is recomputed; nothing is replayed.
+- **Switching sleep mode on ends it** for the windows the sleep switch covers. Turning on sleep mode is a deliberate act of a person and says what the room shall look like now; an older hand movement must not keep the bedroom shutter open all night. A movement by hand **during** sleep mode arms the dam again as usual, so somebody who opens the shutter at night is not overruled.
+- **In dry-run it is never armed** ([section 2.3](#23-the-gate)).
 - **While a protection event is active**, the dam stays armed and its clock keeps running.
 
 > **Decision 4 — Override duration during a protection event (D5 and E2).** Recommendation: the clock keeps running. After the event (plus its waiting time) the remembered manual position is restored only if the dam is still armed at that moment; otherwise the window is simply recomputed. *Rejected:* stopping the clock during the event. It needs extra persisted state, makes the end of an override hard to predict ("until the evening" could become "until tomorrow noon"), and restores a position whose reason may be long gone.
@@ -172,8 +198,10 @@ The reference cases. Every one of them becomes a test.
 | # | Situation | Outcome | Reason codes (winner / constraint / gate) |
 |---|---|---|---|
 | 1 | Fire during maintenance lock | No movement. Fire event fired at once. | `fire_alarm` / — / `maintenance_lock` |
-| 2 | Fire in dry-run | No movement. Fire event fired at once; the record shows "would open". | `fire_alarm` / — / `dry_run` |
+| 2 | Fire in dry-run | No movement. Fire event fired at once; the record shows "would open". | `fire_alarm` / — / `dry_run` (would send 100) |
+| 2a | Dry-run next to another controller: that controller lowers the window at noon; later a storm starts while the window is paused | The noon movement is logged, no dam is armed. At the storm the record shows "would have sent 0" with `dry_run`, because pause does not hold back protection; a comfort wish at the same moment would show `paused` instead. | `protection_event` / — / `dry_run` (would send 0) |
 | 3 | Fire in mode `off` | Opens at once, unstaggered. | `fire_alarm` / — / `sent` |
+| 3a | The fire alarm has ended (false alarm), nobody has acknowledged it, a person closes a shutter by hand | The shutter stays closed. Nothing moves until the acknowledgement; afterwards the manual override dam protects what the person did. | `fire_unacknowledged` / — / — + `manual_detected` |
 | 4 | Storm (closing) with an open terrace door | No movement while the door is open; closes when the door is shut. | `protection_event` / `lockout_door_open` / — |
 | 5 | Same, tamper contact active | Closes. | `protection_event` / `lockout_void_tamper` / `sent` |
 | 6 | Hail (opening) with sleep-room exception, sleep mode active | Stays closed. | `protection_event` / `sleep_exception_no_open` / — |
@@ -181,8 +209,12 @@ The reference cases. Every one of them becomes a test.
 | 8 | Manual override active when a storm begins | Closes. The override dam stays armed and keeps the person's position. | `protection_event` / — / `sent` |
 | 9 | The storm ends, override dam still armed | After the waiting time the remembered manual position is restored. | `protection_return_manual` |
 | 10 | The storm ends, override dam expired meanwhile | After the waiting time the window is recomputed. | whatever layer wins now |
+| 10a | A shutter was opened by hand in the afternoon (override until the next part of the day); sleep mode is switched on | The override ends, the window goes to the night position. | `sleep_mode` / — / `sent` + `override_ended` |
+| 10b | During sleep mode somebody opens the shutter by hand | It stays open; the override dam is armed with its normal end rule. | `sleep_mode` / — / `manual_override` |
 | 11 | Evening closing with a tilted window | Lowers to the ventilation position; closes fully when the window is shut. A reason event makes the deviation visible. | `schedule_night` / `ventilation_floor` / `sent` |
-| 12 | Frost during evening closing | Lowers to the frost position only. | `schedule_night` / `frost_limit` / `sent` |
+| 12 | Frost during evening closing | Closes fully. Frost does not limit closing. | `schedule_night` / — / `sent` |
+| 12a | Frost at the morning opening | Opens to the frost position (90) instead of 100. When frost ends, the recompute opens the rest. | `schedule_day` / `frost_limit` / `sent` |
+| 12b | Frost, and the operator waives frost protection for the window | Opens fully. Warning event. The waiver ends at the next morning trigger. | `schedule_day` / — / `sent` + `frost_protection_waived` |
 | 13 | Restart in the middle of a shading episode | The episode is restored from the persisted state; the recompute yields the same shading position; no movement if the window is already there. | `shading_geometric` / — / `target_reached` |
 | 14 | The source of an active protection event becomes unavailable | The event stays active (D6). The watchdog clock keeps running. | `protection_event` (input held) |
 | 15 | One member of a window with several covers is moved by hand | The override dam is armed for the whole window. The other members stay where they are. | `manual_detected_member` |
@@ -202,7 +234,9 @@ A closed enumeration in the core. Adding a code requires an English and a German
 
 **Gate:** `sent`, `maintenance_lock`, `dry_run`, `cover_unavailable`, `target_reached`, `mode_off`, `mode_protection_only`, `paused`, `person_at_window`, `manual_override`, `movement_in_flight`, `duplicate_command`, `min_change`, `min_interval`, `command_backoff`, `staggered`.
 
-**Tracker and life cycle (events only):** `manual_detected`, `manual_detected_member`, `moved_during_downtime`, `person_at_window_started`, `person_at_window_ended`, `override_started`, `override_ended`, `protection_started`, `protection_ended`, `command_failed`, `command_unconfirmed`, `member_unavailable`, `button_refused_maintenance_lock`.
+**Tracker and life cycle (events only):** `manual_detected`, `manual_detected_member`, `external_movement_observed` (dry-run), `moved_during_downtime`, `person_at_window_started`, `person_at_window_ended`, `override_started`, `override_ended`, `protection_started`, `protection_ended`, `protection_source_blind`, `lockout_contact_blind`, `fire_acknowledged`, `frost_protection_waived`, `frost_waiver_ended`, `frost_released_by_sun`, `position_may_be_inaccurate`, `command_failed`, `actuator_no_reaction`, `movement_not_finished`, `member_unavailable`, `button_refused_maintenance_lock`.
+
+No code claims that a curtain has arrived ([section 8.4](#84-calculated-positions-and-drift)).
 
 ---
 
@@ -258,7 +292,7 @@ An episode belongs to one layer and one window. It has a start condition, an end
 | **Shading** | all enabled conditions hold: sun inside the field of view and above the minimum elevation; temperature condition (C3, C4, C12); radiation above its threshold for the *fast* delay (C5) or, without a radiation source, an allowed weather condition (C6); shading enabled (C9); no rain lock (C14) | any of: sun outside the field of view or below the end elevation (C7); temperature below threshold minus hysteresis; radiation below its threshold for the *slow* delay; weather stably bad for the configured time (default 10 minutes); persistent rain, which also starts the rain lock (C14); shading disabled (C9); sleep mode | active since; rain lock until |
 | **Solar heating** | temperature below its threshold, sun inside the field of view, the window closed or nearly closed, sleep mode off | the sun leaves the field of view, or the temperature condition ends | active since; "opened once" flag |
 
-During a shading episode the position is recalculated cyclically; motor protection (gate rule 10) keeps the number of movements small. When an episode ends, the layer has no opinion any more and the recompute falls through to the schedule.
+During a shading episode the position is recalculated cyclically; motor protection (gate rule 9) keeps the number of movements small. When an episode ends, the layer has no opinion any more and the recompute falls through to the schedule.
 
 Details from the brief's list of vague wording (open point 8):
 
@@ -272,9 +306,11 @@ Details from the brief's list of vague wording (open point 8):
 
 Measured facts that this section has to hold under (two cover platforms, about a hundred movements): both report `opening`/`closing` but no intermediate positions; one keeps the old position for the whole travel and jumps to the target at the end; at the end of a movement two state writes arrive within 7 to 30 ms, either the same state twice or the position as an attribute-only write followed by the resting state; a state write with a new change time but identical state and position occurs without any movement; a transit state can follow a transit state directly when a movement is reversed; travel time differs by direction and is not linear in percent, the part that ends in an end stop takes longer; after an unavailable gap a cover returns with the state it had; the start report of one platform already carries a position a few percent into the travel. The context of the state change carries the caller for about five seconds and is gone on the final report.
 
+**The reported position is an estimate on many installations.** Actuators that switch a plain up/down motor know the position only from run time and a reference run. The motor reports nothing back, and it has an overload cut-out: the actuator may apply "up" for ten seconds while the motor cuts out after two, and the actuator still counts to the end and reports the target as reached. "Ten seconds up" does not mean the curtain went up. This matches the measurements: every movement whose target is known ended exactly on it. Consequences run through this whole section and are collected in [section 8.4](#84-calculated-positions-and-drift).
+
 ### 8.1 Capability profile
 
-Per member: supports open and close; supports set position; supports stop; **reports a position** (yes / no); **reports transit states** (yes / no / unknown until observed); **position updates during travel** (live / end only); full travel time upwards and downwards (configured, with defaults). A member without position feedback is valid (N2): for it there is no tracking, no manual detection and no intermediate target; the owner of its position is `unknown`; targets are mapped to open or close (below 50 closes, from 50 opens, unless the wish is an end position anyway).
+Per member: supports open and close; supports set position; supports stop; **reports a position** (yes / no); **position source** (`measured` by the drive itself, or `calculated` from run time; this cannot be detected, so the user states it, default `calculated`); **reports transit states** (yes / no / unknown until observed); **position updates during travel** (live / end only); full travel time upwards and downwards (configured, with defaults). A member without position feedback is valid (N2): for it there is no tracking, no manual detection and no intermediate target; the owner of its position is `unknown`; targets are mapped to open or close (below 50 closes, from 50 opens, unless the wish is an end position anyway).
 
 ### 8.2 Normalizing reports
 
@@ -287,7 +323,8 @@ Per member: `idle` → `expecting` (own command sent) → `moving` → `settling
 - **Own command:** remember target, direction, time, wish class and the context ID; enter `expecting`. No expectation is created for a command whose target equals the current position (the gate stops those).
 - **Deadline** of the expectation: `start allowance + travel time of the direction × share of the travel × slack + end allowance`. Defaults: start allowance 10 s, slack 1.5, end allowance 5 s. The proportional share alone underestimates movements that end in an end stop.
 - **Settling:** a movement is evaluated **once**, a settle time (default 2 s) after the resting observation, with the position reported by then. This covers platforms that write the position shortly before or after the resting state.
-- **Evaluation:** position within tolerance of the target (default 3, minimum 1) → own movement, the expectation is consumed. Outside the tolerance → somebody intervened (a stop, another command) → external. Deadline passed without a resting observation → `command_unconfirmed`, handled by command verification (N1), not treated as manual.
+- **Evaluation:** position within tolerance of the target → own movement, the expectation is consumed. Outside the tolerance → somebody intervened (a stop, another command) → external. The default tolerance depends on the position source: 2 for a `calculated` position, where the report equals the command and a deviation therefore means an intervention, not inaccuracy; 3 for a `measured` one; minimum 1.
+- **No reaction:** if no transit state and no position change was observed by the deadline, or the member is unavailable, the result is `actuator_no_reaction`; if a movement started but no resting observation arrived by the deadline, `movement_not_finished`. Both are handled by command verification (N1) and never treated as manual operation.
 - **A movement that starts in `idle`** is external. On platforms that report transit states this is reliable, because every movement has a start report.
 - **Reversal:** a moving observation in the direction opposite to the commanded one during `expecting` or `moving` is external at once, without waiting for the end.
 - **Platforms without transit states:** a position change beyond the tolerance in `idle` is external; during `expecting`, changes are attributed to the own command until the evaluation.
@@ -297,6 +334,14 @@ Per member: `idle` → `expecting` (own command sent) → `moving` → `settling
 - **Glass calibration (C2)** applies to shading targets only. The tracker compares commanded and reported motor positions, both on the motor scale, so the calibration never enters the comparison.
 
 Open measurements (deviation between commanded and reported position on the first platform, a second command during travel, real command latency, movements from a vendor's remote) refine the defaults above; they do not change the model. They are to be closed before blocks C06 and H15 are specified.
+
+### 8.4 Calculated positions and drift
+
+- **What command verification (N1) can and cannot know.** With a `calculated` position, verification can establish only that the **actuator did not react**: the member is unavailable, no transit state appeared, the position did not change. It can never establish that the curtain arrived. Reason codes, entity names and documentation must not claim more: there is no "confirmed" and no "arrived", only `sent`, `actuator_no_reaction`, `movement_not_finished` and `command_failed` (the service call itself raised an error). With a `measured` position the same codes are used; the documentation may then say that the reported position is the drive's own.
+- **Drift.** After a blocked or interrupted movement the calculated position is wrong until an end position references it again. The core keeps, per member, a flag **position reference**: `referenced` or `uncertain`. It becomes `uncertain` after a frost phase, a frost waiver or a release by sun in which the member was moved; after a movement that was stopped from outside; after `movement_not_finished`; and after `moved_during_downtime`. It becomes `referenced` again by any complete movement into an end position (0 or 100), whoever commanded it. This is the best available signal, not a proof: a curtain that is still stuck is not referenced by it either, and the documentation says so.
+- **Hint event.** When the flag turns `uncertain`, one event is fired (`position_may_be_inaccurate`): shading positions can be off until the next end position. The flag is visible in the window's diagnostics. It changes no decision; in particular it never blocks a movement.
+- **Reference run.** An action "reference run" drives a window fully into an end position (open by default) so the actuator counts from a known point again. It is a request of class comfort: lockout protection, maintenance lock, dry-run, an active protection event and frost protection apply to it like to any own movement; during frost it therefore needs a waiver first. Proposal: it becomes part of the actions of F1 (block H07). The integration never starts a reference run by itself.
+- **Members without `set position`** and members without position feedback have no drift in this sense; the flag stays `referenced`.
 
 ---
 
@@ -348,6 +393,8 @@ A protection event has a trigger source (binary, a list of states, or a number w
 
 The trigger has three states. **Active** and **inactive** come from a value of the source. **Unknown** (source unavailable or unknown) changes nothing: an active event stays active, an inactive event stays inactive (D6). The state of each event is persisted, so after a restart an event whose source is still unavailable stays what it was; an event whose source reports active at start is active from then on (caught up).
 
+**A blind protection must not stay silent.** Holding the last state (D6) is the right behavior, but nobody notices that the protection has stopped seeing. If the trigger source of a protection event has been unavailable or unknown for longer than a configurable time (default 1 hour), a repair issue names the event and the source and an event is fired (`protection_source_blind`). The behavior of the event itself does not change. The same applies to lockout protection: a blocking contact that is unavailable counts as open, which means nothing closes any more at that window, not even at storm. After a configurable time (default 1 hour) a repair issue and an event say so (`lockout_contact_blind`). Both issues disappear by themselves when the source has a value again.
+
 ### 10.2 Return after a protection event (D5)
 
 When an event starts, the window remembers its position and the owner of that position. When the event has ended and its waiting time has passed without a new activation, the window is recomputed. Only if the remembered owner was `user` **and** the manual override dam is still armed (decision 4), the remembered position is restored one to one; a remembered position that is unknown is skipped. Fire never returns automatically.
@@ -373,11 +420,13 @@ Persisted per window, versioned, all timestamps timezone-aware (naive ones are r
 - external request: position, reason, expires at;
 - latched day type per date (today and tomorrow);
 - time of the last own comfort movement (the motor protection clock);
-- last known values of inputs that are held (frost state, season, protection triggers).
+- last known values of inputs that are held (frost state, season, protection triggers);
+- frost waiver: active until; per member the position reference flag (`referenced` / `uncertain`);
+- in dry-run only: the simulated commands of [section 2.3](#23-the-gate), kept apart from the real state and discarded when the window is armed.
 
 Per installation: the seed for random offsets.
 
-**Restart reconciliation** is a pure function of (persisted state, live observation) with one of these results: `first_setup` (nothing persisted: owner `unknown`, no dam); `unchanged` (the live position matches the last observation or the last own target within tolerance); `moved_during_downtime` (it does not: owner `user`, the manual override dam is armed with the default end rule); `expectation_expired` (an own command was pending: handled as `command_unconfirmed`). Dams and episodes whose end lies in the past are dropped. After reconciliation the window is recomputed, and no decision is made before its members are available.
+**Restart reconciliation** is a pure function of (persisted state, live observation) with one of these results: `first_setup` (nothing persisted: owner `unknown`, no dam); `unchanged` (the live position matches the last observation or the last own target within tolerance); `moved_during_downtime` (it does not: owner `user`, the manual override dam is armed with the default end rule); `expectation_expired` (an own command was pending: handled as `movement_not_finished`). Dams and episodes whose end lies in the past are dropped. After reconciliation the window is recomputed, and no decision is made before its members are available.
 
 Removing a window deletes its persisted state (N4).
 
@@ -439,5 +488,6 @@ Doors kept open, as places in the model and nothing more: covering type (C15); a
 | 10 | Watchdog: meaning of "released" | Released for this activation until the trigger was inactive once; 12 h default; never for fire |
 | 11 | Inputs of F2 | Light entities per window; dark = sun elevation below a threshold, or the brightness source |
 | 12 | New windows start in dry-run | Yes |
+| 13 | Frost protection | Limits opening to the frost position; inherited source; waiver until the next morning; movements by hand exempt; optional release by sun, built with C10; preventive only |
 
-Also worth a look, because they are proposals stated as rules: the final layer order of section 2.1, which follows the brief's starting order except for decisions 1 and 2; the order of the gate rules in section 2.3; the latch of the day type (section 6.3); an unavailable blocking contact counts as open (section 2.2, constraint 3); an unavailable window contact sets no ventilation floor (constraint 4); fire needs an acknowledgement before the window returns to normal operation (section 2.4); the staggering gap also applies between the members of one window (section 9); members of a window without position feedback are mapped to open or close at 50 (section 8.1).
+Also worth a look, because they are proposals stated as rules: the position reference flag, the hint event and the reference run as an action of F1 (section 8.4); the default of one hour before a blind protection source or a blind blocking contact is reported (section 10.1); dry-run as the last gate rule with simulated commands (section 2.3); the final layer order of section 2.1, which follows the brief's starting order except for decisions 1 and 2; the order of the gate rules in section 2.3; the latch of the day type (section 6.3); an unavailable blocking contact counts as open (section 2.2, constraint 3); an unavailable window contact sets no ventilation floor (constraint 4); fire needs an acknowledgement before the window returns to normal operation (section 2.4); the staggering gap also applies between the members of one window (section 9); members of a window without position feedback are mapped to open or close at 50 (section 8.1).
