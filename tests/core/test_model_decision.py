@@ -838,6 +838,54 @@ def test_decision_types_are_checked() -> None:
         Decision(winning_wish=_night_wish(), targets=_targets(0), gate=bad)
 
 
+# --- The return to the manual position (decision 14) -----------------------------------
+
+
+def test_return_to_the_manual_position_is_a_comfort_wish_of_the_protection_layer() -> (
+    None
+):
+    """The class follows from the layer, except for this one reason code."""
+    back = Wish.target(
+        Layer.PROTECTION, ReasonCode.PROTECTION_RETURN_MANUAL, Position(55)
+    )
+    event = Wish.target(Layer.PROTECTION, ReasonCode.PROTECTION_EVENT, FULLY_CLOSED)
+
+    assert back.layer is Layer.PROTECTION
+    assert back.wish_class is WishClass.COMFORT
+    assert event.wish_class is WishClass.PROTECTION
+    assert Layer.PROTECTION.wish_class is WishClass.PROTECTION
+
+
+@pytest.mark.parametrize(
+    "layer", [layer for layer in Layer if layer is not Layer.PROTECTION]
+)
+def test_return_to_the_manual_position_comes_from_the_protection_layer_only(
+    layer: Layer,
+) -> None:
+    """No other layer can carry the reason, whatever the kind of wish."""
+    reason = ReasonCode.PROTECTION_RETURN_MANUAL
+    with pytest.raises(ValueError, match="belongs to a wish of the protection layer"):
+        Wish.target(layer, reason, Position(55))
+    with pytest.raises(ValueError, match="belongs to a wish of the protection layer"):
+        Wish.leave_alone(layer, reason)
+    with pytest.raises(ValueError, match="belongs to a wish of the protection layer"):
+        Wish.no_opinion(layer, reason)
+
+
+@pytest.mark.parametrize(
+    "reason",
+    [
+        code
+        for code in codes_of(ReasonCategory.LAYER)
+        if code is not ReasonCode.PROTECTION_RETURN_MANUAL
+    ],
+)
+def test_every_other_wish_has_the_class_of_its_layer(reason: ReasonCode) -> None:
+    """The exception is exactly one reason code."""
+    for layer in Layer:
+        assert Wish.target(layer, reason, FULLY_OPEN).wish_class is layer.wish_class
+
+
 # --- The displayed target -------------------------------------------------------------
 
 

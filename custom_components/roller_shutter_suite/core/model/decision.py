@@ -78,7 +78,11 @@ class Layer(StrEnum):
 
     @property
     def wish_class(self) -> WishClass:
-        """Return the class of every wish of this layer."""
+        """Return the class of the wishes of this layer.
+
+        The one exception is a property of the wish, not of the layer: see
+        ``Wish.wish_class``.
+        """
         if self is Layer.FIRE:
             return WishClass.FIRE
         if self is Layer.PROTECTION:
@@ -164,6 +168,14 @@ class Wish:
         """Reject combinations that do not describe one of the three answers."""
         require_type(self.layer, Layer, "the layer of a wish")
         require_type(self.kind, WishKind, "the kind of a wish")
+        if (
+            self.reason is ReasonCode.PROTECTION_RETURN_MANUAL
+            and self.layer is not Layer.PROTECTION
+        ):
+            raise ValueError(
+                "the reason 'protection_return_manual' belongs to a wish of the "
+                "protection layer"
+            )
         object.__setattr__(self, "member_positions", tuple(self.member_positions))
         if self.kind is WishKind.TARGET:
             _require_reason(
@@ -255,7 +267,16 @@ class Wish:
 
     @property
     def wish_class(self) -> WishClass:
-        """Return the class of the wish, which follows from its layer."""
+        """Return the class of the wish, which follows from its layer.
+
+        There is one exception (decision 14): the return to the manual position
+        after a protection event, reason ``protection_return_manual``, is a
+        wish of class comfort from the protection layer. That reason is
+        accepted on a wish of the protection layer only, so the class still
+        cannot contradict layer and reason.
+        """
+        if self.reason is ReasonCode.PROTECTION_RETURN_MANUAL:
+            return WishClass.COMFORT
         return self.layer.wish_class
 
 
