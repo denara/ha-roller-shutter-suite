@@ -1,0 +1,10 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "description": "Möchtest du Roller Shutter Suite einrichten? Es gibt noch nichts zu konfigurieren.",
+        "title": "Roller Shutter Suite einrichten"
+      }
+    }
+  }
+}
