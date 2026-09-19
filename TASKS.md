@@ -12,12 +12,12 @@ Status values: `planned` (file exists, dependencies open) · `ready` (can start)
 
 | ID | Block | Depends on | Status |
 |---|---|---|---|
-| [D00](tasks/D00-domain-design-spec.md) | Domain design specification (`docs/architecture.md`) | — | in review (pull request 2) |
+| [D00](tasks/D00-domain-design-spec.md) | Domain design specification (`docs/architecture.md`) | — | done |
 | [T01](tasks/T01-repository-scaffolding.md) | Repository scaffolding | — | done |
-| [T02](tasks/T02-test-setup.md) | Test setup | T01 | ready |
-| [T03](tasks/T03-continuous-integration.md) | Continuous integration | T01, T02 | planned |
-| [S1](tasks/S1-spike-cover-behavior.md) | Spike: cover behavior and movement attribution | history data from the owner | in progress (stage 1 done; open points need approved commands) |
-| [S2](tasks/S2-spike-subentries-inheritance-ux.md) | Spike: subentries, sections and inheritance in the UI | T02 | planned |
+| [T02](tasks/T02-test-setup.md) | Test setup | T01 | done |
+| [T03](tasks/T03-continuous-integration.md) | Continuous integration | T01, T02 | ready |
+| [S1](tasks/S1-spike-cover-behavior.md) | Spike: cover behavior and movement attribution | history data from the owner | done for the design (findings in `docs/architecture.md`; the public taxonomy document is still to be written) |
+| [S2](tasks/S2-spike-subentries-inheritance-ux.md) | Spike: subentries, sections and inheritance in the UI | T02 | in progress |
 | [S3](tasks/S3-spike-button-events.md) | Spike: button event semantics | T02 | planned |
 
 ## Phase 1 — Domain core up to M1
@@ -26,7 +26,7 @@ Plain Python under `custom_components/roller_shutter_suite/core/`, tested withou
 
 | ID | Block | Features | Depends on | Status |
 |---|---|---|---|---|
-| [C01](tasks/C01-core-model-and-ports.md) | Core model and ports | E5, N2, N3; doors for C15, A7 | D00, T01, T02 | planned |
+| [C01](tasks/C01-core-model-and-ports.md) | Core model and ports | E5, N2, N3; doors for C15, A7 | D00, T01, T02 | ready |
 | [C02](tasks/C02-inheritance-resolver.md) | Inheritance resolver | E12, N4 | C01 | planned |
 | [C03](tasks/C03-arbiter.md) | Arbiter: layers, constraints, gate | E5, E4, E9, E10, E11, A6, A12 | C01 | planned |
 | [C04](tasks/C04-schedule-and-day-types.md) | Schedule and day types | A1–A6, E13 (offset) | C01 | planned |
@@ -48,7 +48,7 @@ Files are written after D00, S1 and S2 are approved. IDs and cuts may still chan
 
 | ID | Block | Features | Depends on |
 |---|---|---|---|
-| C06 | Movement tracking, manual detection, override dam; tolerance by position source, position reference flag | E1, E2, E3 | C03, S1 |
+| C06 | Movement tracking, manual detection, override dam; tolerance by position source, report delay, position reference flag, self-measurement for the diagnostics | E1, E2, E3 | C03 |
 | C07 | Protection events, fire, person-at-window dam, watchdog | D1–D6, D8, D9, guardrail 3; door for C13 | C03 |
 | C08 | Window interaction and tamper | B1–B4, B9, F6 | C03 |
 | C09 | Sun geometry and glass calibration | C1, C2, C7 | C01 |
@@ -65,7 +65,7 @@ Files are written after D00, S1 and S2 are approved. IDs and cuts may still chan
 | H12 | Capability-aware configuration and repairs | F7 | H01, H03 |
 | H13 | Roof window profile | F3 | C09, C10, H11 |
 | H14 | Wall buttons | F5 | S3, C07, H07, H12 |
-| H15 | Command verification: detects that an actuator did not react, never that a curtain arrived | N1 | S1, H03 |
+| H15 | Command verification: detects that an actuator did not react, never that a curtain arrived; deadline from the report delay | N1 | C06, H03 |
 | H16 | Wiring: sleep mode, privacy, frost source and frost waiver | A9, F2, A12 | C11, H06 |
 | R01 | Release audit (quality scale checklist, translation parity, documentation consistency, HACS) | G7, G8 | all |
 
