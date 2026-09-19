@@ -617,8 +617,12 @@ def test_released_is_a_read_only_view_of_the_release_time() -> None:
     construct: Any = ProtectionEventState
 
     assert event.released is True
-    with pytest.raises(AttributeError):
+    # Assigning to a name that is no field of a frozen data class with slots
+    # fails with an AttributeError or, on some Python 3.14 patch releases, with
+    # a TypeError from inside the data class machinery. Either way it fails.
+    with pytest.raises((AttributeError, TypeError)):
         event.released = False
+    assert event.released is True
     with pytest.raises(TypeError):
         construct("storm", released=True)
 
