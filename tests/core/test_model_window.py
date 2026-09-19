@@ -677,6 +677,14 @@ def test_world_snapshot_carries_everything_a_recompute_may_look_at() -> None:
     assert snapshot == _snapshot()
 
 
+def test_world_snapshot_is_not_hashable() -> None:
+    """It holds a mapping whose values are source values; neither has a hash."""
+    with pytest.raises(TypeError, match="unhashable"):
+        hash(_snapshot())
+    with pytest.raises(TypeError, match="unhashable"):
+        hash(_snapshot(sources={}))
+
+
 def test_world_snapshot_rejects_a_naive_time() -> None:
     """The core never sees a naive datetime."""
     with pytest.raises(ValueError, match="timezone-aware"):

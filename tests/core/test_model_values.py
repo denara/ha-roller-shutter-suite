@@ -143,7 +143,7 @@ def test_source_value_construction_is_validated() -> None:
         SourceValue(broken)
 
 
-def test_source_value_equality_and_hash() -> None:
+def test_source_value_equality() -> None:
     """Equal by state, value and type of the value; ``True`` is not ``1``."""
     assert SourceValue.of("on") == SourceValue.of("on")
     assert SourceValue.of(True) != SourceValue.of(1)
@@ -153,11 +153,32 @@ def test_source_value_equality_and_hash() -> None:
     assert SourceValue.of("on") != SourceValue.of("off")
     assert SourceValue.of("on") != None  # noqa: E711 - the operator is the subject
     assert SourceValue.of("on") != ("on",)
-    assert hash(SourceValue.of(2.5)) == hash(SourceValue.of(2.5))
-    assert {SourceValue.of(True), SourceValue.of(1), SourceValue.of(True)} == {
-        SourceValue.of(1),
-        SourceValue.of(True),
-    }
+    assert SourceValue.of(2.5) in [SourceValue.of(2.5)]
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        SourceValue.of("open"),
+        SourceValue[str].unknown(),
+        SourceValue[str].unavailable(),
+    ],
+    ids=["value", "unknown", "unavailable"],
+)
+def test_source_value_is_not_hashable(source: Any) -> None:
+    """A set or a dict asks the hash first; without one the lookup raises."""
+    with pytest.raises(TypeError, match="unhashable"):
+        hash(source)
+    with pytest.raises(TypeError, match="unhashable"):
+        _ = {source}
+    with pytest.raises(TypeError, match="unhashable"):
+        _ = {source: 1}
+    with pytest.raises(TypeError, match="unhashable"):
+        _ = source in {"open", "tilted"}
+    with pytest.raises(TypeError, match="unhashable"):
+        _ = source in {"open": 1}
+    with pytest.raises(TypeError, match="unhashable"):
+        _ = source in frozenset({"open"})
 
 
 @pytest.mark.parametrize(

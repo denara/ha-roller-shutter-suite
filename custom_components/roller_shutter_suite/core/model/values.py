@@ -75,7 +75,9 @@ class SourceValue[T: SourceScalar]:
     Comparing a source value with a plain value (``contact != "open"``) raises
     as well: the comparison would be false for every source value, so a
     missing contact would read as "not open". Two source values compare by
-    state, value and type of the value.
+    state, value and type of the value. A source value is not hashable, so it
+    cannot be put into a set or used as a dictionary key, and ``source in
+    {"open"}`` raises instead of answering "not contained".
 
     The adapter of the Home Assistant layer maps the entity states
     ``unavailable`` and ``unknown`` to the states of this type *before* it
@@ -176,9 +178,10 @@ class SourceValue[T: SourceScalar]:
             and self._value == other._value
         )
 
-    def __hash__(self) -> int:
-        """Hash consistently with equality."""
-        return hash((self._state, type(self._value), self._value))
+    # Not hashable, on purpose. A lookup in a set or a dict asks the hash before
+    # it asks equality, so `source in {"open"}` would answer "not contained"
+    # without ever reaching the refusal in `__eq__`. Without a hash it raises.
+    __hash__ = None  # type: ignore[assignment]
 
     def __repr__(self) -> str:
         """Show the state, and the value if there is one."""
