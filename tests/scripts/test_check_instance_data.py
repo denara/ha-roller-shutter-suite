@@ -25,9 +25,23 @@ SUSPICIOUS = {
         ".".join(["172", "16", "4", "1"]) + ":8123",
     ],
     "hardware (MAC) address": [":".join(["00", "1a", "2b", "3c", "4d", "5e"])],
-    "coordinate with five or more decimals": [
-        "latitude: 12." + "345678",
-        "-0." + "123456",
+    "IPv6 address": [
+        ":".join(["fe80", "", "1a2b", "3c4d"]),
+        ":".join(["fd12", "3456", "789a", "1", "", "5"]),
+        ":".join(["2a02", "1234", "5678", "9abc", "def0", "1234", "5678", "9abc"]),
+    ],
+    "host name in the local network": [
+        "nas" + ".local",
+        "http://my-server" + ".local:8123",
+    ],
+    "pair of coordinates": [
+        "12." + "3456, 98." + "7654",
+        "home: -12." + "345678 / 123." + "456789",
+    ],
+    "coordinate next to a latitude or longitude key": [
+        "latitude: 12." + "345",
+        '"lon": -123.' + "4567",
+        "LAT=" + "1.2345",
     ],
     "entity ID with a serial-number-like part": [
         "cover." + "shutter_" + "0012345678",
@@ -60,6 +74,12 @@ HARMLESS = [
     "12345+someone" + AT + "users.noreply.github.com",
     "Use `$HOME/.venvs/<name>` and '<path to the repository>'",
     "10:30:00 is a time, not an address",
+    "DAMPING = 0.0174532925 and a ratio of 1.618033988749",
+    "limits = (0.125, 0.98765) and steps of 0.00001",
+    "tests/ha/test_x.py::test_y and ignore::DeprecationWarning:module",
+    "the documentation address 2001:db8::1 and the loopback ::1",
+    "http://homeassistant.local:8123 and threading.local()",
+    "relative: ../local/file and a.local_name",
 ]
 
 

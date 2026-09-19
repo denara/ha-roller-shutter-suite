@@ -87,9 +87,12 @@ def _literal_dynamic_import(node: ast.Call) -> str | None:
         if isinstance(function, ast.Name)
         else None
     )
-    if name not in _DYNAMIC_IMPORT_FUNCTIONS or not node.args:
+    if name not in _DYNAMIC_IMPORT_FUNCTIONS:
         return None
-    first = node.args[0]
+    named = [keyword.value for keyword in node.keywords if keyword.arg == "name"]
+    if not node.args and not named:
+        return None
+    first = node.args[0] if node.args else named[0]
     if isinstance(first, ast.Constant) and isinstance(first.value, str):
         return first.value
     return None

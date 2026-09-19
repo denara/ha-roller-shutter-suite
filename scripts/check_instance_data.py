@@ -41,6 +41,9 @@ _ALLOWED_MAIL_DOMAINS = ("example.com", "example.org", "example.net")
 # The no-reply address in the co-author trailer of generated commits may also
 # appear in contributor documentation.
 _ALLOWED_MAIL_SUFFIXES = ("noreply@anthropic.com", "users.noreply.github.com")
+# The IPv6 documentation range, and the host names every installation has.
+_ALLOWED_IPV6_PREFIX = "2001:db8:"
+_ALLOWED_HOST_NAMES = ("homeassistant.local", "example.local")
 
 PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     (
@@ -57,8 +60,32 @@ PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
         ),
     ),
     (
-        "coordinate with five or more decimals",
-        re.compile(r"(?<![\w.])-?\d{1,3}\.\d{5,}(?![\w.])"),
+        "IPv6 address",
+        re.compile(
+            r"(?<![\w:.])(?:"
+            r"(?:[0-9A-Fa-f]{1,4}:){7}[0-9A-Fa-f]{1,4}"
+            r"|(?:[0-9A-Fa-f]{1,4}:){1,6}:(?:[0-9A-Fa-f]{1,4}(?::[0-9A-Fa-f]{1,4}){0,5})?"
+            r")(?![\w:])"
+        ),
+    ),
+    (
+        "host name in the local network",
+        re.compile(r"(?<![\w.-])[A-Za-z0-9][A-Za-z0-9-]*\.local(?![\w.(-])"),
+    ),
+    # A plain number with many decimals is not reported: constants of the
+    # domain core look like that. A coordinate is recognized by its company.
+    (
+        "pair of coordinates",
+        re.compile(
+            r"(?<![\w.])-?\d{1,2}\.\d{4,}\s*[,;/ ]\s*-?\d{1,3}\.\d{4,}(?![\w.])"
+        ),
+    ),
+    (
+        "coordinate next to a latitude or longitude key",
+        re.compile(
+            r"(?i)(?<![a-z])(?:lat|latitude|lon|lng|long|longitude)[\"']?\s*[:=]\s*"
+            r"[\"']?-?\d{1,3}\.\d{3,}"
+        ),
     ),
     (
         "entity ID with a serial-number-like part",
@@ -100,9 +127,13 @@ class Finding:
 
 
 def _is_allowed(kind: str, matched: str) -> bool:
+    lowered = matched.lower()
+    if kind == "IPv6 address":
+        return lowered.startswith(_ALLOWED_IPV6_PREFIX)
+    if kind == "host name in the local network":
+        return lowered in _ALLOWED_HOST_NAMES
     if kind != "e-mail address":
         return False
-    lowered = matched.lower()
     return lowered.endswith(_ALLOWED_MAIL_SUFFIXES) or lowered.rsplit("@", 1)[
         -1
     ].endswith(_ALLOWED_MAIL_DOMAINS)

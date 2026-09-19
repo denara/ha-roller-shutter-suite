@@ -103,6 +103,27 @@ def test_malformed_file_is_refused(text: str) -> None:
         parse_entries(text, OWN_MODULES)
 
 
+@pytest.mark.parametrize("category", ["Warning", "builtins.Warning", "Exception"])
+def test_category_that_covers_every_warning_is_refused(category: str) -> None:
+    """``Warning`` would exempt whatever the module ever warns about."""
+    with pytest.raises(EntryError, match="covers every warning"):
+        parse_entries(_entry(category=category), OWN_MODULES)
+
+
+@pytest.mark.parametrize("pattern", [r"^(?:some|other)_package", "some_package:sub"])
+def test_module_pattern_with_a_colon_is_refused(pattern: str) -> None:
+    """Pytest splits a filter at colons, so the pattern would be cut in two."""
+    with pytest.raises(EntryError, match="colon"):
+        parse_entries(_entry(module=pattern), OWN_MODULES)
+
+
+def test_group_without_a_colon_is_accepted() -> None:
+    """The message names the alternative, and the alternative works."""
+    (entry,) = parse_entries(_entry(module=r"^(some|other)_package\."), OWN_MODULES)
+
+    assert ":" not in entry.module
+
+
 def test_own_modules_cover_the_integration_and_the_tests() -> None:
     """The protected names are derived from the files of the repository."""
     assert "custom_components.roller_shutter_suite.config_flow" in OWN_MODULES

@@ -22,6 +22,11 @@ SUBPACKAGE = f"{CORE_PACKAGE}.model"
             CORE_PACKAGE,
         ),
         ("__import__('homeassistant')", CORE_PACKAGE),
+        (
+            "from importlib import import_module\nimport_module(name='homeassistant')",
+            CORE_PACKAGE,
+        ),
+        ("__import__(name='homeassistant.core')", CORE_PACKAGE),
         ("from .. import const", CORE_PACKAGE),
         ("from ..const import DOMAIN", CORE_PACKAGE),
         ("from ... import const", SUBPACKAGE),

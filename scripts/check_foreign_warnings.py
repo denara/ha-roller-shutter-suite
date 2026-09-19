@@ -10,8 +10,10 @@ Every entry needs exactly four fields:
 - ``module``: a regular expression for the module that triggers the warning.
   Python matches it against the start of the module name. It must not match
   this integration, its tests, or the Home Assistant helpers that report
-  deprecated usage, and it must not match every module.
-- ``category``: the warning class, as a built-in name or a dotted path.
+  deprecated usage, it must not match every module, and it must not contain a
+  colon, which pytest reads as the end of the pattern.
+- ``category``: the warning class, as a built-in name or a dotted path. The
+  base class ``Warning`` is refused, because it covers every warning.
 - ``reason``: why the warning exists and cannot be avoided here.
 - ``upstream``: an ``https`` link to the upstream issue or change.
 
@@ -36,6 +38,7 @@ _PROTECTED_HELPERS = (
 )
 # A pattern that matches one of these matches (nearly) every module.
 _CATCH_ALL_PROBES = ("", "a", "zz_unrelated_package.module")
+_TOO_BROAD_CATEGORIES = {"Warning", "Exception", "BaseException"}
 _CATEGORY = re.compile(r"[A-Za-z_]\w*(\.[A-Za-z_]\w*)*")
 
 
@@ -75,6 +78,11 @@ def own_module_names(root: Path) -> list[str]:
 
 
 def _check_module_pattern(pattern: str, protected: list[str]) -> None:
+    if ":" in pattern:
+        raise EntryError(
+            "'module' must not contain a colon: pytest separates the parts of a "
+            "filter with colons. Write a group as (a|b), not as (?:a|b)"
+        )
     try:
         compiled = re.compile(pattern)
     except re.error as error:
@@ -98,6 +106,11 @@ def _check_entry(raw: object, protected: list[str]) -> ForeignWarning:
     _check_module_pattern(entry.module, protected)
     if not _CATEGORY.fullmatch(entry.category):
         raise EntryError("'category' is a class name such as DeprecationWarning")
+    if entry.category.rsplit(".", 1)[-1] in _TOO_BROAD_CATEGORIES:
+        raise EntryError(
+            f"'category' {entry.category} covers every warning of the module; "
+            "name the class of the one warning, such as DeprecationWarning"
+        )
     link = urlsplit(entry.upstream)
     if link.scheme != "https" or "." not in link.netloc:
         raise EntryError("'upstream' must be an https URL")
