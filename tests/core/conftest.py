@@ -14,28 +14,39 @@ Two things make the proof possible:
   belongs to the Home Assistant layer and imports ``homeassistant``. For a core
   run, this file registers an empty stand-in for the integration package, so
   Python finds the ``core`` package through it without executing the
-  integration's ``__init__.py``. The core imports nothing from the rest of the
-  integration, so it cannot notice the difference.
+  integration's ``__init__.py``.
+
+The stand-in does not prove that the core imports nothing from the rest of the
+integration: a plain Python module next to the core, such as ``const.py``, is
+found through the stand-in and imports without a trace. That half of the purity
+rule is enforced by the static import guard of block T03, not here.
 
 In a run that also contains ``tests/ha`` the plugin is loaded and
 ``homeassistant`` is imported before the first test. Nothing can be proven then,
-and this file stays passive; the core tests simply run along.
+and this file stays passive; the core tests simply run along. The report header
+(or, when this file is loaded too late for the header, the summary at the end)
+says whether the proof was active or passive. A run that uses ``pytest.ini``
+next to this file is meant to be the proof; if ``homeassistant`` is already
+imported when such a run starts, the session is refused instead of going
+passive.
 """
 
 import sys
-import types
 from collections.abc import Iterator
+from importlib.machinery import ModuleSpec
+from importlib.util import module_from_spec
 from pathlib import Path
 
 import pytest
 
 _FORBIDDEN = "homeassistant"
-_HA_PLUGIN = "homeassistant"
 _INTEGRATION = "custom_components.roller_shutter_suite"
 _INTEGRATION_DIR = (
     Path(__file__).parents[2] / "custom_components" / "roller_shutter_suite"
 )
+_CORE_CONFIG_FILE = Path(__file__).with_name("pytest.ini")
 _PROOF_ACTIVE = pytest.StashKey[bool]()
+_STATUS_SHOWN = pytest.StashKey[bool]()
 
 
 def _home_assistant_modules() -> list[str]:
@@ -56,14 +67,59 @@ def _failure_message(modules: list[str]) -> str:
     )
 
 
+def _install_stand_in() -> None:
+    """Register an empty package under the integration's name.
+
+    It has a real module spec with the integration folder as its search
+    location, like a namespace package, so ``importlib`` and tools that inspect
+    modules treat it as a package. It has no ``__file__`` because no file is
+    executed for it.
+    """
+    spec = ModuleSpec(_INTEGRATION, loader=None, is_package=True)
+    spec.submodule_search_locations = [str(_INTEGRATION_DIR)]
+    sys.modules[_INTEGRATION] = module_from_spec(spec)
+
+
+def _status_line(config: pytest.Config) -> str:
+    if config.stash[_PROOF_ACTIVE]:
+        return "core purity proof: active (no homeassistant module may be imported)"
+    return (
+        "core purity proof: passive (homeassistant was imported before the core "
+        "tests; run tests/core alone for the proof)"
+    )
+
+
 def pytest_configure(config: pytest.Config) -> None:
-    """Activate the proof when the Home Assistant test plugin is switched off."""
-    proof_active = not config.pluginmanager.has_plugin(_HA_PLUGIN)
+    """Activate the proof unless Home Assistant is imported already."""
+    already_imported = _home_assistant_modules()
+    if already_imported and config.inipath == _CORE_CONFIG_FILE:
+        raise pytest.UsageError(
+            "tests/core/pytest.ini is the active configuration, but "
+            f"homeassistant is already imported ({len(already_imported)} "
+            "modules). This run is meant to prove that the core tests work "
+            "without Home Assistant, and it cannot. Check that the file still "
+            "switches the Home Assistant test plugin off with "
+            "'-p no:homeassistant'."
+        )
+    proof_active = not already_imported
     config.stash[_PROOF_ACTIVE] = proof_active
+    config.stash[_STATUS_SHOWN] = False
     if proof_active and _INTEGRATION not in sys.modules:
-        stand_in = types.ModuleType(_INTEGRATION)
-        stand_in.__path__ = [str(_INTEGRATION_DIR)]
-        sys.modules[_INTEGRATION] = stand_in
+        _install_stand_in()
+
+
+def pytest_report_header(config: pytest.Config) -> str:
+    """Say in the header of the run whether the proof is active."""
+    config.stash[_STATUS_SHOWN] = True
+    return _status_line(config)
+
+
+def pytest_terminal_summary(
+    terminalreporter: pytest.TerminalReporter, config: pytest.Config
+) -> None:
+    """Say it at the end when this file was loaded too late for the header."""
+    if not config.stash[_STATUS_SHOWN]:
+        terminalreporter.write_line(_status_line(config))
 
 
 @pytest.fixture(autouse=True)
