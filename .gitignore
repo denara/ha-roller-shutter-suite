@@ -11,6 +11,9 @@ __pycache__/
 .coverage
 htmlcov/
 
+# Claude Code: local, per-user settings only. Shared project settings in .claude/ stay tracked.
+.claude/settings.local.json
+
 # Editors and OS
 .idea/
 .vscode/
