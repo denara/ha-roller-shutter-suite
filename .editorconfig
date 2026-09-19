@@ -1,0 +1,18 @@
+# Editor defaults for every contributor and every agent.
+# "utf-8" means UTF-8 WITHOUT byte order mark ("utf-8-bom" would be the variant with BOM).
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 4
+
+[*.{json,yaml,yml,toml,md,js,ts,css,html}]
+indent_size = 2
+
+[*.md]
+# Two trailing spaces are a hard line break in Markdown
+trim_trailing_whitespace = false
