@@ -2,13 +2,15 @@
 
 | | |
 |---|---|
-| Status | Draft 1 — definition phase, no code written yet |
+| Status | Draft 2 — definition phase, no code written yet. Revised after the planning review of 2026-09-19 (changes are marked **[REVIEW]**) |
 | Date | 2026-09-19 |
-| Working name / repository | `ha-roller-shutter-suite` (integration domain proposal: `roller_shutter_suite`, see [Open points](#9-open-points)) |
-| Next step | Derive `TASKS.md` from this brief as the basis for the orchestrator / plan agent |
+| Name / repository | `ha-roller-shutter-suite`, integration domain `roller_shutter_suite` (confirmed after the collision check, see [section 6](#repository-and-documentation)) |
+| Minimum Home Assistant version | 2026.9 |
+| License | MIT |
+| Next step | Domain design specification (work block D00 in `TASKS.md`), which refines this brief where it says so |
 | Audience | Implementing agents and maintainers. Instance-specific details of the first installation live in `docs-internal/` and are not part of the public repository. |
 
-How to read the source markers: **[BP]** is the Simon42 blueprint documentation, **[#n]** an issue or pull request in the same repository, **[HA-DEV]** the Home Assistant developer documentation, **[OWN]** experience from the project owner's existing installation. Statements without a marker are decisions taken by the project owner during the definition session on 2026-09-19. All sources are listed in [section 10](#10-sources).
+How to read the source markers: **[BP]** is the Simon42 blueprint documentation, **[#n]** an issue or pull request in the same repository, **[HA-DEV]** the Home Assistant developer documentation, **[HA-SRC]** the Home Assistant Core source code at tag 2026.9.2, **[OWN]** experience from the project owner's existing installation, **[REVIEW]** a change or addition from the planning review of 2026-09-19. Statements without a marker are decisions taken by the project owner during the definition session on 2026-09-19. A statement marked **(unverified)** comes from research that was not checked against a primary source; it must be verified by the work block that relies on it. All sources are listed in [section 10](#10-sources).
 
 ---
 
@@ -46,7 +48,7 @@ How to read the source markers: **[BP]** is the Simon42 blueprint documentation,
 
 Status values: **Will be implemented** · **Not yet** (considered, deferred) · **Will not be implemented**.
 
-Totals: 53 will be implemented, 8 not yet, 6 will not be implemented.
+Totals: 59 will be implemented, 8 not yet, 6 will not be implemented. (Draft 1: 53 / 8 / 6; the six features of [group N](#n--added-after-the-planning-review) were added by the planning review.)
 
 ### A — Daily routine
 
@@ -63,7 +65,7 @@ Totals: 53 will be implemented, 8 not yet, 6 will not be implemented.
 | A9 | Sleep / night mode | Switch, global and per window or room. Closes, blocks shading and solar heating, replaces fixed night time windows. | Will be implemented | [BP], [#12] |
 | A10 | Presence-dependent night position | Partially closed when somebody is home. | Will not be implemented | [#12] |
 | A11 | Alarm clock coupling | Not a built-in feature: alarm automations call the integration's action (F1) so priorities and locks stay central. | Will be implemented (as interface) | [OWN] |
-| A12 | Frost protection | At frost do not drive, or only to about 90 %, to avoid tearing a frozen curtain. Temperature source freely selectable. | Will be implemented | [#24] |
+| A12 | Frost protection | At frost do not drive, or only to about 90 %, to avoid tearing a frozen curtain. Temperature source freely selectable. By default it limits comfort movements only; whether it also limits protection movements is configurable. Fire (D3) always ignores it. **[REVIEW]** | Will be implemented | [#24] |
 
 ### B — Window interaction
 
@@ -83,7 +85,7 @@ Totals: 53 will be implemented, 8 not yet, 6 will not be implemented.
 
 | ID | Feature | Summary | Status | Source |
 |---|---|---|---|---|
-| C1 | Geometric shading | Per window: orientation, field of view left and right, glass top and sill height, maximum sun penetration depth. Position is recalculated cyclically; very flat sun is treated more mildly. Additional simple mode with a fixed shading position for windows without measurements. | Will be implemented | [BP] |
+| C1 | Geometric shading | Per window: orientation, field of view left and right, glass top and sill height, maximum sun penetration depth. Position is recalculated cyclically. The more obliquely the sun strikes the façade (azimuth far from the window normal), the higher the shutter stays; this follows from the geometry and is not a separate rule. The amplification is capped as the sun approaches the façade plane. Draft 1 described this misleadingly as "very flat sun is treated more mildly". **[REVIEW]** Additional simple mode with a fixed shading position for windows without measurements. | Will be implemented | [BP] |
 | C2 | Glass calibration | Two values per window (seating point, upper glass end) correct the difference between motor percentage and free glass area. Optional, with sensible defaults. | Will be implemented | [BP] |
 | C3 | Temperature threshold | One outdoor threshold with hysteresis. | Will be implemented | [BP] |
 | C3b | Multi-stage thresholds | Warm, hot and extreme tiers with their own minimum shading. | Not yet | [#6] item 9 |
@@ -106,30 +108,30 @@ Totals: 53 will be implemented, 8 not yet, 6 will not be implemented.
 |---|---|---|---|---|
 | D1 | Generic protection events | A protection event has a freely selectable trigger (binary, list of states, or number with threshold), a target direction and a rank. Storm is the first instance. Evaluation of weather services stays outside in template sensors. | Will be implemented | [BP], [#18], [OWN] |
 | D2 | Hail protection | A further protection event. Direction configurable per event; never an intermediate position. | Will be implemented | [#9], [OWN] |
-| D3 | Fire alarm | Smoke detector triggers: all shutters open (escape routes). Overrides sleep exceptions, pauses and staggering. **No automatic return** after the alarm ends; a human decides. | Will be implemented | [#4] |
+| D3 | Fire alarm | Smoke detector triggers: all shutters open (escape routes). Overrides sleep exceptions, pauses, staggering, motor protection, frost protection, the manual override and every operating mode including "off". Only two things stop the movement: the maintenance lock (E4) and dry-run (E11). In both cases the fire event is still fired immediately so the situation never goes unnoticed. **[REVIEW]** **No automatic return** after the alarm ends; a human decides. | Will be implemented | [#4] |
 | D4 | Sleep-room exception | Per window: "protection event X must not open while sleep mode is active". Fire always ignores the exception. | Will be implemented | [OWN] |
 | D5 | State-based return after protection | After the event ends (plus waiting time) the integration recomputes what applies **now**; only manually set positions are restored one to one. Remembered positions are persisted; unknown positions are skipped. | Will be implemented | [OWN] |
 | D6 | Robust protection logic | A running event is detected and caught up after a restart. `unavailable` and `unknown` are neither a warning nor an all-clear: they do not trigger and do not release. | Will be implemented | [#18], [OWN] |
 | D7 | Absence / vacation profile | Presence simulation or deviating times and positions during longer absence. The first version only delivers random time offsets (E13). | Not yet | [#2] |
 | D8 | Alarm system coupling | No separate feature; any entity can trigger a "close" protection event through D1. | Will be implemented (covered by D1) | project owner |
-| D9 | Watchdog | A protection event or lock that lasts implausibly long is released and reported as a Home Assistant repair issue. Maximum duration per event configurable. | Will be implemented | [OWN] |
+| D9 | Watchdog | A protection event or lock that lasts implausibly long is released and reported as a Home Assistant repair issue. Maximum duration per event configurable. Does not apply to fire (D3). What "released" means while the trigger is genuinely still active, and how that fits D6, is defined in the domain design specification. **[REVIEW]** | Will be implemented | [OWN] |
 
 ### E — Override, operation, diagnostics
 
 | ID | Feature | Summary | Status | Source |
 |---|---|---|---|---|
-| E1 | Manual operation detection | A position change outside a tolerance band that was not caused by the integration makes the comfort logic leave the window alone. Protection events ignore the override. | Will be implemented | [BP] |
+| E1 | Manual operation detection | A position change outside a tolerance band that was not caused by the integration makes the comfort logic leave the window alone. Protection events ignore the override. "Not caused by the integration" is decided by an expectation window (commanded target, tolerance, travel time, `opening`/`closing` state), not by the Home Assistant context; see guardrail 6. A movement the integration commanded itself, from whatever layer, never arms the override. **[REVIEW]** | Will be implemented | [BP] |
 | E2 | Override duration | Selectable: fixed minutes, until the shading episode ends, or until the next part of the day (default). Additionally, with an optional presence sensor: ends after the room has been empty for X minutes. A "resume automation" button ends it immediately. | Will be implemented | [#6] item 2, [#16], project owner |
-| E3 | Grace period after own movement | Position reports during and shortly after a self-initiated movement do not count as manual. Travel time configurable per window; the cover's `opening`/`closing` state is used where available. | Will be implemented | [#6] item 3 |
-| E4 | Pause and maintenance lock | Pause per window, per group and global as switch entities plus optional external pause entities; protection keeps running. After a pause the target state is recomputed instead of replaying missed events. A separate **maintenance lock** also suppresses protection movements (scaffolding, open shutter box). | Will be implemented | [BP], [#19] |
-| E5 | Priority model | Central architectural principle, see [section 5](#5-architectural-guardrails). | Will be implemented | [BP] |
+| E3 | Grace period after own movement | Position reports during and shortly after a self-initiated movement do not count as manual. Travel time configurable per window; the cover's `opening`/`closing` state is used where available. Since the planning review this is the primary mechanism of E1, no longer the fallback. It must also hold for covers that never report `opening`/`closing`, that report their final position late, or that settle a few percent away from the commanded position. **[REVIEW]** | Will be implemented | [#6] item 3 |
+| E4 | Pause and maintenance lock | Pause per window, per group and global as switch entities plus optional external pause entities; protection keeps running. After a pause the target state is recomputed instead of replaying missed events. A separate **maintenance lock** also suppresses protection movements (scaffolding, open shutter box). The maintenance lock is the only state in which nothing moves at all; it also wins against fire, because the risk of injury comes first. **[REVIEW]** | Will be implemented | [BP], [#19] |
+| E5 | Priority model | Central architectural principle, see [section 5](#5-architectural-guardrails). Since the planning review it consists of layers, constraints and a gate instead of a single ladder (guardrails 1 and 2). **[REVIEW]** | Will be implemented | [BP] |
 | E6 | Restart recovery | Episodes, overrides, remembered positions and locks are persistent. After start the target state is recomputed and missed daily events are caught up. | Will be implemented | [#6] item 1 |
 | E7 | Status entities | Per window: active reason (enum), override active, next planned action, computed target position; plus diagnostics download. | Will be implemented | [#16] |
 | E8 | Reason events | When an action is skipped or blocked, the integration fires an event and writes a logbook entry with the reason. Push delivery is left to user automations. | Will be implemented | [#6] item 12 |
-| E9 | Operating mode | Select entity per window and global: automatic, protection only, off. | Will be implemented | [#14] |
+| E9 | Operating mode | Select entity per window and global: automatic, protection only, off. "Protection only" means no comfort movements. "Off" means no comfort movements and no weather protection; fire (D3) still opens. "Nothing moves at all" exists only as the maintenance lock (E4), so the four states have clearly distinct meanings. **[REVIEW]** | Will be implemented | [#14] |
 | E9b | Named profiles | Freely definable profiles such as "Christmas". | Not yet | [#14] |
 | E10 | Motor protection | Minimum change (blueprint: below 5 % no movement) and minimum interval between comfort movements. Does not apply to protection movements. | Will be implemented | [BP] |
-| E11 | Dry-run | Per window the integration decides and logs but does not move. Enables side-by-side migration on a productive system. | Will be implemented | project owner |
+| E11 | Dry-run | Per window the integration decides and logs but does not move. Enables side-by-side migration on a productive system. Dry-run never moves anything, not even at fire (D3): it only records what it would have done. During side-by-side migration the old system still controls the same window, and two controllers must never act on it (section 6). **[REVIEW]** | Will be implemented | project owner |
 | E12 | Inheritance | Global to group to window; a window only overrides what differs. | Will be implemented | project owner |
 | E13 | Staggered and randomized movements | Collective movements run with a short gap per motor; optional random offset for schedules. Fire alarm is never staggered. | Will be implemented | [#2], project owner |
 
@@ -145,16 +147,40 @@ Totals: 53 will be implemented, 8 not yet, 6 will not be implemented.
 | F6 | Tamper contact | Optional per window or door. When tampering is reported, the "open" signal is no longer trusted: lockout protection (B2) does not block, protection and evening movements run, and an event is fired. A push is optional so it does not collide with an alarm system. | Will be implemented | project owner |
 | F7 | Capability-aware configuration | During setup and reconfiguration the integration inspects what each selected entity can actually do: cover (stop, set position, tilt), button (available event types such as long-press release), contact (two- or three-state). Options that cannot work with the selected hardware are not offered, or are shown disabled, **always with a plain-language reason** (for example: "This cover cannot be stopped, so hold-to-move and stop-on-press are unavailable"). If capabilities change later (entity replaced, integration update), a repair issue names the affected window and option. | Will be implemented | project owner |
 
+### N — Added after the planning review
+
+Pieces a working integration needs that draft 1 did not name. **[REVIEW]**
+
+| ID | Feature | Summary | Status | Source |
+|---|---|---|---|---|
+| N1 | Command verification | After a movement command the integration checks that the cover reacted and arrived. A command without effect (cover unavailable, radio contact lost) is retried with backoff and, if it keeps failing, reported as a repair issue and a reason event. A cover that settles slightly off the commanded position must not cause a command loop. | Will be implemented | [REVIEW], related work |
+| N2 | Covers without position feedback | A cover that reports no position or does not support `set_position` is supported in a degraded mode (open and close only), not rejected. Features that need a position (shading, intermediate positions, manual operation detection) are inactive for it, and F7 explains this in plain language. | Will be implemented | [REVIEW], project owner |
+| N3 | Window and cover cardinality | A window has exactly one cover; that cover may be a Home Assistant cover group. A cover belongs to at most one window; configuration validates this and explains a conflict. | Will be implemented | [REVIEW], project owner |
+| N4 | Removing windows and groups | Removing a window deletes its device, entities and persisted state (episodes, overrides, remembered positions). Removing a group that windows still reference is either prevented or handled with a defined fallback; no orphaned references remain. | Will be implemented | [REVIEW] |
+| N5 | Configuration and storage versioning | Config entry data, subentry data and the integration's own storage carry a version from the first release and have a tested migration path, so an update never loses configuration or persisted state. | Will be implemented | [REVIEW] |
+| N6 | Time-lapse simulation | The domain core can be run against a synthetic world (sun, weather, contacts, cover travel time, connectivity dropouts) for a whole day or year in seconds. It is a deliverable of its own and doubles as the scenario test harness of the core (guardrail 4). | Will be implemented | [REVIEW], guardrail 4 |
+
 ## 5. Architectural guardrails
 
 These are decisions and constraints, not a design. The design is part of the implementation phase.
 
-1. **One arbiter instead of competing rules.** Every feature reports a position wish with a priority for a window; one arbiter per window picks the winner. The target state is always derivable from the current situation. This makes restart recovery (E6), pause end (E4) and return after protection (D5) the same operation: recompute.
-2. **Proposed priority order** (highest first; to be finalized in the design, see open points): maintenance lock (no movement at all) → fire → local manual operation during a protection event (time-limited) → lockout protection (blocks closing only; void when tamper is active) → hail → storm and other protection events by rank → operating mode and pause → manual override → sleep / night mode → window interaction (B1, B4, B9) → privacy (F2) → shading and solar heating → schedule.
-3. **A person at the window wins, for a limited time.** A wall button always moves the shutter, even during storm or hail. After a configurable time the protection event reasserts itself and a reason event is fired.
+1. **One arbiter instead of competing rules, in three stages.** **[REVIEW]** One arbiter per window decides; no feature moves a cover on its own. Draft 1 described the arbiter as a single priority ladder with one winner. The review showed that several entries of that ladder are not position wishes at all (lockout protection only blocks closing, frost only limits travel, the maintenance lock forbids movement) and that the sleep-room exception (D4) lets a lower entry beat a higher one. The arbiter therefore has three stages:
+   - **Layers** answer "where should this window be?". Each layer returns a target position, "leave alone", or no opinion, always with a machine-readable reason. Layers are evaluated in a fixed order and the first opinion wins. Unknown or unavailable input never becomes a guess: it yields "leave alone" or no opinion, as defined per input (guardrail 8).
+   - **Constraints** limit the winning wish without replacing it: lockout protection (B2, void while tamper is active, F6), evening moves downward only (A6), frost protection (A12), no intermediate position during storm (section 6), the sleep-room exception (D4).
+   - **The gate** answers "may the integration move now?": maintenance lock, operating mode, pause, dry-run (E11), manual override, a movement already in flight, motor protection (E10), staggering (E13), command backoff (N1). The gate sends, defers until a point in time, or suppresses, always with a reason.
+
+   The target state is always derivable from the current situation. This makes restart recovery (E6), pause end (E4) and return after protection (D5) the same operation: recompute.
+2. **Decided rules of the arbiter.** **[REVIEW]** The exact layer order, the list of constraints and gate rules, and the reason codes are defined in the domain design specification (work block D00) and approved by the project owner. These rules are fixed:
+   - The **maintenance lock** wins against everything, including fire: scaffolding or an open shutter box mean a risk of injury. It is the only state in which nothing moves at all. A fire alarm during a maintenance lock still fires its event immediately.
+   - **Fire** (D3) comes next. It must be able to bypass the gate rules that would delay or stop it: staggering, motor protection, the manual override, pause and every operating mode. This bypass has to be an explicit, named part of the design, not a special case that emerges in code. Fire also ignores frost protection and the sleep-room exception. Fire does **not** bypass the maintenance lock and does **not** bypass dry-run (E11): a window in dry-run never moves, it only records what would have happened.
+   - The **manual override** (E1, E2) is not a layer. It is a gate rule that holds the comfort layers back (a "dam") while protection layers pass. This replaces the special cases of draft 1 ("protection ignores the override", "ventilation does not count as manual").
+   - **"A person at the window wins" (guardrail 3) needs a second, time-limited dam.** The override dam lets protection layers pass, but a person at the window shall win against storm and hail for a limited time. This second dam also holds protection layers back, ends by itself after the configured time, and never holds back fire. How the two dams relate (what arms each, whether one can turn into the other, what happens when the time-limited dam ends while the override is still active) is defined in D00.
+   - **Operating modes** have four distinct meanings: automatic; protection only (no comfort movements); off (no comfort movements and no weather protection, fire still opens); maintenance lock (nothing moves).
+   - **Relative order carried over from draft 1** as the starting point for D00 (highest first): fire → local manual operation during a protection event (time-limited, guardrail 3) → hail → storm and other protection events by rank → sleep / night mode → window interaction (B1, B4, B9) → privacy (F2) → shading and solar heating → schedule. Draft 1 listed maintenance lock, lockout protection, "operating mode and pause" and the manual override inside this order; they are now gate rules or constraints as described above.
+3. **A person at the window wins, for a limited time.** A wall button always moves the shutter, even during storm or hail. After a configurable time (default 15 minutes **[REVIEW]**) the protection event reasserts itself and a reason event is fired. In the arbiter this is the time-limited dam of guardrail 2; fire is never held back by it. **[REVIEW]**
 4. **Pure domain core.** Geometry, episodes, priorities and override handling are plain Python without Home Assistant imports, so they can be unit-tested and run in a time-lapse simulation of a whole day or year. The Home Assistant layer only adapts entities, time and storage.
-5. **Configuration structure.** One config entry for the house (global sources, defaults, protection events); groups and windows as config subentries, each window with its own device. Reconfigure flows instead of delete-and-recreate. Same pattern as the owner's `room_presence` integration.
-6. **Manual operation detection via context.** Working hypothesis: a state change caused by a service call with a user context is manual, one carrying the integration's own context is an own movement, one without a parent context is a hardware button. This must be verified per cover platform before it is relied upon; E3 remains the fallback.
+5. **Configuration structure.** One config entry for the house (global sources, defaults, protection events); groups and windows as config subentries, each window with its own device. Reconfigure flows instead of delete-and-recreate. Same structural pattern as the owner's `room_presence` integration. **[REVIEW]** Two limits apply. Subentries are a flat list and a device belongs to at most one subentry (section 6), so a window refers to its group by the group's subentry ID stored in the window's own data; groups own no window devices. And the reference integration predates some current APIs (it still builds its schemas with `voluptuous`), so it is a model for structure, not for API usage; section 6 is binding for the latter.
+6. **Manual operation detection by expectation, not by context.** **[REVIEW]** Draft 1 carried the working hypothesis that the Home Assistant context tells own, user and hardware movements apart, with E3 as the fallback. The review refuted this as a primary mechanism. Home Assistant keeps the context of a service call on the target entity for only five seconds (`CONTEXT_RECENT_TIME_SECONDS = 5` [HA-SRC-CTX]); every later state write gets a fresh context without user and without parent. The final position report of a shutter that travels 20 to 60 seconds therefore looks exactly like a press on a wall button, and a button press within five seconds of an own command inherits the integration's context. Cover platforms that debounce their updates longer than that never deliver the context at all (reported for one platform in the review; unverified). The rule is therefore reversed: the expectation window of E3 decides (commanded target, tolerance, a grace period proportional to the travel, `opening`/`closing` where the platform reports it). The context may raise confidence (a user ID proves a dashboard action), but it never decides alone, and its absence proves nothing. What each cover platform actually reports (latency, settling time, deviation from the commanded position, transit states) is measured in a spike before E1 is built.
 7. **Buttons: hybrid.** Where the hardware supports a local link between button and actuator, up/down/stop stay local and work without Home Assistant; the integration sees the resulting movement as manual operation and only adds special functions. A full Home Assistant path exists for buttons without a local link and for rooms that only have a wall display. Not every user has a CCU or a comparable system.
 8. **Sources are inputs, never assumptions.** Every sensor input is optional, accepts an entity or an entity attribute where that is common in practice, and has a defined behavior when unavailable.
 9. **Configuration UX is settled: progressive configuration with sections (F4).** Feature switches first, steps only for enabled features, expert values in collapsed `section`s, everything else inherited. There is no "basic/advanced" mode and no use of `show_advanced_options` [HA-DEV-ADV]. Decided by the project owner on 2026-09-19; not an open point.
@@ -165,7 +191,7 @@ These are decisions and constraints, not a design. The design is part of the imp
 
 ### Safety and behavior
 
-- Fire opens everything, immediately and unstaggered, and never returns automatically (D3).
+- Fire opens everything, immediately and unstaggered, and never returns automatically (D3). The only exception is a window under maintenance lock, which does not move; the fire event is fired regardless. **[REVIEW]**
 - Never an intermediate position during storm: a half-lowered shutter offers the wind a surface and can be torn out of its guide rails [OWN]. Whether hail means "up" or "down" is disputed between glass and curtain types, so the direction is configurable per event (D2).
 - An open door blocks closing even during storm, so nobody is locked out in bad weather; with an active tamper contact this trust is withdrawn (B2, F6).
 - Missing data is not good news. `unavailable` and `unknown` must never be evaluated as "no warning", "no rain" or "window closed" (D6) [OWN].
@@ -177,25 +203,37 @@ These are decisions and constraints, not a design. The design is part of the imp
 - Restored entities carry the restart time as `last_changed`, and a `for:` duration on a state trigger never starts after a restart because a restore is not a state change. Durations must be tracked with own timestamps [OWN].
 - After start, wait until the managed covers are available before computing or moving. Bus and radio integrations need time, and late position feedback is normal (E3).
 - Cover capabilities differ. Check `supported_features` per cover: some covers offer no STOP (for example roof window shutters connected through HomeKit), so hold-to-move and stop-on-press (F5) are impossible there. Some report no position at all. This must be detected and explained during configuration (F7), not discovered at runtime.
-- Button hardware usually delivers `press_short`, `press_long_start`, `press_long` and `press_long_release` as event entity types, but no native double press. Double press has to be detected by timing inside the integration, which adds latency to the single press; this trade-off must be configurable (F5).
+- Button hardware usually delivers `press_short`, `press_long_start`, `press_long` and `press_long_release` as event entity types, but no native double press. Double press has to be detected by timing inside the integration, which adds latency to the single press; this trade-off must be configurable (F5). **[REVIEW]** Since 2026-07 Home Assistant also defines standard event types for button event entities (`ButtonEventType`: `PRESS_START`, `PRESS_END`, `LONG_PRESS_START`, `LONG_PRESS_END`, `MULTI_PRESS_ONGOING`, `MULTI_PRESS_END`, the last two with a `multi_press_count` attribute) [HA-DEV-BTN]. F5 and F7 must map both the standard types and vendor-specific types; where a button reports multi press natively, the integration's own timing detection is not needed.
 - Some thermostats expose temperature only as an attribute of a `climate` entity (C12).
 - `FlowHandler.show_advanced_options` is deprecated since 2026-05-26 and will be removed in Home Assistant Core 2027.6; the recommended replacement is grouping additional options in sections [HA-DEV-ADV]. F4 follows this.
 - Use current APIs only: config subentries, reconfigure, sections, repairs, diagnostics, translation keys for every user-facing string. Before each rollout check the developer blog for breaking changes since the tested version [HA-DEV-BLOG].
 - Labels, areas and naming conventions of an installation are not an API. The integration works on explicitly configured entities.
 
+Added by the planning review **[REVIEW]**. Each item was checked against the named primary source on 2026-09-19 unless it is marked unverified:
+
+- **Schemas are written with `probatio`, not `voluptuous`.** Home Assistant Core 2026.9.2 depends on `probatio` and no longer lists `voluptuous` [HA-SRC-DEPS]; the developer documentation uses `import probatio` in its examples [HA-DEV-FLOW]; on the development branch importing `voluptuous` is banned by lint with the message "use probatio instead". No developer blog post announces the change. That `import voluptuous` keeps working through a compatibility shim, and for how long, is unverified; the scaffolding block checks the installed version before anything is built on it.
+- **Python 3.14.2 or newer** is required (`requires-python = ">=3.14.2"` [HA-SRC-DEPS]), not just 3.14.
+- **A device belongs to one config entry and to at most one config subentry** (Home Assistant 2026.8, deprecated behavior supported until 2027.8) [HA-DEV-DEVREG]. There is no hierarchy between subentries; see guardrail 5. Follow-up deprecations in the device registry (`DeviceEntry.config_entries`, `async_get_device`, `via_device`) were announced on 2026-08-24 and 2026-09-15 and are partly enforced already (unverified in detail; the block that creates devices checks them).
+- **A config entry update listener combined with a reloading flow method is deprecated** since 2026.6 and becomes an error in 2026.12 [HA-DEV-RELOAD]. Use one or the other: either no update listener and `async_update_reload_and_abort()`, or an update listener with `async_update_and_abort()`. This affects every reconfigure flow of guardrail 5.
+- **Sections cannot be nested**: "Only a single level of sections is allowed" [HA-DEV-FLOW]. The input of a section arrives nested under the section key. F4 has to be designed within this limit.
+- **Brand images ship inside the integration** since 2026.3: a `brand/` folder next to `manifest.json` with at least `icon.png` [HA-DEV-BRANDS]. No pull request to the Home Assistant brands repository is needed. That the HACS validation requires this folder is unverified.
+- **Sun position.** `homeassistant.helpers.sun.get_astral_location` is deprecated and breaks in 2027.7; `get_astral_observer` is current [HA-SRC-SUN]. Home Assistant has no helper that returns azimuth and elevation for an arbitrary point in time. The `astral` library is a Core dependency and plain Python, so the domain core may use it without violating guardrail 4, and the time-lapse simulation (N6) needs it for exactly that reason.
+- **Not verifiable on 2026-09-19** and therefore to be checked by the block that needs it: the logbook platform API for custom event descriptions (the documentation page returned 404), the exact signatures for updating a subentry, whether subentry flows officially support several steps and sections, how deprecation messages that Home Assistant logs instead of raising as warnings can be turned into test failures, and the removal of the legacy `forecast` attribute of weather entities (C4 uses the `weather.get_forecasts` action either way).
+
 ### Quality
 
 - The Integration Quality Scale is used as a checklist: Silver rules are binding, Gold rules where sensible (diagnostics, reconfiguration via the UI, fully translatable entities) [HA-DEV-IQS]. Custom integrations are not formally graded on the scale; it serves as a guideline only.
-- Tests with `pytest-homeassistant-custom-component` against the current Home Assistant version (2026.9.2 at the time of writing), deprecation warnings treated as errors. Python 3.14 via `uv` is required for current Home Assistant versions; `asyncio_mode = "auto"` [OWN].
+- Tests with `pytest-homeassistant-custom-component` against the current Home Assistant version (2026.9.2 at the time of writing), deprecation warnings treated as errors. Python 3.14 via `uv` is required for current Home Assistant versions (precisely: 3.14.2 or newer, see above **[REVIEW]**); `asyncio_mode = "auto"` [OWN].
+- **[REVIEW]** CI additionally enforces two rules mechanically: the domain core imports nothing from `homeassistant` (guardrail 4), and no tracked file contains instance data (section "Repository and documentation").
 - `hassfest` and the HACS validation action run in CI from the first commit, even while the repository is private.
 - Code rules: English, documented, clean code, readable names. The owner is a software engineer and will read and adjust the code.
 
 ### Repository and documentation
 
-- The content of the project folder becomes the repository. Proposed layout: `custom_components/<domain>/`, `tests/`, `docs/` (public), `docs-internal/` (git-ignored), `TASKS.md`, `README.md`, `hacs.json`, `.github/workflows/`.
-- Public documentation: no secrets, no instance data, worked examples, plain language, no background knowledge assumed beyond operating Home Assistant. A dedicated writing skill for this tone can be created later; none exists yet.
+- The content of the project folder becomes the repository. Proposed layout: `custom_components/<domain>/`, `tests/`, `docs/` (public), `docs-internal/` (git-ignored), `TASKS.md` with one file per work block in `tasks/` **[REVIEW]**, `README.md`, `hacs.json`, `.github/workflows/`.
+- Public documentation: no secrets, no instance data, worked examples, plain language, no background knowledge assumed beyond operating Home Assistant. A dedicated writing skill for this tone can be created later; none exists yet. Public documentation is English only; German exists in the UI translations, where parity between English and German is mandatory. **[REVIEW]**
 - Internal documentation: entity IDs, migration plan and decisions specific to the first installation.
-- Before the repository is created, check the name and the domain for collisions with Home Assistant Core, the HACS default list and existing projects. A web search on 2026-09-19 found no project named "roller shutter suite"; it did find projects with overlapping purpose, see related work. The search was not exhaustive.
+- Before the repository is created, check the name and the domain for collisions with Home Assistant Core, the HACS default list and existing projects. A web search on 2026-09-19 found no project named "roller shutter suite"; it did find projects with overlapping purpose, see related work. The search was not exhaustive. **[REVIEW]** The planning review repeated the check: no Home Assistant Core integration, no entry of the HACS default list and no GitHub code search hit uses the domain `roller_shutter_suite` or the name (checked by a research agent, not re-checked by hand). Name and domain are confirmed. The license is MIT.
 
 ## 7. Related work
 
@@ -208,6 +246,14 @@ To be evaluated at the start of implementation for ideas, terminology and pitfal
 
 The decision for an own integration stands (section 1, items 3 and 5; none of the above was chosen as a base), but the review may show that parts of the geometry or the override pipeline are solved problems.
 
+**Result of the planning review [REVIEW]** (brief look by a research agent; details unverified, to be re-read by the blocks that use them):
+
+- Nothing found argues against the architecture. Two of the projects arrived independently at what guardrail 1 now describes: `adaptive-cover-pro` at handlers with priorities that also report why they did not act, `hass-cover-automation` at a Home-Assistant-free engine with layers, a separate gate, a "leave alone" outcome, stable reason codes, config subentries and a day-replay test harness. The latter only opens and closes and has no geometry.
+- The most valuable material is the list of pitfalls in manual operation detection that `adaptive-cover-pro` documents: covers that never report `opening`/`closing`, a final position that arrives tens of seconds late, covers that settle one percent off and cause command loops, and protection inputs that silently drop protection when their sensor becomes unavailable. These become acceptance criteria of E1, E3, N1 and D6.
+- `adaptive-cover-pro` is also a warning about scope: within eight months it grew to several megabytes of Python. Non-goals (section 3) are to be defended.
+- Geometry: the core of the blueprint's calculation is elementary trigonometry that `adaptive-cover` contains as well. The blueprint adds the sill height, a cap on the amplification at oblique sun and the two-point glass calibration (C2). The calibration has to be applied in both directions, to the command and to the position read back, or E1 compares two different scales.
+- Licenses: the four integrations are MIT licensed; the blueprint repository has no license. Ideas and formulas may be used; no code, template or text is copied from the blueprint. The recommendation is to copy no code at all.
+
 ## 8. Outlook
 
 Without commitment:
@@ -219,12 +265,23 @@ Without commitment:
 
 ## 9. Open points
 
-1. Final name and domain after the collision check.
-2. Final priority order, in particular the position of the maintenance lock relative to fire, and the default duration of "person at the window wins".
-3. Verification of the context-based manual detection per cover platform (guardrail 6).
-4. License.
-5. Detailed catch-up rules: which missed daily events are caught up after a restart or pause, and until when.
-6. School holidays as a day type (A3): calendar entity or dedicated source.
+Revised by the planning review **[REVIEW]**. Closed since draft 1: name and domain (confirmed), license (MIT), maintenance lock relative to fire and the default duration of "person at the window wins" (guardrails 2 and 3), verification of the context-based manual detection (refuted, guardrail 6; the measurement per cover platform is a spike in `TASKS.md`).
+
+Open, to be settled by the domain design specification (work block D00) as a reasoned proposal that the project owner approves:
+
+1. Final layer order and the complete list of constraints and gate rules, including the explicit fire bypass and its two exceptions, maintenance lock and dry-run (guardrail 2).
+2. The two dams of the gate: the manual override dam, which lets protection pass, and the time-limited "person at the window" dam, which also holds protection back but never fire (guardrails 2 and 3). What arms each, how they relate and how they end; also whether a wall button on the full Home Assistant path (guardrail 7) is refused during a maintenance lock, given that a locally linked button cannot be stopped by the integration anyway.
+3. Detailed catch-up rules: which missed daily events are caught up after a restart or pause, and until when. Direction: state-based, in line with guardrail 1. The schedule defines a target state per part of the day and nothing is replayed; only one-time actions such as C8 need an expiry.
+4. Definitions of "episode" (C8, C14, E2) and "part of the day" (E2), and the source of the season for A5.
+5. Watchdog (D9): what "released" means while the trigger is genuinely still active, without contradicting D6.
+6. Interaction of D5 and E2: whether the override duration keeps running during a protection event, and what is restored if it expires meanwhile.
+7. Inputs of F2: which lights count for a window, and what "dark outside" is derived from.
+8. Remaining vague wording: "until mid-afternoon" (C4), "more aggressive heat protection" (F3), gap and random offset of E13, default durations of D9.
+9. Day types (A3): the source is one or more entities chosen by the user (for example a workday sensor or a calendar); the integration does not bring its own holiday data. How these entities map to workday, weekend and public holiday is part of D00.
+
+Open beyond D00:
+
+10. School holidays as a day type (A3): calendar entity or dedicated source. Not part of the first version.
 
 ## 10. Sources
 
@@ -232,5 +289,13 @@ Without commitment:
 - **[#n]** Issues and pull requests of the same repository, read individually on 2026-09-19: <https://github.com/TheRealSimon42/ha-blueprints/issues>. At that date the repository had 22 issues (all open, none answered by the maintainer) and 4 pull requests (#18, #19, #22, #23). Referenced here: #1 sunrise/sunset, #2 vacation mode, #3 insect screen door, #4 smoke detector, #5 brightness-based closing, #6 twelve suggestions from practice (restart, manual override, evening, shading), #7 presence condition and awning, #8 venetian blinds, #9 hail protection, #10 weekend and astro times, #11 optional window sensor, #12 ideas, #13 heat self-protection, #14 intermediate position and mode select, #15 ventilation recommendation, #16 external shading enable and override timeout, #17 PV-based shading, #18 storm protection hardening (PR), #19 pause helper consistency (PR), #20 rain protection while ventilating, #21 calendar confirmation, #23 weekend opening time (PR), #24 frost protection, #25 motion-based opening, #26 light sensor.
 - **[HA-DEV-ADV]** Home Assistant Developer Docs, *Deprecation of advanced mode in data entry flow*, 2026-05-26: <https://developers.home-assistant.io/blog/2026/05/26/advanced-mode-config-flow-deprecation/>
 - **[HA-DEV-BLOG]** Home Assistant developer blog: <https://developers.home-assistant.io/blog>
+- **[HA-DEV-FLOW]** Home Assistant Developer Docs, *Data entry flow* (sections, schema examples): <https://developers.home-assistant.io/docs/data_entry_flow_index/>
+- **[HA-DEV-DEVREG]** Developer blog, *Devices are restricted to a single config entry and at most one subentry*, 2026-07-21: <https://developers.home-assistant.io/blog/2026/07/21/device-registry-single-config-entry/>
+- **[HA-DEV-RELOAD]** Developer blog, *Deprecating config entry listener with reloading methods in config flow*, 2026-05-07: <https://developers.home-assistant.io/blog/2026/05/07/config-entry-listener-together-with-reloading-methods>
+- **[HA-DEV-BRANDS]** Developer blog, *Custom integrations can now ship their own brand images*, 2026-02-24: <https://developers.home-assistant.io/blog/2026/02/24/brands-proxy-api>
+- **[HA-DEV-BTN]** Developer blog, *Standard event types for button event entities*, 2026-07-22: <https://developers.home-assistant.io/blog/2026/07/22/button-standard-event-types>
+- **[HA-SRC-CTX]** Home Assistant Core 2026.9.2, `homeassistant/helpers/entity.py` (`CONTEXT_RECENT_TIME_SECONDS`, `async_set_context`): <https://github.com/home-assistant/core/blob/2026.9.2/homeassistant/helpers/entity.py>
+- **[HA-SRC-DEPS]** Home Assistant Core, `pyproject.toml` at tag 2026.9.2 (dependencies, `requires-python`) and on the development branch (lint ban): <https://github.com/home-assistant/core/blob/2026.9.2/pyproject.toml>
+- **[HA-SRC-SUN]** Home Assistant Core 2026.9.2, `homeassistant/helpers/sun.py`: <https://github.com/home-assistant/core/blob/2026.9.2/homeassistant/helpers/sun.py>
 - **[HA-DEV-IQS]** Home Assistant Integration Quality Scale: <https://developers.home-assistant.io/docs/core/integration-quality-scale/>
 - **[OWN]** Documentation of the project owner's installation (shading of the west façade, storm and hail protection, comfort functions August 2026, lessons from the storm protection rework of 2026-09-17). Internal, not part of the repository; summarized in `docs-internal/`.
