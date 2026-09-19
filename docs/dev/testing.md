@@ -1,36 +1,38 @@
 # Testing
 
-The tests live in two folders that are kept apart on purpose.
+The tests live in three folders that are kept apart on purpose.
 
 | Folder | What it tests | What it needs |
 |---|---|---|
 | `tests/core/` | The domain core under `custom_components/roller_shutter_suite/core/`: the rules that decide where a shutter goes. | Plain Python and pytest. Runs on Linux, macOS and Windows. |
 | `tests/ha/` | The Home Assistant layer: config entry, config flow, entities, translations. | The Home Assistant test harness ([pytest-homeassistant-custom-component](https://github.com/MatthewFlamm/pytest-homeassistant-custom-component)). Runs on Linux and macOS, not on native Windows. |
+| `tests/scripts/` | The guard scripts under `scripts/` that CI runs; see [Contributing](contributing.md). | Plain Python and pytest. Runs on Linux, macOS and Windows. |
 
-## Why there are two folders
+## Why the core has a folder of its own
 
 The domain core is plain Python and imports nothing from Home Assistant. That keeps its tests fast, and it allows running the core in a time-lapse simulation of a whole day or year. The split makes this rule checkable: a run of `tests/core` alone fails when anything it executes imports `homeassistant`.
 
 Two details make that check work:
 
-- The Home Assistant test plugin imports `homeassistant` as soon as pytest loads it. `tests/core/pytest.ini` switches the plugin off. pytest uses the configuration file closest to the paths it is given, so `uv run pytest tests/core` uses that file, and every run that includes `tests/ha` uses `pyproject.toml`. The settings that both files share (warnings as errors, import mode, `asyncio_mode`) must stay identical; `tests/core/test_pytest_configuration.py` fails when they differ or when the core file no longer switches the plugin off.
+- The Home Assistant test plugin imports `homeassistant` as soon as pytest loads it. `tests/core/pytest.ini` switches the plugin off. pytest uses the configuration file closest to the paths it is given, so `uv run pytest tests/core` uses that file, and every run that includes `tests/ha` uses `pyproject.toml`. `tests/scripts/pytest.ini` does the same for the tests of the guard scripts, so they run on native Windows too. All settings of the three files must stay identical apart from the plugin switch; `tests/core/test_pytest_configuration.py` compares every key and fails when they differ or when a small file no longer switches the plugin off.
 - Importing `custom_components.roller_shutter_suite.core` would normally execute the integration's `__init__.py` first, which belongs to the Home Assistant layer. In a core run, `tests/core/conftest.py` registers an empty stand-in for the integration package, so the core is found without executing that file. Core tests import the core under its real name, for example `from custom_components.roller_shutter_suite.core import ...`.
 
 In a run of everything, `homeassistant` is loaded before the first test, so nothing can be proven there; the check stays passive and the core tests simply run along. The proof is the run of `tests/core` alone. Every run prints a line "core purity proof: active" or "core purity proof: passive", so a log shows which one it was. A run that uses `tests/core/pytest.ini` but finds `homeassistant` already imported is refused with an error instead of going passive.
 
-The check covers `homeassistant` only. That the core imports nothing from the rest of the integration is not proven by these tests; a static import guard (block T03) enforces that.
+The check covers `homeassistant` only. That the core imports nothing from the rest of the integration is not proven by these tests; the static guard `scripts/check_core_purity.py` enforces both directions.
 
 ## Running the tests
 
 Create the environment once with `uv sync`, then:
 
 ```sh
-uv run pytest tests/core   # core tests only, without Home Assistant
-uv run pytest tests/ha     # Home Assistant tests only
-uv run pytest              # everything
+uv run pytest tests/core      # core tests only, without Home Assistant
+uv run pytest tests/scripts   # tests of the guard scripts, without Home Assistant
+uv run pytest tests/ha        # Home Assistant tests only
+uv run pytest                 # everything
 ```
 
-On Windows only the first command works natively; see [Running the Home Assistant tests on Windows](#running-the-home-assistant-tests-on-windows).
+On Windows only the first two commands work natively; see [Running the Home Assistant tests on Windows](#running-the-home-assistant-tests-on-windows).
 
 To measure coverage, add `--cov`:
 
@@ -38,22 +40,24 @@ To measure coverage, add `--cov`:
 uv run pytest --cov
 ```
 
-Coverage is measured for `custom_components/roller_shutter_suite` with branch coverage. No minimum is enforced yet.
+Coverage is measured for `custom_components/roller_shutter_suite` with branch coverage. CI enforces a minimum for each part of the code; [Contributing](contributing.md#coverage) has the values and the commands.
 
 ## What makes a test fail besides its assertions
 
-- **Warnings are errors.** Every Python warning fails the test (`filterwarnings = error`). Exceptions for noise from third-party libraries go into the `filterwarnings` list in `pyproject.toml`, each as narrow as possible (message, category and module) and with a comment that names its origin. The list is empty at present.
+- **Warnings are errors.** Every Python warning fails the test (`filterwarnings = error`), and that setting is never extended. The only way to exempt a warning is the list `tests/foreign_warnings.toml`, and only for a warning that another package causes: each entry names the module (as a regular expression), the warning category, the reason and a link to the upstream issue, and the project owner approves each entry. `tests/conftest.py` turns the list into filters for every test folder. The list is empty at present. A warning that this integration causes is fixed, not listed.
 - **Logged deprecations are errors.** Home Assistant does not raise Python warnings when an integration uses something deprecated; it writes a log message. Two helpers do that in Home Assistant 2026.9:
   - `homeassistant.helpers.frame.report_usage` logs "Detected that custom integration '…' …" on the logger `homeassistant.helpers.frame`.
   - `homeassistant.helpers.deprecation` (deprecated functions, classes, constants, aliases and arguments) logs "The deprecated … was used from …" on the logger of the module that owns the deprecated name.
 
-  A fixture in `tests/ha/conftest.py` is active for every test under `tests/ha/`. It fails the test when such a message names this integration. Every test that reaches the deprecated call fails, not only the first one: Home Assistant remembers the usage reports it has already logged, but the test plugin clears that memory after every test, and the deprecation helper for functions logs on every call anyway.
+  A fixture in `tests/ha/conftest.py` (the log guard) is active for every test under `tests/ha/`. It fails the test when such a message names this integration, by its domain or by its issue tracker. Not every such message contains the word "deprecated": a usage report may only say "This will stop working in Home Assistant …" or "Please report it …". The guard therefore counts every record of the frame helper, and on every other logger the known phrases of these reports ("detected that", "will stop working", "will be removed", "no longer supported", "please report", "create a bug report" and similar). Every test that reaches the deprecated call fails, not only the first one: Home Assistant remembers the usage reports it has already logged, but the test plugin clears that memory after every test, and the deprecation helper for functions logs on every call anyway.
 
-  A test that provokes a report on purpose requests the `integration_reports` fixture, asserts on the list and clears it; `tests/ha/test_report_guard.py` shows how.
+  Only the guard's own self-test, `tests/ha/test_report_guard.py`, provokes reports on purpose: it requests the `integration_reports` fixture, asserts on the list and clears it. No other test may do that; `scripts/check_log_guard.py` fails the build otherwise.
 
 ## How Home Assistant finds the integration in tests
 
-The test plugin requires the `enable_custom_integrations` fixture; `tests/ha/conftest.py` requests it for every test.
+The test plugin requires the `enable_custom_integrations` fixture; `tests/ha/conftest.py` requests it for every test through the autouse fixture `auto_enable_custom_integrations`.
+
+Some fixtures of the plugin, `recorder_mock` for example, have to be set up before `enable_custom_integrations`; the plugin's README says so. pytest sets up autouse fixtures first, so requesting `recorder_mock` in a test is too late. A test that needs the recorder needs an autouse fixture that requests `recorder_mock` and that `auto_enable_custom_integrations` depends on; no test needs the recorder yet, so none exists.
 
 The plugin also ships a `custom_components` package of its own inside its test configuration folder. The `hass` fixture puts that folder at the front of the import path while Home Assistant imports `custom_components`. Python keeps whichever `custom_components` package was imported first. `tests/ha/conftest.py` imports from the repository's `custom_components` folder, and pytest loads that file before any test is set up, so the repository's folder wins and Home Assistant finds the integration.
 
