@@ -25,6 +25,7 @@ Configuration is per window with defaults flowing from global to group to window
 - **Provenance:** for every resolved value the level it came from (built-in default, global, group, window), so the UI and the diagnostics can show "inherited from group …".
 - Validation of the resolved result with errors that name the field and the level that set the offending value.
 - Behavior for a window whose group reference points to a group that no longer exists (N4): a defined, tested outcome as specified in the architecture document.
+- **Capability mask for inherited values.** A group cannot know what the covers of its windows can do, so a window can inherit an option that its own cover cannot execute (for example hold-to-move for a cover without stop, or a shading position for a cover without set position). The resolver therefore takes the window's capabilities (lowest common denominator of its members) and masks the resolved result: a setting that requires a missing capability resolves to "not available", with the provenance kept and the missing capability and the limiting member named, so that the UI (block H12) can explain it and the arbiter never acts on it. Which setting requires which capability is declared with the setting, in the same single place as its other properties.
 - Settings that cannot be inherited (the cover itself, measurements of the window) are marked as such in one place.
 
 ## Out of scope
@@ -42,6 +43,7 @@ Resolver module, tests, a section "Inheritance" in `docs/dev/core-model.md`. For
 - `0`, `False` and an empty list are respected as set values at every level.
 - Provenance is correct for each of the four levels.
 - A dangling group reference produces the specified outcome and never an exception that would stop other windows.
+- A value inherited from a group is masked when the window's capabilities do not allow it; the result names the capability and the member, and the provenance still shows the group. A window's own value for such a setting is rejected by validation with the same explanation.
 - Adding a new setting later requires a change in one place only; show this in the pull request description.
 
 ## Required tests
