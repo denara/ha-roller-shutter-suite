@@ -51,7 +51,7 @@ Files are written after D00, S1 and S2 are approved. IDs and cuts may still chan
 | C06 | Movement tracking, manual detection, override dam; tolerance by position source, report delay, position reference flag, self-measurement for the diagnostics | E1, E2, E3 | C03 |
 | C07 | Protection events, fire, person-at-window dam, watchdog; test cases for the four conditions of the return to the manual position (architecture, decision 14) | D1–D6, D8, D9, guardrail 3; door for C13 | C03 |
 | C08 | Window interaction and tamper | B1–B4, B9, F6 | C03 |
-| C09 | Sun geometry and glass calibration | C1, C2, C7 | C01 |
+| C09 | Sun geometry and glass calibration; one curtain edge per element, mapped per member through its vertical offset (architecture, decision 9) | C1, C2, C7 | C01 |
 | C10 | Shading episodes, conditions, solar heating; frost release by sun | C3–C6, C8, C9, C12, C14, A12 (part); doors for C3b, C10, C11 | C03, C09 |
 | C11 | Sleep mode and privacy | A9, F2 | C03 |
 | C12 | Persistence model and restart reconciliation | E6, D5, N5 | C06, C07, C10 |
@@ -61,7 +61,7 @@ Files are written after D00, S1 and S2 are approved. IDs and cuts may still chan
 | H08 | Wiring: protection events, fire, watchdog and blind-source repairs | D1–D6, D8, D9 | C07, H03, H05 |
 | H09 | Wiring: window interaction, tamper, blind-contact repair | B1–B4, B9, F6 | C08, H03 |
 | H10 | Wiring: manual detection and override; per-member configuration steps (position source, report delay, travel times) | E1–E3 | C06, H03, H05 |
-| H11 | Wiring: shading (sun, forecast, radiation, indoor temperature); per-member measurement steps | C1–C9, C12, C14 | C10, H03 |
+| H11 | Wiring: shading (sun, forecast, radiation, indoor temperature); per-member measurement steps: glass height, glass calibration and the offset of the member's top edge within the element | C1–C9, C12, C14 | C10, H03 |
 | H12 | Capability-aware configuration and repairs; explains settings masked by the capability mask of C02 | F7 | H01, H03, C02 |
 | H13 | Roof window profile | F3 | C09, C10, H11 |
 | H14 | Wall buttons | F5 | S3, C07, H07, H12 |
