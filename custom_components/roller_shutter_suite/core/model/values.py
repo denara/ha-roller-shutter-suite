@@ -36,12 +36,12 @@ FULLY_OPEN: Final = Position(100)
 FULLY_CLOSED: Final = Position(0)
 
 
-def as_position(value: JsonValue) -> Position:
+def _as_position(value: JsonValue) -> Position:
     """Read a position from plain data (helper of the package)."""
     return Position(as_int(value))
 
 
-def position_data(value: Position | None) -> int | None:
+def _position_data(value: Position | None) -> int | None:
     """Return a position as plain data (helper of the package)."""
     return None if value is None else value.value
 

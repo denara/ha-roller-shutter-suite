@@ -44,6 +44,7 @@ from .decision import (
 from .observation import (
     MemberCommand,
     MemberObservation,
+    MembersAtTargets,
     MovementState,
     Observation,
     OwnCommand,
@@ -130,6 +131,7 @@ __all__ = [
     "MemberObservation",
     "MemberState",
     "MemberTarget",
+    "MembersAtTargets",
     "MissingSourceValueError",
     "MovementState",
     "Observation",

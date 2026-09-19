@@ -14,6 +14,7 @@ from custom_components.roller_shutter_suite.core.model import (
     CoveringType,
     MemberConfig,
     MemberObservation,
+    MembersAtTargets,
     MemberState,
     MovementState,
     Observation,
@@ -410,6 +411,94 @@ def test_window_with_only_some_members_commanded_has_no_position() -> None:
     """The fallback is for a window that was never commanded, not for a partial one."""
     assert _resting(60, 60).position(_both(None, 60), TOLERANCES) is None
     assert _resting(60, 60).position(_both(60, None), TOLERANCES) is None
+
+
+def test_members_at_their_own_different_targets() -> None:
+    """The view says yes where the position has no single number to give."""
+    window = _resting(21, 36)
+
+    assert (
+        window.members_at_commanded_targets(_both(21, 36), TOLERANCES)
+        is MembersAtTargets.YES
+    )
+    assert window.position(_both(21, 36), TOLERANCES) is None
+
+
+@pytest.mark.parametrize(
+    ("window", "commanded", "answer", "position"),
+    [
+        (_resting(30, 31), _both(30, 30), MembersAtTargets.YES, Position(30)),
+        (_resting(21, 38), _both(21, 36), MembersAtTargets.YES, None),
+        (_resting(30, 70), _both(30, 30), MembersAtTargets.NO, None),
+        (_resting(21, 40), _both(21, 36), MembersAtTargets.NO, None),
+        (_resting(30, 30), {}, MembersAtTargets.CANNOT_BE_JUDGED, Position(30)),
+        (_resting(30, 80), {}, MembersAtTargets.CANNOT_BE_JUDGED, None),
+        (_resting(30, 30), _both(30, None), MembersAtTargets.CANNOT_BE_JUDGED, None),
+        (_resting(None, 30), _both(30, 30), MembersAtTargets.CANNOT_BE_JUDGED, None),
+        (_resting(None, 70), _both(30, 30), MembersAtTargets.CANNOT_BE_JUDGED, None),
+        (
+            _observed(
+                (LEFT, Observation(MovementState.UNAVAILABLE)),
+                (RIGHT, Observation(MovementState.RESTING, Position(30))),
+            ),
+            _both(30, 30),
+            MembersAtTargets.CANNOT_BE_JUDGED,
+            None,
+        ),
+    ],
+    ids=[
+        "common target",
+        "different targets",
+        "one member off",
+        "one member off its own target",
+        "never commanded, agreeing",
+        "never commanded, differing",
+        "partly commanded",
+        "no position feedback",
+        "no position feedback and another member off",
+        "unavailable",
+    ],
+)
+def test_the_three_answers_of_the_view_and_the_position_built_on_it(
+    window: WindowObservation,
+    commanded: dict[str, Position],
+    answer: MembersAtTargets,
+    position: Position | None,
+) -> None:
+    """Yes, no, cannot be judged; the position follows from the same logic."""
+    assert window.members_at_commanded_targets(commanded, TOLERANCES) is answer
+    assert window.position(commanded, TOLERANCES) == position
+    assert [value.value for value in MembersAtTargets] == [
+        "yes",
+        "no",
+        "cannot_be_judged",
+    ]
+
+
+def test_a_member_that_still_reports_movement_is_compared_like_any_other() -> None:
+    """Rest is not required here; "settled" is the tracker's knowledge."""
+    window = _observed(
+        (LEFT, Observation(MovementState.MOVING_DOWN, Position(31))),
+        (RIGHT, Observation(MovementState.RESTING, Position(30))),
+    )
+
+    assert window.reports_movement is True
+    assert window.position(_both(30, 30), TOLERANCES) == Position(30)
+
+
+@pytest.mark.parametrize(
+    ("tolerance", "error"),
+    [(0, ValueError), (-1, ValueError), (1.5, TypeError), (True, TypeError)],
+)
+def test_tolerances_are_validated(tolerance: Any, error: type[Exception]) -> None:
+    """A tolerance below the minimum is refused, by the view and by the position."""
+    tolerances = {LEFT: 2, RIGHT: tolerance}
+    with pytest.raises(error, match="tolerance"):
+        _resting(30, 30).position(_both(30, 30), tolerances)
+    with pytest.raises(error, match="tolerance"):
+        _resting(30, 30).members_at_commanded_targets(_both(30, 30), tolerances)
+    with pytest.raises(error, match="tolerance"):
+        _resting(None, 30).position({}, tolerances)
 
 
 def test_window_has_no_position_when_a_member_reports_none() -> None:

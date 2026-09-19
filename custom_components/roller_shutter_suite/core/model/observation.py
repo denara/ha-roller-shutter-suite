@@ -24,7 +24,8 @@ from ._validation import (
     to_utc,
 )
 from .decision import WishClass
-from .values import Position, as_position, position_data
+from .values import Position, _as_position, _position_data
+from .window import MIN_TOLERANCE
 
 # ---------------------------------------------------------------------------
 # Observations
@@ -68,7 +69,7 @@ class Observation:
 
     def to_data(self) -> JsonObject:
         """Return plain data for persistence."""
-        return {"state": self.state.value, "position": position_data(self.position)}
+        return {"state": self.state.value, "position": _position_data(self.position)}
 
     @classmethod
     def from_data(cls, data: JsonValue) -> Self:
@@ -76,7 +77,7 @@ class Observation:
         content = as_object(data, "state", "position")
         return cls(
             state=read(content, "state", as_enum(MovementState)),
-            position=read(content, "position", optional(as_position)),
+            position=read(content, "position", optional(_as_position)),
         )
 
 
@@ -91,6 +92,15 @@ class MemberObservation:
         """Validate the member identifier."""
         require_identifier(self.member_id, "the member of an observation")
         require_type(self.observation, Observation, "the observation of a member")
+
+
+@unique
+class MembersAtTargets(StrEnum):
+    """Whether every member stands at its own last commanded target."""
+
+    YES = "yes"
+    NO = "no"
+    CANNOT_BE_JUDGED = "cannot_be_judged"
 
 
 @dataclass(frozen=True, slots=True)
@@ -128,6 +138,70 @@ class WindowObservation:
         """Return whether at least one member reports a movement."""
         return any(member.observation.moving for member in self.members)
 
+    def _reports(
+        self, commanded: Mapping[str, Position], tolerances: Mapping[str, int]
+    ) -> list[tuple[int, Position | None, int]] | None:
+        """Validate the arguments; return (report, target, tolerance) per member.
+
+        ``None`` means that a member reports no position.
+        """
+        known = {member.member_id for member in self.members}
+        for member_id in commanded:
+            if member_id not in known:
+                raise ValueError(
+                    f"a commanded target names {member_id!r}, which is not a "
+                    "member of this window"
+                )
+        rows: list[tuple[int, Position | None, int]] | None = []
+        for member in self.members:
+            if member.member_id not in tolerances:
+                raise ValueError(f"no tolerance given for {member.member_id!r}")
+            tolerance = tolerances[member.member_id]
+            if isinstance(tolerance, bool) or not isinstance(tolerance, int):
+                raise TypeError(f"the tolerance of {member.member_id!r} is no integer")
+            if tolerance < MIN_TOLERANCE:
+                raise ValueError(
+                    f"the tolerance of {member.member_id!r} is below the minimum "
+                    f"of {MIN_TOLERANCE}"
+                )
+            reported = member.observation.position
+            if reported is None:
+                rows = None
+            elif rows is not None:
+                rows.append(
+                    (reported.value, commanded.get(member.member_id), tolerance)
+                )
+        return rows
+
+    def members_at_commanded_targets(
+        self, commanded: Mapping[str, Position], tolerances: Mapping[str, int]
+    ) -> MembersAtTargets:
+        """Say whether every member stands at its own last commanded target.
+
+        Each member is compared with its own target within its own tolerance.
+        The targets may differ between members (shading with unequal glass):
+        the answer is still "yes", although the window then has no single
+        position. This is what tells "everything is where it should be" apart
+        from "something is off" when :meth:`position` returns ``None``.
+
+        The answer is "cannot be judged" as soon as one member cannot be
+        compared: it reports no position (no position feedback, or
+        unavailable), or it was never commanded, be it all members or only
+        some. This takes precedence over a "no" of another member, because
+        the question is about the window as a whole.
+
+        Arguments as for :meth:`position`. A member that still reports a
+        movement is compared like any other; whether a movement has settled
+        is the tracker's knowledge.
+        """
+        rows = self._reports(commanded, tolerances)
+        if rows is None or any(target is None for _, target, _ in rows):
+            return MembersAtTargets.CANNOT_BE_JUDGED
+        for reported, target, tolerance in rows:
+            if target is not None and abs(reported - target.value) > tolerance:
+                return MembersAtTargets.NO
+        return MembersAtTargets.YES
+
     def position(
         self, commanded: Mapping[str, Position], tolerances: Mapping[str, int]
     ) -> Position | None:
@@ -140,8 +214,8 @@ class WindowObservation:
         ``commanded`` maps a member to the target of its last own command as
         the persisted state has it (``WindowState.commanded_targets``); a
         member that was never commanded has no entry. ``tolerances`` gives the
-        tolerance of every member. ``WorldSnapshot.window_position`` calls
-        this with the persisted state of the snapshot.
+        tolerance of every member, at least 1. ``WorldSnapshot.window_position``
+        calls this with the persisted state of the snapshot.
 
         1. Every member reports a position; otherwise there is none.
         2. If no member was ever commanded, the window has a position only if
@@ -150,43 +224,30 @@ class WindowObservation:
            tolerance. It is then the mean of the reports, rounded half up.
         3. If some members have a last command and others do not, there is
            none.
-        4. Otherwise every member stands within its tolerance of its own
-           target, or there is none. The position is the common target. If
-           the members' targets differ (shading with unequal glass), there is
-           no single number, so there is none.
+        4. Otherwise :meth:`members_at_commanded_targets` has to answer "yes",
+           or there is none. The position is the common target. If the
+           members' targets differ (shading with unequal glass), there is no
+           single number, so there is none.
+
+        A position may be returned while a member still reports a movement,
+        if its report is inside the tolerance already. Rest is not required
+        here: "settled" is knowledge of the movement tracker.
 
         Rules 1 to 4 were decided by the project owner, except two readings
         of this block: the rounded mean as the value in rule 2, and "none"
         for members that stand at different targets in rule 4.
         """
-        known = {member.member_id for member in self.members}
-        for member_id in commanded:
-            if member_id not in known:
-                raise ValueError(
-                    f"a commanded target names {member_id!r}, which is not a "
-                    "member of this window"
-                )
-        reports: list[int] = []
-        limits: list[int] = []
-        at_target = True
-        for member in self.members:
-            if member.member_id not in tolerances:
-                raise ValueError(f"no tolerance given for {member.member_id!r}")
-            tolerance = tolerances[member.member_id]
-            reported = member.observation.position
-            if reported is None:
-                return None
-            target = commanded.get(member.member_id)
-            if target is not None and abs(reported.value - target.value) > tolerance:
-                at_target = False
-            reports.append(reported.value)
-            limits.append(tolerance)
+        rows = self._reports(commanded, tolerances)
+        if rows is None:
+            return None
         if not commanded:
-            if max(reports) - min(reports) > min(limits):
+            reports = [reported for reported, _, _ in rows]
+            if max(reports) - min(reports) > min(limit for _, _, limit in rows):
                 return None
             return Position((2 * sum(reports) + len(reports)) // (2 * len(reports)))
+        at_targets = self.members_at_commanded_targets(commanded, tolerances)
         targets = set(commanded.values())
-        if len(commanded) != len(self.members) or not at_target or len(targets) != 1:
+        if at_targets is not MembersAtTargets.YES or len(targets) != 1:
             return None
         return next(iter(targets))
 
@@ -262,7 +323,7 @@ class OwnCommand:
         )
         return cls(
             command_id=read(content, "command_id", as_str),
-            target=read(content, "target", as_position),
+            target=read(content, "target", _as_position),
             direction=read(content, "direction", as_enum(TravelDirection)),
             time=read(content, "time", as_datetime),
             wish_class=read(content, "wish_class", as_enum(WishClass)),

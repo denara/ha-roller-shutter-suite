@@ -49,7 +49,7 @@ The vocabulary and the rules come from the [domain design specification](../arch
 | Type | Meaning |
 |---|---|
 | `Layer` | The seven layers of the arbiter in the order in which they are asked, from fire to schedule. |
-| `WishClass` | `fire`, `protection` or `comfort`; it follows from the layer. |
+| `WishClass` | `fire`, `protection` or `comfort`; it follows from the layer. The one exception: the return to the manual position after a protection event (`protection_return_manual`) is a comfort wish of the protection layer, and only that layer can carry this reason. |
 | `WishKind` | What a layer answers: `target`, `leave_alone` or `no_opinion`. |
 | `Direction` | A limit a wish carries itself: `raise_only` or `lower_only`. |
 | `Wish` | The answer of one layer: kind, layer, reason code, and for a target either one position for all members or one position per member, an optional direction, and optionally the ray height the positions were computed from. |
@@ -97,6 +97,10 @@ A window has one or more members: the covers that are always moved together. Eve
 3. If some members have a last command and others do not, the window has no position.
 4. Otherwise every member is within its tolerance of its own target, and the position is the common target. Members that stand at different targets (shading with unequal glass) give the window no single number, so it has none.
 
+A position can be returned while a member still reports a movement, if its report is inside the tolerance already; whether a movement has settled is the tracker's knowledge.
+
+"No position" alone would mean two opposite things: every member is exactly where it should be, only at different targets, or something is off. `WindowObservation.members_at_commanded_targets(commanded, tolerances)` tells them apart with three answers (`MembersAtTargets`): `yes`, every member stands at its own last commanded target within its own tolerance, also when the targets differ; `no`; and `cannot_be_judged`, when a member reports no position (no feedback, or unavailable) or when not every member was commanded. The position is built on this view, so there is one piece of logic.
+
 ### Persisted window state
 
 `WindowState` is everything a window has to remember between recomputes and across a restart. `WindowState()` is the state of a window that was just set up. `to_data()` turns it into plain data that can be written as JSON, with a `schema_version`; `from_data()` reads it back and refuses naive datetimes, malformed data, unknown keys and other schema versions, each with the path of the key in the message. Migration between versions is the job of the later `persistence` module.
@@ -107,10 +111,10 @@ A window has one or more members: the covers that are always moved together. Eve
 | `OwnCommand` | A command of the integration to a member: its identifier, target, direction (`TravelDirection`: `up` or `down`), time, wish class, and the context under which it was executed once that is known. The identifier goes to the actuator and comes back with the result, so a late result is never attributed to a newer command. |
 | `MemberCommand` | An own command together with the member it went to. |
 | `PositionReference` | Whether a calculated position can be trusted: `referenced` or `uncertain`. |
-| `MemberState` | Per member: the last own command with its target, the last observation, the position reference flag, and the command backoff as facts: the number of attempts of the current command and the time of the last attempt. The time of the next retry is never stored; it is computed from the two facts with the current settings, so a reload right after a failed attempt does not send a second command at once. |
+| `MemberState` | Per member: the last own command with its target, the last observation, the position reference flag, and the command backoff as facts: the number of attempts of the current command and the time of the last attempt (no attempts without a last own command). The time of the next retry is never stored; it is computed from the two facts with the current settings, so a reload right after a failed attempt does not send a second command at once. |
 | `ManualOverrideDam` | The armed manual override: armed at, end rule (`OverrideEndRule`), absolute end if the rule has one, and the position the person chose. |
 | `PersonAtWindowDam` | The armed person-at-the-window dam: when it ends. |
-| `ProtectionEventState` | Per protection event: active or inactive (`ProtectionEventStatus`), active since, ended at, released by the watchdog, and the position and owner remembered from before the event. An active event has "active since" and no "ended at"; an inactive one may have an "ended at". The end time is stored, not a deadline: the waiting time after the end is configuration and is applied when it is evaluated. |
+| `ProtectionEventState` | Per protection event: active or inactive (`ProtectionEventStatus`), active since, ended at, released by the watchdog, and the position and owner remembered from before the event. An active event has "active since" and no "ended at", unless the watchdog released it: it is then still active, and "ended at" is the time of the release, from which the waiting time runs. An inactive one may have an "ended at". The end time is stored, not a deadline: the waiting time after the end is configuration and is applied when it is evaluated. |
 | `ShadingEpisodeState` | Active since, and the end of the rain lock. |
 | `SolarHeatingEpisodeState` | Active since, and the "opened once" flag. |
 | `ExternalRequest` | A position requested by an automation, the text the caller gave as reason, and the expiry. |
