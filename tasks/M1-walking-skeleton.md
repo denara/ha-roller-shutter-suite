@@ -20,7 +20,7 @@ The owner wants to install something on a productive system early, next to the o
 ## Scope
 
 - **End-to-end tests** under `tests/ha/` that set up the integration through its config flow with one group and one window in dry-run, run a simulated day with frozen time, and check entities, events and the absence of any cover service call.
-- **The safety proof for the pilot,** as tests: over a full simulated day, across a restart, a reload, a reconfigure, an unavailable cover that returns, and a stub fire trigger, a window in dry-run causes zero cover service calls. A second window that is armed does move, which shows the test would notice a call.
+- **The safety proof for the pilot,** as tests: over a full simulated day, across a restart, a reload, a reconfigure, an unavailable cover that returns, and a stub fire trigger, a window in dry-run causes zero cover service calls. In the same run the cover is moved from outside several times (as the other controller would): the movements are logged, no dam is armed, and the decisions keep showing the hypothetical outcome instead of `manual_override`. A second window that is armed does move, which shows the test would notice a call.
 - **Restart behavior without persistence** (H05 comes later): after a restart the schedule decision is the same as before, because it is derived from the situation; document what is not yet persistent.
 - **Gap list:** walk through the acceptance criteria of all blocks up to here and list what is missing or weaker than specified; fix small gaps, report the rest.
 - **A version number and a tagged pre-release** so it can be installed through HACS as a custom repository.
