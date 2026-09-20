@@ -31,14 +31,16 @@ The function reads no clock, computes nothing astronomical and keeps nothing bet
 | Field | Meaning |
 |---|---|
 | `wish` | the wish of the schedule layer: by day the morning position with `raise_only` and `schedule_day`, by night the evening position with `lower_only` and `schedule_night` |
+| `evaluated_at` | the time of the snapshot as an instant in UTC |
 | `part_of_day` | `day` or `night` |
+| `part_of_day_since` | the instant at which the current part of the day really began: the boundary as an offset, a clamp, the random offset, the day type or the brightness moved it, never the first evaluation that noticed it. Before today's morning trigger it is yesterday's evening, which is why yesterday's latch and brightness instant are kept until the morning; without them it is computed with the day of the week |
 | `morning_trigger`, `evening_trigger` | today's triggers as instants in UTC; the evening trigger is the effective one |
 | `evening_by_brightness` | whether the brightness began this evening before the time did |
 | `day_type`, `day_type_latched`, `day_type_reason` | today's day type, whether it is fixed for the date, and `day_type_fallback` while the day of the week stands in for an input without a value |
 | `summer`, `season_reason` | the season the evening position was chosen by (`None` without a seasonal setup), and `input_held_last_known`, `input_unavailable` or `input_unknown` when it is not a fresh value |
 | `brightness_reason` | why the brightness source gives no value at the moment |
 | `next_action` | the next planned action: instant in UTC, target, reason |
-| `recheck_at` | an instant at which the window has to be evaluated again although no planned action is due |
+| `recheck_at` | an instant at which the window has to be evaluated again although no planned action is due. It lies strictly after `evaluated_at`, or it is none; the result type refuses anything else. A minimum distance between such wake-ups is the business of the Home Assistant layer |
 | `state` | the persisted window state with what the schedule has to remember; the caller persists it |
 
 A window without schedule settings gets the constant `SCHEDULE_NOT_CONFIGURED`, a wish without an opinion and with the reason `not_configured`.
@@ -78,12 +80,13 @@ This is why both clamps are mandatory for the two kinds that depend on the sun: 
 
 All instants are compared in UTC. Python compares two aware datetimes that share a zone object by their wall-clock reading, which is wrong in the repeated hour of a clock change.
 
-A local time (a fixed time, a clamp, local midnight) becomes an instant by one rule: **it is read with the UTC offset that is valid before the change.**
+A local time (a fixed time, a clamp, local midnight) becomes an instant by a rule that concerns only the times inside the skipped or the repeated hour:
 
+- A time that does not exist (clocks set forward) moves forward by the length of the gap: with a change from 02:00 to 03:00, "02:30" happens at 03:30.
 - A time that exists twice (clocks set back) means its first occurrence. At the second pass of 02:15, a morning trigger of 02:30 has passed already.
-- A time that does not exist (clocks set forward) happens as long after the change as it lies inside the skipped hour: with a change from 02:00 to 03:00, "02:30" happens at 03:30.
+- Every other time is simply that local time. A trigger at 07:00 runs at 07:00 on the clock of that day, on both days of a change; a test says so.
 
-Both are the same statement: such a time happens as much elapsed time after local midnight as on any other day. No part of the day is skipped or doubled; a test walks through both clock changes of a named zone in steps of five minutes and counts the changes.
+This is the usual behavior for such times, and it is what Python yields for a wall-clock time with `fold=0`. No part of the day is skipped or doubled; a test walks through both clock changes of a named zone in steps of five minutes and counts the changes.
 
 The local zone is the zone of `WorldSnapshot.time`. A naive datetime, from the snapshot or from the sun port, is refused: it would be read in the zone of the machine, and that is a clock the core must not look at.
 
@@ -99,13 +102,14 @@ A source that is unknown, unavailable, absent from the snapshot or not a boolean
 
 The day type of a date is latched (`WindowState.latched_day_types`):
 
-- At the first evaluation of the date at which the inputs the rules need have a value, the day type is fixed for the date. A source that changes later in the day moves nothing.
-- While an input has no value, rule 3 stands in, the result carries `day_type_fallback`, and nothing is latched. As soon as the input has a value, the latch is set, as long as the morning trigger of the stand-in has not passed.
-- At the first evaluation after that morning trigger has passed without a value, the stand-in itself is latched, with `LatchedDayType.fallback` set. The result keeps reporting `day_type_fallback` for the rest of the date, and an input that comes back cannot move the morning trigger after the fact.
+- **The day type latches at the first boundary between parts of the day of the date, which is the morning trigger, and not before.** A workday sensor is updated at midnight or shortly after it; an evaluation at 00:00:10 may still see the value of yesterday, and it must not write that down for the whole day.
+- Until then the day type is a preview, and nothing is persisted for the date: it follows the inputs, or rule 3 with `day_type_fallback` while an input has no value, and it may correct itself with every evaluation. The morning trigger and the next planned action follow the preview.
+- The first evaluation at or after the morning trigger of the preview fixes the day type for the date. A source that changes later in the day moves nothing.
+- If an input has no value at that moment, rule 3 is latched with `LatchedDayType.fallback` set. The result keeps reporting `day_type_fallback` for the rest of the date, and an input that comes back cannot move the morning trigger after the fact.
 
-The third step is what tells "an input came back too late" from "the core was started in the middle of the day". In the second case there is no latch at all, and the inputs are used. The price is small and stated here: if no evaluation at all takes place between the morning trigger and the return of the input, the return is treated like a start in the middle of the day. The runtime evaluates at every planned action, so this takes a core that was not running.
+A core that is started in the middle of the day finds no latch for the date and sets it at once, from the inputs if they have a value, because the morning trigger has passed. The fallback mark is what tells this case from "an input came back too late". The price is small and stated here: if no evaluation at all takes place between the morning trigger and the return of the input, the return is treated like a start in the middle of the day. The runtime evaluates at every planned action, so this takes a core that was not running.
 
-The schedule sets the latch of today only. It keeps a latch for tomorrow if another part of the system has set one, uses it for the next planned action, and drops every other date.
+The schedule sets the latch of today only. It keeps a latch for tomorrow if another part of the system has set one and uses it for the next planned action. Until the latch of today is set, the latch of yesterday is kept in its place, because the night that is still running began with the evening trigger of yesterday (`part_of_day_since`). Every other date is dropped.
 
 ## The evening by brightness
 
@@ -113,7 +117,7 @@ With a brightness source, the evening also begins when the brightness has been b
 
 The trigger holds only inside the clamps: not before "not before" of the evening trigger, and only ahead of the time-based evening trigger, which never lies after "not after". That is why settings with a brightness source require "not before" on every evening trigger. If it has been dark since noon, the evening begins at "not before".
 
-The instant at which the brightness began the evening is persisted as `WindowState.evening_brightness_at` and counts for the local date it lies on. Without it the schedule would not be state-based: the headlights of a car or a source that drops out would bring the day back, and the day target would raise the shutter again.
+The instant at which the brightness began the evening is persisted as `WindowState.evening_brightness_at` and counts for the local date it lies on. It is kept until the morning trigger of the next date, because until then it is the start of the night that is running. Without it the schedule would not be state-based: the headlights of a car or a source that drops out would bring the day back, and the day target would raise the shutter again.
 
 **Missing data is not good news.** A brightness source without a value is not "dark": `brightness_below_since` is dropped, nothing is triggered, and `brightness_reason` says why. It does not block anything either: the time-based evening trigger is not affected, and an evening that the brightness has begun already stays.
 
@@ -131,7 +135,7 @@ The held value is renewed when the source reports another value than the held on
 
 ## Next planned action
 
-The first change of the part of the day after the time of the snapshot: today's morning or evening trigger, otherwise the morning trigger of the next date that has a part `day`, searched over a week and a day. It works across midnight and across a change of the day type. A later date counts with its latched day type if it has one, otherwise with the day of the week. With a workday or holiday source that is a forecast: it becomes final when the date begins and its day type is latched. A forecast that was too late corrects itself at the planned instant, when the evaluation finds that the morning has not come yet; one that was too early is corrected by the first evaluation of the new date.
+The first change of the part of the day after the time of the snapshot: today's morning or evening trigger, otherwise the morning trigger of the next date that has a part `day`, searched over a week and a day. It works across midnight and across a change of the day type. A later date counts with its latched day type if it has one, otherwise with the day of the week. With a workday or holiday source that is a forecast: once the date has begun it follows the preview of the inputs, and it is final when the day type latches at the morning trigger. A forecast that named too early a time corrects itself at the planned instant, when the evaluation finds that the morning has not come yet; one that named too late a time is corrected by the first evaluation of the new date that sees the inputs of that date.
 
 The brightness is not part of the forecast. `evening_trigger` and `next_action` name the time-based evening until the brightness has begun it.
 

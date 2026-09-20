@@ -77,9 +77,9 @@ The day type decides which pair of times applies:
 2. Otherwise, if you have a workday sensor: on means **workday**, off means **weekend**.
 3. Without a workday sensor: Monday to Friday are workdays, Saturday and Sunday are weekend.
 
-The day type is decided once per day, shortly after midnight, and then kept for that day. If your workday sensor changes its mind at noon, the evening still follows the day type from the morning; otherwise the shutters might move at a moment nobody expects.
+The day type is fixed once per day, **at the morning trigger**, and then kept for that day. If your workday sensor changes its mind at noon, the evening still follows the day type from the morning; otherwise the shutters might move at a moment nobody expects. Before the morning trigger the day type is only a preview: sensors such as the workday sensor are updated at midnight or a little later, and the integration does not take the value of yesterday for the whole new day just because it looked a few seconds too early.
 
-**If a sensor has no value** (unavailable or unknown) when the day begins, the integration uses the day of the week for the time being and says so in the window's status (`day_type_fallback`). If the sensor comes back before the morning trigger of that day, its value is used. If it comes back later, the day stays as it began.
+**If a sensor has no value** (unavailable or unknown), the integration uses the day of the week for the time being and says so in the window's status (`day_type_fallback`). If the sensor comes back before the morning trigger of that day, its value is used. If it still has no value at the morning trigger, the day stays as the day of the week says.
 
 School holidays are not part of the first version.
 
@@ -115,9 +115,9 @@ Settings: on workdays the morning is "sunrise, not before 06:30, not after 07:30
 
 | Time | What happens |
 |---|---|
-| 00:00 | The day type is decided: no holiday, the workday sensor is on. Workday. |
+| 00:00 | A new day. The preview says workday: no holiday, and the workday sensor is on. |
 | 00:00–07:30 | Night. The shutter stays closed. The status shows the next planned action: 07:30, 100 %. |
-| 07:30 | Sunrise at 07:41 plus this window's random amount of 6 minutes would be 07:47. That is later than "not after", so the morning happens at 07:30. It is day; the shutter is raised to 100 %. |
+| 07:30 | Sunrise at 07:41 plus this window's random amount of 6 minutes would be 07:47. That is later than "not after", so the morning happens at 07:30. The day type "workday" is now fixed for the day. It is day; the shutter is raised to 100 %. |
 | 11:00 | Home Assistant is restarted. It is still day, the shutter is at 100 %. Nothing moves. |
 | 14:00 | You lower the shutter to 40 % by hand. The integration leaves it alone until the evening. |
 | 18:48 | The elevation is reached at 18:52; this window's random amount for the evening is minus 4 minutes. It is night; the shutter is lowered from 40 % to 0 %. |
@@ -128,9 +128,9 @@ Settings: on weekends the morning is a fixed 09:00, the evening is "sunset plus 
 
 | Time | What happens |
 |---|---|
-| 00:00 | The workday sensor is off: weekend. |
+| 00:00 | A new day. A few seconds later the workday sensor switches to off; from then on the preview says weekend. |
 | 07:30 | On a workday the shutters would open now. Today they stay closed until 09:00. |
-| 09:00 | It is day; the shutter is raised to the morning position. |
+| 09:00 | The day type "weekend" is fixed for the day. It is day; the shutter is raised to the morning position. |
 | 17:10 | The brightness drops below 50 lx. It is before 17:30, "not before" of the evening, so the brightness cannot begin the evening yet. |
 | 17:30 | It has been darker than 50 lx for more than 10 minutes, and "not before" has come. The evening begins now instead of at 18:50; the shutter is lowered. |
 | 17:40 | The clouds open up and the brightness rises to 300 lx. It stays evening. |
@@ -140,10 +140,15 @@ If the brightness sensor had been unavailable that afternoon, the shutter would 
 
 ## When the clocks change
 
-On the night the clocks go forward, the hour from 02:00 to 03:00 does not exist; on the night they go back, it exists twice. If a time of your routine lies in that hour, the rule is: it happens as long after midnight as on any other night. "02:30" happens once in either night: at 03:30 new time when the clocks go forward, and at the first 02:30 when they go back. Times outside that hour are not affected; 06:30 is 06:30 on the new clock.
+On the night the clocks go forward, the hour from 02:00 to 03:00 does not exist; on the night they go back, it exists twice. Only a time of your routine that lies in that hour is affected:
+
+- When the clocks go forward, a time in the missing hour moves forward by that hour: "02:30" happens at 03:30 new time.
+- When the clocks go back, a time in the doubled hour means the first of the two: "02:30" happens at the first 02:30, and not again an hour later.
+
+Every other time is simply the time on the clock of that day: 06:30 is 06:30 and 07:00 is 07:00, on both nights.
 
 ## Good to know
 
 - The next planned action in the window's status is what the routine will ask for. Whether the shutter then moves also depends on everything that ranks higher: a storm, an open window, your manual override, a pause.
-- For a day in the future, the status assumes the day type from the day of the week, or the one that is already known. If your holiday sensor turns a Monday into a public holiday, the status corrects itself shortly after midnight.
+- For a day in the future, the status assumes the day type from the day of the week, or the one that is already known. If your holiday sensor turns a Monday into a public holiday, the status corrects itself as soon as the sensor has switched after midnight.
 - The integration sends the shutter to a position. With most actuators the reported position is calculated from run time, so the integration can notice that an actuator did not react, but it cannot know that a curtain has actually arrived.
