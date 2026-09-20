@@ -1,9 +1,15 @@
 """Throw-away git repositories for the tests of the guard and of the hook.
 
-No identity is configured or passed and no git configuration is written: a
-commit is put together as an object by hand, with a documentation address, and
-the branch is moved with ``git update-ref``. A remote-tracking ref is a ref like
-any other and is set the same way, so no remote has to be configured either.
+No identity is passed to git and no ``git config`` is run: a commit is put
+together as an object by hand, with a made-up address from a documentation
+domain, and the branch is moved with ``git update-ref``. A remote-tracking ref
+is a ref like any other and is set the same way, so no remote has to be
+configured either.
+
+The guard compares the addresses of pushed commits with ``user.email`` of the
+checkout it judges. A throw-away repository therefore gets that one setting,
+written into its own configuration file in the temporary folder when it is
+created. The configuration of this repository and of the user is never touched.
 """
 
 import os
@@ -14,12 +20,14 @@ from pathlib import Path
 
 ZEROS = "0" * 40
 MAIN = "refs/heads/main"
-# The address is a documentation value.
+# Made-up addresses from a documentation domain, put together at runtime.
+ADDRESS = "someone" + "@" + "example.com"
+OTHER_ADDRESS = "somebody.else" + "@" + "example.org"
 _COMMIT = (
     "tree {tree}\n"
     "{parents}"
-    "author Example <someone@example.com> 0 +0000\n"
-    "committer Example <someone@example.com> 0 +0000\n"
+    "author Example <{author}> 0 +0000\n"
+    "committer Example <{committer}> 0 +0000\n"
     "{headers}"
     "\n"
     "{message}\n"
@@ -28,7 +36,7 @@ _TAG = (
     "object {target}\n"
     "type {kind}\n"
     "tag {name}\n"
-    "tagger Example <someone@example.com> 0 +0000\n"
+    "tagger Example <{tagger}> 0 +0000\n"
     "\n"
     "{message}\n"
 )
@@ -74,11 +82,21 @@ class Repository:
     root: Path
 
     @classmethod
-    def create(cls, root: Path, *, bare: bool = False) -> Repository:
-        """Create an empty repository whose ``HEAD`` names the branch ``main``."""
+    def create(
+        cls, root: Path, *, bare: bool = False, address: str | None = ADDRESS
+    ) -> Repository:
+        """Create an empty repository whose ``HEAD`` names the branch ``main``.
+
+        ``address`` becomes ``user.email`` of this repository alone; ``None``
+        leaves it without one.
+        """
         root.mkdir(parents=True)
         run_git(root, "init", "--quiet", *(["--bare"] if bare else []))
         run_git(root, "symbolic-ref", "HEAD", MAIN)
+        if address is not None:
+            settings = root / "config" if bare else root / ".git" / "config"
+            with settings.open("a", encoding="utf-8", newline="\n") as file:
+                file.write(f"[user]\n\temail = {address}\n")
         return cls(root)
 
     def git(self, *arguments: str, data: bytes | None = None) -> str:
@@ -108,6 +126,7 @@ class Repository:
         ref: str = MAIN,
         parents: list[str] | None = None,
         headers: str = "",
+        addresses: tuple[str, str] = (ADDRESS, ADDRESS),
     ) -> str:
         """Turn the index into a commit on ``ref`` and return its object name."""
         if parents is None:
@@ -118,12 +137,16 @@ class Repository:
             parents="".join(f"parent {parent}\n" for parent in parents),
             headers=headers,
             message=message,
+            author=addresses[0],
+            committer=addresses[1],
         )
         return self.store("commit", text.encode(), ref)
 
     def tag(self, name: str, target: str, message: str, kind: str = "commit") -> str:
         """Write an annotated tag by hand and return the name of the tag object."""
-        text = _TAG.format(target=target, kind=kind, name=name, message=message)
+        text = _TAG.format(
+            target=target, kind=kind, name=name, message=message, tagger=ADDRESS
+        )
         return self.store("tag", text.encode(), f"refs/tags/{name}")
 
     def store(self, kind: str, content: bytes, ref: str | None = None) -> str:

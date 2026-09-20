@@ -26,7 +26,14 @@ from scripts.check_instance_data import (
     main,
     parse_pushed,
 )
-from tests.scripts.throwaway_repository import MAIN, ZEROS, Repository, hook_line
+from tests.scripts.throwaway_repository import (
+    ADDRESS,
+    MAIN,
+    OTHER_ADDRESS,
+    ZEROS,
+    Repository,
+    hook_line,
+)
 
 PRIVATE_VALUE = ".".join(["192", "168", "9", "9"])
 OTHER_PRIVATE_VALUE = "/home" + "/someone/checkout"
@@ -124,13 +131,126 @@ def test_additional_header_of_a_commit_is_judged(repository: Repository) -> None
     )
 
 
-def test_identity_lines_are_not_judged_by_content(repository: Repository) -> None:
-    """The hand-written commits carry an address; a documentation value passes."""
+def _repository_of(tmp_path: Path, address: str | None) -> tuple[Repository, str]:
+    """Return a repository with that ``user.email`` and the commit the remote has."""
+    repository = Repository.create(tmp_path / "other-checkout", address=address)
+    repository.write("notes.md", "harmless\n")
+    base = repository.commit()
+    repository.git("update-ref", TRACKED_MAIN, base)
     repository.write("notes.md", "harmless\nmore\n")
+    return repository, base
+
+
+def test_identity_lines_are_compared_not_judged_by_content(tmp_path: Path) -> None:
+    """An address that the content rules would flag passes as the configured one.
+
+    Upper and lower case are not told apart.
+    """
+    real_looking = "someone" + "@" + "provider.test"
+    repository, base = _repository_of(tmp_path, real_looking)
+    shouting = real_looking.upper()
+    commit = repository.commit(addresses=(real_looking, shouting))
+
+    report = _judge(repository, hook_line(commit, base))
+
+    assert real_looking in repository.git("cat-file", "commit", commit)
+    assert report.findings == []
+    assert report.identities == 1
+
+
+@pytest.mark.parametrize(
+    ("addresses", "roles"),
+    [
+        ((OTHER_ADDRESS, ADDRESS), ["author"]),
+        ((ADDRESS, OTHER_ADDRESS), ["committer"]),
+        ((OTHER_ADDRESS, OTHER_ADDRESS), ["author", "committer"]),
+    ],
+)
+def test_commit_with_another_identity_is_found_without_any_address(
+    repository: Repository, addresses: tuple[str, str], roles: list[str]
+) -> None:
+    """A commit from another environment, or one of somebody else, pushed onward."""
+    repository.write("notes.md", "harmless\nmore\n")
+    foreign = repository.commit(addresses=addresses)
+    repository.write("notes.md", "harmless\nmore\nand more\n")
+    own = repository.commit()
+
+    report = _judge(repository, hook_line(own, _base(repository)))
+
+    assert _shown(report).splitlines() == [
+        f"commit {foreign[:10]}: the e-mail address of its {role} is not the one "
+        "configured for this clone ('git config user.email'); neither address is "
+        "printed here"
+        for role in roles
+    ]
+    assert ADDRESS not in _shown(report)
+    assert OTHER_ADDRESS not in _shown(report)
+    assert report.identities == 2  # noqa: PLR2004 - both commits were compared
+
+
+def test_identity_of_what_the_remote_has_is_not_compared(
+    repository: Repository,
+) -> None:
+    """A merge or squash made on the server has the server's address as committer.
+
+    It reaches a branch by merging the remote main line and stays outside the
+    range, so only the merge commit itself is compared.
+    """
+    base = _base(repository)
+    repository.write("topic.md", "harmless\n")
+    topic = repository.commit(ref="refs/heads/topic", parents=[base])
+    repository.write("main.md", "harmless\n")
+    squashed = repository.commit(ref=TRACKED_MAIN, addresses=(ADDRESS, OTHER_ADDRESS))
+    merge = repository.commit(ref="refs/heads/topic", parents=[topic, squashed])
+
+    report = _judge(repository, hook_line(merge, ZEROS, "refs/heads/topic"))
+
+    assert report.findings == []
+    assert (report.commits, report.identities) == (2, 2)
+
+
+def test_without_a_configured_address_nothing_can_be_compared(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """No identity in the clone, none of the user: a failure, never a pass.
+
+    The folders in which git looks for the configuration of the user are
+    pointed at an empty one for this test, through the environment of this
+    process only.
+    """
+    empty = tmp_path / "no-settings"
+    empty.mkdir()
+    for variable in ("HOME", "USERPROFILE", "XDG_CONFIG_HOME"):
+        monkeypatch.setenv(variable, str(empty))
+    repository, base = _repository_of(tmp_path, None)
     commit = repository.commit()
 
-    assert "someone@" in repository.git("cat-file", "commit", commit)
-    assert _judge(repository, hook_line(commit, _base(repository))).findings == []
+    with pytest.raises(CannotCheckError, match=r"git names no 'user\.email'"):
+        _judge(repository, hook_line(commit, base))
+
+
+def test_identity_line_that_cannot_be_read_cannot_be_checked(
+    repository: Repository,
+) -> None:
+    """An author line without an address in angle brackets is not skipped."""
+    tree = repository.git("write-tree")
+    content = (
+        f"tree {tree}\nauthor Example 0 +0000\n"
+        f"committer Example <{ADDRESS}> 0 +0000\n\nharmless\n"
+    )
+    repository.git("update-ref", "refs/heads/topic", _base(repository))
+    unreadable = repository.git(
+        "hash-object",
+        "-t",
+        "commit",
+        "-w",
+        "--stdin",
+        "--literally",
+        data=content.encode(),
+    )
+
+    with pytest.raises(CannotCheckError, match="names its author unreadably"):
+        _judge(repository, hook_line(unreadable, ZEROS, "refs/heads/topic"))
 
 
 def test_value_in_a_path_text_only_is_found_without_naming_it(
@@ -148,7 +268,7 @@ def test_value_in_a_path_text_only_is_found_without_naming_it(
 
     shown = _shown(report)
     short = mistake[:10]
-    assert [finding.kind for finding in report.findings] == [
+    assert [str(finding).rsplit(": ", 1)[-1] for finding in report.findings] == [
         "private IPv4 address",
         "path inside a user's home directory",
     ]
@@ -401,8 +521,8 @@ def test_message_that_is_not_utf8_cannot_be_checked(repository: Repository) -> N
     """A message that cannot be read cannot be judged."""
     tree = repository.git("write-tree")
     content = (
-        f"tree {tree}\nauthor Example <someone@example.com> 0 +0000\n"
-        "committer Example <someone@example.com> 0 +0000\n\ncaf"
+        f"tree {tree}\nauthor Example <{ADDRESS}> 0 +0000\n"
+        f"committer Example <{ADDRESS}> 0 +0000\n\ncaf"
     ).encode() + b"\xe9\n"
     commit = repository.store("commit", content, "refs/heads/topic")
 

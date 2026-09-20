@@ -18,7 +18,11 @@ this file is scanned by the guard itself. No test changes a git configuration:
 the hook is started directly, or handed to one ``git push`` of a throw-away
 repository with ``-c core.hooksPath``; a named remote exists for that one
 command only, through ``-c`` as well. The commits of such a repository are
-written as objects by hand, so that no identity is configured or passed.
+written as objects by hand, so that no identity is passed to git. The guard
+compares the addresses of pushed commits with ``user.email`` of the checkout,
+so a throw-away repository carries a made-up one in its own configuration file
+(see ``tests/scripts/throwaway_repository.py``); the configuration of this
+repository and of the user is never touched.
 
 The tests read numbers out of the last line of each run. Documented and stable
 are its beginnings, ``instance data: ok; judged <n> path text(s)`` and
@@ -38,7 +42,9 @@ import pytest
 
 from scripts.check_instance_data import listing_commands
 from tests.scripts.throwaway_repository import (
+    ADDRESS,
     MAIN,
+    OTHER_ADDRESS,
     ZEROS,
     Repository,
     environment,
@@ -534,6 +540,27 @@ def test_mistake_that_the_next_commit_corrected_is_refused(
     assert "exit status 1;" in output
     assert PRIVATE_VALUE not in output
     assert remote.tip() == checkout.git("rev-parse", "main~2")
+
+
+@needs_sh
+def test_commit_made_with_another_identity_is_refused(
+    checkout: Repository, remote: Repository
+) -> None:
+    """A commit from another environment stays at home; no address is printed."""
+    assert _push(checkout, remote, "main").returncode == 0
+    base = checkout.tip()
+    checkout.write("docs/notes.md", "harmless\nmore\n")
+    foreign = checkout.commit("Add more", addresses=(ADDRESS, OTHER_ADDRESS))
+
+    refused = _push(checkout, remote, "main")
+
+    output = refused.stdout + refused.stderr
+    assert refused.returncode != 0
+    assert f"commit {foreign[:10]}: the e-mail address of its committer" in output
+    assert "Do not change the configured identity" in output
+    assert ADDRESS not in output
+    assert OTHER_ADDRESS not in output
+    assert remote.tip() == base
 
 
 @needs_sh

@@ -128,6 +128,16 @@ and judges, with the patterns and allowed values above and nothing else:
   judged too, and the tag has to lead to a commit.
 
 The lines of the author and the committer are not judged by these patterns.
+They are compared instead: the e-mail address of the author and the one of
+the committer of every judged commit have to equal ``user.email`` as git
+resolves it for this checkout (read, never written; upper and lower case are
+not told apart). This catches a commit that was made in another environment
+with another identity. A finding names the commit and says whether it is the
+author or the committer; it prints neither address. Without a configured
+address the identity cannot be compared, and that is a failure. Commits that
+the remote already has, such as a merge made on the server with the address of
+the server as committer, are outside the range and are not compared. The
+tagger of a tag object is not compared.
 A line whose local object name consists of zeros deletes a ref, sends nothing
 and is only counted.
 
@@ -657,6 +667,8 @@ _UNJUDGED_HEADERS = frozenset(
     }
 )
 _HOOK_INPUT = "what git handed to the hook"
+# The line of an author or committer: a name, the address, seconds, time zone.
+_IDENTITY_ADDRESS = re.compile(r"[^<>]*<([^<>]*)> -?\d+ [+-]\d{4}")
 
 
 @dataclass(frozen=True)
@@ -669,6 +681,22 @@ class PlaceFinding:
     def __str__(self) -> str:
         """Render as ``place: kind``."""
         return f"{self.place}: looks like: {self.kind}"
+
+
+@dataclass(frozen=True)
+class IdentityFinding:
+    """A commit that was not made with the identity of this clone. No address is kept."""
+
+    commit: str
+    role: str
+
+    def __str__(self) -> str:
+        """Render without any address."""
+        return (
+            f"commit {self.commit}: the e-mail address of its {self.role} is not the "
+            "one configured for this clone ('git config user.email'); neither "
+            "address is printed here"
+        )
 
 
 @dataclass(frozen=True)
@@ -685,10 +713,13 @@ class PushedRef:
 class PushedReport:
     """What the check of a push looked at, and what it found."""
 
-    findings: list[Finding | PlaceFinding] = field(default_factory=list)
+    findings: list[Finding | PlaceFinding | IdentityFinding] = field(
+        default_factory=list
+    )
     refs: int = 0
     deletions: int = 0
     commits: int = 0
+    identities: int = 0
     messages: int = 0
     names: int = 0
     files: int = 0
@@ -709,8 +740,9 @@ class PushedReport:
             f"{self.messages} message(s) of commits and tags, {self.names} path "
             f"text(s), {self.lines} added line(s) in {self.files} file(s); skipped: "
             f"{self.binary} binary, {self.generated} generated, {self.nested} "
-            f"nested checkout(s); {self.deletions} deletion(s) of a remote ref, "
-            "which send nothing"
+            f"nested checkout(s); compared the addresses of author and committer of "
+            f"{self.identities} commit(s) with the one configured for this clone; "
+            f"{self.deletions} deletion(s) of a remote ref, which send nothing"
         )
 
 
@@ -765,6 +797,8 @@ class _Git:
             )
         # The objects that are pushed are the real ones, not their replacements.
         self.environment = {**_environment(), "GIT_NO_REPLACE_OBJECTS": "1"}
+        # ``user.email`` of this checkout, asked for once; see ``_configured_address``.
+        self.address: str | None = None
 
     def output(self, *arguments: str) -> bytes:
         """Return what a git command prints; its failure is a failure of the guard.
@@ -965,6 +999,48 @@ def _changed_entries(
     return f"git diff-tree -r --no-renames --name-only {by_hand}", entries
 
 
+def _configured_address(git: _Git) -> str:
+    """Return ``user.email`` as git resolves it for this checkout; never written."""
+    if git.address is None:
+        try:
+            answer = git.output("config", "--get", "user.email")
+            address = answer.decode("utf-8").strip().casefold()
+        except (CannotCheckError, UnicodeDecodeError) as error:
+            address = ""
+            cause: Exception | None = error
+        else:
+            cause = None
+        if not address:
+            raise CannotCheckError(
+                "git names no 'user.email' for this checkout, so the identity of "
+                "the pushed commits cannot be compared with it. A human configures "
+                "the identity of the clone; agents never change git configuration"
+            ) from cause
+        git.address = address
+    return git.address
+
+
+def _judge_identity(
+    git: _Git, headers: list[tuple[str, str]], short: str, report: PushedReport
+) -> None:
+    """Compare the addresses of author and committer with the one of this clone.
+
+    Not a content rule: which address is right is the business of whoever owns
+    the clone. What is caught is a commit made in another environment, with an
+    identity that was never meant for this repository. Upper and lower case
+    are not told apart, as mail systems do not tell them apart in practice.
+    """
+    expected = _configured_address(git)
+    for role in ("author", "committer"):
+        lines = [value for key, value in headers if key == role]
+        match = _IDENTITY_ADDRESS.fullmatch(lines[0]) if len(lines) == 1 else None
+        if match is None:
+            raise CannotCheckError(f"commit {short} names its {role} unreadably")
+        if match[1].strip().casefold() != expected:
+            report.findings.append(IdentityFinding(short, role))
+    report.identities += 1
+
+
 def _judge_commit(
     git: _Git, objects: _Objects, name: str, report: PushedReport
 ) -> None:
@@ -979,6 +1055,7 @@ def _judge_commit(
         raise CannotCheckError(f"commit {short} names a parent unreadably")
     report.commits += 1
     _judge_object_text(headers, message, f"commit {short}", report)
+    _judge_identity(git, headers, short, report)
     by_hand, entries = _changed_entries(git, name, parents)
     for position, entry in enumerate(entries, start=1):
         if entry.status == "D":
@@ -1107,6 +1184,16 @@ def main_pushed(remote_name: str, remote_url: str) -> int:
         return EXIT_CANNOT_CHECK
     for finding in report.findings:
         sys.stdout.write(f"{finding}\n")
+    if any(isinstance(finding, IdentityFinding) for finding in report.findings):
+        sys.stdout.write(
+            "A commit with another address was made in another environment (inside "
+            "WSL, on another computer), or it is the work of somebody else. Do not "
+            "change the configured identity to get past this. Make your own commit "
+            "again in this clone, on a new branch if the old one was never pushed "
+            "(docs/dev/contributing.md says how); commits of somebody else are "
+            "pushed by the project owner, or reach a branch by merging what is "
+            "already on the remote.\n"
+        )
     if report.findings:
         sys.stdout.write(
             f"{label}: {len(report.findings)} suspicious place(s); {report.summary()}\n"
