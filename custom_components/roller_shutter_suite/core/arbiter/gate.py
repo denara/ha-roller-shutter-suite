@@ -278,6 +278,20 @@ def _movement_in_flight(gate: GateInput) -> GateOutcome | None:
 # --- 9 Motor protection ---------------------------------------------------------
 
 
+def _is_fresh(gate: GateInput) -> bool:
+    """Return whether the trigger of the wish lies after the last comfort movement.
+
+    A fresh wish is something new: a boundary of the schedule fired, sleep
+    mode was switched, a request arrived, an episode began. The minimum
+    interval exists against flapping and does not hold it back. Not fresh are
+    tracking inside an episode and an older wish that wins again because
+    another layer dropped out, and a wish that states no trigger at all.
+    """
+    trigger = gate.wish.triggered_at
+    moved_at = gate.last_comfort_movement
+    return trigger is not None and moved_at is not None and trigger > moved_at
+
+
 def _motor_protection(gate: GateInput) -> GateOutcome | None:
     """Judge the largest change among the members, then the minimum interval."""
     settings = gate.config.motor_protection
@@ -290,7 +304,7 @@ def _motor_protection(gate: GateInput) -> GateOutcome | None:
     ]
     if changes and max(changes) < settings.min_change:
         return GateOutcome.suppress(GateRule.MOTOR_PROTECTION, ReasonCode.MIN_CHANGE)
-    if gate.last_comfort_movement is not None:
+    if gate.last_comfort_movement is not None and not _is_fresh(gate):
         end = gate.last_comfort_movement + settings.min_interval
         if gate.snapshot.time < end:
             return GateOutcome.defer(

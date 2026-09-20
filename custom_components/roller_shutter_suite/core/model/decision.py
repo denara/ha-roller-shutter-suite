@@ -13,7 +13,7 @@ Reason codes are tied to their group (``ReasonCategory`` of the module ``reasons
 """
 
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from enum import StrEnum, unique
 from types import MappingProxyType
@@ -154,6 +154,16 @@ class Wish:
       glass calibration has been applied by the shading layer already). A
       layer that decides per member (shading, decision 9) also states the
       quantity it decided in as ``ray_height`` (metres above the floor).
+
+    ``triggered_at`` is the time of the trigger of a wish for a target: the
+    moment from which the layer wants what it wants now. A boundary of the
+    schedule fired, sleep mode or privacy was switched, an external request
+    arrived, a shading or solar heating episode began. It stays the same
+    while the layer only tracks (a new shading position inside an episode),
+    and it stays the old one when the wish wins again because a higher layer
+    dropped out. Motor protection reads it: a wish whose trigger lies after
+    the last own comfort movement is fresh. A wish that states no trigger is
+    never fresh.
     """
 
     layer: Layer
@@ -163,6 +173,7 @@ class Wish:
     direction: Direction | None = None
     member_positions: tuple[MemberTarget, ...] = ()
     ray_height: float | None = None
+    triggered_at: datetime | None = None
 
     def __post_init__(self) -> None:
         """Reject combinations that do not describe one of the three answers."""
@@ -191,10 +202,11 @@ class Wish:
             or self.direction is not None
             or self.member_positions
             or self.ray_height is not None
+            or self.triggered_at is not None
         ):
             raise ValueError(
                 f"a wish of the kind {self.kind.value!r} carries no position, "
-                "direction, member positions or ray height"
+                "direction, member positions, ray height or trigger time"
             )
 
     def _validate_target(self) -> None:
@@ -214,6 +226,7 @@ class Wish:
         )
         if self.ray_height is not None:
             require_finite(self.ray_height, "the ray height of a wish")
+        require_aware_or_none(self.triggered_at, "the trigger time of a wish")
 
     @classmethod
     def target(
@@ -254,6 +267,10 @@ class Wish:
             member_positions=tuple(member_positions),
             ray_height=ray_height,
         )
+
+    def triggered(self, at: datetime) -> Self:
+        """Return the same wish for a target with the time of its trigger."""
+        return replace(self, triggered_at=at)
 
     @classmethod
     def leave_alone(cls, layer: Layer, reason: ReasonCode) -> Self:

@@ -53,7 +53,7 @@ The vocabulary and the rules come from the [domain design specification](../arch
 | `WishClass` | `fire`, `protection` or `comfort`; it follows from the layer. The one exception: the return to the manual position after a protection event (`protection_return_manual`) is a comfort wish of the protection layer, and only that layer can carry this reason. |
 | `WishKind` | What a layer answers: `target`, `leave_alone` or `no_opinion`. |
 | `Direction` | A limit a wish carries itself: `raise_only` or `lower_only`. |
-| `Wish` | The answer of one layer: kind, layer, reason code, and for a target either one position for all members or one position per member, an optional direction, and optionally the ray height the positions were computed from. |
+| `Wish` | The answer of one layer: kind, layer, reason code, and for a target either one position for all members or one position per member, an optional direction, optionally the ray height the positions were computed from, and optionally `triggered_at`, the time of its trigger (see below). |
 | `MemberTarget` | The target of one member on the motor scale; a position of `None` means the member stays where it is. |
 | `LayerReason` | Why a layer did not win: the layer and a reason code. |
 | `Constraint` | The seven constraints in the order in which they are applied. |
@@ -62,6 +62,8 @@ The vocabulary and the rules come from the [domain design specification](../arch
 | `GateKind` | `send`, `defer` or `suppress`. |
 | `GateOutcome` | The answer of the gate: kind, reason code, the rule that decided, for a deferral its time (see below), and for a window in dry-run the hypothetical outcome (see below). |
 | `Decision` | The complete result of one recompute: the winning wish, the reasons of the other layers, the constraint results, the target of every member, and the gate outcome. All of them name the same members in the same order. `target` is the target the window shows: the common target if all members have the same one, otherwise none, with the per-member targets as the detail. |
+
+**The trigger of a wish.** `Wish.triggered_at` is the moment from which a layer wants what it wants now: a boundary of the schedule fired, sleep mode or privacy was switched, an external request arrived, a shading or solar heating episode began. A layer fills it from a fact it already has (the boundary time, the "active since" of the episode, the time of the request or of the switch) with `wish.triggered(at)`. It does not change while a layer only tracks, and it is the old one when a wish wins again because a higher layer dropped out. Motor protection compares it with the time of the last own comfort movement: a wish whose trigger is later is fresh, and the minimum interval does not hold it back. A wish that states no trigger is never fresh.
 
 **Deferral.** Nothing waits forever. A deferral states exactly one of two times: `until`, the time at which it ends, if that is known; or `reevaluate_no_later_than`, if it ends with a condition whose time nobody knows (a member becomes available, the members come to rest). The second is an upper bound: at that time at the latest the window is recomputed from the state it has then, and nothing is replayed. A deferral with neither is refused.
 

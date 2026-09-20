@@ -10,6 +10,11 @@ plain sources of the snapshot, so a test states a situation as data:
 | sleep | ``sleep`` (bool) | on: close, ``sleep_mode``. Missing: steps aside. |
 | shading | ``shading_position`` (int) | the position, ``shading_geometric``. Missing: steps aside. |
 | schedule | ``part_of_day`` (str) | ``day``: open, raise only. ``night``: close, lower only. Missing: steps aside. |
+
+The sleep, shading and schedule stubs state the trigger of their wish if the
+world has the source ``sleep_since``, ``shading_since`` or ``part_of_day_since``
+(see ``since``): the moment the switch was flipped, the episode began, or the
+boundary of the schedule fired.
 """
 
 from collections.abc import Mapping
@@ -130,6 +135,19 @@ def on_level(level: str, **settings: Any) -> Controls:
     return Controls(dry_run=False, **{f"{level}_level": ControlLevel(**settings)})
 
 
+def since(moment: datetime) -> SourceValue[str]:
+    """Return a moment as the source value a stub layer reads its trigger from."""
+    return SourceValue.of(moment.isoformat())
+
+
+def _triggered(wish: Wish, world: WorldSnapshot, key: str) -> Wish:
+    """Give the wish the trigger time of the source ``key``, if the world has one."""
+    moment = world.sources.get(key)
+    if moment is None or not moment.has_value:
+        return wish
+    return wish.triggered(datetime.fromisoformat(str(moment.value)))
+
+
 # --- Stub layers ------------------------------------------------------------------
 
 
@@ -173,7 +191,8 @@ def sleep_layer(_config: WindowConfig, world: WorldSnapshot) -> Wish:
     if missing is not None:
         return missing
     if sleep.value is True:
-        return Wish.target(Layer.SLEEP, ReasonCode.SLEEP_MODE, FULLY_CLOSED)
+        wish = Wish.target(Layer.SLEEP, ReasonCode.SLEEP_MODE, FULLY_CLOSED)
+        return _triggered(wish, world, "sleep_since")
     return Wish.no_opinion(Layer.SLEEP, ReasonCode.INACTIVE)
 
 
@@ -185,9 +204,10 @@ def shading_layer(_config: WindowConfig, world: WorldSnapshot) -> Wish:
     missing = wish_for_missing_input(Layer.SHADING, wanted, hold=False)
     if missing is not None:
         return missing
-    return Wish.target(
+    wish = Wish.target(
         Layer.SHADING, ReasonCode.SHADING_GEOMETRIC, Position(int(wanted.value))
     )
+    return _triggered(wish, world, "shading_since")
 
 
 def schedule_layer(_config: WindowConfig, world: WorldSnapshot) -> Wish:
@@ -199,18 +219,20 @@ def schedule_layer(_config: WindowConfig, world: WorldSnapshot) -> Wish:
     if missing is not None:
         return missing
     if part.value == "day":
-        return Wish.target(
+        wish = Wish.target(
             Layer.SCHEDULE,
             ReasonCode.SCHEDULE_DAY,
             FULLY_OPEN,
             direction=Direction.RAISE_ONLY,
         )
-    return Wish.target(
-        Layer.SCHEDULE,
-        ReasonCode.SCHEDULE_NIGHT,
-        FULLY_CLOSED,
-        direction=Direction.LOWER_ONLY,
-    )
+    else:
+        wish = Wish.target(
+            Layer.SCHEDULE,
+            ReasonCode.SCHEDULE_NIGHT,
+            FULLY_CLOSED,
+            direction=Direction.LOWER_ONLY,
+        )
+    return _triggered(wish, world, "part_of_day_since")
 
 
 STUB_LAYERS = (

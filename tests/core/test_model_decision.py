@@ -181,9 +181,27 @@ def test_wish_kind_and_payload_have_to_fit() -> None:
             {"direction": Direction.RAISE_ONLY},
             {"member_positions": _targets(10)},
             {"ray_height": 1.2},
+            {"triggered_at": LATER},
         ):
             with pytest.raises(ValueError, match="carries no position"):
                 Wish(Layer.SLEEP, kind, ReasonCode.SLEEP_MODE, **payload)
+
+
+def test_a_wish_for_a_target_can_state_the_time_of_its_trigger() -> None:
+    """The moment from which the layer wants what it wants; never a naive one."""
+    wish = Wish.target(Layer.SCHEDULE, ReasonCode.SCHEDULE_NIGHT, FULLY_CLOSED)
+
+    assert wish.triggered_at is None
+    assert wish.triggered(LATER).triggered_at == LATER
+    assert wish.triggered(LATER) == wish.triggered(LATER)
+    assert wish.triggered(LATER) != wish
+    assert wish.triggered(LATER).position == FULLY_CLOSED
+    with pytest.raises(ValueError, match="timezone-aware"):
+        wish.triggered(NAIVE)
+    with pytest.raises(TypeError, match="trigger time"):
+        wish.triggered("yesterday")  # type: ignore[arg-type]
+    with pytest.raises(ValueError, match="carries no position"):
+        Wish.leave_alone(Layer.FIRE, ReasonCode.FIRE_UNACKNOWLEDGED).triggered(LATER)
 
 
 def test_wish_types_are_checked() -> None:
