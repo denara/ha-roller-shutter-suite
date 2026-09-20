@@ -20,6 +20,7 @@ ORDER = [
     "_data",
     "values",
     "window",
+    "controls",
     "decision",
     "observation",
     "state",

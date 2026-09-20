@@ -11,11 +11,14 @@ from ._validation import (
     require_type,
     require_unique,
 )
+from .values import Position
 
 MIN_TOLERANCE: Final = 1
 DEFAULT_TOLERANCE_CALCULATED: Final = 2
 DEFAULT_TOLERANCE_MEASURED: Final = 3
 _MAX_TOLERANCE: Final = 100
+_DEFAULT_FROST_POSITION: Final = Position(90)
+_DEFAULT_REEVALUATE_AFTER: Final = timedelta(minutes=5)
 
 
 @unique
@@ -169,6 +172,65 @@ class TemperatureTier:
 
 
 @dataclass(frozen=True, slots=True)
+class MotorProtectionSettings:
+    """Motor protection: it applies to comfort movements only.
+
+    ``min_change`` is the smallest change of position, in percent, that is
+    worth a movement; ``min_interval`` the shortest time between two own
+    comfort movements. Zero switches a part off.
+    """
+
+    min_change: int = 5
+    min_interval: timedelta = timedelta(minutes=10)
+
+    def __post_init__(self) -> None:
+        """Validate the ranges."""
+        if isinstance(self.min_change, bool) or not isinstance(self.min_change, int):
+            raise TypeError("the minimum change must be an integer")
+        if not 0 <= self.min_change <= _MAX_TOLERANCE:
+            raise ValueError("the minimum change must be within 0 and 100")
+        require_type(self.min_interval, timedelta, "the minimum interval")
+        if self.min_interval < timedelta(0):
+            raise ValueError("the minimum interval must not be negative")
+
+
+@dataclass(frozen=True, slots=True)
+class FrostSettings:
+    """Frost protection of one window.
+
+    - ``source``: key of the temperature source; ``None`` means that frost
+      protection is not configured.
+    - Frost is active below ``threshold``; it ends at ``threshold`` plus
+      ``hysteresis``.
+    - ``position``: how far own movements open while frost is active.
+    - ``applies_to_protection``: whether protection movements are limited too;
+      comfort movements always are, fire never is.
+    - ``hold_closed``: the option "do not raise a closed window at all".
+    """
+
+    source: str | None = None
+    threshold: float = 0.0
+    hysteresis: float = 1.0
+    position: Position = _DEFAULT_FROST_POSITION
+    applies_to_protection: bool = False
+    hold_closed: bool = False
+
+    def __post_init__(self) -> None:
+        """Validate the types and the numbers."""
+        if self.source is not None:
+            require_identifier(self.source, "the frost source")
+        require_finite(self.threshold, "the frost threshold")
+        require_finite(self.hysteresis, "the frost hysteresis")
+        if self.hysteresis < 0:
+            raise ValueError("the frost hysteresis must not be negative")
+        require_type(self.position, Position, "the frost position")
+        require_type(
+            self.applies_to_protection, bool, "the flag 'applies to protection'"
+        )
+        require_type(self.hold_closed, bool, "the flag 'hold closed'")
+
+
+@dataclass(frozen=True, slots=True)
 class MemberConfig:
     """One cover of a window as the core sees it."""
 
@@ -207,6 +269,9 @@ class WindowConfig:
     morning_condition_source: str | None = None
     shading_temperature_tiers: tuple[TemperatureTier, ...] = ()
     schedule_profile: ScheduleProfile = ScheduleProfile.DEFAULT
+    motor_protection: MotorProtectionSettings = MotorProtectionSettings()
+    frost: FrostSettings = FrostSettings()
+    reevaluate_after: timedelta = _DEFAULT_REEVALUATE_AFTER
 
     def __post_init__(self) -> None:
         """Validate identity, members and the doors kept open."""
@@ -232,6 +297,13 @@ class WindowConfig:
         if len(self.shading_temperature_tiers) > 1:
             raise ValueError("more than one temperature tier is not supported yet")
         require_type(self.schedule_profile, ScheduleProfile, "the schedule profile")
+        require_type(
+            self.motor_protection, MotorProtectionSettings, "the motor protection"
+        )
+        require_type(self.frost, FrostSettings, "the frost settings")
+        require_type(self.reevaluate_after, timedelta, "the re-evaluation bound")
+        if self.reevaluate_after <= timedelta(0):
+            raise ValueError("the re-evaluation bound must be longer than zero")
 
     @property
     def capabilities(self) -> WindowCapabilities:

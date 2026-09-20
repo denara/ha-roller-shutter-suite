@@ -15,7 +15,8 @@ The vocabulary and the rules come from the [domain design specification](../arch
 | Module of `model` | Content |
 |---|---|
 | `values` | position, source value, sun position |
-| `window` | capability profile, member and window configuration |
+| `window` | capability profile, member and window configuration, settings of motor protection and frost protection |
+| `controls` | pause, maintenance lock and operating mode on three levels, dry-run |
 | `decision` | wish, constraint result, gate outcome, decision |
 | `observation` | observations, the window-level view, own commands |
 | `state` | the persisted window state and its serialization |
@@ -81,14 +82,19 @@ A window has one or more members: the covers that are always moved together. Eve
 | `PositionUpdates` | `live` during travel, or at the `end_only`. |
 | `MemberConfig` | One member: its identifier and its capability profile. |
 | `WindowCapabilities` | What all members of a window can do: the lowest common denominator. |
-| `WindowConfig` | A window after inheritance has been resolved: identifier, covering type, members, and three places for later features (the condition input of the morning opening, the tiers of the temperature condition, the profile key of the schedule). The blocks that build a feature add its settings here. |
+| `WindowConfig` | A window after inheritance has been resolved: identifier, covering type, members, and three places for later features (the condition input of the morning opening, the tiers of the temperature condition, the profile key of the schedule). The blocks that build a feature add its settings here; so far `motor_protection`, `frost` and `reevaluate_after`, the upper bound of a deferral whose end is not known (default 5 minutes). |
+| `MotorProtectionSettings` | The minimum change in percent (default 5) and the minimum interval between two own comfort movements (default 10 minutes); zero switches a part off. |
+| `FrostSettings` | Frost protection of a window: the key of the temperature source (none means not configured), threshold (default 0) and hysteresis (default 1), the frost position (default 90), whether protection movements are limited too (default no), and `hold_closed`, the option "do not raise a closed window at all" (default off). |
 | `TemperatureTier` | One tier of the temperature condition of shading: threshold and hysteresis. A window has none or one. |
 | `ScheduleProfile` | The key under which the schedule looks up its targets. It has one value, `default`. |
 | `MovementState` | The state class of an observation: `resting`, `moving_up`, `moving_down` or `unavailable`. |
 | `Observation` | A normalized report of one member: state class and position, if it reports one. An unavailable member has no position. |
 | `MemberObservation` | The current observation of one named member. |
 | `WindowObservation` | The observed members of a window and the view over them: available while one member is; `reports_movement` as soon as one member reports a movement (whether it has settled is the tracker's knowledge); `position(tolerances)`; and `members_at_commanded_targets(commanded, tolerances)`, see below. |
-| `WorldSnapshot` | Everything one recompute may look at: the time, the sun position, the source values by key, the observed window, and the persisted window state. |
+| `WorldSnapshot` | Everything one recompute may look at: the time, the sun position, the source values by key, the observed window, the persisted window state, and the controls. |
+| `OperatingMode` | `automatic`, `protection_only` or `off`. What each mode holds back is a table of the arbiter. |
+| `ControlLevel` | Pause, maintenance lock and operating mode as set on one level; by default nothing is set. |
+| `Controls` | What a person has set for a window at the moment of a recompute: the three levels (global, group, window) and `dry_run`. They change while the integration runs, so they belong to the snapshot and not to the configuration. `dry_run` has no default: whether a window may move is never assumed. The arbiter combines the levels; the most restrictive value is in effect. |
 
 **The position of a window.** The window has a position, one number, as soon as all members report the same position within tolerance, whatever was commanded last. Otherwise it has none, and the members' values are there individually. No member speaks for the window. `WindowObservation.position(tolerances)` holds the rules, and `WorldSnapshot.window_position(tolerances)` calls it:
 

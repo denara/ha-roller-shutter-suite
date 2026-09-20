@@ -10,7 +10,8 @@ Position``. The modules exist so that blocks that work in parallel edit
 different files. Their dependencies run one way:
 
 ``_validation`` ← ``_data`` ← ``values`` ← ``decision`` ← ``observation`` ←
-``state`` ← ``snapshot``; ``window`` depends on ``_validation`` only.
+``state`` ← ``snapshot``. ``window`` depends on ``_validation`` and ``values``,
+``controls`` on ``_validation`` only; ``snapshot`` also uses ``controls``.
 
 Conventions that hold for the whole package:
 
@@ -24,6 +25,7 @@ Conventions that hold for the whole package:
 """
 
 from ._data import JsonObject, JsonValue
+from .controls import ControlLevel, Controls, OperatingMode
 from .decision import (
     CONSTRAINT_REASONS,
     GATE_RULE_REASONS,
@@ -88,7 +90,9 @@ from .window import (
     MIN_TOLERANCE,
     CapabilityProfile,
     CoveringType,
+    FrostSettings,
     MemberConfig,
+    MotorProtectionSettings,
     PositionSource,
     PositionUpdates,
     ScheduleProfile,
@@ -111,11 +115,14 @@ __all__ = [
     "CapabilityProfile",
     "Constraint",
     "ConstraintResult",
+    "ControlLevel",
+    "Controls",
     "CoveringType",
     "DayType",
     "Decision",
     "Direction",
     "ExternalRequest",
+    "FrostSettings",
     "GateKind",
     "GateOutcome",
     "GateRule",
@@ -133,8 +140,10 @@ __all__ = [
     "MemberTarget",
     "MembersAtTargets",
     "MissingSourceValueError",
+    "MotorProtectionSettings",
     "MovementState",
     "Observation",
+    "OperatingMode",
     "OverrideEndRule",
     "OwnCommand",
     "PersonAtWindowDam",

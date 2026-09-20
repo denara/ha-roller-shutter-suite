@@ -11,6 +11,7 @@ from custom_components.roller_shutter_suite.core.model import (
     DEFAULT_TOLERANCE_MEASURED,
     MIN_TOLERANCE,
     CapabilityProfile,
+    Controls,
     CoveringType,
     MemberConfig,
     MemberObservation,
@@ -678,6 +679,7 @@ def _snapshot(**changes: Any) -> WorldSnapshot:
             (LEFT, Observation(MovementState.RESTING, Position(100)))
         ),
         "state": WindowState(),
+        "controls": Controls(dry_run=True),
     }
     return WorldSnapshot(**(arguments | changes))
 
@@ -692,6 +694,7 @@ def test_world_snapshot_carries_everything_a_recompute_may_look_at() -> None:
     assert snapshot.sources["window_contact"].has_value is False
     assert snapshot.window_position({LEFT: 2}) == Position(100)
     assert snapshot.state == WindowState()
+    assert snapshot.controls == Controls(dry_run=True)
     assert snapshot == _snapshot()
 
 
@@ -736,5 +739,7 @@ def test_world_snapshot_types_are_checked() -> None:
         _snapshot(observation=bad)
     with pytest.raises(TypeError, match="persisted window state"):
         _snapshot(state=bad)
+    with pytest.raises(TypeError, match="controls of a snapshot"):
+        _snapshot(controls=bad)
     with pytest.raises(TypeError, match="time of a world snapshot"):
         _snapshot(time=bad)
