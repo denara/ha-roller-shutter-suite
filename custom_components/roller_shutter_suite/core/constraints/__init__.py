@@ -9,8 +9,9 @@ from .direction import DIRECTION_CONSTRAINT
 from .frost import (
     FROST_CONSTRAINT,
     FROST_HOLD_LIMIT,
-    frost_is_active,
+    FrostState,
     frost_is_waived,
+    frost_state,
     held_frost_after,
 )
 
@@ -18,7 +19,8 @@ __all__ = [
     "DIRECTION_CONSTRAINT",
     "FROST_CONSTRAINT",
     "FROST_HOLD_LIMIT",
-    "frost_is_active",
+    "FrostState",
     "frost_is_waived",
+    "frost_state",
     "held_frost_after",
 ]

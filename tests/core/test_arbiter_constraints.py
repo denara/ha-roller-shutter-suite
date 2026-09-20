@@ -15,7 +15,8 @@ from custom_components.roller_shutter_suite.core.constraints import (
     DIRECTION_CONSTRAINT,
     FROST_CONSTRAINT,
     FROST_HOLD_LIMIT,
-    frost_is_active,
+    FrostState,
+    frost_state,
     held_frost_after,
 )
 from custom_components.roller_shutter_suite.core.engine import (
@@ -328,43 +329,135 @@ def test_frost_is_active_below_the_threshold_and_ends_above_the_hysteresis() -> 
     thaw_held = WindowState(held_frost=HeldInput(value=False, seen_at=NOW))
     in_band = SourceValue.of(1.0)
 
-    assert frost_is_active(config, _world(SourceValue.of(-0.1))) is True
-    assert frost_is_active(config, _world(SourceValue.of(0))) is False
-    assert frost_is_active(config, _world(SourceValue.of(2.0), frost_held)) is False
-    assert frost_is_active(config, _world(in_band, frost_held)) is True
-    assert frost_is_active(config, _world(in_band, thaw_held)) is False
-    assert frost_is_active(config, _world(in_band)) is False
+    assert frost_state(config, _world(SourceValue.of(-0.1))) is FrostState.FROST
+    assert frost_state(config, _world(SourceValue.of(0))) is FrostState.NO_FROST
+    assert frost_state(config, _world(SourceValue.of(2.0), frost_held)) is (
+        FrostState.NO_FROST
+    )
+    assert frost_state(config, _world(in_band, frost_held)) is FrostState.FROST
+    assert frost_state(config, _world(in_band, thaw_held)) is FrostState.NO_FROST
+    assert frost_state(config, _world(in_band)) is FrostState.NO_FROST
 
 
 def test_frost_without_a_configured_source_is_never_active() -> None:
-    """The default configuration has no frost protection."""
+    """The default configuration has no frost protection, and nothing is blind."""
     held = WindowState(held_frost=HeldInput(value=True, seen_at=NOW))
 
-    assert frost_is_active(window(), _world(COLD, held)) is False
+    assert frost_state(window(), _world(COLD, held)) is FrostState.NO_FROST
+    assert frost_state(window(), _world(None)) is FrostState.NO_FROST
     assert held_frost_after(window(), _world(COLD, held)) == held.held_frost
 
 
-@pytest.mark.parametrize(
-    "missing",
-    [SourceValue[float].unavailable(), SourceValue[float].unknown(), None],
-)
-def test_a_frost_source_without_a_value_holds_the_last_state_for_a_day(
+MISSING = [SourceValue[float].unavailable(), SourceValue[float].unknown(), None]
+
+
+@pytest.mark.parametrize("missing", MISSING)
+def test_a_silent_frost_source_holds_the_last_state_for_a_day_and_is_blind_afterwards(
     missing: SourceValue[float] | None,
 ) -> None:
-    """Missing data is not good news, but a dead sensor does not limit for weeks."""
+    """Never silently "no frost": held for 24 hours, then blind."""
     config = window(frost=FROST)
-    fresh = WindowState(held_frost=HeldInput(True, NOW - FROST_HOLD_LIMIT))
-    stale = WindowState(
-        held_frost=HeldInput(True, NOW - FROST_HOLD_LIMIT - timedelta(seconds=1))
-    )
-    thawed = WindowState(held_frost=HeldInput(False, NOW - timedelta(hours=1)))
+
+    def state(value: bool, hours: float) -> WorldSnapshot:
+        seen_at = NOW - timedelta(hours=hours)
+        return _world(missing, WindowState(held_frost=HeldInput(value, seen_at)))
 
     assert timedelta(hours=24) == FROST_HOLD_LIMIT
-    assert frost_is_active(config, _world(missing, fresh)) is True
-    assert frost_is_active(config, _world(missing, stale)) is False
-    assert frost_is_active(config, _world(missing, thawed)) is False
-    assert frost_is_active(config, _world(missing)) is False
-    assert held_frost_after(config, _world(missing, fresh)) == fresh.held_frost
+    assert frost_state(config, state(True, 24)) is FrostState.FROST
+    assert frost_state(config, state(False, 23)) is FrostState.NO_FROST
+    assert frost_state(config, state(False, 25)) is FrostState.BLIND
+    assert frost_state(config, state(True, 25)) is FrostState.BLIND
+    assert frost_state(config, _world(missing)) is FrostState.BLIND
+    fresh = state(True, 1)
+    assert held_frost_after(config, fresh) == fresh.state.held_frost
+
+
+def _morning(
+    temperature: SourceValue[float] | None, state: WindowState | None = None
+) -> Decision:
+    sources = day() if temperature is None else day(outdoor_temperature=temperature)
+    return _frosty().recompute(snapshot(sources=sources, position=0, state=state))
+
+
+@pytest.mark.parametrize("missing", MISSING)
+def test_a_frost_source_that_is_silent_from_the_start_limits_the_opening(
+    missing: SourceValue[float] | None,
+) -> None:
+    """The limit applies as a cautious value, and the reason says "blind"."""
+    decision = _morning(missing)
+
+    assert _reasons(decision) == [ReasonCode.FROST_LIMIT_SOURCE_BLIND]
+    assert decision.constraints[0].constraint is Constraint.FROST_PROTECTION
+    assert decision.target == Position(90)
+
+
+def test_silent_for_23_hours_with_the_last_state_no_frost_sets_no_limit() -> None:
+    """The held state still counts."""
+    held = WindowState(held_frost=HeldInput(False, NOW - timedelta(hours=23)))
+
+    decision = _morning(SourceValue[float].unavailable(), held)
+
+    assert decision.constraints == ()
+    assert decision.target == FULLY_OPEN
+
+
+def test_silent_for_25_hours_with_the_last_state_no_frost_limits_as_blind() -> None:
+    """What was known a day ago says nothing about now."""
+    held = WindowState(held_frost=HeldInput(False, NOW - timedelta(hours=25)))
+
+    decision = _morning(SourceValue[float].unavailable(), held)
+
+    assert _reasons(decision) == [ReasonCode.FROST_LIMIT_SOURCE_BLIND]
+    assert decision.target == Position(90)
+
+
+def test_held_frost_is_frost_measured_not_blind() -> None:
+    """Silent for an hour after a frost reading: the ordinary reason."""
+    held = WindowState(held_frost=HeldInput(True, NOW - timedelta(hours=1)))
+
+    decision = _morning(SourceValue[float].unknown(), held)
+
+    assert _reasons(decision) == [ReasonCode.FROST_LIMIT]
+
+
+def test_a_waiver_lifts_the_limit_of_a_blind_source() -> None:
+    """The operator knows better than a dead sensor."""
+    waived = WindowState(frost_waiver_until=NOW + timedelta(hours=3))
+
+    decision = _morning(None, waived)
+
+    assert decision.constraints == ()
+    assert decision.target == FULLY_OPEN
+
+
+def test_data_that_returns_lifts_the_limit_of_a_blind_source() -> None:
+    """A mild reading ends it at once; a cold one turns it into measured frost."""
+    stale = WindowState(held_frost=HeldInput(False, NOW - timedelta(days=3)))
+
+    assert _reasons(_morning(None, stale)) == [ReasonCode.FROST_LIMIT_SOURCE_BLIND]
+    assert _morning(MILD, stale).constraints == ()
+    assert _reasons(_morning(COLD, stale)) == [ReasonCode.FROST_LIMIT]
+
+
+def test_a_blind_source_never_limits_closing_and_never_fire() -> None:
+    """Blind is the cautious reading of the same constraint, nothing more."""
+    closing = _frosty().recompute(snapshot(sources=night(), position=100))
+    burning = _frosty().recompute(snapshot(sources=fire(), position=0))
+
+    assert closing.constraints == ()
+    assert closing.target == FULLY_CLOSED
+    assert burning.constraints == ()
+    assert burning.target == FULLY_OPEN
+
+
+def test_blind_takes_precedence_over_hold_in_the_reason() -> None:
+    """The closed member is still held; the record says why the limit applies at all."""
+    config = window(frost=FrostSettings(source="outdoor_temperature", hold_closed=True))
+
+    decision = engine(config).recompute(snapshot(sources=day(), position=0))
+
+    assert _reasons(decision) == [ReasonCode.FROST_LIMIT_SOURCE_BLIND]
+    assert decision.targets == (MemberTarget(LEFT, None),)
 
 
 def test_the_frost_state_to_persist_follows_the_source() -> None:
@@ -383,7 +476,7 @@ def test_the_frost_state_to_persist_follows_the_source() -> None:
 def test_a_frost_source_that_is_no_temperature_is_refused(value: Any) -> None:
     """A switch or a text is a configuration error, not a temperature."""
     with pytest.raises(TypeError, match="temperature as a number"):
-        frost_is_active(window(frost=FROST), _world(value))
+        frost_state(window(frost=FROST), _world(value))
 
 
 # --- Frost: what it limits --------------------------------------------------------

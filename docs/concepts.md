@@ -29,7 +29,7 @@ If a part cannot see what it needs, for example because a sensor is unavailable,
 The winning wish can be limited, but it is never replaced by something else. Two limits are built in so far:
 
 - **Direction.** The morning opening only ever raises a shutter, and the evening closing only ever lowers one. A shutter that you have already lowered further than the evening position is not raised again in the evening.
-- **Frost protection.** While it is freezing, the integration opens a shutter only up to the frost position (90 % by default) instead of fully, so the shutter does not run into a frozen end stop. Closing is never limited. You can lift this for a window when you know the shutter is free. The integration cannot detect a shutter that is frozen in place; it can only avoid the movement that does the damage.
+- **Frost protection.** While it is freezing, the integration opens a shutter only up to the frost position (90 % by default) instead of fully, so the shutter does not run into a frozen end stop. Closing is never limited. You can lift this for a window when you know the shutter is free. If the temperature sensor stops reporting, the integration keeps what it last knew for a day. After that it does not assume "no frost": it applies the limit as a precaution, says so in its record (`frost_limit_source_blind`), and carries on normally as soon as the sensor reports again or you lift the limit. The integration cannot detect a shutter that is frozen in place; it can only avoid the movement that does the damage.
 
 No limit ever applies to a fire alarm.
 
@@ -45,8 +45,8 @@ Finally the integration checks whether it is allowed to move the shutter at this
 | **Pause** | comfort movements. Weather protection and the fire alarm still move the shutter. |
 | **Somebody just used the shutter during a storm** | weather protection and comfort, for a short time (15 minutes by default). |
 | **Manual override** | comfort movements: what you set by hand stays, until the override ends. Weather protection and the fire alarm still move the shutter. |
-| **The shutter is still moving** | comfort movements, until it has come to rest. |
-| **Motor protection** | comfort movements that would change the position by only a few percent, or that come too soon after the last one. |
+| **The shutter is still moving** | comfort movements, until it has come to rest. A command that is already under way is never sent a second time, whoever wants it; if a storm or a fire alarm wants exactly the movement that is already running, it simply takes that movement over. |
+| **Motor protection** | comfort movements that would change the position by only a few percent (fully open and fully closed are always driven), and repeated adjustments that come too soon after the last one (10 minutes by default). Something new is not a repetition: the evening closing, switching on sleep mode or the start of shading run on time, even right after another movement. |
 | **Dry-run** | everything. See below. |
 
 Pause, maintenance lock and operating mode can be set for a single window, for a group, or for the whole installation. **The strictest setting wins**: if the group is paused, every window in it is paused, whatever the window itself says.

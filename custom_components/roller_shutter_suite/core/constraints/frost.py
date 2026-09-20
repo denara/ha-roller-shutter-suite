@@ -12,13 +12,18 @@ Inputs of the constraint:
 - the frost source of the window configuration, with threshold and
   hysteresis, and the held frost state of the persisted state
   (``WindowState.held_frost``) for the hysteresis band and for a source
-  without a value;
+  without a value. A source that stays silent longer than the held state
+  lasts is blind: the limit applies then too, with a reason of its own
+  (``frost_limit_source_blind``), so the record tells "blind" apart from
+  "frost measured". Raising the repair issue and the event
+  ``frost_source_blind`` is the Home Assistant layer's job;
 - the waiver: ``WindowState.frost_waiver_until``. Who sets it (a person, for a
   window, a group or the installation, until the next morning trigger) is not
   the constraint's business. The release by sun is not built here.
 """
 
 from datetime import timedelta
+from enum import StrEnum, unique
 from typing import Final
 
 from custom_components.roller_shutter_suite.core.arbiter.registry import (
@@ -62,22 +67,36 @@ def _reading(config: WindowConfig, snapshot: WorldSnapshot) -> bool | None:
     return held.value if held is not None else False
 
 
-def frost_is_active(config: WindowConfig, snapshot: WorldSnapshot) -> bool:
-    """Return whether frost is active for the window.
+@unique
+class FrostState(StrEnum):
+    """What is known about frost at a window."""
 
-    A source without a value is no good news: the last known state is held,
-    for at most ``FROST_HOLD_LIMIT``. After that, and without a configured
-    source, frost is not active.
+    NO_FROST = "no_frost"
+    """No frost, measured or held; or frost protection is not configured."""
+    FROST = "frost"
+    """Frost, measured or held."""
+    BLIND = "blind"
+    """Nothing is known: the source is silent and no held state is left."""
+
+
+def frost_state(config: WindowConfig, snapshot: WorldSnapshot) -> FrostState:
+    """Return what is known about frost at the window.
+
+    A source without a value is never silently "no frost". The last known
+    state is held for at most ``FROST_HOLD_LIMIT``. After that, or if there
+    never was a known state, the source is blind, and the constraint applies
+    its limit as a cautious value until data returns or the operator waives
+    frost protection.
     """
     if config.frost.source is None:
-        return False
+        return FrostState.NO_FROST
     reading = _reading(config, snapshot)
-    if reading is not None:
-        return reading
-    held = snapshot.state.held_frost
-    if held is None or snapshot.time - held.seen_at > FROST_HOLD_LIMIT:
-        return False
-    return held.value
+    if reading is None:
+        held = snapshot.state.held_frost
+        if held is None or snapshot.time - held.seen_at > FROST_HOLD_LIMIT:
+            return FrostState.BLIND
+        reading = held.value
+    return FrostState.FROST if reading else FrostState.NO_FROST
 
 
 def held_frost_after(config: WindowConfig, snapshot: WorldSnapshot) -> HeldInput | None:
@@ -107,7 +126,8 @@ def _apply(constraint: ConstraintInput) -> ConstraintResult | None:
         and not settings.applies_to_protection
     ):
         return None
-    if not frost_is_active(config, snapshot) or frost_is_waived(snapshot):
+    frost = frost_state(config, snapshot)
+    if frost is FrostState.NO_FROST or frost_is_waived(snapshot):
         return None
     reported = constraint.current_positions
     tolerances = {m.member_id: m.capabilities.tolerance for m in config.members}
@@ -134,11 +154,11 @@ def _apply(constraint: ConstraintInput) -> ConstraintResult | None:
         targets.append(limited)
     if tuple(targets) == constraint.targets:
         return None
-    return ConstraintResult(
-        Constraint.FROST_PROTECTION,
-        ReasonCode.FROST_HOLD if held else ReasonCode.FROST_LIMIT,
-        tuple(targets),
-    )
+    if frost is FrostState.BLIND:
+        reason = ReasonCode.FROST_LIMIT_SOURCE_BLIND
+    else:
+        reason = ReasonCode.FROST_HOLD if held else ReasonCode.FROST_LIMIT
+    return ConstraintResult(Constraint.FROST_PROTECTION, reason, tuple(targets))
 
 
 FROST_CONSTRAINT: Final = ConstraintRegistration(
