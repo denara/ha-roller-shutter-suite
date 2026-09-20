@@ -158,6 +158,21 @@ def test_no_workflow_hides_a_failed_command(workflow: Path) -> None:
     assert status_problems(workflow.name, workflow.read_text(encoding="utf-8")) == []
 
 
+@pytest.mark.parametrize("workflow", WORKFLOWS, ids=lambda path: path.name)
+def test_no_workflow_depends_on_the_pre_push_hook(workflow: Path) -> None:
+    """CI runs the instance data guard itself; the hook is a local net only.
+
+    A hook is active only where somebody switched it on, so nothing on GitHub
+    may rely on it. That the guard itself runs in CI, exactly once and
+    unhidden, is what the test above holds.
+    """
+    text = workflow.read_text(encoding="utf-8").lower()
+
+    assert [
+        word for word in (".githooks", "hookspath", "pre-push") if word in text
+    ] == []
+
+
 VERSIONS_GUARD = "run: uv run --no-sync python scripts/check_versions.py"
 COVERAGE_GUARD = "uv run --no-sync python scripts/check_coverage.py coverage.json"
 

@@ -1,0 +1,125 @@
+#!/bin/sh
+# Pre-push hook: run the instance data guard of this checkout, and refuse the
+# push unless the guard ends with exit status 0.
+#
+# Why: the repository is public, and CI sees a file only when it is already
+# published. Activate the hook once per clone, by hand (agents never change git
+# configuration):
+#
+#     git config core.hooksPath .githooks
+#
+# docs/dev/contributing.md describes the hook.
+#
+# What is refused: exit status 1 of the guard (findings), exit status 2 (CANNOT
+# CHECK), and every other status that is not 0. The hook fails closed as well:
+# when git cannot name the checkout, when the guard is missing, or when no
+# Python is found that can run it, the push is refused. A hook that cannot
+# check never lets a push through.
+#
+# What is NOT covered: the guard judges the checkout as it is (tracked files
+# and new files that git does not ignore), not the exact commits that are
+# pushed. Commits that differ from the checkout (another branch, stashed or
+# reverted changes) are not seen here. CI is the second net. Git hands the
+# refs to be pushed to this script on standard input; they are not needed and
+# never read, and the guard gets an empty input.
+#
+# How the checkout is found: through `git rev-parse --show-toplevel`, never
+# through the place of this file, so it works from a subfolder and in a
+# worktree. Only where git cannot answer (a worktree made by git for Windows,
+# looked at from inside WSL) the current folder is taken, and only if it is the
+# top of a checkout that holds the guard; the guard then asks git in its own
+# documented ways and fails closed if none works.
+#
+# How Python is found, in this order, each through PATH and none through a
+# fixed location; nothing is installed, created or configured:
+#   1. the interpreter that `uv python find` names (the one `uv run` would
+#      use; `uv run` itself is avoided, because it may create an environment),
+#   2. python3,
+#   3. python,
+#   4. py -3 (the launcher on Windows).
+# A candidate counts only if it can read and compile the guard, so an
+# interpreter that is too old for its syntax is passed over. The guard needs
+# nothing but the standard library.
+#
+# The exit status of the guard is taken from `$?` directly after the call.
+# This file contains no pipe, no `set +e` and nothing else that could swallow
+# it: a swallowed status once let a flagged commit through.
+
+set -u
+
+refuse() {
+    printf '%s\n' "pre-push hook: PUSH REFUSED: $1" >&2
+    printf '%s\n' "Do not bypass this hook with --no-verify. If the guard is wrong, report the false positive; the guard is then made narrower." >&2
+    exit 1
+}
+
+guard_path="scripts/check_instance_data.py"
+
+root=$(git rev-parse --show-toplevel 2>/dev/null)
+status=$?
+if [ "$status" -ne 0 ]; then
+    root=""
+fi
+if [ -z "$root" ]; then
+    if [ -e ".git" ]; then
+        if [ -f "$guard_path" ]; then
+            root=$(pwd)
+        fi
+    fi
+fi
+if [ -z "$root" ]; then
+    refuse "git cannot name the checkout, so the instance data guard cannot run."
+fi
+
+guard="$root/$guard_path"
+if [ ! -f "$guard" ]; then
+    refuse "the instance data guard ($guard_path) is not in this checkout, so nothing can be checked."
+fi
+
+probe='import sys; compile(open(sys.argv[1], encoding="utf-8").read(), "guard", "exec")'
+
+# Succeeds if the given command is a Python that can read and compile the guard.
+usable() {
+    "$@" -c "$probe" "$guard" >/dev/null 2>&1 </dev/null
+}
+
+set --
+if command -v uv >/dev/null 2>&1; then
+    found=$(cd "$root" && uv python find --no-python-downloads 2>/dev/null </dev/null)
+    status=$?
+    if [ "$status" -eq 0 ]; then
+        if [ -n "$found" ]; then
+            if usable "$found"; then
+                set -- "$found"
+            fi
+        fi
+    fi
+fi
+if [ "$#" -eq 0 ]; then
+    if usable python3; then
+        set -- python3
+    fi
+fi
+if [ "$#" -eq 0 ]; then
+    if usable python; then
+        set -- python
+    fi
+fi
+if [ "$#" -eq 0 ]; then
+    if usable py -3; then
+        set -- py -3
+    fi
+fi
+if [ "$#" -eq 0 ]; then
+    refuse "no Python that can run the instance data guard was found (tried: uv python find, python3, python, py -3), so nothing was checked. Install uv or the Python version that pyproject.toml requires."
+fi
+
+"$@" "$guard" </dev/null
+status=$?
+if [ "$status" -eq 0 ]; then
+    exit 0
+fi
+if [ "$status" -eq 1 ]; then
+    refuse "the instance data guard has findings (exit status 1), see above."
+fi
+refuse "the instance data guard could not check (exit status $status), see above."
