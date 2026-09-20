@@ -28,6 +28,7 @@ from custom_components.roller_shutter_suite.core.model._data import (
 )
 from custom_components.roller_shutter_suite.core.settings import (
     INHERIT,
+    STORED_NONE,
     WINDOW_IDENTITY_FIELDS,
     WINDOW_SETTINGS,
     Capability,
@@ -44,6 +45,7 @@ from custom_components.roller_shutter_suite.core.settings import (
     SettingDefinition,
     SettingError,
     SettingFault,
+    SettingKind,
     SettingProblem,
     SettingsRegistry,
     resolve_settings,
@@ -76,29 +78,47 @@ class ExampleMode(StrEnum):
 # tests bring a registry with one setting of every kind.
 REGISTRY = SettingsRegistry(
     (
-        SettingDefinition(key="enabled", default=True, parse=as_bool),
-        SettingDefinition(key="offset", default=5, parse=as_int),
         SettingDefinition(
-            key="mode", default=ExampleMode.PLAIN, parse=as_enum(ExampleMode)
+            key="enabled", kind=SettingKind.BOOLEAN, default=True, parse=as_bool
         ),
-        SettingDefinition[str | None](key="source", default=None, parse=as_str),
+        SettingDefinition(
+            key="offset", kind=SettingKind.NUMBER, default=5, parse=as_int
+        ),
+        SettingDefinition(
+            key="mode",
+            kind=SettingKind.ENUMERATION,
+            default=ExampleMode.PLAIN,
+            parse=as_enum(ExampleMode),
+        ),
+        SettingDefinition[str | None](
+            key="source",
+            kind=SettingKind.OPTIONAL_REFERENCE,
+            default=None,
+            parse=as_str,
+        ),
         SettingDefinition[tuple[str, ...]](
-            key="lights", default=("light.example_default",), parse=tuple_of(as_str)
+            key="lights",
+            kind=SettingKind.LIST,
+            default=("light.example_default",),
+            parse=tuple_of(as_str),
         ),
         SettingDefinition(
             key="hold_to_move",
+            kind=SettingKind.BOOLEAN,
             default=False,
             parse=as_bool,
             requires=CapabilityRequirement(Capability.SUPPORTS_STOP, False),
         ),
         SettingDefinition[int | None](
             key="shading_position",
+            kind=SettingKind.NUMBER,
             default=DEFAULT_SHADING_POSITION,
             parse=as_int,
             requires=CapabilityRequirement(Capability.SUPPORTS_SET_POSITION, None),
         ),
         SettingDefinition(
             key="glass_height",
+            kind=SettingKind.NUMBER,
             default=DEFAULT_GLASS_HEIGHT,
             parse=as_int,
             inheritable=False,
@@ -285,7 +305,11 @@ def test_falsy_values_are_set_values_at_every_level(
 def test_falsy_built_in_default_is_a_value() -> None:
     """A default of zero is what a window gets when no level says anything."""
     registry = SettingsRegistry(
-        (SettingDefinition(key="offset", default=0, parse=as_int),)
+        (
+            SettingDefinition(
+                key="offset", kind=SettingKind.NUMBER, default=0, parse=as_int
+            ),
+        )
     )
 
     resolved = _resolve(registry=registry)
@@ -398,15 +422,26 @@ def test_partial_settings_refuse_what_makes_no_sense(
     [
         lambda: SettingFault("", "broken"),
         lambda: SettingFault("offset", ""),
-        lambda: SettingDefinition(key="", default=0, parse=as_int),
+        lambda: SettingDefinition(
+            key="", kind=SettingKind.NUMBER, default=0, parse=as_int
+        ),
         lambda: SettingDefinition(
             key="offset",
+            kind="number",  # type: ignore[arg-type]
+            default=0,
+            parse=as_int,
+        ),
+        lambda: SettingFault("offset", "broken", "unreadable"),  # type: ignore[arg-type]
+        lambda: SettingDefinition(
+            key="offset",
+            kind=SettingKind.NUMBER,
             default=0,
             parse=as_int,
             inheritable=1,  # type: ignore[arg-type]
         ),
         lambda: SettingDefinition(
             key="offset",
+            kind=SettingKind.NUMBER,
             default=0,
             parse=as_int,
             requires=Capability.SUPPORTS_STOP,  # type: ignore[arg-type]
@@ -415,8 +450,12 @@ def test_partial_settings_refuse_what_makes_no_sense(
         lambda: SettingsRegistry(("offset",)),  # type: ignore[arg-type]
         lambda: SettingsRegistry(
             (
-                SettingDefinition(key="offset", default=0, parse=as_int),
-                SettingDefinition(key="offset", default=1, parse=as_int),
+                SettingDefinition(
+                    key="offset", kind=SettingKind.NUMBER, default=0, parse=as_int
+                ),
+                SettingDefinition(
+                    key="offset", kind=SettingKind.NUMBER, default=1, parse=as_int
+                ),
             )
         ),
         lambda: GroupLevel("", PartialSettings()),
@@ -478,6 +517,140 @@ def test_value_that_cannot_be_read_is_a_fault_and_not_set(
     assert partial.values == {}
     assert [fault.key for fault in partial.faults] == [key]
     assert detail in partial.faults[0].detail
+
+
+# --- "Explicitly none" for an optional reference --------------------------------
+
+
+def test_marker_for_none_is_one_documented_string() -> None:
+    """The stored form is fixed; forms and stored data rely on it."""
+    assert STORED_NONE == "__none__"
+
+
+def test_window_says_none_although_its_group_names_a_source() -> None:
+    """The marker is a set value: it beats the group, and the provenance is "window"."""
+    group = settings_from_stored({"source": "sensor.example_south"}, REGISTRY)
+    window = settings_from_stored({"source": STORED_NONE}, REGISTRY)
+
+    resolved = _resolve(
+        house=PartialSettings({"source": "sensor.example_house"}),
+        group=GroupLevel(GROUP_ID, group),
+        window=window,
+    )
+
+    assert window == PartialSettings({"source": None})
+    assert resolved.valid
+    assert resolved.values["source"] == ResolvedValue(
+        key="source", value=None, effective=None, level=Level.WINDOW
+    )
+
+
+def test_group_says_none_and_a_window_can_still_name_a_source() -> None:
+    """On group level the marker beats the house; a window's own value beats it."""
+    house = PartialSettings({"source": "sensor.example_house"})
+    group = GroupLevel(
+        GROUP_ID, settings_from_stored({"source": STORED_NONE}, REGISTRY)
+    )
+
+    inherited = _resolve(house=house, group=group)
+    own = _resolve(
+        house=house,
+        group=group,
+        window=settings_from_stored({"source": "sensor.example_window"}, REGISTRY),
+    )
+
+    assert inherited.group_fallback is None
+    assert inherited.values["source"].value is None
+    assert inherited.values["source"].level is Level.GROUP
+    assert inherited.values["source"].group_id == GROUP_ID
+    assert own.values["source"].value == "sensor.example_window"
+    assert own.values["source"].level is Level.WINDOW
+
+
+@pytest.mark.parametrize("key", ["enabled", "offset", "mode", "lights"])
+def test_marker_for_none_on_another_kind_of_setting_is_a_fault(key: str) -> None:
+    """A switch, a number, a choice and a list always have a value."""
+    partial = settings_from_stored({key: STORED_NONE}, REGISTRY)
+
+    assert partial.values == {}
+    assert [(fault.key, fault.problem) for fault in partial.faults] == [
+        (key, SettingProblem.NONE_NOT_ALLOWED)
+    ]
+    assert "optional reference only" in partial.faults[0].detail
+
+    resolved = _resolve(window=partial)
+
+    assert [(error.key, error.level, error.problem) for error in resolved.errors] == [
+        (key, Level.WINDOW, SettingProblem.NONE_NOT_ALLOWED)
+    ]
+
+
+def test_null_stays_a_fault_and_an_absent_key_still_inherits() -> None:
+    """The marker is the only way to say "none"; nothing else changed."""
+    with_null = settings_from_stored({"source": None}, REGISTRY)
+    absent = settings_from_stored({}, REGISTRY)
+
+    assert [(fault.key, fault.problem) for fault in with_null.faults] == [
+        ("source", SettingProblem.UNREADABLE)
+    ]
+    assert absent.get("source") is INHERIT
+
+    resolved = _resolve(
+        group=GroupLevel(GROUP_ID, PartialSettings({"source": "sensor.example_south"})),
+        window=absent,
+    )
+
+    assert resolved.values["source"].value == "sensor.example_south"
+    assert resolved.values["source"].level is Level.GROUP
+
+
+def test_marker_never_reaches_the_window_configuration_as_a_string() -> None:
+    """The morning condition of a window is switched off although the group has one."""
+    resolution = resolve_window(
+        window_id="window_example",
+        members=FULL,
+        global_settings=PartialSettings(),
+        group=GroupLevel(
+            GROUP_ID,
+            settings_from_stored(
+                {"morning_condition_source": "binary_sensor.example_south"},
+                WINDOW_SETTINGS,
+            ),
+        ),
+        window_settings=settings_from_stored(
+            {"morning_condition_source": STORED_NONE}, WINDOW_SETTINGS
+        ),
+    )
+
+    assert resolution.config is not None
+    assert resolution.config.morning_condition_source is None
+    item = resolution.settings.values["morning_condition_source"]
+    assert item.level is Level.WINDOW
+    assert STORED_NONE not in [
+        str(value) for value in resolution.settings.effective().values()
+    ]
+
+
+def test_only_the_optional_reference_of_the_window_accepts_the_marker() -> None:
+    """The kinds of the window's settings are declared in the registry."""
+    kinds = {
+        definition.key: definition.kind for definition in WINDOW_SETTINGS.definitions
+    }
+
+    assert kinds == {
+        "covering_type": SettingKind.ENUMERATION,
+        "morning_condition_source": SettingKind.OPTIONAL_REFERENCE,
+        "shading_temperature_tiers": SettingKind.LIST,
+        "schedule_profile": SettingKind.ENUMERATION,
+    }
+    partial = settings_from_stored(
+        {"schedule_profile": STORED_NONE, "covering_type": STORED_NONE},
+        WINDOW_SETTINGS,
+    )
+    assert sorted(fault.key for fault in partial.faults) == [
+        "covering_type",
+        "schedule_profile",
+    ]
 
 
 # --- Validation errors name the field and the level --------------------------------

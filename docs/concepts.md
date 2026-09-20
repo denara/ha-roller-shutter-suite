@@ -29,6 +29,8 @@ Three details matter:
 - **Zero and "off" are values.** An evening position of 0 % or a switch set to "off" is something you set, and it wins like any other value. Only a field you leave empty, or the choice "Inherit" in a drop-down list, means "take the value from the level above".
 - **You can always go back.** Empty the field again, or pick "Inherit" again, and the window follows its group as if it had never had a value of its own.
 
+There is one more choice for settings that name an optional source, such as a sensor that a feature may use but does not need: **"none"**. Leaving such a field empty means "inherit", so a window whose group names a sensor would always get that sensor. If the window shall use no sensor at all, choose "none" on the window. That is a value of its own: it wins over the group like any other value, and you can return to "inherit" at any time. Settings that always need a value, such as a position or a switch, have no "none".
+
 The integration always shows where a value comes from, for example "inherited from group South side", so you never have to guess which level you need to change.
 
 ### A worked example with three windows

@@ -13,7 +13,8 @@ The pieces:
   set ``None`` is a set value like any other.
 - :class:`PartialSettings` holds what one level sets.
   :func:`settings_from_stored` is the single place that turns stored data into
-  partial settings; there, and only there, an absent key means "inherit".
+  partial settings; there, and only there, an absent key means "inherit" and
+  :data:`STORED_NONE` means "explicitly none".
 - :class:`SettingDefinition` describes one setting, and a
   :class:`SettingsRegistry` lists the settings that exist. The resolver is
   generic over the registry. :data:`WINDOW_SETTINGS` is the registry of the
@@ -73,6 +74,33 @@ class Level(StrEnum):
 
 
 @unique
+class SettingKind(StrEnum):
+    """The declared kind of a setting.
+
+    The kind decides what stored data may say about the setting beyond a
+    plain value; today that is one thing: only an ``OPTIONAL_REFERENCE``
+    accepts :data:`STORED_NONE`.
+    """
+
+    BOOLEAN = "boolean"
+    NUMBER = "number"
+    ENUMERATION = "enumeration"
+    LIST = "list"
+    OPTIONAL_REFERENCE = "optional_reference"
+    """A reference to a source or an entity that may be absent: ``str | None``."""
+
+
+STORED_NONE: Final = "__none__"
+"""How stored data says "explicitly none" for an optional reference.
+
+An absent key means "inherit", so it cannot also mean "none". This string is
+the one marker for it. It exists in stored data only:
+:func:`settings_from_stored` turns it into the set value ``None``, and it never
+reaches partial settings or a resolved configuration as a string.
+"""
+
+
+@unique
 class Capability(StrEnum):
     """A capability a setting can require; the fields of ``WindowCapabilityStates``."""
 
@@ -107,10 +135,11 @@ class SettingDefinition[T]:
     - ``key``: the name of the setting, in stored data and in the resolved
       result. For a setting of a window it is the name of the field of
       ``WindowConfig``.
+    - ``kind``: the declared kind of the setting.
     - ``default``: the built-in default, used when no level sets the value.
     - ``parse``: reads the value from stored data and raises a ``ValueError``
-      if it cannot. It is never called for an absent key, an empty string or
-      ``null``.
+      if it cannot. It is never called for an absent key, an empty string,
+      ``null`` or :data:`STORED_NONE`.
     - ``inheritable``: ``False`` for what belongs to one window only (the
       cover itself, measurements). Such a setting is read from the window
       level alone, and a group or the house that sets it is reported.
@@ -118,6 +147,7 @@ class SettingDefinition[T]:
     """
 
     key: str
+    kind: SettingKind
     default: T
     parse: Callable[[JsonValue], T]
     inheritable: bool = True
@@ -126,6 +156,7 @@ class SettingDefinition[T]:
     def __post_init__(self) -> None:
         """Validate the description itself."""
         require_identifier(self.key, "the key of a setting")
+        require_type(self.kind, SettingKind, "the kind of a setting")
         require_type(self.inheritable, bool, "the flag 'inheritable'")
         if self.requires is not None:
             require_type(
@@ -152,17 +183,38 @@ class SettingsRegistry:
         return tuple(definition.key for definition in self.definitions)
 
 
+@unique
+class SettingProblem(StrEnum):
+    """What is wrong with a setting. The Home Assistant layer translates it."""
+
+    UNREADABLE = "unreadable"
+    """The stored value could not be read."""
+    NONE_NOT_ALLOWED = "none_not_allowed"
+    """The stored marker for "explicitly none" on a setting that is no optional reference."""
+    INVALID = "invalid"
+    """The value was read, but the window configuration refuses it."""
+    NOT_INHERITABLE = "not_inheritable"
+    """A group or the house sets what only a window can set."""
+    UNKNOWN_SETTING = "unknown_setting"
+    """The level sets a key that the registry does not know."""
+
+
 @dataclass(frozen=True, slots=True)
 class SettingFault:
-    """A stored value that could not be read: the key and what is wrong with it."""
+    """A stored value that could not be read: the key and what is wrong with it.
+
+    ``detail`` is English text for logs; ``problem`` is the code to translate.
+    """
 
     key: str
     detail: str
+    problem: SettingProblem = SettingProblem.UNREADABLE
 
     def __post_init__(self) -> None:
-        """Validate key and text."""
+        """Validate key, text and code."""
         require_identifier(self.key, "the key of a faulty setting")
         require_identifier(self.detail, "the description of a fault")
+        require_type(self.problem, SettingProblem, "the problem of a fault")
 
 
 @dataclass(frozen=True, slots=True)
@@ -213,6 +265,10 @@ class PartialSettings:
 
 
 _NULL_FAULT: Final = "null is not a stored value; a key that is absent is inherited"
+_NONE_FAULT: Final = (
+    f"{STORED_NONE!r} is accepted for an optional reference only; "
+    "this setting always has a value"
+)
 
 
 def settings_from_stored(
@@ -227,7 +283,10 @@ def settings_from_stored(
       deliver an emptied text field that way;
     - ``0``, ``False`` and an empty list are set values;
     - ``null`` is never written, so it is a fault and not a second way to say
-      "inherit";
+      "inherit" or "none";
+    - :data:`STORED_NONE` on an optional reference is the set value ``None``:
+      "explicitly none", which beats the levels below like any set value. On a
+      setting of any other kind it is a fault (``none_not_allowed``);
     - a value the setting cannot read is a fault.
 
     Keys the registry does not know are left alone: the stored data of a
@@ -244,6 +303,16 @@ def settings_from_stored(
             continue
         if raw is None:
             faults.append(SettingFault(definition.key, _NULL_FAULT))
+            continue
+        if raw == STORED_NONE:
+            if definition.kind is SettingKind.OPTIONAL_REFERENCE:
+                values[definition.key] = None
+            else:
+                faults.append(
+                    SettingFault(
+                        definition.key, _NONE_FAULT, SettingProblem.NONE_NOT_ALLOWED
+                    )
+                )
             continue
         try:
             values[definition.key] = definition.parse(raw)
@@ -344,20 +413,6 @@ class ResolvedValue[T]:
         return self.unavailable is not None and self.level is Level.WINDOW
 
 
-@unique
-class SettingProblem(StrEnum):
-    """What is wrong with a setting. The Home Assistant layer translates it."""
-
-    UNREADABLE = "unreadable"
-    """The stored value could not be read."""
-    INVALID = "invalid"
-    """The value was read, but the window configuration refuses it."""
-    NOT_INHERITABLE = "not_inheritable"
-    """A group or the house sets what only a window can set."""
-    UNKNOWN_SETTING = "unknown_setting"
-    """The level sets a key that the registry does not know."""
-
-
 @dataclass(frozen=True, slots=True)
 class SettingError:
     """A validation error: the field, the level that set the value, the problem.
@@ -435,9 +490,7 @@ def _level_errors(
     """Yield what is wrong with one level, whatever wins in the end."""
     level, settings, group_id = level_input
     for fault in settings.faults:
-        yield SettingError(
-            fault.key, level, SettingProblem.UNREADABLE, fault.detail, group_id
-        )
+        yield SettingError(fault.key, level, fault.problem, fault.detail, group_id)
     definitions = {definition.key: definition for definition in registry.definitions}
     for key in settings.values:
         definition = definitions.get(key)
@@ -578,22 +631,26 @@ WINDOW_SETTINGS: Final = SettingsRegistry(
     (
         SettingDefinition(
             key="covering_type",
+            kind=SettingKind.ENUMERATION,
             default=CoveringType.ROLLER_SHUTTER,
             parse=as_enum(CoveringType),
             inheritable=False,
         ),
         SettingDefinition[str | None](
             key="morning_condition_source",
+            kind=SettingKind.OPTIONAL_REFERENCE,
             default=None,
             parse=as_str,
         ),
         SettingDefinition[tuple[TemperatureTier, ...]](
             key="shading_temperature_tiers",
+            kind=SettingKind.LIST,
             default=(),
             parse=tuple_of(_as_temperature_tier),
         ),
         SettingDefinition(
             key="schedule_profile",
+            kind=SettingKind.ENUMERATION,
             default=ScheduleProfile.DEFAULT,
             parse=as_enum(ScheduleProfile),
         ),

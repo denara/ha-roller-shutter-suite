@@ -174,8 +174,10 @@ Configuration is stored on three levels: the house (global), a group, a window. 
 | Type | Meaning |
 |---|---|
 | `INHERIT` (type `Inherit`) | The one marker for "this level does not set the value". It is never `None`: for a setting whose type allows `None`, a set `None` is a set value that beats the levels below it. |
-| `PartialSettings` | What one level sets itself: a read-only mapping from key to value; every other key is `INHERIT`. `get(key)` returns the value or the marker, `with_value` and `with_inherit` return changed copies. `faults` lists stored values that could not be read (`SettingFault`: key and English detail). Compared by value; not hashable, because it holds a mapping. |
-| `SettingDefinition` | Everything the resolver knows about one setting, in one place: `key`, built-in `default`, `parse` (reads the value from stored data), `inheritable`, `requires`. |
+| `PartialSettings` | What one level sets itself: a read-only mapping from key to value; every other key is `INHERIT`. `get(key)` returns the value or the marker, `with_value` and `with_inherit` return changed copies. `faults` lists stored values that could not be read (`SettingFault`: key, English detail, and a `SettingProblem` code). Compared by value; not hashable, because it holds a mapping. |
+| `SettingDefinition` | Everything the resolver knows about one setting, in one place: `key`, `kind`, built-in `default`, `parse` (reads the value from stored data), `inheritable`, `requires`. |
+| `SettingKind` | The declared kind of a setting: `boolean`, `number`, `enumeration`, `list`, `optional_reference`. Only an optional reference (a source or an entity that may be absent, `str \| None`) can be "explicitly none". |
+| `STORED_NONE` | The string `"__none__"`: how stored data says "explicitly none" for an optional reference. It exists in stored data only. |
 | `CapabilityRequirement` | A setting needs a capability of the window (`Capability`, the four fields of `WindowCapabilityStates`), and the value the configuration carries when the capability is definitely missing. |
 | `SettingsRegistry` | The settings that exist. The resolver is generic over it. `WINDOW_SETTINGS` is the registry of the settings of `WindowConfig`. |
 | `GroupLevel` | The group a window refers to: its identifier and its partial settings, or `None` as settings when the group no longer exists. A window without a group passes no `GroupLevel`. |
@@ -195,7 +197,9 @@ Configuration is stored on three levels: the house (global), a group, a window. 
 | the key is absent | inherit |
 | `""` | inherit: a form can deliver an emptied text field that way |
 | `0`, `false`, `[]` | a set value |
-| `null` | a fault. `null` is never written, so it is not a second way to say "inherit". |
+| `null` | a fault. `null` is never written, so it is not a second way to say "inherit" or "none". |
+| `"__none__"` (`STORED_NONE`) on an optional reference | the set value `None`: "explicitly none". It beats the levels below like any set value, so a window can have no source although its group names one. The string never reaches partial settings or the resolved configuration. |
+| `"__none__"` on a setting of any other kind | a fault with the code `none_not_allowed`: a switch, a number, a choice and a list always have a value |
 | a value that `parse` refuses | a fault with the message of the refusal |
 | a key the registry does not know | left alone: the stored data of a window also holds its covers and its group reference |
 
@@ -211,7 +215,7 @@ Configuration is stored on three levels: the house (global), a group, a window. 
    - `present`: the value applies.
    - `missing` (a member definitely lacks it): the setting is **not available**. `unavailable` names the capability and the limiting members, the provenance stays, and `effective` is the definition's `value_when_missing`, so the arbiter never acts on the option. This holds for a value from the group, from the house, for the built-in default, and for the window's **own** value. **Mask and report, never make the window invalid:** an own value stays stored, the window keeps its configuration, the value takes effect again as soon as the capability is back, and the case is listed in `masked_own_values`, apart from masked inherited values, so the user interface can word it differently and raise a repair issue.
    - `unknown` (a member could not be asked, for example because its entity is not available at start): the value applies unmasked and nothing is reported; `capability` says `unknown`, so nobody mistakes it for confirmed. Supplying the last known flags is the job of the Home Assistant layer. A sequence present → unknown → present therefore never masks and never reports.
-6. **Validation.** Errors name the key and the level that set the offending value: `unreadable` (a fault of the house or the window), `not_inheritable`, `unknown_setting` (partial settings built in code with a key the registry does not know), and `invalid`. For `invalid` the model stays the single place for value rules: `resolve_window` hands every resolved value to `WindowConfig` on its own and turns a refusal into an error of that key, with the level the value came from. A window whose members or identifier the model refuses gets an error of the key `members` or `window_id`. With errors there is no `WindowConfig`.
+6. **Validation.** Errors name the key and the level that set the offending value: `unreadable` and `none_not_allowed` (faults of the house or the window), `not_inheritable`, `unknown_setting` (partial settings built in code with a key the registry does not know), and `invalid`. For `invalid` the model stays the single place for value rules: `resolve_window` hands every resolved value to `WindowConfig` on its own and turns a refusal into an error of that key, with the level the value came from. A window whose members or identifier the model refuses gets an error of the key `members` or `window_id`. With errors there is no `WindowConfig`.
 
 ### Adding a setting
 
@@ -223,6 +227,7 @@ WINDOW_SETTINGS = SettingsRegistry(
         ...,  # the entries that exist
         SettingDefinition(
             key="hold_to_move",
+            kind=SettingKind.BOOLEAN,
             default=False,
             parse=as_bool,
             requires=CapabilityRequirement(Capability.SUPPORTS_STOP, False),
