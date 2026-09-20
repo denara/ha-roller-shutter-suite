@@ -498,10 +498,16 @@ class ExternalRequest:
 
 @dataclass(frozen=True, slots=True)
 class LatchedDayType:
-    """The day type that was determined for one date and is kept for it."""
+    """The day type that was determined for one date and is kept for it.
+
+    ``fallback`` is true if the day type was fixed by the day of the week
+    because a day-type input had no value until the morning trigger of the
+    date had passed; the schedule keeps reporting ``day_type_fallback`` then.
+    """
 
     day: date
     day_type: DayType
+    fallback: bool = False
 
     def __post_init__(self) -> None:
         """Require a calendar date, not a point in time."""
@@ -509,18 +515,24 @@ class LatchedDayType:
             raise TypeError("a day type is latched for a date, not for a datetime")
         require_type(self.day, date, "the date of a latched day type")
         require_type(self.day_type, DayType, "the latched day type")
+        require_type(self.fallback, bool, "the fallback flag of a latched day type")
 
     def to_data(self) -> JsonObject:
         """Return plain data for persistence."""
-        return {"day": self.day.isoformat(), "day_type": self.day_type.value}
+        return {
+            "day": self.day.isoformat(),
+            "day_type": self.day_type.value,
+            "fallback": self.fallback,
+        }
 
     @classmethod
     def from_data(cls, data: JsonValue) -> Self:
         """Rebuild the latch from plain data."""
-        content = as_object(data, "day", "day_type")
+        content = as_object(data, "day", "day_type", "fallback")
         return cls(
             day=read(content, "day", as_date),
             day_type=read(content, "day_type", as_enum(DayType)),
+            fallback=read(content, "fallback", as_bool),
         )
 
 
@@ -610,6 +622,13 @@ class WindowState:
     :class:`ProtectionEventState`; ``held_frost`` (true = frost) and
     ``held_season`` (true = summer) are the other inputs that are held.
     ``simulated`` exists only while the window is in dry-run.
+
+    The brightness trigger of the evening keeps two instants:
+    ``brightness_below_since`` is the time since which the outdoor brightness
+    has been seen below its threshold without interruption, and
+    ``evening_brightness_at`` is the instant at which it began the evening; it
+    counts for the local date it lies on. Without the second one, the evening
+    would end again when the brightness rises or its source drops out.
     """
 
     owner: PositionOwner = PositionOwner.UNKNOWN
@@ -627,6 +646,8 @@ class WindowState:
     held_season: HeldInput | None = None
     frost_waiver_until: datetime | None = None
     simulated: SimulatedState | None = None
+    brightness_below_since: datetime | None = None
+    evening_brightness_at: datetime | None = None
 
     def __post_init__(self) -> None:
         """Validate the lists and reject naive datetimes."""
@@ -677,6 +698,20 @@ class WindowState:
             self,
             "frost_waiver_until",
             to_utc_or_none(self.frost_waiver_until, "the end of the frost waiver"),
+        )
+        object.__setattr__(
+            self,
+            "brightness_below_since",
+            to_utc_or_none(
+                self.brightness_below_since, "the start of the low brightness"
+            ),
+        )
+        object.__setattr__(
+            self,
+            "evening_brightness_at",
+            to_utc_or_none(
+                self.evening_brightness_at, "the evening begun by the brightness"
+            ),
         )
 
     @property
@@ -730,6 +765,8 @@ class WindowState:
             ),
             "frost_waiver_until": datetime_data(self.frost_waiver_until),
             "simulated": None if self.simulated is None else self.simulated.to_data(),
+            "brightness_below_since": datetime_data(self.brightness_below_since),
+            "evening_brightness_at": datetime_data(self.evening_brightness_at),
         }
 
     @classmethod
@@ -757,6 +794,8 @@ class WindowState:
             "held_season",
             "frost_waiver_until",
             "simulated",
+            "brightness_below_since",
+            "evening_brightness_at",
         )
         version = read(content, "schema_version", as_int)
         if version != WINDOW_STATE_SCHEMA_VERSION:
@@ -800,4 +839,10 @@ class WindowState:
                 content, "frost_waiver_until", optional(as_datetime)
             ),
             simulated=read(content, "simulated", optional(SimulatedState.from_data)),
+            brightness_below_since=read(
+                content, "brightness_below_since", optional(as_datetime)
+            ),
+            evening_brightness_at=read(
+                content, "evening_brightness_at", optional(as_datetime)
+            ),
         )
