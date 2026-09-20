@@ -9,8 +9,10 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from types import MappingProxyType
+from typing import Final
 
 from custom_components.roller_shutter_suite.core.model import (
+    GATE_RULE_REASONS,
     Constraint,
     ConstraintResult,
     GateOutcome,
@@ -24,12 +26,23 @@ from custom_components.roller_shutter_suite.core.model import (
     WishClass,
     WorldSnapshot,
 )
+from custom_components.roller_shutter_suite.core.reasons import ReasonCode
 
 from .controls import EffectiveControls
 from .fire_bypass import FIRE_BYPASS
 
 ALL_CLASSES: frozenset[WishClass] = frozenset(WishClass)
 """Fire, protection and comfort."""
+
+
+_CLASS_RANK: Final = MappingProxyType(
+    {WishClass.COMFORT: 0, WishClass.PROTECTION: 1, WishClass.FIRE: 2}
+)
+
+
+def outranks(wish_class: WishClass, other: WishClass) -> bool:
+    """Return whether a wish class stands above another: fire, protection, comfort."""
+    return _CLASS_RANK[wish_class] > _CLASS_RANK[other]
 
 
 def reported_positions(snapshot: WorldSnapshot) -> dict[str, Position | None]:
@@ -139,11 +152,19 @@ type GateFunction = Callable[[GateInput], GateOutcome | None]
 
 @dataclass(frozen=True, slots=True)
 class GateRuleRegistration:
-    """One gate rule, the wish classes it can hold back, and its function."""
+    """One gate rule, the wish classes it can hold back, and its function.
+
+    ``reasons`` are the reason codes this registration can give. By default
+    they are all reasons of the rule. A rule whose parts apply to different
+    wish classes is registered once per part, each with its own reasons (the
+    rule "movement in flight" is); the parts must not depend on the order in
+    which they are asked.
+    """
 
     rule: GateRule
     applies_to: frozenset[WishClass]
     evaluate: GateFunction
+    reasons: frozenset[ReasonCode] = frozenset()
 
     def __post_init__(self) -> None:
         """Keep the fire bypass exact in both directions."""
@@ -152,12 +173,23 @@ class GateRuleRegistration:
         object.__setattr__(self, "applies_to", frozenset(self.applies_to))
         if not self.applies_to:
             raise ValueError("a gate rule names the wish classes it applies to")
-        if self.rule in FIRE_BYPASS:
+        reasons = frozenset(self.reasons) or GATE_RULE_REASONS[self.rule]
+        object.__setattr__(self, "reasons", reasons)
+        if not reasons <= GATE_RULE_REASONS[self.rule]:
+            raise ValueError(
+                f"the gate rule {self.rule.value!r} gives only its own reasons"
+            )
+        if reasons <= FIRE_BYPASS:
             if WishClass.FIRE in self.applies_to:
                 raise ValueError(
                     f"the gate rule {self.rule.value!r} is part of the fire bypass "
                     "and cannot hold back fire"
                 )
+        elif reasons & FIRE_BYPASS:
+            raise ValueError(
+                f"the gate rule {self.rule.value!r} mixes reasons that fire skips "
+                "with reasons that it does not; register the parts separately"
+            )
         elif self.applies_to != ALL_CLASSES:
             raise ValueError(
                 f"the gate rule {self.rule.value!r} is never skipped and applies "

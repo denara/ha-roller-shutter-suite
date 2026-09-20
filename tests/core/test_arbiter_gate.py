@@ -16,6 +16,7 @@ from custom_components.roller_shutter_suite.core.arbiter import (
     Dam,
     GateInput,
     GateRuleRegistration,
+    apply_take_over,
     effective_controls,
 )
 from custom_components.roller_shutter_suite.core.engine import build_arbiter
@@ -34,6 +35,7 @@ from custom_components.roller_shutter_suite.core.model import (
     OwnCommand,
     PersonAtWindowDam,
     Position,
+    PositionOwner,
     SourceValue,
     TravelDirection,
     WindowState,
@@ -116,8 +118,12 @@ def test_the_built_in_rules_stand_in_the_specified_order() -> None:
     """Backoff and staggering are registered by the blocks that build them."""
     rules = [registration.rule for registration in build_arbiter(()).gate_rules]
 
-    assert rules == [rule for rule in GateRule if rule in rules]
+    assert rules == sorted(rules, key=list(GateRule).index)
     assert set(GateRule) - set(rules) == {GateRule.COMMAND_BACKOFF, GateRule.STAGGERING}
+    # "Movement in flight" is registered in two parts, for different classes.
+    assert [rule for rule in GateRule if rules.count(rule) > 1] == [
+        GateRule.MOVEMENT_IN_FLIGHT
+    ]
     assert rules[0] is GateRule.MAINTENANCE_LOCK
     assert rules[-1] is GateRule.DRY_RUN
     assert Arbiter(gate_rules=BUILT_IN_GATE_RULES[::-1]).gate_rules == tuple(
@@ -592,6 +598,92 @@ def test_protection_and_fire_retarget_at_once() -> None:
             )
         )
         assert gate == GateOutcome.send()
+
+
+def test_a_pending_command_with_the_same_target_is_not_sent_again_for_any_class() -> (
+    None
+):
+    """Protection during its own closing: a duplicate, until the window closes."""
+    pending = WindowState(members=(_commanded(0, 5, wish_class=WishClass.PROTECTION),))
+    closed = WindowState(members=(_commanded(0, 18, wish_class=WishClass.PROTECTION),))
+
+    def gate(state: WindowState) -> GateOutcome:
+        return _gate(
+            engine().recompute(snapshot(sources=storm(), position=100, state=state))
+        )
+
+    assert gate(pending) == GateOutcome.suppress(
+        GateRule.MOVEMENT_IN_FLIGHT, ReasonCode.DUPLICATE_COMMAND
+    )
+    assert gate(closed) == GateOutcome.send()
+
+
+def test_a_wish_of_a_higher_class_takes_over_a_movement_with_the_same_target() -> None:
+    """A storm begins while the evening closing is under way: nothing is sent."""
+    state = WindowState(members=(_commanded(0, 5),))
+    world = snapshot(sources=storm(), observation=observed(left="down:70"), state=state)
+
+    decision = engine().recompute(world)
+    after = engine().state_after(world, decision)
+
+    assert _gate(decision) == GateOutcome.suppress(
+        GateRule.MOVEMENT_IN_FLIGHT, ReasonCode.MOVEMENT_TAKEN_OVER
+    )
+    command = after.members[0].last_own_command
+    assert command is not None
+    assert command.wish_class is WishClass.PROTECTION
+    assert replace(command, wish_class=WishClass.COMFORT) == (
+        state.members[0].last_own_command
+    )
+    assert after.owner is PositionOwner.ENGINE
+    assert replace(after, members=state.members, owner=state.owner) == state
+    # From now on it is a protection movement: the same wish is a duplicate.
+    again = engine().recompute(replace(world, state=after))
+    assert _gate(again).reason is ReasonCode.DUPLICATE_COMMAND
+    assert engine().state_after(replace(world, state=after), again) is after
+
+
+def test_a_wish_of_the_same_or_a_lower_class_does_not_take_over() -> None:
+    """The evening closing meets a protection closing that is under way."""
+    state = WindowState(members=(_commanded(0, 5, wish_class=WishClass.PROTECTION),))
+    world = snapshot(sources=night(), position=100, state=state)
+
+    decision = engine().recompute(world)
+
+    assert _gate(decision).reason is ReasonCode.DUPLICATE_COMMAND
+    assert engine().state_after(world, decision) is state
+    assert apply_take_over(world, decision) is state
+
+
+def test_a_take_over_raises_only_the_commands_of_a_lower_class() -> None:
+    """Two members open: one for comfort, the other for fire already."""
+    state = WindowState(
+        members=(
+            _commanded(100, 5, direction=TravelDirection.UP),
+            _commanded(
+                100,
+                5,
+                member=RIGHT,
+                direction=TravelDirection.UP,
+                wish_class=WishClass.FIRE,
+            ),
+        )
+    )
+    world = snapshot(
+        sources=fire(), observation=observed(left=40, right=40), state=state
+    )
+    subject = engine(window(LEFT, RIGHT))
+
+    decision = subject.recompute(world)
+    after = subject.state_after(world, decision)
+
+    assert _gate(decision).reason is ReasonCode.MOVEMENT_TAKEN_OVER
+    assert [
+        member.last_own_command.wish_class
+        for member in after.members
+        if member.last_own_command is not None
+    ] == [WishClass.FIRE, WishClass.FIRE]
+    assert after.members[1] == state.members[1]
 
 
 def test_a_command_to_a_member_the_window_no_longer_has_is_ignored() -> None:

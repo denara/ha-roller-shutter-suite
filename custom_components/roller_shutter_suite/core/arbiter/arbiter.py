@@ -43,18 +43,32 @@ _REQUIRED_GATE_RULES = (GateRule.MAINTENANCE_LOCK, GateRule.DRY_RUN)
 
 
 def _in_order[R](
-    registrations: Iterable[R], place: Callable[[R], StrEnum], what: str
+    registrations: Iterable[R],
+    place: Callable[[R], StrEnum],
+    what: str,
+    claims: Callable[[R], frozenset[StrEnum]] | None = None,
 ) -> tuple[R, ...]:
-    """Sort registrations by their place in the enumeration; refuse duplicates."""
+    """Sort registrations by their place in the enumeration; refuse duplicates.
+
+    ``claims`` says which parts of its place a registration takes; without it,
+    a registration takes its place as a whole. Two registrations may share a
+    place only if their claims do not overlap. They are then sorted by their
+    first claim, so the result never depends on the order of registration.
+    """
     items = tuple(registrations)
-    seen: set[StrEnum] = set()
+    taken: set[tuple[StrEnum, StrEnum]] = set()
+    keys: dict[int, tuple[int, int]] = {}
     for item in items:
-        if place(item) in seen:
-            raise ValueError(f"the {what} {place(item).value!r} is registered twice")
-        seen.add(place(item))
-    return tuple(
-        sorted(items, key=lambda item: list(type(place(item))).index(place(item)))
-    )
+        where = place(item)
+        parts = frozenset({where}) if claims is None else claims(item)
+        if any((where, part) in taken for part in parts):
+            raise ValueError(f"the {what} {where.value!r} is registered twice")
+        taken |= {(where, part) for part in parts}
+        keys[id(item)] = (
+            list(type(where)).index(where),
+            min(list(type(part)).index(part) for part in parts),
+        )
+    return tuple(sorted(items, key=lambda item: keys[id(item)]))
 
 
 @dataclass(frozen=True, slots=True)
@@ -78,7 +92,12 @@ class Arbiter:
         object.__setattr__(
             self,
             "gate_rules",
-            _in_order(self.gate_rules, lambda r: r.rule, "gate rule"),
+            _in_order(
+                self.gate_rules,
+                lambda r: r.rule,
+                "gate rule",
+                claims=lambda r: frozenset(r.reasons),
+            ),
         )
         registered = {registration.rule for registration in self.gate_rules}
         for rule in _REQUIRED_GATE_RULES:
@@ -161,7 +180,7 @@ class Arbiter:
             # A window in dry-run is judged by its simulated commands, and a
             # standing would-be command does not count against itself.
             simulated = simulated_state(state)
-            standing = is_standing(simulated, to_send)
+            standing = is_standing(simulated, to_send, wish.wish_class)
             own_commands = (
                 {}
                 if standing
@@ -180,14 +199,18 @@ class Arbiter:
             last_comfort_movement=clock,
         )
         for registration in self.gate_rules:
-            if skips(wish.wish_class, registration.rule):
+            if skips(wish.wish_class, registration.reasons):
                 continue
             if wish.wish_class not in registration.applies_to:
                 continue
             outcome = registration.evaluate(gate_input)
             if outcome is None:
                 continue
-            if outcome.kind is GateKind.SEND or outcome.rule is not registration.rule:
+            if (
+                outcome.kind is GateKind.SEND
+                or outcome.rule is not registration.rule
+                or outcome.reason not in registration.reasons
+            ):
                 raise ValueError(
                     f"the gate rule {registration.rule.value!r} holds back in its "
                     "own name or returns nothing"

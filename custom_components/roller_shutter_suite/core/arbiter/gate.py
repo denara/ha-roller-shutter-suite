@@ -29,7 +29,7 @@ from custom_components.roller_shutter_suite.core.reasons import ReasonCode
 
 from .capabilities import cannot_execute, has_no_position_feedback
 from .controls import MODE_TABLE
-from .registry import ALL_CLASSES, GateInput, GateRuleRegistration
+from .registry import ALL_CLASSES, GateInput, GateRuleRegistration, outranks
 
 _COMFORT: Final = frozenset({WishClass.COMFORT})
 _PROTECTION_AND_COMFORT: Final = frozenset({WishClass.PROTECTION, WishClass.COMFORT})
@@ -219,15 +219,29 @@ passed) is the decision of the protection layer.
 
 
 # --- 8 Movement in flight -------------------------------------------------------
+#
+# The rule has two parts, registered separately because they apply to different
+# wish classes. Neither depends on the other being asked first.
+#
+# - The same targets as the pending own commands: nothing is sent again. This
+#   holds for every class, fire included. It hangs on the running expectation
+#   window and not on "was sent once": when the window has closed and the
+#   target is still not reached, the command is no longer pending, and fire is
+#   sent again at once. If the wish is of a higher class than a pending
+#   command, the movement is taken over: see ``take_over``.
+# - Other targets, or a movement nobody commanded: a comfort wish waits until
+#   the members have come to rest. Protection and fire retarget at once.
 
 
-def _travel_end(
+def expectation_window_end(
     gate: GateInput, member_id: str, command: OwnCommand
 ) -> datetime | None:
-    """Return until when a command can still be travelling; an upper bound.
+    """Return until when an own command counts as pending; an upper bound.
 
-    It is the full travel time of the direction plus the report delay of the
-    member. A command to a member the window no longer has is ignored.
+    It is the time of the command plus the full travel time of its direction
+    plus the report delay of the member. The tracker knows more about a
+    movement than the gate; this is the one place to change when it does. A
+    command to a member the window no longer has is ignored.
     """
     for member in gate.config.members:
         if member.member_id == member_id:
@@ -241,37 +255,59 @@ def _travel_end(
     return None
 
 
-def _movement_in_flight(gate: GateInput) -> GateOutcome | None:
-    """Hold back a comfort wish while an own command or a movement is under way.
-
-    A command is pending until its travel end. A movement that a member
-    reports counts too, whoever started it, but only for an armed window: what
-    moves a window in dry-run is another controller, and a dry-run window is
-    judged by its simulated commands.
-    """
-    time = gate.snapshot.time
-    pending: dict[str, OwnCommand] = {}
-    ends: list[datetime] = []
+def _pending(gate: GateInput) -> dict[str, tuple[OwnCommand, datetime]]:
+    """Return the own commands whose expectation window is still running."""
+    pending: dict[str, tuple[OwnCommand, datetime]] = {}
     for member_id, command in gate.own_commands.items():
-        end = _travel_end(gate, member_id, command)
-        if end is not None and time < end:
-            pending[member_id] = command
-            ends.append(end)
-    moving = not gate.controls.dry_run and gate.snapshot.observation.reports_movement
-    if not pending and not moving:
-        return None
-    if pending and all(
+        end = expectation_window_end(gate, member_id, command)
+        if end is not None and gate.snapshot.time < end:
+            pending[member_id] = (command, end)
+    return pending
+
+
+def _repeats(gate: GateInput, pending: dict[str, tuple[OwnCommand, datetime]]) -> bool:
+    """Return whether every target at the gate is the target of a pending command."""
+    return bool(pending) and all(
         target.member_id in pending
-        and pending[target.member_id].target == target.position
+        and pending[target.member_id][0].target == target.position
         for target in gate.to_send
-    ):
-        return GateOutcome.suppress(
-            GateRule.MOVEMENT_IN_FLIGHT, ReasonCode.DUPLICATE_COMMAND
-        )
+    )
+
+
+def _same_command_pending(gate: GateInput) -> GateOutcome | None:
+    """Do not send what is already under way; a higher class takes it over."""
+    pending = _pending(gate)
+    if not _repeats(gate, pending):
+        return None
+    taken_over = any(
+        outranks(gate.wish.wish_class, pending[target.member_id][0].wish_class)
+        for target in gate.to_send
+    )
+    return GateOutcome.suppress(
+        GateRule.MOVEMENT_IN_FLIGHT,
+        ReasonCode.MOVEMENT_TAKEN_OVER if taken_over else ReasonCode.DUPLICATE_COMMAND,
+    )
+
+
+def _wait_for_rest(gate: GateInput) -> GateOutcome | None:
+    """Hold back a comfort wish while another movement is under way.
+
+    A pending own command with other targets counts, and for an armed window
+    a movement that a member reports, whoever started it, so a comfort
+    movement never interrupts a person. What moves a window in dry-run is
+    another controller; such a window is judged by its simulated commands.
+    """
+    pending = _pending(gate)
+    moving = not gate.controls.dry_run and gate.snapshot.observation.reports_movement
+    if (not pending and not moving) or _repeats(gate, pending):
+        return None
     return GateOutcome.defer(
         GateRule.MOVEMENT_IN_FLIGHT,
         ReasonCode.MOVEMENT_IN_FLIGHT,
-        reevaluate_no_later_than=max(ends, default=time + gate.config.reevaluate_after),
+        reevaluate_no_later_than=max(
+            (end for _, end in pending.values()),
+            default=gate.snapshot.time + gate.config.reevaluate_after,
+        ),
     )
 
 
@@ -335,7 +371,20 @@ BUILT_IN_GATE_RULES: Final = (
     GateRuleRegistration(GateRule.PAUSE, _COMFORT, _pause),
     PERSON_AT_WINDOW_DAM.registration(),
     MANUAL_OVERRIDE_DAM.registration(),
-    GateRuleRegistration(GateRule.MOVEMENT_IN_FLIGHT, _COMFORT, _movement_in_flight),
+    GateRuleRegistration(
+        GateRule.MOVEMENT_IN_FLIGHT,
+        _COMFORT,
+        _wait_for_rest,
+        reasons=frozenset({ReasonCode.MOVEMENT_IN_FLIGHT}),
+    ),
+    GateRuleRegistration(
+        GateRule.MOVEMENT_IN_FLIGHT,
+        ALL_CLASSES,
+        _same_command_pending,
+        reasons=frozenset(
+            {ReasonCode.DUPLICATE_COMMAND, ReasonCode.MOVEMENT_TAKEN_OVER}
+        ),
+    ),
     GateRuleRegistration(GateRule.MOTOR_PROTECTION, _COMFORT, _motor_protection),
     GateRuleRegistration(GateRule.DRY_RUN, ALL_CLASSES, _dry_run),
 )

@@ -1,9 +1,20 @@
 """The fire bypass: a named construct of the gate.
 
-A wish of class fire skips exactly the gate rules listed in ``FIRE_BYPASS``.
-It never skips the maintenance lock and never dry-run (decided), and it never
-skips the two rules that describe what is physically possible or already true
-("no member can execute the command", "target reached").
+The bypass names what can never hold back a wish of class fire, as the reason
+codes of the gate rules. Fire skips every registered gate rule, or part of a
+rule, that can give only these reasons:
+
+- operating mode, pause, both dams, motor protection, command backoff and
+  staggering as whole rules;
+- of the rule "movement in flight" only the deferral (``movement_in_flight``):
+  fire retargets at once.
+
+It never skips the maintenance lock and never dry-run (decided), never the two
+rules that describe what is physically possible or already true ("no member
+can execute the command", "target reached"), and never the other part of
+"movement in flight": a command with the same target whose expectation window
+is still running is not sent again, for fire either (``duplicate_command``,
+``movement_taken_over``).
 
 The bypass lives in this one place. No gate rule contains an exception for
 fire, and a rule that is part of the bypass cannot even be registered for the
@@ -14,26 +25,42 @@ cannot be registered for that class.
 
 from typing import Final
 
-from custom_components.roller_shutter_suite.core.model import GateRule, WishClass
+from custom_components.roller_shutter_suite.core.model import (
+    GATE_RULE_REASONS,
+    GateRule,
+    WishClass,
+)
+from custom_components.roller_shutter_suite.core.reasons import ReasonCode
 
-FIRE_BYPASS: Final[frozenset[GateRule]] = frozenset(
+FIRE_BYPASS: Final[frozenset[ReasonCode]] = frozenset(
     {
-        GateRule.OPERATING_MODE,
-        GateRule.PAUSE,
-        GateRule.PERSON_AT_WINDOW_DAM,
-        GateRule.MANUAL_OVERRIDE_DAM,
-        GateRule.MOVEMENT_IN_FLIGHT,
-        GateRule.MOTOR_PROTECTION,
-        GateRule.COMMAND_BACKOFF,
-        GateRule.STAGGERING,
+        ReasonCode.MODE_OFF,
+        ReasonCode.MODE_PROTECTION_ONLY,
+        ReasonCode.PAUSED,
+        ReasonCode.PERSON_AT_WINDOW,
+        ReasonCode.MANUAL_OVERRIDE,
+        ReasonCode.MOVEMENT_IN_FLIGHT,
+        ReasonCode.MIN_CHANGE,
+        ReasonCode.MIN_INTERVAL,
+        ReasonCode.COMMAND_BACKOFF,
+        ReasonCode.STAGGERED,
     }
 )
-"""The gate rules a wish of class fire skips."""
+"""The reasons for which a wish of class fire is never held back."""
 
-NEVER_SKIPPED: Final[frozenset[GateRule]] = frozenset(GateRule) - FIRE_BYPASS
-"""Maintenance lock, no member can execute, target reached, dry-run."""
+NEVER_BYPASSED: Final[frozenset[ReasonCode]] = (
+    frozenset().union(*GATE_RULE_REASONS.values()) - FIRE_BYPASS
+)
+"""Every other reason a gate rule can give; these hold back fire too."""
 
 
-def skips(wish_class: WishClass, rule: GateRule) -> bool:
-    """Return whether a wish of this class skips the gate rule."""
-    return wish_class is WishClass.FIRE and rule in FIRE_BYPASS
+def bypassed_rules() -> frozenset[GateRule]:
+    """Return the gate rules the bypass touches, as a whole or in part."""
+    return frozenset(
+        rule for rule, reasons in GATE_RULE_REASONS.items() if reasons & FIRE_BYPASS
+    )
+
+
+def skips(wish_class: WishClass, reasons: frozenset[ReasonCode]) -> bool:
+    """Return whether a wish of this class skips a rule that gives these reasons."""
+    return wish_class is WishClass.FIRE and reasons <= FIRE_BYPASS

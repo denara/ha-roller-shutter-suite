@@ -11,13 +11,14 @@ Import from the package: ``from ...core.arbiter import Arbiter``.
 from .arbiter import Arbiter
 from .controls import MODE_TABLE, EffectiveControls, ModeEntry, effective_controls
 from .dry_run import arm, is_standing, remember_would_be_send, simulated_state
-from .fire_bypass import FIRE_BYPASS, NEVER_SKIPPED, skips
+from .fire_bypass import FIRE_BYPASS, NEVER_BYPASSED, bypassed_rules, skips
 from .gate import (
     BUILT_IN_GATE_RULES,
     MANUAL_OVERRIDE_DAM,
     PERSON_AT_WINDOW_DAM,
     ArmedDam,
     Dam,
+    expectation_window_end,
 )
 from .layers import wish_for_missing_input
 from .registry import (
@@ -30,8 +31,10 @@ from .registry import (
     GateRuleRegistration,
     LayerFunction,
     LayerRegistration,
+    outranks,
     reported_positions,
 )
+from .take_over import apply_take_over
 
 __all__ = [
     "ALL_CLASSES",
@@ -39,7 +42,7 @@ __all__ = [
     "FIRE_BYPASS",
     "MANUAL_OVERRIDE_DAM",
     "MODE_TABLE",
-    "NEVER_SKIPPED",
+    "NEVER_BYPASSED",
     "PERSON_AT_WINDOW_DAM",
     "Arbiter",
     "ArmedDam",
@@ -54,9 +57,13 @@ __all__ = [
     "LayerFunction",
     "LayerRegistration",
     "ModeEntry",
+    "apply_take_over",
     "arm",
+    "bypassed_rules",
     "effective_controls",
+    "expectation_window_end",
     "is_standing",
+    "outranks",
     "remember_would_be_send",
     "reported_positions",
     "simulated_state",

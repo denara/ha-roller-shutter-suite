@@ -38,7 +38,7 @@ from custom_components.roller_shutter_suite.core.model import (
     WorldSnapshot,
 )
 
-from .registry import reported_positions
+from .registry import outranks, reported_positions
 
 _HALFWAY = 50
 
@@ -48,12 +48,23 @@ def simulated_state(state: WindowState) -> SimulatedState:
     return state.simulated if state.simulated is not None else SimulatedState()
 
 
-def is_standing(simulated: SimulatedState, to_send: tuple[MemberTarget, ...]) -> bool:
-    """Return whether the simulated commands are the would-be command for these targets."""
-    commanded = {
-        command.member_id: command.command.target for command in simulated.commands
-    }
-    return all(commanded.get(target.member_id) == target.position for target in to_send)
+def is_standing(
+    simulated: SimulatedState, to_send: tuple[MemberTarget, ...], wish_class: WishClass
+) -> bool:
+    """Return whether the simulated commands are the would-be command of this wish.
+
+    They are if every target at the gate is the target of a simulated command
+    and no such command is of a lower class than the wish. A command of a
+    lower class is not the wish's own: while its expectation window runs, the
+    wish takes it over, and afterwards the wish would have sent anew.
+    """
+    commanded = {command.member_id: command.command for command in simulated.commands}
+    return all(
+        (command := commanded.get(target.member_id)) is not None
+        and command.target == target.position
+        and not outranks(wish_class, command.wish_class)
+        for target in to_send
+    )
 
 
 def _direction(target: Position, reported: Position | None) -> TravelDirection:
@@ -80,9 +91,9 @@ def remember_would_be_send(snapshot: WorldSnapshot, decision: Decision) -> Windo
     ):
         return state
     simulated = simulated_state(state)
-    if is_standing(simulated, gate.would_send):
-        return state
     wish_class = decision.winning_wish.wish_class
+    if is_standing(simulated, gate.would_send, wish_class):
+        return state
     reported = reported_positions(snapshot)
     commands = {command.member_id: command for command in simulated.commands}
     would_send = [

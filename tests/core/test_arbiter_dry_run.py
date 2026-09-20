@@ -339,12 +339,78 @@ def test_the_standing_command_is_the_one_with_the_targets_of_the_wish() -> None:
     _, state = _run(subject, world)
     both = (MemberTarget(LEFT, Position(0)), MemberTarget(RIGHT, Position(0)))
 
-    assert is_standing(simulated_state(state), both) is True
-    assert is_standing(simulated_state(state), both[:1]) is True
+    comfort = WishClass.COMFORT
+    assert is_standing(simulated_state(state), both, comfort) is True
+    assert is_standing(simulated_state(state), both[:1], comfort) is True
+    assert is_standing(simulated_state(state), both, WishClass.PROTECTION) is False
     assert (
-        is_standing(simulated_state(state), (MemberTarget(LEFT, Position(5)),)) is False
+        is_standing(simulated_state(state), (MemberTarget(LEFT, Position(5)),), comfort)
+        is False
     )
-    assert is_standing(SimulatedState(), both) is False
+    assert is_standing(SimulatedState(), both, comfort) is False
+
+
+# --- Take-over in dry-run -----------------------------------------------------------
+
+
+def test_in_dry_run_a_take_over_happens_on_the_simulated_commands_only() -> None:
+    """A storm begins twelve seconds after a would-be evening closing."""
+    subject = engine()
+    real = WindowState(
+        members=(
+            MemberState(
+                LEFT,
+                last_own_command=OwnCommand(
+                    "command-1",
+                    Position(0),
+                    TravelDirection.DOWN,
+                    NOW,
+                    WishClass.COMFORT,
+                ),
+            ),
+        ),
+        owner=PositionOwner.USER,
+    )
+    evening = snapshot(sources=night(), position=100, state=real, controls=DRY_RUN)
+    _, state = _run(subject, evening)
+    stormy = replace(
+        evening, sources=storm(), time=NOW + timedelta(seconds=12), state=state
+    )
+
+    decision = subject.recompute(stormy)
+    after = subject.state_after(stormy, decision)
+
+    assert _gate(decision) == GateOutcome.suppress(
+        GateRule.MOVEMENT_IN_FLIGHT, ReasonCode.MOVEMENT_TAKEN_OVER, dry_run=True
+    )
+    assert simulated_state(after).commands[0].command.wish_class is WishClass.PROTECTION
+    assert simulated_state(after).commands[0].command.time == NOW
+    assert after.members == real.members
+    assert after.owner is PositionOwner.USER
+    # The simulated command is the storm's own now: the record is stable again.
+    records, final = _run(subject, replace(stormy, state=after), times=20)
+    assert set(records) == {records[0]}
+    assert _gate(records[0]) == _would_send(0)
+    assert final == after
+
+
+def test_after_the_window_a_higher_class_would_have_sent_anew() -> None:
+    """The simulated comfort command is no longer pending when the storm begins."""
+    subject = engine()
+    evening = snapshot(sources=night(), position=100, controls=DRY_RUN)
+    _, state = _run(subject, evening)
+    stormy = replace(
+        evening, sources=storm(), time=NOW + timedelta(minutes=5), state=state
+    )
+
+    decision = subject.recompute(stormy)
+    after = subject.state_after(stormy, decision)
+
+    assert _gate(decision) == _would_send(0)
+    command = simulated_state(after).commands[0].command
+    assert command.wish_class is WishClass.PROTECTION
+    assert command.time == NOW + timedelta(minutes=5)
+    assert simulated_state(after).last_comfort_movement == NOW
 
 
 # --- The record is stable -----------------------------------------------------------

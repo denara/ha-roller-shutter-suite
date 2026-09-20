@@ -14,6 +14,7 @@ world snapshot ─► layers (first opinion wins) ─► constraints ─► gate
 | `arbiter/gate.py` | the gate rules that belong to no single feature, and the dam mechanism |
 | `arbiter/controls.py` | operating modes as a table; the effective pause, lock and mode over three levels |
 | `arbiter/dry_run.py` | the simulated state of a window in dry-run; arming |
+| `arbiter/take_over.py` | what a take-over of a movement in flight does to the state |
 | `arbiter/capabilities.py` | the one place where the gate asks what a member can do |
 | `arbiter/layers.py` | help for layers: what a missing input means |
 | `constraints/` | one module per constraint; so far `direction` and `frost` |
@@ -42,7 +43,7 @@ The order of layers, constraints and gate rules is the order of the enumerations
 | 5 | pause | comfort | this block |
 | 6 | person-at-the-window dam | protection, comfort | this block (the mechanism; arming it is a later block) |
 | 7 | manual override dam | comfort, except the return to the manual position | this block (the mechanism; arming it is a later block) |
-| 8 | movement in flight | comfort | this block |
+| 8 | movement in flight | the same command is still pending: fire, protection, comfort. Another movement is under way: comfort | this block |
 | 9 | motor protection | comfort | this block |
 | 10 | command backoff | protection, comfort | a later block |
 | 11 | staggering | protection, comfort | a later block |
@@ -54,19 +55,28 @@ Details of the built-in rules that the table of the specification leaves to the 
 
 - **No member can execute (2).** Only the members that have a target and are available right now are looked at. None of them: defer with `cover_unavailable`. All of them definitely lack both "set position" and "open and close": suppress with `capability_missing`. Capabilities are asked through `arbiter/capabilities.py` only; a capability that is not known never blocks.
 - **Target reached (3)** always compares with the real, reported position, also in dry-run. Unavailable members are not judged. A member without position feedback counts as reached if its last real own command had this target.
-- **Movement in flight (8).** An own command is pending until its travel end: the time of the command plus the full travel time of its direction plus the report delay of the member. That is an upper bound, not the tracker's verdict. For an armed window a member that reports a movement counts as well, whoever started it, so a comfort movement never interrupts a person. The same targets as the pending command: `duplicate_command`. Anything else: deferred with `movement_in_flight`.
-- **Motor protection (9)** judges the largest change among the members that report a position, then the minimum interval since `last_comfort_movement`. Zero switches a part off.
-
+- **Movement in flight (8)** has two parts, registered separately because they hold back different classes.
+  - *The same command is still pending* (all classes, fire included). An own command is pending while its **expectation window** runs: from the time of the command for the full travel time of its direction plus the report delay of the member (`expectation_window_end`, an upper bound and the one place to change when the tracker knows more). If every target at the gate is the target of a pending command, nothing is sent again: `duplicate_command`. This hangs on the running window, not on "was sent once". When the window has closed and the target is still not reached, the command is not pending any more: fire is sent again at once, protection and comfort follow their normal rules.
+  - **Take-over.** If the wish is of a higher class than a pending command with the same target (a storm begins while the evening closing is under way), the outcome is `movement_taken_over` instead: nothing is sent, and `Engine.state_after` raises the wish class of the pending commands to that of the wish and sets the owner of the position to the integration. From then on the dams, motor protection and the return after a protection event see a protection or fire movement, not a comfort one, and the next recompute reads `duplicate_command`. A command carries no reason code; the reason of the new wish is in the decision. A wish of the same or a lower class never takes over.
+  - *Another movement is under way* (comfort only; protection and fire retarget at once). A pending command with other targets counts, and for an armed window a member that reports a movement, whoever started it, so a comfort movement never interrupts a person: deferred with `movement_in_flight`.
+- **Motor protection (9)**, comfort only.
+  - *Minimum change:* judged on the largest change among the members that report a position; below it: `min_change`.
+  - *Minimum interval:* since `last_comfort_movement`: `min_interval`, deferred until it has passed. It exists against flapping, so it does not hold back a **fresh** wish: one whose trigger (`Wish.triggered_at`) lies strictly after the last own comfort movement. A boundary of the schedule fired, sleep mode was switched, a request arrived, an episode began. Not fresh are tracking inside an episode (the episode began before the last movement), an older wish that wins again because another layer dropped out (the day position after the end of shading), a trigger at the very instant of the last movement (that movement was its answer, which matters after a restart), and a wish that states no trigger.
+  - Zero switches a part off.
 ### Operating modes are a table
 
 `MODE_TABLE` in `arbiter/controls.py` has one row per `OperatingMode`: its rank among the modes, the wish classes it holds back, and the reason code. The gate rule reads the table and nothing else. No row holds back fire.
 
 ## The fire bypass
 
-The fire bypass is one named construct, `FIRE_BYPASS` in `arbiter/fire_bypass.py`, and not a set of exceptions spread over the rules. A wish of class fire skips exactly these gate rules: operating mode, pause, both dams, movement in flight, motor protection, command backoff and staggering. It never skips the maintenance lock and never dry-run, and it never skips "no member can execute" and "target reached", which describe what is possible or already true.
+The fire bypass is one named construct, `FIRE_BYPASS` in `arbiter/fire_bypass.py`, and not a set of exceptions spread over the rules. It names, as reason codes, what can never hold back a wish of class fire, and fire skips every registered rule, or part of a rule, that can give only such reasons:
 
-The registry keeps this exact in both directions. A rule that is part of the bypass cannot be registered for the class fire, and a rule that is not part of it has to apply to all three classes. A test compares `FIRE_BYPASS` with the list in section 2.4 of the specification. A dam cannot be defined to hold back fire either, and a constraint cannot be registered for fire.
+- operating mode, pause, both dams, motor protection, command backoff and staggering as whole rules;
+- of "movement in flight" only the deferral (`movement_in_flight`): fire retargets at once.
 
+It never skips the maintenance lock and never dry-run, never "no member can execute" and "target reached", which describe what is possible or already true, and never the other part of "movement in flight": a fire command whose expectation window is still running is not sent a second time, and a pending comfort or protection command with the same target is taken over.
+
+The registry keeps this exact in both directions. A registration whose reasons all belong to the bypass cannot name the class fire; one whose reasons are all outside it has to apply to all three classes; one that mixes the two is refused and has to be split into parts. A test compares the rules the bypass touches with the list in section 2.4 of the specification. A dam cannot be defined to hold back fire either, and a constraint cannot be registered for fire.
 Under a maintenance lock and in dry-run the decision still names the fire wish as the winner, with its target, so the fire event can be fired although nothing moves.
 
 The fire layer itself belongs to a later block. What the arbiter guarantees for it: while its wish is a target, the bypass applies; while its wish is "leave alone" (`fire_unacknowledged`, after the alarm has ended and until somebody acknowledges it), it wins, no lower layer acts, and nothing is sent.
@@ -96,9 +106,9 @@ A deferral never waits forever. It states exactly one of two times, and the mode
 
 Dry-run is the last gate rule on purpose: whatever reaches it would have been sent. The decision of a window in dry-run therefore shows the complete hypothetical outcome. `GateOutcome.dry_run` is true, and either the rule `dry_run` decided and `would_send` lists the command, or an earlier rule decided and its reason says what would have held the wish back. No rule except the last one knows about dry-run; the arbiter marks the outcome.
 
-Rules that depend on own commands must not read them from `snapshot.state`. They read `GateInput.own_commands` and `GateInput.last_comfort_movement`. For an armed window these are the real commands and the real motor protection clock. For a window in dry-run they are the **simulated** ones from `WindowState.simulated`, and never the real ones. `Engine.state_after(snapshot, decision)` returns the state with a would-be send remembered as simulated commands (and, for a comfort wish, the simulated clock); it never touches a real command, the real clock, a dam or the owner of the position. `Engine.arm(state)` discards the simulated state and starts the window clean: no dam, owner unknown.
+Rules that depend on own commands must not read them from `snapshot.state`. They read `GateInput.own_commands` and `GateInput.last_comfort_movement`. For an armed window these are the real commands and the real motor protection clock. For a window in dry-run they are the **simulated** ones from `WindowState.simulated`, and never the real ones. `Engine.state_after(snapshot, decision)` returns the state with a would-be send remembered as simulated commands (and, for a comfort wish, the simulated clock); for a window in dry-run it never touches a real command, the real clock, a dam or the owner of the position. `Engine.arm(state)` discards the simulated state and starts the window clean: no dam, owner unknown.
 
-**The standing would-be command.** An armed window that has sent a command moves, arrives, and reads `target_reached` from then on. A window in dry-run does not move. If its simulated command counted against the very wish it stands for, the record would flap between "would have sent 30" and `duplicate_command` or `min_interval`. So while the simulated commands have the same targets as the wish at the gate, they *are* that wish's command: the own-command rules do not count them against it, the outcome stays "would have sent", and nothing new is remembered, which also means that a recompute that changes nothing writes nothing. A wish with other targets is judged against the simulated commands and the simulated clock like any new command: inside the minimum interval it reads `min_interval` with the time at which it ends. A test recomputes a hundred times under constant inputs, also with advancing time, and expects one distinct record.
+**The standing would-be command.** An armed window that has sent a command moves, arrives, and reads `target_reached` from then on. A window in dry-run does not move. If its simulated command counted against the very wish it stands for, the record would flap between "would have sent 30" and `duplicate_command` or `min_interval`. So while the simulated commands have the same targets as the wish at the gate, and none of them is of a lower class than the wish, they *are* that wish's command: the own-command rules do not count them against it, the outcome stays "would have sent", and nothing new is remembered, which also means that a recompute that changes nothing writes nothing. A wish with other targets is judged against the simulated commands and the simulated clock like any new command: inside the minimum interval it reads `min_interval` with the time at which it ends. A test recomputes a hundred times under constant inputs, also with advancing time, and expects one distinct record. A take-over happens in dry-run too, on the simulated commands only: a wish of a higher class meets a simulated command with its target whose expectation window still runs, the record reads `movement_taken_over` once, the simulated command becomes the wish's own, and the record is stable again.
 
 ## How to add a layer
 
@@ -162,6 +172,7 @@ STAGGERING = GateRuleRegistration(
 - Its place is its member of `GateRule`; `GATE_RULE_REASONS` says which reason codes it can give.
 - Name the classes it can hold back. Do not write an exception for fire into the rule: a rule that is part of the fire bypass cannot name fire, and the arbiter skips it.
 - Return `GateOutcome.suppress(...)` or `GateOutcome.defer(...)` under the rule's own name, never `send`. A deferral states `until` or `reevaluate_no_later_than`.
+- A rule whose parts hold back different classes is registered once per part, each with `reasons=` naming the reason codes of that part; the parts must not depend on the order in which they are asked. "Movement in flight" is the example.
 - Do not think about dry-run. Read own commands from `GateInput.own_commands` and the motor protection clock from `GateInput.last_comfort_movement`, and the rule works for a dry-run window as well.
 - Ask about capabilities through `arbiter/capabilities.py`.
 - Hand it to `build_arbiter(gate_rules=[...])`.

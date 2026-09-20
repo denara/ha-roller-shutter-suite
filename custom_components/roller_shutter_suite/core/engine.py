@@ -18,11 +18,13 @@ from .arbiter import (
     ConstraintRegistration,
     GateRuleRegistration,
     LayerRegistration,
+    apply_take_over,
     arm,
     remember_would_be_send,
 )
 from .constraints import DIRECTION_CONSTRAINT, FROST_CONSTRAINT
 from .model import Decision, WindowConfig, WindowState, WorldSnapshot
+from .reasons import ReasonCode
 
 BUILT_IN_CONSTRAINTS = (DIRECTION_CONSTRAINT, FROST_CONSTRAINT)
 """The constraints that belong to no single feature block."""
@@ -59,11 +61,19 @@ class Engine:
     def state_after(self, snapshot: WorldSnapshot, decision: Decision) -> WindowState:
         """Return the window state after the decision was made.
 
-        For a window in dry-run a would-be send is remembered as a simulated
-        command; the real state is never touched. For an armed window the state
-        is returned as it is: what a real command leaves behind is recorded by
-        the blocks that send and track commands.
+        - A take-over (``movement_taken_over``) raises the wish class of the
+          pending commands: of the real ones for an armed window, of the
+          simulated ones for a window in dry-run.
+        - For a window in dry-run a would-be send is remembered as a simulated
+          command; the real state is never touched.
+        - Otherwise the state is returned as it is: what a real command leaves
+          behind is recorded by the blocks that send and track commands.
         """
+        if (
+            decision.gate is not None
+            and decision.gate.reason is ReasonCode.MOVEMENT_TAKEN_OVER
+        ):
+            return apply_take_over(snapshot, decision)
         return remember_would_be_send(snapshot, decision)
 
     @staticmethod
