@@ -535,7 +535,7 @@ def test_the_same_target_as_the_pending_own_command_is_a_duplicate() -> None:
 
 
 def test_another_target_waits_until_the_members_have_come_to_rest() -> None:
-    """The end is not known; the bound is the travel end of the pending command."""
+    """The end is not known; the bound is the end of the pending command's window."""
     config = window(profiles={LEFT: profile(report_delay=timedelta(seconds=60))})
     state = WindowState(members=(_commanded(30, 5),))
 

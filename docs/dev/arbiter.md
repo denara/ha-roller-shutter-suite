@@ -98,7 +98,7 @@ A deferral never waits forever. It states exactly one of two times, and the mode
 | a dam with a known end | `until` | the end of the dam |
 | motor protection, minimum interval | `until` | last own comfort movement plus the interval |
 | no member available | `reevaluate_no_later_than` | the time of the recompute plus `WindowConfig.reevaluate_after` (default 5 minutes) |
-| movement in flight | `reevaluate_no_later_than` | the latest travel end of the pending own commands; without one (somebody else is moving the window), the time of the recompute plus `reevaluate_after` |
+| movement in flight | `reevaluate_no_later_than` | the latest end of the expectation windows of the pending own commands; without one (somebody else is moving the window), the time of the recompute plus `reevaluate_after` |
 
 **What ends a deferral without a time** is the condition it waits for: a member becomes available again, or the members come to rest. Both are changes of the observed state, and the runtime recomputes a window whenever its observed state changes. `reevaluate_no_later_than` is only the safety net for the case that no such change is ever reported: at that time at the latest, the runtime recomputes the window from the state it has then. Nothing is replayed when a deferral ends; the window is simply recomputed, and the new decision may well be another deferral.
 
