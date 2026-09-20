@@ -62,7 +62,7 @@ Files are written after D00, S1 and S2 are approved. IDs and cuts may still chan
 | H09 | Wiring: window interaction, tamper, blind-contact repair | B1–B4, B9, F6 | C08, H03 |
 | H10 | Wiring: manual detection and override; per-member configuration steps (position source, report delay, travel times) | E1–E3 | C06, H03, H05 |
 | H11 | Wiring: shading (sun, forecast, radiation, indoor temperature); per-member measurement steps: glass height, glass calibration and the offset of the member's top edge within the element | C1–C9, C12, C14 | C10, H03 |
-| H12 | Capability-aware configuration and repairs; explains settings masked by the capability mask of C02 | F7 | H01, H03, C02 |
+| H12 | Capability-aware configuration and repairs; explains settings masked by the capability mask of C02 (inherited and own values; an own value stays stored and returns with the capability); mask and repair issue never flap at a restart or while an entity is unavailable, with a test | F7 | H01, H03, C02 |
 | H13 | Roof window profile | F3 | C09, C10, H11 |
 | H14 | Wall buttons | F5 | S3, C07, H07, H12 |
 | H15 | Command verification: detects that an actuator did not react, never that a curtain arrived; deadline from the report delay | N1 | C06, H03 |
