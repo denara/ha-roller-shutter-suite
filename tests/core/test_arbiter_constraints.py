@@ -9,7 +9,6 @@ from custom_components.roller_shutter_suite.core.arbiter import (
     Arbiter,
     ConstraintInput,
     ConstraintRegistration,
-    LayerRegistration,
 )
 from custom_components.roller_shutter_suite.core.constraints import (
     DIRECTION_CONSTRAINT,
@@ -56,6 +55,7 @@ from tests.core.arbiter_kit import (
     night,
     observed,
     profile,
+    registered,
     snapshot,
     storm,
     window,
@@ -168,7 +168,7 @@ def test_a_constraint_is_skipped_for_the_classes_it_does_not_name() -> None:
     assert burning.target == FULLY_OPEN
 
 
-_RAISE_TO_60 = LayerRegistration(
+_RAISE_TO_60 = registered(
     Layer.SCHEDULE,
     lambda _config, _world: Wish.target(
         Layer.SCHEDULE,
@@ -261,7 +261,7 @@ def test_a_movement_in_the_allowed_direction_passes(
 
 def test_lower_only_never_raises_a_shutter() -> None:
     """A privacy position of 20 does not raise a shutter that stands at 5."""
-    privacy = LayerRegistration(
+    privacy = registered(
         Layer.PRIVACY,
         lambda _config, _world: Wish.target(
             Layer.PRIVACY,
@@ -285,7 +285,7 @@ def test_lower_only_never_raises_a_shutter() -> None:
 def test_direction_is_judged_per_member() -> None:
     """One member is pinned, the other moves; a member without a position passes."""
     config = window(LEFT, RIGHT)
-    privacy = LayerRegistration(
+    privacy = registered(
         Layer.PRIVACY,
         lambda _config, _world: Wish.target(
             Layer.PRIVACY,
@@ -572,7 +572,7 @@ def test_the_frost_position_is_a_setting() -> None:
 
 def test_by_default_frost_does_not_limit_a_protection_movement() -> None:
     """Configured for protection, it does; fire ignores it either way."""
-    hail = LayerRegistration(
+    hail = registered(
         Layer.PROTECTION,
         lambda _config, _world: Wish.target(
             Layer.PROTECTION, ReasonCode.PROTECTION_EVENT, FULLY_OPEN
@@ -646,9 +646,7 @@ def test_direction_and_frost_are_both_recorded_in_order() -> None:
         (MemberTarget(LEFT, Position(40)), MemberTarget(RIGHT, Position(95))),
         direction=Direction.RAISE_ONLY,
     )
-    arbiter = build_arbiter(
-        [LayerRegistration(Layer.SHADING, lambda _config, _world: wish)]
-    )
+    arbiter = build_arbiter([registered(Layer.SHADING, lambda _config, _world: wish)])
 
     decision = arbiter.recompute(
         config,

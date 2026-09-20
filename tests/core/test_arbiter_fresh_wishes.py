@@ -15,7 +15,6 @@ from datetime import datetime, timedelta
 
 import pytest
 
-from custom_components.roller_shutter_suite.core.arbiter import LayerRegistration
 from custom_components.roller_shutter_suite.core.engine import build_arbiter
 from custom_components.roller_shutter_suite.core.model import (
     FULLY_CLOSED,
@@ -45,6 +44,7 @@ from tests.core.arbiter_kit import (
     day,
     engine,
     night,
+    registered,
     since,
     snapshot,
     window,
@@ -214,7 +214,7 @@ def test_shading_toggling_every_three_minutes_yields_one_return_per_minimum_inte
 
 FORGETFUL = build_arbiter(
     [
-        LayerRegistration(
+        registered(
             Layer.SCHEDULE,
             lambda _config, _world: Wish.target(
                 Layer.SCHEDULE, ReasonCode.SCHEDULE_NIGHT, FULLY_CLOSED

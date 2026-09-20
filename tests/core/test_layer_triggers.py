@@ -39,7 +39,14 @@ from custom_components.roller_shutter_suite.core.model import (
     WorldSnapshot,
 )
 from custom_components.roller_shutter_suite.core.reasons import ReasonCode
-from tests.core.arbiter_kit import STUB_LAYERS, day, night, snapshot, window
+from tests.core.arbiter_kit import (
+    STUB_LAYERS,
+    day,
+    night,
+    registered,
+    snapshot,
+    window,
+)
 
 type Provocation = Callable[[], tuple[WindowConfig, WorldSnapshot]]
 
@@ -119,7 +126,7 @@ def test_the_stub_layers_pass_the_check() -> None:
 
 def test_a_layer_that_forgets_its_trigger_fails_the_check() -> None:
     """The message names the layer and says what to do."""
-    forgetful = _with_schedule(LayerRegistration(Layer.SCHEDULE, _forgetful_schedule))
+    forgetful = _with_schedule(registered(Layer.SCHEDULE, _forgetful_schedule))
 
     with pytest.raises(AssertionError, match=r"'schedule' wants a position but does"):
         check_triggers(forgetful, STUB_PROVOCATIONS)

@@ -65,6 +65,7 @@ class ReasonCode(StrEnum):
     WATCHDOG_RELEASED = "watchdog_released"
     CAPABILITY_MISSING = "capability_missing"
     DAY_TYPE_FALLBACK = "day_type_fallback"
+    FUNCTION_DISABLED_BY_FAULT = "function_disabled_by_fault"
 
     # Constraints
     ONLY_RAISE = "only_raise"
@@ -159,6 +160,7 @@ _GROUPS: Final = MappingProxyType(
             ReasonCode.WATCHDOG_RELEASED,
             ReasonCode.CAPABILITY_MISSING,
             ReasonCode.DAY_TYPE_FALLBACK,
+            ReasonCode.FUNCTION_DISABLED_BY_FAULT,
         ),
         ReasonCategory.CONSTRAINT: (
             ReasonCode.ONLY_RAISE,

@@ -18,7 +18,6 @@ from custom_components.roller_shutter_suite.core.arbiter import (
     Dam,
     GateInput,
     GateRuleRegistration,
-    LayerRegistration,
     apply_take_over,
     effective_controls,
 )
@@ -66,6 +65,7 @@ from tests.core.arbiter_kit import (
     observed,
     on_level,
     profile,
+    registered,
     snapshot,
     storm,
     window,
@@ -807,9 +807,7 @@ def test_an_end_position_of_one_member_exempts_the_movement_of_the_window() -> N
         ReasonCode.SHADING_GEOMETRIC,
         (MemberTarget(LEFT, Position(0)), MemberTarget(RIGHT, Position(40))),
     )
-    arbiter = build_arbiter(
-        [LayerRegistration(Layer.SHADING, lambda _config, _world: wish)]
-    )
+    arbiter = build_arbiter([registered(Layer.SHADING, lambda _config, _world: wish)])
 
     def reason(left: int, right: int) -> ReasonCode:
         world = snapshot(observation=observed(left=left, right=right))

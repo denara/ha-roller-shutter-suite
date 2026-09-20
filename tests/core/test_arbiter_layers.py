@@ -33,6 +33,7 @@ from tests.core.arbiter_kit import (
     fire,
     night,
     observed,
+    registered,
     snapshot,
     storm,
     window,
@@ -42,7 +43,7 @@ CORE = Path(__file__).parents[2] / "custom_components" / "roller_shutter_suite" 
 
 
 def _answers(wish: Wish) -> LayerRegistration:
-    return LayerRegistration(wish.layer, lambda _config, _world: wish)
+    return registered(wish.layer, lambda _config, _world: wish)
 
 
 def test_the_first_layer_with_an_opinion_wins() -> None:
@@ -252,7 +253,7 @@ def test_adding_a_layer_is_a_registration() -> None:
 def test_a_layer_is_registered_once_and_answers_for_itself() -> None:
     """Two functions for one layer, or an answer in another layer's name, are refused."""
     inactive = _answers(Wish.no_opinion(Layer.SLEEP, ReasonCode.INACTIVE))
-    impostor = LayerRegistration(
+    impostor = registered(
         Layer.FIRE,
         lambda _config, _world: Wish.no_opinion(Layer.SLEEP, ReasonCode.INACTIVE),
     )
@@ -263,7 +264,7 @@ def test_a_layer_is_registered_once_and_answers_for_itself() -> None:
     with pytest.raises(ValueError, match="answered with a wish of the layer 'sleep'"):
         build_arbiter([impostor]).recompute(window(), snapshot())
     with pytest.raises(TypeError, match="member of 'Layer'"):
-        LayerRegistration(bad, inactive.evaluate)
+        registered(bad, inactive.evaluate)
 
 
 # --- No state, no clock -----------------------------------------------------------

@@ -23,6 +23,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from custom_components.roller_shutter_suite.core.arbiter import (
+    LayerFunction,
     LayerRegistration,
     wish_for_missing_input,
 )
@@ -242,12 +243,27 @@ def schedule_layer(_config: WindowConfig, world: WorldSnapshot) -> Wish:
     return _triggered(wish, world, "part_of_day_since")
 
 
+FUNCTION_OF = {
+    Layer.SLEEP: "sleep",
+    Layer.EXTERNAL_REQUEST: "request",
+    Layer.PRIVACY: "privacy",
+    Layer.SHADING: "shading",
+    Layer.SCHEDULE: "schedule",
+}
+"""The function a stub comfort layer declares; fire and protection declare none."""
+
+
+def registered(layer: Layer, evaluate: LayerFunction) -> LayerRegistration:
+    """Return the registration of a stub layer with the function it belongs to."""
+    return LayerRegistration(layer, evaluate, FUNCTION_OF.get(layer))
+
+
 STUB_LAYERS = (
-    LayerRegistration(Layer.SCHEDULE, schedule_layer),
-    LayerRegistration(Layer.SHADING, shading_layer),
-    LayerRegistration(Layer.SLEEP, sleep_layer),
-    LayerRegistration(Layer.PROTECTION, protection_layer),
-    LayerRegistration(Layer.FIRE, fire_layer),
+    registered(Layer.SCHEDULE, schedule_layer),
+    registered(Layer.SHADING, shading_layer),
+    registered(Layer.SLEEP, sleep_layer),
+    registered(Layer.PROTECTION, protection_layer),
+    registered(Layer.FIRE, fire_layer),
 )
 """Registered in the wrong order on purpose: the arbiter sorts them."""
 

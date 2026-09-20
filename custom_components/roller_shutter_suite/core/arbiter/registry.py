@@ -62,15 +62,38 @@ The persisted window state is part of the snapshot (``snapshot.state``).
 
 @dataclass(frozen=True, slots=True)
 class LayerRegistration:
-    """One layer and the function that answers for it."""
+    """One layer, the function that answers for it, and the function it belongs to.
+
+    ``function`` is the stable identifier of the function of the integration
+    the layer belongs to (``schedule``, ``shading``, ``privacy``, ``sleep``,
+    ``request`` ...). A comfort layer has to declare it: a window can have a
+    function disabled because a stored setting of it is faulty, and the
+    arbiter then does not ask the layer. The fire layer and the protection
+    layer are never disabled; what they declare is ignored.
+    """
 
     layer: Layer
     evaluate: LayerFunction
+    function: str | None = None
 
     def __post_init__(self) -> None:
-        """Validate the place of the registration."""
+        """Validate the place of the registration and the declared function."""
         if not isinstance(self.layer, Layer):
             raise TypeError("a layer is registered for a member of 'Layer'")
+        if self.function is not None and (
+            not isinstance(self.function, str) or not self.function
+        ):
+            raise ValueError("the function of a layer is a non-empty identifier")
+        if self.can_be_disabled and self.function is None:
+            raise ValueError(
+                f"the comfort layer {self.layer.value!r} declares the function it "
+                "belongs to"
+            )
+
+    @property
+    def can_be_disabled(self) -> bool:
+        """Return whether the layer is a comfort layer; only those can be disabled."""
+        return self.layer.wish_class is WishClass.COMFORT
 
 
 @dataclass(frozen=True, slots=True)

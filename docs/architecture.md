@@ -228,7 +228,7 @@ A closed enumeration in the core. Adding a code requires an English and a German
 
 **Winning or contributing layers:** `fire_alarm`, `fire_unacknowledged`, `protection_event`, `protection_return_manual`, `sleep_mode`, `external_request`, `privacy_lights_on`, `shading_geometric`, `shading_fixed`, `solar_heating`, `schedule_day`, `schedule_night`.
 
-**Why a layer did not act:** `not_configured`, `inactive`, `input_unavailable`, `input_unknown`, `input_held_last_known`, `waiting_for_delay`, `outside_episode`, `episode_locked`, `watchdog_released`, `capability_missing`, `day_type_fallback`.
+**Why a layer did not act:** `not_configured`, `inactive`, `input_unavailable`, `input_unknown`, `input_held_last_known`, `waiting_for_delay`, `outside_episode`, `episode_locked`, `watchdog_released`, `capability_missing`, `day_type_fallback`, `function_disabled_by_fault`.
 
 **Constraints:** `only_raise`, `only_lower`, `sleep_exception_no_open`, `lockout_door_open`, `lockout_void_tamper`, `lockout_contact_unavailable`, `ventilation_floor`, `rain_ventilation_floor`, `frost_limit`, `frost_limit_source_blind`, `frost_hold`, `no_intermediate_position`.
 

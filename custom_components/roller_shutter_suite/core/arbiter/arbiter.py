@@ -31,6 +31,7 @@ from custom_components.roller_shutter_suite.core.reasons import ReasonCode
 from .controls import effective_controls
 from .dry_run import is_standing, simulated_state
 from .fire_bypass import skips
+from .layers import disabled_functions
 from .registry import (
     ConstraintInput,
     ConstraintRegistration,
@@ -117,6 +118,16 @@ class Arbiter:
             registration = registered.get(layer)
             if registration is None:
                 wishes.append(Wish.no_opinion(layer, ReasonCode.NOT_CONFIGURED))
+                continue
+            if (
+                registration.can_be_disabled
+                and registration.function in disabled_functions(config)
+            ):
+                # Comfort becomes cautious: a faulty stored setting never moves a
+                # window. The layer is not asked, and the record says why.
+                wishes.append(
+                    Wish.no_opinion(layer, ReasonCode.FUNCTION_DISABLED_BY_FAULT)
+                )
                 continue
             wish = registration.evaluate(config, snapshot)
             if wish.layer is not layer:

@@ -261,6 +261,15 @@ class WindowConfig:
       accepted at present.
     - ``schedule_profile``: the key under which the schedule's targets are
       looked up; it has one value.
+    - ``motor_protection`` and ``frost``: the settings of the two features.
+    - ``reevaluate_after``: the upper bound of a deferral whose end is not
+      known: that long after the recompute, at the latest, the window is
+      evaluated again.
+    - ``disabled_functions``: the comfort functions that are paused for this
+      window because a stored setting in their inheritance chain is faulty,
+      as stable identifiers (``schedule``, ``shading`` ...). The arbiter does
+      not ask a comfort layer whose function is listed. Fire and protection
+      cannot be disabled this way.
     """
 
     window_id: str
@@ -272,6 +281,7 @@ class WindowConfig:
     motor_protection: MotorProtectionSettings = MotorProtectionSettings()
     frost: FrostSettings = FrostSettings()
     reevaluate_after: timedelta = _DEFAULT_REEVALUATE_AFTER
+    disabled_functions: frozenset[str] = frozenset()
 
     def __post_init__(self) -> None:
         """Validate identity, members and the doors kept open."""
@@ -301,6 +311,11 @@ class WindowConfig:
             self.motor_protection, MotorProtectionSettings, "the motor protection"
         )
         require_type(self.frost, FrostSettings, "the frost settings")
+        object.__setattr__(
+            self, "disabled_functions", frozenset(self.disabled_functions)
+        )
+        for function in self.disabled_functions:
+            require_identifier(function, "a disabled function")
         require_type(self.reevaluate_after, timedelta, "the re-evaluation bound")
         if self.reevaluate_after <= timedelta(0):
             raise ValueError("the re-evaluation bound must be longer than zero")

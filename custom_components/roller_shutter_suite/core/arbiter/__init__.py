@@ -20,7 +20,7 @@ from .gate import (
     Dam,
     expectation_window_end,
 )
-from .layers import wish_for_missing_input
+from .layers import disabled_functions, wish_for_missing_input
 from .registry import (
     ALL_CLASSES,
     ConstraintFunction,
@@ -62,6 +62,7 @@ __all__ = [
     "apply_take_over",
     "arm",
     "bypassed_rules",
+    "disabled_functions",
     "effective_controls",
     "expectation_window_end",
     "is_standing",

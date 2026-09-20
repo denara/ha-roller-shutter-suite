@@ -13,9 +13,18 @@ from custom_components.roller_shutter_suite.core.model import (
     AnySourceValue,
     Layer,
     SourceState,
+    WindowConfig,
     Wish,
 )
 from custom_components.roller_shutter_suite.core.reasons import ReasonCode
+
+
+def disabled_functions(config: WindowConfig) -> frozenset[str]:
+    """Return the comfort functions that are disabled for the window.
+
+    The one place where the arbiter reads them from the configuration.
+    """
+    return config.disabled_functions
 
 
 def wish_for_missing_input(
