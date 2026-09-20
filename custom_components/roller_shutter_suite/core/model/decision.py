@@ -329,7 +329,11 @@ CONSTRAINT_REASONS: Final = MappingProxyType(
             {ReasonCode.RAIN_VENTILATION_FLOOR}
         ),
         Constraint.FROST_PROTECTION: frozenset(
-            {ReasonCode.FROST_LIMIT, ReasonCode.FROST_HOLD}
+            {
+                ReasonCode.FROST_LIMIT,
+                ReasonCode.FROST_LIMIT_SOURCE_BLIND,
+                ReasonCode.FROST_HOLD,
+            }
         ),
         Constraint.NO_INTERMEDIATE_POSITION: frozenset(
             {ReasonCode.NO_INTERMEDIATE_POSITION}
@@ -412,7 +416,11 @@ GATE_RULE_REASONS: Final = MappingProxyType(
         GateRule.PERSON_AT_WINDOW_DAM: frozenset({ReasonCode.PERSON_AT_WINDOW}),
         GateRule.MANUAL_OVERRIDE_DAM: frozenset({ReasonCode.MANUAL_OVERRIDE}),
         GateRule.MOVEMENT_IN_FLIGHT: frozenset(
-            {ReasonCode.MOVEMENT_IN_FLIGHT, ReasonCode.DUPLICATE_COMMAND}
+            {
+                ReasonCode.MOVEMENT_IN_FLIGHT,
+                ReasonCode.DUPLICATE_COMMAND,
+                ReasonCode.MOVEMENT_TAKEN_OVER,
+            }
         ),
         GateRule.MOTOR_PROTECTION: frozenset(
             {ReasonCode.MIN_CHANGE, ReasonCode.MIN_INTERVAL}

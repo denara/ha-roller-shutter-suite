@@ -76,6 +76,7 @@ class ReasonCode(StrEnum):
     VENTILATION_FLOOR = "ventilation_floor"
     RAIN_VENTILATION_FLOOR = "rain_ventilation_floor"
     FROST_LIMIT = "frost_limit"
+    FROST_LIMIT_SOURCE_BLIND = "frost_limit_source_blind"
     FROST_HOLD = "frost_hold"
     NO_INTERMEDIATE_POSITION = "no_intermediate_position"
 
@@ -92,6 +93,7 @@ class ReasonCode(StrEnum):
     MANUAL_OVERRIDE = "manual_override"
     MOVEMENT_IN_FLIGHT = "movement_in_flight"
     DUPLICATE_COMMAND = "duplicate_command"
+    MOVEMENT_TAKEN_OVER = "movement_taken_over"
     MIN_CHANGE = "min_change"
     MIN_INTERVAL = "min_interval"
     COMMAND_BACKOFF = "command_backoff"
@@ -114,6 +116,7 @@ class ReasonCode(StrEnum):
     FROST_PROTECTION_WAIVED = "frost_protection_waived"
     FROST_WAIVER_ENDED = "frost_waiver_ended"
     FROST_RELEASED_BY_SUN = "frost_released_by_sun"
+    FROST_SOURCE_BLIND = "frost_source_blind"
     POSITION_MAY_BE_INACCURATE = "position_may_be_inaccurate"
     COMMAND_FAILED = "command_failed"
     ACTUATOR_NO_REACTION = "actuator_no_reaction"
@@ -166,6 +169,7 @@ _GROUPS: Final = MappingProxyType(
             ReasonCode.VENTILATION_FLOOR,
             ReasonCode.RAIN_VENTILATION_FLOOR,
             ReasonCode.FROST_LIMIT,
+            ReasonCode.FROST_LIMIT_SOURCE_BLIND,
             ReasonCode.FROST_HOLD,
             ReasonCode.NO_INTERMEDIATE_POSITION,
         ),
@@ -182,6 +186,7 @@ _GROUPS: Final = MappingProxyType(
             ReasonCode.MANUAL_OVERRIDE,
             ReasonCode.MOVEMENT_IN_FLIGHT,
             ReasonCode.DUPLICATE_COMMAND,
+            ReasonCode.MOVEMENT_TAKEN_OVER,
             ReasonCode.MIN_CHANGE,
             ReasonCode.MIN_INTERVAL,
             ReasonCode.COMMAND_BACKOFF,
@@ -204,6 +209,7 @@ _GROUPS: Final = MappingProxyType(
             ReasonCode.FROST_PROTECTION_WAIVED,
             ReasonCode.FROST_WAIVER_ENDED,
             ReasonCode.FROST_RELEASED_BY_SUN,
+            ReasonCode.FROST_SOURCE_BLIND,
             ReasonCode.POSITION_MAY_BE_INACCURATE,
             ReasonCode.COMMAND_FAILED,
             ReasonCode.ACTUATOR_NO_REACTION,
