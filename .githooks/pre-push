@@ -1,6 +1,7 @@
 #!/bin/sh
-# Pre-push hook: run the instance data guard of this checkout, and refuse the
-# push unless the guard ends with exit status 0.
+# Pre-push hook: run the instance data guard of this checkout twice, on the
+# checkout and on the commits that the push would send, and refuse the push
+# unless both runs end with exit status 0.
 #
 # Why: the repository is public, and CI sees a file only when it is already
 # published. Activate the hook once per clone, by hand (agents never change git
@@ -10,25 +11,28 @@
 #
 # docs/dev/contributing.md describes the hook.
 #
-# What is refused: exit status 1 of the guard (findings), exit status 2 (CANNOT
-# CHECK), and every other status that is not 0. The hook fails closed as well:
-# when git cannot name the checkout, when the guard is missing, or when no
-# Python is found that can run it, the push is refused. A hook that cannot
-# check never lets a push through.
+# What is judged:
+#   1. the checkout as it is (tracked files and new files that git does not
+#      ignore), exactly as `python scripts/check_instance_data.py` does it;
+#   2. what the push really sends: git hands this script one line per ref on
+#      standard input and the name and the URL of the remote as arguments. The
+#      guard, called with `--pushed`, judges every commit that is not on the
+#      remote yet, one by one: its message, the path texts and the added lines.
+#      A private value that was committed and corrected in the next commit is
+#      gone from the checkout, but it would leave with the history.
 #
-# What is NOT covered: the guard judges the checkout as it is (tracked files
-# and new files that git does not ignore), not the exact commits that are
-# pushed. Commits that differ from the checkout (another branch, stashed or
-# reverted changes) are not seen here. CI is the second net. Git hands the
-# refs to be pushed to this script on standard input; they are not needed and
-# never read, and the guard gets an empty input.
+# What is refused: exit status 1 of either run (findings), exit status 2
+# (CANNOT CHECK), and every other status that is not 0. The hook fails closed
+# as well: when git cannot name the checkout, when the guard is missing, or
+# when no Python is found that can run it, the push is refused. A hook that
+# cannot check never lets a push through.
+#
+# What is NOT covered: content that is on the remote already, and a push with
+# --no-verify, which skips this script and is never to be used.
 #
 # How the checkout is found: through `git rev-parse --show-toplevel`, never
 # through the place of this file, so it works from a subfolder and in a
-# worktree. Only where git cannot answer (a worktree made by git for Windows,
-# looked at from inside WSL) the current folder is taken, and only if it is the
-# top of a checkout that holds the guard; the guard then asks git in its own
-# documented ways and fails closed if none works.
+# worktree. If git cannot answer, the hook refuses; there is no other way.
 #
 # How Python is found, in this order, each through PATH and none through a
 # fixed location; nothing is installed, created or configured:
@@ -37,35 +41,37 @@
 #   2. python3,
 #   3. python,
 #   4. py -3 (the launcher on Windows).
-# A candidate counts only if it can read and compile the guard, so an
-# interpreter that is too old for its syntax is passed over. The guard needs
-# nothing but the standard library.
+# A candidate counts only if it reads and compiles the guard and then prints
+# the expected token, exactly and with exit status 0. A program that merely
+# ends with status 0 is not taken for a Python, and an interpreter that is too
+# old for the syntax of the guard is passed over. The guard needs nothing but
+# the standard library.
 #
-# The exit status of the guard is taken from `$?` directly after the call.
-# This file contains no pipe, no `set +e` and nothing else that could swallow
-# it: a swallowed status once let a flagged commit through.
+# Standard input belongs to the second run alone: the first run and every
+# other command here get an empty input, so the lines of git arrive unchanged.
+#
+# The exit status of each run is taken from `$?` directly after the call and
+# kept in a variable of its own. This file contains no pipe, no `&&`, no `||`,
+# no `set +e`, no `exec`, no `return` and nothing else that could swallow a
+# status or leave before it is looked at: a swallowed status once let a flagged
+# commit through. The only `exit 0` stands behind the comparison of both.
 
 set -u
 
 refuse() {
     printf '%s\n' "pre-push hook: PUSH REFUSED: $1" >&2
-    printf '%s\n' "Do not bypass this hook with --no-verify. If the guard is wrong, report the false positive; the guard is then made narrower." >&2
+    printf '%s\n' "Do not bypass this hook with --no-verify. If the guard is wrong, report the false positive; the guard is then made narrower. If a commit of the history is named, do not rewrite a branch that was pushed before; docs/dev/contributing.md says what to do." >&2
     exit 1
 }
 
+remote_name=${1-}
+remote_url=${2-}
 guard_path="scripts/check_instance_data.py"
 
-root=$(git rev-parse --show-toplevel 2>/dev/null)
+root=$(git rev-parse --show-toplevel 2>/dev/null </dev/null)
 status=$?
 if [ "$status" -ne 0 ]; then
     root=""
-fi
-if [ -z "$root" ]; then
-    if [ -e ".git" ]; then
-        if [ -f "$guard_path" ]; then
-            root=$(pwd)
-        fi
-    fi
 fi
 if [ -z "$root" ]; then
     refuse "git cannot name the checkout, so the instance data guard cannot run."
@@ -76,37 +82,50 @@ if [ ! -f "$guard" ]; then
     refuse "the instance data guard ($guard_path) is not in this checkout, so nothing can be checked."
 fi
 
-probe='import sys; compile(open(sys.argv[1], encoding="utf-8").read(), "guard", "exec")'
+token="pre-push-probe: this python compiled the guard"
+probe='import sys; compile(open(sys.argv[1], encoding="utf-8").read(), "guard", "exec"); sys.stdout.write("pre-push-probe: this python compiled the guard")'
 
-# Succeeds if the given command is a Python that can read and compile the guard.
-usable() {
-    "$@" -c "$probe" "$guard" >/dev/null 2>&1 </dev/null
+# Sets `usable` to yes if the given command is a Python that can read and
+# compile the guard: it has to end with status 0 and print exactly the token.
+try_python() {
+    usable=no
+    answer=$("$@" -c "$probe" "$guard" 2>/dev/null </dev/null)
+    status=$?
+    if [ "$status" -eq 0 ]; then
+        if [ "$answer" = "$token" ]; then
+            usable=yes
+        fi
+    fi
 }
 
 set --
-if command -v uv >/dev/null 2>&1; then
-    found=$(cd "$root" && uv python find --no-python-downloads 2>/dev/null </dev/null)
+if command -v uv >/dev/null 2>/dev/null </dev/null; then
+    found=$(cd "$root" 2>/dev/null; uv python find --no-python-downloads 2>/dev/null </dev/null)
     status=$?
     if [ "$status" -eq 0 ]; then
         if [ -n "$found" ]; then
-            if usable "$found"; then
+            try_python "$found"
+            if [ "$usable" = yes ]; then
                 set -- "$found"
             fi
         fi
     fi
 fi
 if [ "$#" -eq 0 ]; then
-    if usable python3; then
+    try_python python3
+    if [ "$usable" = yes ]; then
         set -- python3
     fi
 fi
 if [ "$#" -eq 0 ]; then
-    if usable python; then
+    try_python python
+    if [ "$usable" = yes ]; then
         set -- python
     fi
 fi
 if [ "$#" -eq 0 ]; then
-    if usable py -3; then
+    try_python py -3
+    if [ "$usable" = yes ]; then
         set -- py -3
     fi
 fi
@@ -115,11 +134,20 @@ if [ "$#" -eq 0 ]; then
 fi
 
 "$@" "$guard" </dev/null
-status=$?
-if [ "$status" -eq 0 ]; then
-    exit 0
+checkout_status=$?
+
+"$@" "$guard" --pushed "$remote_name" "$remote_url"
+pushed_status=$?
+
+if [ "$checkout_status" -eq 0 ]; then
+    if [ "$pushed_status" -eq 0 ]; then
+        exit 0
+    fi
 fi
-if [ "$status" -eq 1 ]; then
-    refuse "the instance data guard has findings (exit status 1), see above."
+if [ "$checkout_status" -eq 0 ]; then
+    refuse "the check of the pushed commits did not pass (exit status $pushed_status; 1 means findings, 2 means it could not check), see above."
 fi
-refuse "the instance data guard could not check (exit status $status), see above."
+if [ "$pushed_status" -eq 0 ]; then
+    refuse "the check of the checkout did not pass (exit status $checkout_status; 1 means findings, 2 means it could not check), see above."
+fi
+refuse "neither check passed (checkout: exit status $checkout_status, pushed commits: exit status $pushed_status; 1 means findings, 2 means it could not check), see above."

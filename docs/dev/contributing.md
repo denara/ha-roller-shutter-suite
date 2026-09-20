@@ -64,26 +64,64 @@ A local run speeds up the work. The authoritative result is the run on GitHub.
 
 The repository is public, and CI sees a push only when it is already published. The instance data guard therefore has to run before every push. Remembering that is not reliable: a chain of commands once sent the guard's output through a pipe, the pipe swallowed exit status 1, and a flagged commit was pushed. The hook `.githooks/pre-push` makes the step mechanical.
 
-Activate it once per clone, by hand:
+### Activating it
+
+A human activates the hook once per clone, by hand. **Agents never change git configuration**, this setting included; an agent that finds the hook inactive runs the guard itself, without a pipe behind it, and looks at the exit status. The setting is stored in the clone, so every worktree of that clone shares it. There are two ways, and each has a hole:
 
 ```sh
 git config core.hooksPath .githooks
 ```
 
-This is the only step, and a human takes it. **Agents never change git configuration**, this setting included; an agent that finds the hook inactive runs the guard itself, without a pipe behind it, and looks at the exit status. The setting is stored in the clone, so every worktree of that clone shares it, and each worktree runs the hook and the guard of its own checkout.
+With this relative folder, git looks in the checkout it pushes from, so every worktree runs its own copy of the hook. The hole: a branch that does not contain the folder yet (one that started before the hook existed) has no hook, and git then runs nothing and says nothing.
 
-What the hook does on every `git push`:
+```sh
+git config core.hooksPath "<absolute path of one checkout>/.githooks"
+```
 
-- It asks git for the top of the checkout (`git rev-parse --show-toplevel`), so it works from a subfolder and in a worktree, and runs `scripts/check_instance_data.py` of that checkout.
-- It refuses the push unless the guard ends with exit status 0. Findings (status 1) and `CANNOT CHECK` (status 2) both refuse. The guard's output is shown; it names file, line and kind, never the text or a private name.
-- It fails closed: if git cannot name the checkout, the guard is missing, or no Python is found that can run the guard, the push is refused. A hook that cannot check never lets a push through.
-- It looks for Python in this order, each through `PATH`: the interpreter that `uv python find` names (the one `uv run` would use; the hook does not call `uv run`, which may create an environment), then `python3`, `python`, and `py -3`. A candidate counts only if it can compile the guard, so an interpreter that is too old is passed over. The hook installs, creates and configures nothing.
+With the absolute folder of one checkout, every worktree runs the hook file of that checkout, whatever its own branch contains. The hole: the hook is only as new as that checkout, and if the file is missing there (another branch is checked out, the checkout was moved), git again runs nothing and says nothing.
+
+In both cases the hook judges the checkout it is started in, with the guard of that checkout, because it asks git for the top of the checkout and never looks at its own location.
+
+Git treats a hook that is missing as "no hook", silently, and nothing inside the hook can change that, because it does not run then. What a human can check: `git config core.hooksPath` names a folder, that folder holds a file `pre-push` (on Linux and macOS an executable one), and a push prints the two lines of the guard that start with `instance data`. A push that prints neither was not checked.
+
+### What the hook does on every `git push`
+
+- It asks git for the top of the checkout (`git rev-parse --show-toplevel`), so it works from a subfolder and in a worktree, and takes `scripts/check_instance_data.py` of that checkout.
+- **First it judges the checkout**, exactly as `uv run python scripts/check_instance_data.py` does: the tracked files and the new files that git does not ignore.
+- **Then it judges what the push really sends.** The checkout shows the end state only. A private value that was committed by mistake and corrected in the next commit has left the checkout, but it would leave the computer with the history of the branch, and it stays retrievable on GitHub through the pull request, even after a squash merge and the deletion of the branch. Git hands the hook one line per ref, and the guard (called with `--pushed`) works out the commits the remote does not have yet: those reachable from what is pushed, but neither from the present state of that ref on the remote nor from a remote-tracking ref of that remote (`origin/main` and the like). If the push names a URL instead of a configured remote, the remote-tracking refs of all remotes are taken. Every such commit is judged on its own, never as one combined difference, with the same patterns and the same allowed documentation values as the checkout:
+  - the **commit message**: subject, body and trailers;
+  - the **path text** of every entry that the commit adds or changes compared with its first parent; a renamed file counts as a new one;
+  - the **added lines** of these entries: every line whose text the first parent's version of that path does not contain. For a commit without a parent that is everything. Binary files and the generated lock file are skipped as in the checkout, and the target text of a symbolic link is judged;
+  - the **name of the remote ref**, because a branch name is published like a file name.
+
+  Deleted lines and the old path of a rename are not judged: they are public already, or they were judged in the commit that added them. The identity lines of author and committer are not judged by these patterns. A merge of `origin/main` into a branch is an ordinary commit here: what the remote already has is outside the range. Tags and other refs outside `refs/heads/` are judged in the same way; of an annotated tag the message of the tag is judged too. A deletion of a remote ref sends nothing and is only counted.
+- It refuses the push unless both runs end with exit status 0. Findings (status 1) and `CANNOT CHECK` (status 2) both refuse. The output names the commit by its abbreviated object name, the kind of place (the line of a file, the message, a path text by its position in a list that a printed git command shows) and the kind of pattern, never the text, and never a path that itself looks private.
+- It fails closed: if git cannot name the checkout, the guard is missing, no Python is found that can run the guard, a line of git cannot be parsed, an object is not known locally, git fails for a commit, or a message, path or content is neither UTF-8 text nor binary, the push is refused. A hook that cannot check never lets a push through. If the refusal says that the object of the remote is not known locally, somebody else has pushed in between: run `git fetch` and push again.
+- It looks for Python in this order, each through `PATH`: the interpreter that `uv python find` names (the one `uv run` would use; the hook does not call `uv run`, which may create an environment), then `python3`, `python`, and `py -3`. A candidate counts only if it compiles the guard and then prints an expected token, exactly; a program that merely ends with status 0 is not taken for a Python, and an interpreter that is too old is passed over. The hook installs, creates and configures nothing.
+
+Each run ends with one line that says how much was looked at. Two beginnings of these lines are stable, and tests and readers may rely on them: `instance data: ok; judged <n> path text(s)` for the checkout, and `instance data, pushed commits: ok; judged <n> commit(s)` for the push. The rest of the wording may change. When the remote is up to date, git starts the hook without a line; the second run then says that it judged 0 commits because git named no ref. Without a line and without git behind it (a start by hand) the hook refuses.
+
+**Agents state both numbers in the pull request**, in their own words, at the first push of a branch and at the first push after merging `main` into it: that the hook ran, how many files of the checkout it checked and how many commits it judged. That is the visible proof that the hook ran.
 
 **Never bypass the hook with `--no-verify`.** If the guard flags something harmless, change the example or report the false positive; the guard is then made narrower.
 
-What the hook does not cover: the guard judges the checkout as it is, not the exact commits of the push. If you push commits that differ from your checkout (another branch, changes you stashed or reverted), the hook does not see them. CI is the second net, and reading what you publish stays your job.
+### When the hook refuses because of a commit in the history
 
-On Windows, git for Windows runs the hook with the `sh` it ships; nothing else is needed, and the executable bit does not matter there. On Linux, macOS and inside WSL the file has to be executable, which git takes care of because the mode is recorded in the repository. Pushes happen on the Windows side (see [Running the Home Assistant tests on Windows](testing.md#running-the-home-assistant-tests-on-windows)); the hook also runs under the `sh` of a WSL distribution, where the guard reaches git in the ways described below.
+The checkout is clean, but an earlier commit of the branch is not. Correcting it with one more commit does not help, because the flagged commit would still be sent.
+
+- If the branch has never been pushed, nothing has left the computer. Make a new branch from the current `origin/main`, bring the clean end state over (for example `git checkout <old branch> -- <paths>`, then commit in meaningful steps), and push the new branch. Leave the old branch unpushed and delete it when the work is merged.
+- If earlier commits of the branch are on the remote already, the flagged commit is a later one that has not been sent; the same way out applies, and the pull request moves to the new branch. **Never force-push a rewritten version of a branch that was pushed before.**
+- Tell the orchestrator or the project owner what happened: which kind of value, in which kind of place, and that it did not leave the computer. Do not quote the value.
+
+### What the hook does not cover
+
+- Content that is on the remote already. The hook cannot take anything back; if something private was published, tell the project owner at once.
+- Lines whose text the first parent's version of the same file already contains, and deleted lines: see above.
+- A push with `--no-verify`, which skips every hook and is not to be used, and a clone in which nobody activated the hook.
+- A configured hook folder without a `pre-push` file; see "Activating it".
+- What no pattern can know: a real room name or device name looks like any other word. CI is the second net for files, and reading what you publish stays your job.
+
+On Windows, git for Windows runs the hook with the `sh` it ships; nothing else is needed, and the executable bit does not matter there. On Linux, macOS and inside WSL the file has to be executable, which git takes care of because the mode is recorded in the repository. Pushes happen on the Windows side (see [Running the Home Assistant tests on Windows](testing.md#running-the-home-assistant-tests-on-windows)); the hook also runs under the `sh` of a WSL distribution, where the guard reaches git in the ways described below. The one exception: in a worktree that git for Windows created, the git of the distribution cannot name the checkout, so the hook refuses there; to check by hand under WSL in such a worktree, run the guard directly instead (`uv run python scripts/check_instance_data.py`).
 
 ## What the guards enforce
 
@@ -97,7 +135,7 @@ The instance data guard asks git for the files: the tracked ones and the new one
 |---|---|
 | `check_core_purity.py` | a module under `custom_components/roller_shutter_suite/core/` imports `homeassistant`, or imports anything of the integration outside `core/`. The core is plain Python and gets all its inputs handed in. |
 | `check_deprecated_names.py` | the integration or a test references a Home Assistant name that is known to be deprecated. The names are listed in `scripts/deprecated_names.toml`, and the message tells you what to use instead. See [Deprecated names](#deprecated-names). |
-| `check_instance_data.py` | a tracked file, or a new file that git does not ignore, contains something that looks like data of a real installation or a real computer: a private IP address, an IPv6 address, a hardware address, a host name ending in `.local`, a pair of coordinates or a coordinate next to a latitude or longitude key, an entity ID with a serial number in it, a path with a drive letter or a home directory, an e-mail address. The script reports file, line and kind, never the text itself. It needs git to list the files; see above. |
+| `check_instance_data.py` | a tracked file, or a new file that git does not ignore, contains something that looks like data of a real installation or a real computer: a private IP address, an IPv6 address, a hardware address, a host name ending in `.local`, a pair of coordinates or a coordinate next to a latitude or longitude key, an entity ID with a serial number in it, a path with a drive letter or a home directory, an e-mail address. The script reports file, line and kind, never the text itself. It needs git to list the files; see above. Called with `--pushed` by the pre-push hook, it judges the commits of a push with the same patterns instead; see [The pre-push hook](#the-pre-push-hook). |
 | `check_versions.py` | `pyproject.toml` and `manifest.json` state different versions. Both files need the version (uv requires one, Home Assistant and HACS read the other), so a release changes both. |
 | `check_log_guard.py` | anything weakens the rule that warnings and logged deprecations are errors. A test other than `tests/ha/test_report_guard.py` uses the fixtures of the log guard, or any file outside `tests/ha/conftest.py` defines a function with the name of one of them. `filterwarnings` in a pytest configuration is anything but exactly `error`. `addopts` or a `pytest` command line in a workflow carries `-W`, `-o`/`--override-ini`, `-c`, `-p no:warnings`, `-p no:logging` or `--disable-warnings`, or a workflow sets `PYTHONWARNINGS`. A test or the integration filters or catches warnings, with the `warnings` module or with `pytest.warns`, `pytest.deprecated_call` or the `recwarn` fixture. |
 | `check_foreign_warnings.py` | an entry of `tests/foreign_warnings.toml` is incomplete, has no `https` link, names the category `Warning` (which covers everything), or has a module pattern that contains a colon or matches this integration, its tests, or the Home Assistant helpers that report deprecated usage. |

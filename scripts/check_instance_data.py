@@ -89,15 +89,70 @@ the checkout this script lives in.
 
 Run it from anywhere: ``python scripts/check_instance_data.py``. It needs git
 and the standard library.
+
+**The second mode: what a push really sends.** The checkout shows the end state
+only. A private value that was committed by mistake and corrected in the next
+commit is gone from the checkout, but it leaves with the history of the branch
+and stays retrievable on the server. ``python scripts/check_instance_data.py
+--pushed <name of the remote> <URL of the remote>`` is what the pre-push hook
+(``.githooks/pre-push``) calls after the check of the checkout. It reads the
+lines git hands to such a hook on standard input, one per ref::
+
+    <local ref> <local object name> <remote ref> <remote object name>
+
+and judges, with the patterns and allowed values above and nothing else:
+
+- the name of every remote ref that is created or updated (a branch name is
+  published like a file name);
+- every commit the push would send, one by one and never as one combined
+  difference, because the correcting commit would hide the mistake. The commits
+  of a line are those reachable from the local object and neither from the
+  remote object (if the ref exists there) nor from a remote-tracking ref of the
+  named remote. A remote that has no name, only a URL, has no remote-tracking
+  refs of its own; then those of all remotes are taken. A commit that several
+  refs reach is judged once;
+- of each commit the message (subject, body, trailers; also every header line
+  other than ``tree``, ``parent``, ``author``, ``committer`` and a signature),
+  the path text of every entry that differs from the first parent and is not
+  deleted (for a commit without a parent: every entry), and the added lines of
+  these entries. An added line is a line of the new content whose text does not
+  occur in the first parent's content of the same path; such a text is either
+  public already or was judged in the commit that brought it. Renames are not
+  detected, so a renamed file counts as new: its new path and all its lines are
+  judged. Deleted lines and deleted paths are not judged;
+- content is sorted into the groups of the first mode: text and the target
+  text of a symbolic link are judged, a binary file and the generated lock
+  file are skipped, of a nested checkout git publishes a commit id only;
+- a ref outside ``refs/heads/`` (a tag, for example) is judged in the same way.
+  If the local object is an annotated tag, the message of the tag object is
+  judged too, and the tag has to lead to a commit.
+
+The lines of the author and the committer are not judged by these patterns.
+A line whose local object name consists of zeros deletes a ref, sends nothing
+and is only counted.
+
+This mode fails closed like the first one, with exit status 2: a line that
+cannot be parsed; an object that is not known locally (the remote object of a
+ref after somebody else pushed: fetch first); a ref that leads to something
+other than a commit; a message, path or content that is neither UTF-8 nor
+binary; any failure of git; no input at all from something that is not a pipe
+or a file (git always hands the hook a pipe; without a line in it git has
+nothing to push, and the last line of the run says so). The only way to exit
+status 0 is that every listed commit was judged and is clean; the last line
+then starts with ``instance data, pushed commits: ok; judged <n> commit(s)``.
+A finding names the commit by its abbreviated object name, the kind of place
+and the kind of pattern, never the text, and never a path that looks private.
 """
 
+import contextlib
+import itertools
 import os
 import re
 import shutil
 import stat
 import subprocess
 import sys
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -276,9 +331,13 @@ def check_name(listed: str, entry: int) -> list[NameFinding]:
     right for prose and wrong for ``<address>.md``. The path is therefore
     judged a second time with the file extensions taken off every part of it.
     """
+    return [NameFinding(entry, kind) for kind in name_kinds(listed)]
+
+
+def name_kinds(listed: str) -> list[str]:
+    """Return the kinds of pattern a path text looks like; see ``check_name``."""
     without_extensions = _EXTENSION.sub(" ", listed)
-    kinds = [*_kinds(listed), *_kinds(without_extensions)]
-    return [NameFinding(entry, kind) for kind in dict.fromkeys(kinds)]
+    return list(dict.fromkeys([*_kinds(listed), *_kinds(without_extensions)]))
 
 
 class CannotCheckError(RuntimeError):
@@ -315,22 +374,26 @@ class Report:
         )
 
 
+def _environment() -> dict[str, str]:
+    """Return the environment for git: without the variables that redirect it."""
+    return {
+        name: value
+        for name, value in os.environ.items()
+        if not name.upper().startswith(_GIT_VARIABLE_PREFIX)
+    }
+
+
 def _answer(command: list[str], root: Path) -> list[str] | None:
     """Run a command that prints NUL-separated text; ``None`` if it cannot.
 
     What the command writes to standard error is dropped on purpose: git names
     local paths there, and the output of this script may be pasted in public.
     """
-    environment = {
-        name: value
-        for name, value in os.environ.items()
-        if not name.upper().startswith(_GIT_VARIABLE_PREFIX)
-    }
     try:
         result = subprocess.run(  # noqa: S603 - fixed arguments, program from PATH
             command,
             cwd=root,
-            env=environment,
+            env=_environment(),
             check=True,
             capture_output=True,
             timeout=_GIT_TIMEOUT_SECONDS,
@@ -380,8 +443,14 @@ def _translated_git_dir(root: Path) -> str | None:
 
 
 def listing_commands(root: Path) -> list[list[str]]:
-    """Return the commands that may list the files, in the order to try them.
+    """Return the commands that may list the files, in the order to try them."""
+    return [[*git, *_LIST_ARGUMENTS] for git in git_commands(root)]
 
+
+def git_commands(root: Path) -> list[list[str]]:
+    """Return the ways of calling git for this checkout, in the order to try them.
+
+    Each is the beginning of a command line, to be followed by a git command.
     Every program is looked up through ``PATH``; see the module documentation
     for the reason behind each entry.
     """
@@ -396,20 +465,15 @@ def listing_commands(root: Path) -> list[list[str]]:
                 f"the folder of the checkout cannot be resolved ({type(error).__name__})"
             ) from error
         safe = [git, "-c", f"safe.directory={real_root}"]
-        commands.append([*safe, *_LIST_ARGUMENTS])
+        commands.append(safe)
         git_dir = _translated_git_dir(root)
         if git_dir is not None:
             commands.append(
-                [
-                    *safe,
-                    f"--git-dir={git_dir}",
-                    f"--work-tree={root.as_posix()}",
-                    *_LIST_ARGUMENTS,
-                ]
+                [*safe, f"--git-dir={git_dir}", f"--work-tree={root.as_posix()}"]
             )
     windows_git = shutil.which("git.exe")
     if windows_git is not None and windows_git != git:
-        commands.append([windows_git, *_LIST_ARGUMENTS])
+        commands.append([windows_git])
     return commands
 
 
@@ -443,13 +507,18 @@ def _read_text(file: Path, relative: str) -> str | None:
             f"{relative} cannot be read ({type(error).__name__}); make it readable "
             "or have git ignore it"
         ) from error
+    return _decoded(content, relative)
+
+
+def _decoded(content: bytes, shown: str) -> str | None:
+    """Return content as text, or ``None`` if it is binary; else it cannot be judged."""
     try:
         return content.decode("utf-8")
     except UnicodeDecodeError as error:
         if b"\0" in content:
             return None
         raise CannotCheckError(
-            f"{relative} is neither UTF-8 text nor binary, so it cannot be judged; "
+            f"{shown} is neither UTF-8 text nor binary, so it cannot be judged; "
             "save it as UTF-8, as .editorconfig demands"
         ) from error
 
@@ -541,8 +610,501 @@ def check_checkout(root: Path, own_path: str = OWN_PATH) -> Report:
     return report
 
 
-def main() -> int:
-    """Run the guard on this repository."""
+PUSHED_OPTION = "--pushed"
+_OBJECT_NAME = re.compile(r"[0-9a-f]{40}|[0-9a-f]{64}")
+_RAW_ENTRY = re.compile(r":(\d{6}) (\d{6}) ([0-9a-f]+) ([0-9a-f]+) ([AMDT])")
+_ABBREVIATED = 10
+_MODE_LINK = "120000"
+_MODE_NESTED = "160000"
+_MODE_NONE = "000000"
+_GLOB_CHARACTERS = frozenset("*?[\\")
+# An annotated tag may name another tag; nobody nests them deeply.
+_MAXIMUM_TAG_DEPTH = 10
+# Header lines of a commit or tag object that are not judged: object names, the
+# identities (see the module documentation) and signatures.
+_UNJUDGED_HEADERS = frozenset(
+    {
+        "tree",
+        "parent",
+        "author",
+        "committer",
+        "gpgsig",
+        "gpgsig-sha256",
+        "object",
+        "type",
+        "tagger",
+    }
+)
+_HOOK_INPUT = "what git handed to the hook"
+
+
+@dataclass(frozen=True)
+class PlaceFinding:
+    """Something suspicious that is not a line of a file. The text is not kept."""
+
+    place: str
+    kind: str
+
+    def __str__(self) -> str:
+        """Render as ``place: kind``."""
+        return f"{self.place}: looks like: {self.kind}"
+
+
+@dataclass(frozen=True)
+class PushedRef:
+    """One line of the hook's input. ``None`` stands for an object name of zeros."""
+
+    line: int
+    remote_ref: str
+    local_object: str | None
+    remote_object: str | None
+
+
+@dataclass
+class PushedReport:
+    """What the check of a push looked at, and what it found."""
+
+    findings: list[Finding | PlaceFinding] = field(default_factory=list)
+    refs: int = 0
+    deletions: int = 0
+    commits: int = 0
+    messages: int = 0
+    names: int = 0
+    files: int = 0
+    lines: int = 0
+    binary: int = 0
+    generated: int = 0
+    nested: int = 0
+
+    def summary(self) -> str:
+        """Say how much was judged; the number of commits comes first."""
+        if self.refs == 0 and self.deletions == 0:
+            return (
+                "judged 0 commit(s): git named no ref to push, as it does when "
+                "the remote is up to date"
+            )
+        return (
+            f"judged {self.commits} commit(s) that {self.refs} ref(s) would send: "
+            f"{self.messages} message(s) of commits and tags, {self.names} path "
+            f"text(s), {self.lines} added line(s) in {self.files} file(s); skipped: "
+            f"{self.binary} binary, {self.generated} generated, {self.nested} "
+            f"nested checkout(s); {self.deletions} deletion(s) of a remote ref, "
+            "which send nothing"
+        )
+
+
+def parse_pushed(data: bytes) -> list[PushedRef]:
+    """Parse the lines git writes to a pre-push hook; refuse what is off."""
+    try:
+        lines = data.decode("utf-8").split("\n")
+    except UnicodeDecodeError as error:
+        raise CannotCheckError(f"{_HOOK_INPUT} is not UTF-8 text") from error
+    if lines.pop():
+        raise CannotCheckError(
+            f"the last line of {_HOOK_INPUT} does not end with a line feed, so it "
+            "may be cut off"
+        )
+    refs: list[PushedRef] = []
+    for number, line in enumerate(lines, start=1):
+        parts = line.rsplit(" ", 3)
+        if (
+            len(parts) != 4  # noqa: PLR2004 - the four fields of the line
+            or not parts[0]
+            or not parts[2].startswith("refs/")
+            or _OBJECT_NAME.fullmatch(parts[1]) is None
+            or _OBJECT_NAME.fullmatch(parts[3]) is None
+            or len(parts[1]) != len(parts[3])
+        ):
+            raise CannotCheckError(
+                f"line {number} of {_HOOK_INPUT} cannot be parsed; expected "
+                "'<local ref> <local object name> <remote ref> <remote object name>'"
+            )
+        sent, present = (
+            None if set(name) == {"0"} else name for name in (parts[1], parts[3])
+        )
+        refs.append(PushedRef(number, parts[2], sent, present))
+    return refs
+
+
+class _Git:
+    """The first way of calling git that answers for this checkout."""
+
+    def __init__(self, root: Path) -> None:
+        self.root = root
+        commands = git_commands(root)
+        for command in commands:
+            if _answer([*command, "rev-parse", "--git-dir"], root) is not None:
+                self.command = command
+                break
+        else:
+            raise CannotCheckError(
+                f"git cannot be asked about this checkout ({len(commands)} way(s) "
+                "tried). Install git where this script runs and make sure it is "
+                "on PATH"
+            )
+        # The objects that are pushed are the real ones, not their replacements.
+        self.environment = {**_environment(), "GIT_NO_REPLACE_OBJECTS": "1"}
+
+    def output(self, *arguments: str) -> bytes:
+        """Return what a git command prints; its failure is a failure of the guard.
+
+        What git writes to standard error is dropped, as in ``_answer``.
+        """
+        try:
+            return subprocess.run(  # noqa: S603 - object names are checked, program from PATH
+                [*self.command, *arguments],
+                cwd=self.root,
+                env=self.environment,
+                check=True,
+                capture_output=True,
+                timeout=_GIT_TIMEOUT_SECONDS,
+            ).stdout
+        except (OSError, subprocess.SubprocessError) as error:
+            raise CannotCheckError(
+                f"'git {arguments[0]}' failed ({type(error).__name__}), so the "
+                "commits of this push cannot be read"
+            ) from error
+
+
+class _Objects:
+    """One running ``git cat-file --batch`` that hands out objects by name."""
+
+    def __init__(self, git: _Git) -> None:
+        self._git = git
+        self._process: subprocess.Popen[bytes] | None = None
+
+    def __enter__(self) -> _Objects:
+        try:
+            self._process = subprocess.Popen(  # noqa: S603 - fixed arguments, program from PATH
+                [*self._git.command, "cat-file", "--batch"],
+                cwd=self._git.root,
+                env=self._git.environment,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+            )
+        except OSError as error:
+            raise CannotCheckError(
+                f"'git cat-file' cannot be started ({type(error).__name__})"
+            ) from error
+        return self
+
+    def __exit__(self, *_details: object) -> None:
+        process = self._process
+        if process is None:
+            return
+        for stream in (process.stdin, process.stdout):
+            if stream is not None:
+                # The answers are all read by now; nothing depends on this.
+                with contextlib.suppress(OSError):
+                    stream.close()
+        try:
+            process.wait(timeout=_GIT_TIMEOUT_SECONDS)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait()
+
+    def read(self, name: str) -> tuple[str, bytes] | None:
+        """Return kind and content of an object, or ``None`` if git has it not."""
+        process = self._process
+        if process is None or process.stdin is None or process.stdout is None:
+            raise CannotCheckError("'git cat-file' is not running")
+        try:
+            process.stdin.write(name.encode("ascii") + b"\n")
+            process.stdin.flush()
+            header = process.stdout.readline().split()
+            if header[1:] == [b"missing"]:
+                return None
+            _, kind, size = header
+            content = process.stdout.read(int(size))
+            if len(content) != int(size) or process.stdout.read(1) != b"\n":
+                raise CannotCheckError("'git cat-file' answered with a short object")
+        except (OSError, ValueError) as error:
+            raise CannotCheckError(
+                f"'git cat-file' gave no usable answer ({type(error).__name__})"
+            ) from error
+        return kind.decode("ascii", "replace"), content
+
+    def blob(self, name: str, shown: str) -> bytes:
+        """Return the content of a file or of a link as git stores it."""
+        found = self.read(name)
+        if found is None or found[0] != "blob":
+            raise CannotCheckError(f"the content of {shown} is not known to git here")
+        return found[1]
+
+
+def _split_object(content: bytes, shown: str) -> tuple[list[tuple[str, str]], str]:
+    """Return the header lines and the message of a commit or tag object."""
+    try:
+        text = content.decode("utf-8")
+    except UnicodeDecodeError as error:
+        raise CannotCheckError(
+            f"{shown} is not UTF-8 text, so its message cannot be judged"
+        ) from error
+    head, _, message = text.partition("\n\n")
+    headers: list[tuple[str, str]] = []
+    for line in head.split("\n"):
+        if line.startswith(" ") and headers:
+            key, value = headers[-1]
+            headers[-1] = (key, f"{value}\n{line}")
+        else:
+            key, _, value = line.partition(" ")
+            headers.append((key, value))
+    return headers, message
+
+
+def _judge_object_text(
+    headers: list[tuple[str, str]], message: str, place: str, report: PushedReport
+) -> None:
+    """Judge the message of a commit or tag, and every header that carries text."""
+    report.messages += 1
+    report.findings += check_text(message, f"{place}: message")
+    for key, value in headers:
+        if key not in _UNJUDGED_HEADERS:
+            report.findings += [
+                PlaceFinding(f"{place}: an additional header line", kind)
+                for kind in dict.fromkeys(_kinds(f"{key} {value}".replace("\n", " ")))
+            ]
+
+
+def _commit_behind(objects: _Objects, ref: PushedRef, report: PushedReport) -> str:
+    """Return the commit a local object leads to; judge tag objects on the way."""
+    name = ref.local_object
+    where = f"line {ref.line} of {_HOOK_INPUT}"
+    for _ in range(_MAXIMUM_TAG_DEPTH):
+        found = None if name is None else objects.read(name)
+        if name is None or found is None:
+            raise CannotCheckError(f"the local object of {where} is not known to git")
+        kind, content = found
+        if kind == "commit":
+            return name
+        if kind != "tag":
+            raise CannotCheckError(
+                f"{where} pushes a {kind}, not a commit, which this guard cannot judge"
+            )
+        headers, message = _split_object(content, f"the tag object of {where}")
+        _judge_object_text(headers, message, f"{where}: tag object", report)
+        name = dict(headers).get("object")
+        if name is not None and _OBJECT_NAME.fullmatch(name) is None:
+            name = None
+    raise CannotCheckError(f"the tags of {where} are nested too deeply")
+
+
+@dataclass(frozen=True)
+class _Entry:
+    """One entry of a commit that differs from the first parent, as git tells it."""
+
+    old_mode: str
+    new_mode: str
+    old_object: str
+    new_object: str
+    status: str
+    path: str
+
+
+def _changed_entries(
+    git: _Git, name: str, parents: list[str]
+) -> tuple[str, list[_Entry]]:
+    """Return how to list them by hand, and the entries that differ from the parent."""
+    short = name[:_ABBREVIATED]
+    if parents:
+        ends = [parents[0], name]
+        by_hand = f"{parents[0][:_ABBREVIATED]} {short}"
+    else:
+        ends = ["--root", "--no-commit-id", name]
+        by_hand = f"--root --no-commit-id {short}"
+    raw = git.output("diff-tree", "-r", "-z", "--no-renames", "--no-abbrev", *ends)
+    fields = raw.split(b"\0")
+    if fields.pop() or len(fields) % 2:
+        raise CannotCheckError(f"git listed the entries of commit {short} unreadably")
+    entries = []
+    for described, path in itertools.batched(fields, 2, strict=True):
+        match = _RAW_ENTRY.fullmatch(described.decode("ascii", "replace"))
+        if match is None:
+            raise CannotCheckError(
+                f"git described an entry of commit {short} in a way this guard "
+                "does not know"
+            )
+        old_mode, new_mode, old_object, new_object, status = match.groups()
+        try:
+            entries.append(
+                _Entry(
+                    old_mode,
+                    new_mode,
+                    old_object,
+                    new_object,
+                    status,
+                    path.decode("utf-8"),
+                )
+            )
+        except UnicodeDecodeError as error:
+            raise CannotCheckError(
+                f"a path text of commit {short} is not UTF-8, so it cannot be judged"
+            ) from error
+    return f"git diff-tree -r --no-renames --name-only {by_hand}", entries
+
+
+def _judge_commit(
+    git: _Git, objects: _Objects, name: str, report: PushedReport
+) -> None:
+    """Judge message, path texts and added lines of one commit."""
+    short = name[:_ABBREVIATED]
+    found = objects.read(name)
+    if found is None or found[0] != "commit":
+        raise CannotCheckError(f"commit {short} is not known to git here")
+    headers, message = _split_object(found[1], f"commit {short}")
+    parents = [value for key, value in headers if key == "parent"]
+    if any(_OBJECT_NAME.fullmatch(parent) is None for parent in parents):
+        raise CannotCheckError(f"commit {short} names a parent unreadably")
+    report.commits += 1
+    _judge_object_text(headers, message, f"commit {short}", report)
+    by_hand, entries = _changed_entries(git, name, parents)
+    for position, entry in enumerate(entries, start=1):
+        if entry.status == "D":
+            continue
+        report.names += 1
+        label = f"entry {position} of its changed entries"
+        kinds = name_kinds(entry.path)
+        report.findings += [
+            PlaceFinding(
+                f"commit {short}: {label}: its name, which is not printed here "
+                f"(line {position} of the output of '{by_hand}')",
+                kind,
+            )
+            for kind in kinds
+        ]
+        # Never a path that looks private, not in a finding about its content either.
+        shown = f"commit {short}: {label if kinds else entry.path}"
+        _judge_content(objects, entry, shown, report)
+
+
+def _judge_content(
+    objects: _Objects, entry: _Entry, shown: str, report: PushedReport
+) -> None:
+    """Sort the new content of an entry into its group; judge its added lines."""
+    if entry.new_mode == _MODE_NESTED:
+        report.nested += 1
+        return
+    if entry.new_mode != _MODE_LINK and entry.path in SKIPPED_FILES:
+        report.generated += 1
+        return
+    text = _decoded(objects.blob(entry.new_object, shown), shown)
+    if text is None:
+        report.binary += 1
+        return
+    known: set[str] = set()
+    if entry.old_mode not in (_MODE_NONE, _MODE_NESTED):
+        try:
+            old = objects.blob(entry.old_object, shown).decode("utf-8")
+            known = set(old.splitlines())
+        except UnicodeDecodeError:
+            # Nothing of an old content that is not text counts as known.
+            known = set()
+    report.files += 1
+    for number, line in enumerate(text.splitlines(), start=1):
+        if line not in known:
+            report.lines += 1
+            report.findings += [Finding(shown, number, kind) for kind in _kinds(line)]
+
+
+def check_pushed(
+    root: Path, data: bytes, remote_name: str, remote_url: str
+) -> PushedReport:
+    """Judge every commit that the push described by ``data`` would send."""
+    refs = parse_pushed(data)
+    report = PushedReport()
+    if not refs:
+        return report
+    if not remote_name or _GLOB_CHARACTERS & set(remote_name):
+        raise CannotCheckError("the name of the remote is not one git would accept")
+    # A remote without a name has no remote-tracking refs of its own.
+    known = "--remotes" if remote_name == remote_url else f"--remotes={remote_name}"
+    git = _Git(root)
+    judged: set[str] = set()
+    with _Objects(git) as objects:
+        for ref in refs:
+            if ref.local_object is None:
+                report.deletions += 1
+                continue
+            report.refs += 1
+            where = f"line {ref.line} of {_HOOK_INPUT}"
+            report.findings += [
+                PlaceFinding(f"{where}: the name of the remote ref", kind)
+                for kind in name_kinds(ref.remote_ref)
+            ]
+            commit = _commit_behind(objects, ref, report)
+            exclude = [known]
+            if ref.remote_object is not None:
+                if objects.read(ref.remote_object) is None:
+                    raise CannotCheckError(
+                        f"the object that {where} names as the present state of "
+                        "the remote ref is not known locally, so the new commits "
+                        "cannot be told from the old ones; fetch first "
+                        "('git fetch'), then push again"
+                    )
+                exclude.append(ref.remote_object)
+            listed = git.output("rev-list", "--reverse", commit, "--not", *exclude)
+            for name in listed.decode("ascii", "replace").split():
+                if _OBJECT_NAME.fullmatch(name) is None:
+                    raise CannotCheckError(
+                        f"git listed the commits of {where} unreadably"
+                    )
+                if name not in judged:
+                    judged.add(name)
+                    _judge_commit(git, objects, name, report)
+    return report
+
+
+def _hook_input() -> bytes:
+    """Return what git wrote to the hook; an empty input must come from a pipe."""
+    stream = sys.stdin.buffer
+    data = stream.read()
+    if data:
+        return data
+    try:
+        mode = os.fstat(stream.fileno()).st_mode
+    except (OSError, ValueError) as error:
+        raise CannotCheckError(
+            f"standard input cannot be examined ({type(error).__name__})"
+        ) from error
+    if not (stat.S_ISFIFO(mode) or stat.S_ISREG(mode)):
+        raise CannotCheckError(
+            "standard input is empty and is not a pipe, so this run was not "
+            "started by git for a push. Git hands the refs to the hook on "
+            "standard input; without them nothing can be judged"
+        )
+    return data
+
+
+def main_pushed(remote_name: str, remote_url: str) -> int:
+    """Run the guard on what a push would send; called by the pre-push hook."""
+    label = "instance data, pushed commits"
+    try:
+        report = check_pushed(REPOSITORY_ROOT, _hook_input(), remote_name, remote_url)
+    except CannotCheckError as error:
+        sys.stdout.write(f"{label}: CANNOT CHECK, so this is a failure: {error}\n")
+        return EXIT_CANNOT_CHECK
+    for finding in report.findings:
+        sys.stdout.write(f"{finding}\n")
+    if report.findings:
+        sys.stdout.write(
+            f"{label}: {len(report.findings)} suspicious place(s); {report.summary()}\n"
+        )
+        return EXIT_FINDINGS
+    sys.stdout.write(f"{label}: ok; {report.summary()}\n")
+    return 0
+
+
+def main(arguments: Sequence[str] = ()) -> int:
+    """Run the guard: on this checkout, or with ``--pushed`` on what a push sends."""
+    if len(arguments) == 3 and arguments[0] == PUSHED_OPTION:  # noqa: PLR2004 - option, name, URL
+        return main_pushed(arguments[1], arguments[2])
+    if arguments:
+        sys.stdout.write(
+            "instance data: CANNOT CHECK, so this is a failure: unknown arguments; "
+            f"use none, or '{PUSHED_OPTION} <name of the remote> <URL of the remote>'\n"
+        )
+        return EXIT_CANNOT_CHECK
     try:
         report = check_checkout(REPOSITORY_ROOT)
     except CannotCheckError as error:
@@ -579,4 +1141,4 @@ def run(entry: Callable[[], int]) -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(run(main))
+    sys.exit(run(lambda: main(sys.argv[1:])))
