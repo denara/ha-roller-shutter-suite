@@ -1,0 +1,165 @@
+"""What a feature registers with the arbiter: a layer, a constraint, a gate rule.
+
+A registration is data. It names its place (the layer, the constraint or the
+gate rule of the model's enumerations, which fix the order), the wish classes
+it applies to, and a pure function. Nothing here evaluates anything.
+"""
+
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass
+from datetime import datetime
+from types import MappingProxyType
+
+from custom_components.roller_shutter_suite.core.model import (
+    Constraint,
+    ConstraintResult,
+    GateOutcome,
+    GateRule,
+    Layer,
+    MemberTarget,
+    OwnCommand,
+    Position,
+    WindowConfig,
+    Wish,
+    WishClass,
+    WorldSnapshot,
+)
+
+from .controls import EffectiveControls
+from .fire_bypass import FIRE_BYPASS
+
+ALL_CLASSES: frozenset[WishClass] = frozenset(WishClass)
+"""Fire, protection and comfort."""
+
+
+def reported_positions(snapshot: WorldSnapshot) -> dict[str, Position | None]:
+    """Return what every observed member reports as its position, if anything."""
+    return {
+        member.member_id: member.observation.position
+        for member in snapshot.observation.members
+    }
+
+
+type LayerFunction = Callable[[WindowConfig, WorldSnapshot], Wish]
+"""A layer: the window configuration and the world snapshot in, a wish out.
+
+The persisted window state is part of the snapshot (``snapshot.state``).
+"""
+
+
+@dataclass(frozen=True, slots=True)
+class LayerRegistration:
+    """One layer and the function that answers for it."""
+
+    layer: Layer
+    evaluate: LayerFunction
+
+    def __post_init__(self) -> None:
+        """Validate the place of the registration."""
+        if not isinstance(self.layer, Layer):
+            raise TypeError("a layer is registered for a member of 'Layer'")
+
+
+@dataclass(frozen=True, slots=True)
+class ConstraintInput:
+    """What a constraint sees: the winning wish and the targets so far."""
+
+    config: WindowConfig
+    snapshot: WorldSnapshot
+    wish: Wish
+    targets: tuple[MemberTarget, ...]
+
+    @property
+    def current_positions(self) -> dict[str, Position | None]:
+        """Return the reported position of every member, if it reports one."""
+        return reported_positions(self.snapshot)
+
+
+type ConstraintFunction = Callable[[ConstraintInput], ConstraintResult | None]
+"""A constraint: returns its result, or ``None`` if it has nothing to report."""
+
+
+@dataclass(frozen=True, slots=True)
+class ConstraintRegistration:
+    """One constraint, the wish classes it applies to, and its function."""
+
+    constraint: Constraint
+    applies_to: frozenset[WishClass]
+    apply: ConstraintFunction
+
+    def __post_init__(self) -> None:
+        """Refuse a constraint on fire: fire is subject to no constraint at all."""
+        if not isinstance(self.constraint, Constraint):
+            raise TypeError("a constraint is registered for a member of 'Constraint'")
+        object.__setattr__(self, "applies_to", frozenset(self.applies_to))
+        if not self.applies_to:
+            raise ValueError("a constraint names the wish classes it applies to")
+        if WishClass.FIRE in self.applies_to:
+            raise ValueError("fire is subject to no constraint at all")
+
+
+@dataclass(frozen=True, slots=True)
+class GateInput:
+    """What a gate rule sees.
+
+    - ``to_send``: the targets that reached the gate (pinned members left out).
+    - ``controls``: the effective pause, lock, mode and dry-run of the window.
+    - ``own_commands`` and ``last_comfort_movement``: the own commands per
+      member and the motor protection clock **as this window has to judge
+      them**. For an armed window they are the real ones. For a window in
+      dry-run they are the simulated ones, and never the real ones. A rule
+      that depends on own commands reads them here and not from
+      ``snapshot.state``; that is what keeps the real and the simulated state
+      apart.
+    """
+
+    config: WindowConfig
+    snapshot: WorldSnapshot
+    wish: Wish
+    to_send: tuple[MemberTarget, ...]
+    controls: EffectiveControls
+    own_commands: Mapping[str, OwnCommand]
+    last_comfort_movement: datetime | None
+
+    def __post_init__(self) -> None:
+        """Copy and freeze the commands."""
+        object.__setattr__(
+            self, "own_commands", MappingProxyType(dict(self.own_commands))
+        )
+
+    @property
+    def current_positions(self) -> dict[str, Position | None]:
+        """Return the reported position of every member, if it reports one."""
+        return reported_positions(self.snapshot)
+
+
+type GateFunction = Callable[[GateInput], GateOutcome | None]
+"""A gate rule: returns its outcome, or ``None`` if it does not apply."""
+
+
+@dataclass(frozen=True, slots=True)
+class GateRuleRegistration:
+    """One gate rule, the wish classes it can hold back, and its function."""
+
+    rule: GateRule
+    applies_to: frozenset[WishClass]
+    evaluate: GateFunction
+
+    def __post_init__(self) -> None:
+        """Keep the fire bypass exact in both directions."""
+        if not isinstance(self.rule, GateRule):
+            raise TypeError("a gate rule is registered for a member of 'GateRule'")
+        object.__setattr__(self, "applies_to", frozenset(self.applies_to))
+        if not self.applies_to:
+            raise ValueError("a gate rule names the wish classes it applies to")
+        if self.rule in FIRE_BYPASS:
+            if WishClass.FIRE in self.applies_to:
+                raise ValueError(
+                    f"the gate rule {self.rule.value!r} is part of the fire bypass "
+                    "and cannot hold back fire"
+                )
+        elif self.applies_to != ALL_CLASSES:
+            raise ValueError(
+                f"the gate rule {self.rule.value!r} is never skipped and applies "
+                "to every wish class"
+            )

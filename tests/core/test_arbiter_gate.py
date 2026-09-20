@@ -1,0 +1,815 @@
+"""The gate: its rules one by one, their order, and what registers with it."""
+
+from dataclasses import replace
+from datetime import timedelta
+from typing import Any
+
+import pytest
+
+from custom_components.roller_shutter_suite.core.arbiter import (
+    ALL_CLASSES,
+    BUILT_IN_GATE_RULES,
+    MANUAL_OVERRIDE_DAM,
+    MODE_TABLE,
+    PERSON_AT_WINDOW_DAM,
+    Arbiter,
+    Dam,
+    GateInput,
+    GateRuleRegistration,
+    effective_controls,
+)
+from custom_components.roller_shutter_suite.core.engine import build_arbiter
+from custom_components.roller_shutter_suite.core.model import (
+    ControlLevel,
+    Controls,
+    Decision,
+    GateKind,
+    GateOutcome,
+    GateRule,
+    ManualOverrideDam,
+    MemberState,
+    MotorProtectionSettings,
+    OperatingMode,
+    OverrideEndRule,
+    OwnCommand,
+    PersonAtWindowDam,
+    Position,
+    SourceValue,
+    TravelDirection,
+    WindowState,
+    WishClass,
+)
+from custom_components.roller_shutter_suite.core.reasons import ReasonCode
+from tests.core.arbiter_kit import (
+    ARMED,
+    LEFT,
+    NOW,
+    RIGHT,
+    STUB_LAYERS,
+    day,
+    engine,
+    fire,
+    night,
+    observed,
+    on_level,
+    profile,
+    snapshot,
+    storm,
+    window,
+)
+
+LEVELS = ["global", "group", "window"]
+LATER = NOW + timedelta(minutes=15)
+
+
+def _gate(decision: Decision) -> GateOutcome:
+    assert decision.gate is not None
+    return decision.gate
+
+
+def _commanded(
+    target: int,
+    seconds_ago: float,
+    *,
+    member: str = LEFT,
+    direction: TravelDirection = TravelDirection.DOWN,
+    wish_class: WishClass = WishClass.COMFORT,
+) -> MemberState:
+    return MemberState(
+        member,
+        last_own_command=OwnCommand(
+            command_id="command-1",
+            target=Position(target),
+            direction=direction,
+            time=NOW - timedelta(seconds=seconds_ago),
+            wish_class=wish_class,
+        ),
+    )
+
+
+def _override(ends_at: Any = LATER) -> ManualOverrideDam:
+    rule = (
+        OverrideEndRule.ROOM_EMPTY
+        if ends_at is None
+        else OverrideEndRule.NEXT_PART_OF_DAY
+    )
+    return ManualOverrideDam(
+        armed_at=NOW - timedelta(hours=1),
+        end_rule=rule,
+        ends_at=ends_at,
+        remembered_position=Position(40),
+    )
+
+
+# --- No rule applies ----------------------------------------------------------------
+
+
+def test_without_a_rule_that_applies_the_command_is_sent() -> None:
+    """Reason ``sent``; no rule is named."""
+    gate = _gate(engine().recompute(snapshot(sources=night())))
+
+    assert gate == GateOutcome.send()
+    assert gate.reason is ReasonCode.SENT
+
+
+def test_the_built_in_rules_stand_in_the_specified_order() -> None:
+    """Backoff and staggering are registered by the blocks that build them."""
+    rules = [registration.rule for registration in build_arbiter(()).gate_rules]
+
+    assert rules == [rule for rule in GateRule if rule in rules]
+    assert set(GateRule) - set(rules) == {GateRule.COMMAND_BACKOFF, GateRule.STAGGERING}
+    assert rules[0] is GateRule.MAINTENANCE_LOCK
+    assert rules[-1] is GateRule.DRY_RUN
+    assert Arbiter(gate_rules=BUILT_IN_GATE_RULES[::-1]).gate_rules == tuple(
+        BUILT_IN_GATE_RULES
+    )
+
+
+# --- 1 Maintenance lock -------------------------------------------------------------
+
+
+@pytest.mark.parametrize("level", LEVELS)
+@pytest.mark.parametrize(
+    "sources", [fire(), storm(), night()], ids=["fire", "protection", "comfort"]
+)
+def test_under_a_maintenance_lock_nothing_is_sent(
+    sources: dict[str, Any], level: str
+) -> None:
+    """Not for fire either; the decision still names the winning wish."""
+    decision = engine().recompute(
+        snapshot(sources=sources, controls=on_level(level, maintenance_lock=True))
+    )
+
+    assert _gate(decision) == GateOutcome.suppress(
+        GateRule.MAINTENANCE_LOCK, ReasonCode.MAINTENANCE_LOCK
+    )
+    assert decision.targets
+
+
+def test_the_lock_still_names_fire_as_the_winning_wish() -> None:
+    """So the fire event can be fired although nothing moves."""
+    decision = engine().recompute(
+        snapshot(sources=fire(), controls=on_level("global", maintenance_lock=True))
+    )
+
+    assert decision.winning_wish is not None
+    assert decision.winning_wish.reason is ReasonCode.FIRE_ALARM
+    assert decision.target == Position(100)
+    assert _gate(decision).kind is GateKind.SUPPRESS
+
+
+# --- 2 No member can execute --------------------------------------------------------
+
+
+def test_with_every_member_unavailable_the_command_waits_with_an_upper_bound() -> None:
+    """Nobody knows when a member returns, so the deferral carries its bound."""
+    config = window(LEFT, RIGHT, reevaluate_after=timedelta(minutes=3))
+    gate = _gate(
+        engine(config).recompute(
+            snapshot(
+                sources=fire(),
+                observation=observed(left="unavailable", right="unavailable"),
+            )
+        )
+    )
+
+    assert gate == GateOutcome.defer(
+        GateRule.NO_MEMBER_CAN_EXECUTE,
+        ReasonCode.COVER_UNAVAILABLE,
+        reevaluate_no_later_than=NOW + timedelta(minutes=3),
+    )
+    assert gate.until is None
+
+
+def test_the_available_members_move_when_one_is_unavailable() -> None:
+    """The command goes to every available member."""
+    gate = _gate(
+        engine(window(LEFT, RIGHT)).recompute(
+            snapshot(
+                sources=storm(), observation=observed(left=100, right="unavailable")
+            )
+        )
+    )
+
+    assert gate == GateOutcome.send()
+
+
+def test_a_member_that_can_neither_be_positioned_nor_opened_is_a_missing_capability() -> (
+    None
+):
+    """Suppressed with the capability reason; open and close alone is enough."""
+    stop_only = profile(supports_open_close=False, supports_set_position=False)
+    open_close = profile(supports_set_position=False)
+
+    unable = engine(window(profiles={LEFT: stop_only})).recompute(
+        snapshot(sources=night())
+    )
+    able = engine(window(profiles={LEFT: open_close})).recompute(
+        snapshot(sources=night())
+    )
+
+    assert _gate(unable) == GateOutcome.suppress(
+        GateRule.NO_MEMBER_CAN_EXECUTE, ReasonCode.CAPABILITY_MISSING
+    )
+    assert _gate(able) == GateOutcome.send()
+
+
+# --- 3 Target reached ---------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("position", "reached"), [(0, True), (2, True), (3, False), (100, False)]
+)
+def test_a_target_within_tolerance_is_reached(position: int, reached: bool) -> None:
+    """The tolerance of a calculated position is 2."""
+    gate = _gate(engine().recompute(snapshot(sources=storm(), position=position)))
+
+    assert (gate.reason is ReasonCode.TARGET_REACHED) is reached
+    assert (gate.kind is GateKind.SUPPRESS) is reached
+
+
+def test_a_member_without_feedback_is_reached_if_its_last_command_had_the_target() -> (
+    None
+):
+    """Otherwise the same command would be repeated at every recompute."""
+    config = window(profiles={LEFT: profile(reports_position=False)})
+    same = WindowState(members=(_commanded(0, 3600),))
+    other = WindowState(members=(_commanded(100, 3600),))
+
+    def gate(state: WindowState | None) -> GateOutcome:
+        return _gate(
+            engine(config).recompute(
+                snapshot(sources=storm(), position=None, state=state)
+            )
+        )
+
+    assert gate(same).reason is ReasonCode.TARGET_REACHED
+    assert gate(other) == GateOutcome.send()
+    assert gate(None) == GateOutcome.send()
+
+
+def test_a_member_that_reports_no_position_right_now_is_not_reached() -> None:
+    """What is not known is not assumed."""
+    gate = _gate(engine().recompute(snapshot(sources=storm(), position=None)))
+
+    assert gate == GateOutcome.send()
+
+
+def test_unavailable_members_are_not_judged_and_every_available_one_has_to_be_there() -> (
+    None
+):
+    """Two members: both at the target, one missing, one elsewhere."""
+    subject = engine(window(LEFT, RIGHT))
+
+    def reason(**members: int | str | None) -> ReasonCode:
+        world = snapshot(sources=storm(), observation=observed(**members))
+        return _gate(subject.recompute(world)).reason
+
+    assert reason(left=0, right=1) is ReasonCode.TARGET_REACHED
+    assert reason(left=0, right="unavailable") is ReasonCode.TARGET_REACHED
+    assert reason(left=0, right=50) is ReasonCode.SENT
+
+
+def test_target_reached_stands_before_mode_and_pause_and_after_the_lock() -> None:
+    """A paused window that is where it should be says so."""
+    paused = on_level("window", paused=True, mode=OperatingMode.OFF)
+    locked = replace(paused, global_level=ControlLevel(maintenance_lock=True))
+
+    there = engine().recompute(snapshot(sources=night(), position=0, controls=paused))
+    locked_there = engine().recompute(
+        snapshot(sources=night(), position=0, controls=locked)
+    )
+
+    assert _gate(there).reason is ReasonCode.TARGET_REACHED
+    assert _gate(locked_there).reason is ReasonCode.MAINTENANCE_LOCK
+
+
+# --- 4 Operating mode ---------------------------------------------------------------
+
+
+@pytest.mark.parametrize("level", LEVELS)
+@pytest.mark.parametrize(
+    ("mode", "sources", "reason"),
+    [
+        (OperatingMode.OFF, night(), ReasonCode.MODE_OFF),
+        (OperatingMode.OFF, storm(), ReasonCode.MODE_OFF),
+        (OperatingMode.OFF, fire(), ReasonCode.SENT),
+        (OperatingMode.PROTECTION_ONLY, night(), ReasonCode.MODE_PROTECTION_ONLY),
+        (OperatingMode.PROTECTION_ONLY, storm(), ReasonCode.SENT),
+        (OperatingMode.PROTECTION_ONLY, fire(), ReasonCode.SENT),
+        (OperatingMode.AUTOMATIC, night(), ReasonCode.SENT),
+        (OperatingMode.AUTOMATIC, storm(), ReasonCode.SENT),
+        (OperatingMode.AUTOMATIC, fire(), ReasonCode.SENT),
+    ],
+)
+def test_what_each_operating_mode_lets_through(
+    mode: OperatingMode, sources: dict[str, Any], reason: ReasonCode, level: str
+) -> None:
+    """Off: fire only. Protection only: protection and fire. Automatic: everything."""
+    gate = _gate(
+        engine().recompute(
+            snapshot(sources=sources, controls=on_level(level, mode=mode))
+        )
+    )
+
+    assert gate.reason is reason
+    if reason is not ReasonCode.SENT:
+        assert gate == GateOutcome.suppress(GateRule.OPERATING_MODE, reason)
+
+
+def test_the_operating_modes_are_a_table() -> None:
+    """One row per mode, ranked, and no row holds back fire."""
+    assert set(MODE_TABLE) == set(OperatingMode)
+    ranks = [MODE_TABLE[mode].restrictiveness for mode in OperatingMode]
+    assert ranks == sorted(set(ranks))
+    for entry in MODE_TABLE.values():
+        assert WishClass.FIRE not in entry.holds_back
+        assert (entry.reason is None) == (not entry.holds_back)
+    assert MODE_TABLE[OperatingMode.OFF].holds_back > (
+        MODE_TABLE[OperatingMode.PROTECTION_ONLY].holds_back
+    )
+
+
+# --- Three levels -------------------------------------------------------------------
+
+
+def test_the_effective_value_is_the_most_restrictive_of_the_three_levels() -> None:
+    """Paused or locked if any level is; the mode is the most restrictive one."""
+    controls = Controls(
+        dry_run=False,
+        global_level=ControlLevel(mode=OperatingMode.PROTECTION_ONLY),
+        group_level=ControlLevel(paused=True, mode=OperatingMode.OFF),
+        window_level=ControlLevel(maintenance_lock=True),
+    )
+
+    effective = effective_controls(controls)
+    neutral = effective_controls(Controls(dry_run=True))
+
+    assert (effective.paused, effective.maintenance_lock) == (True, True)
+    assert effective.mode is OperatingMode.OFF
+    assert effective.dry_run is False
+    assert (neutral.paused, neutral.maintenance_lock) == (False, False)
+    assert neutral.mode is OperatingMode.AUTOMATIC
+    assert neutral.dry_run is True
+
+
+def test_a_window_cannot_loosen_what_a_higher_level_restricts() -> None:
+    """Automatic on the window does not lift "off" on the group."""
+    controls = Controls(
+        dry_run=False,
+        group_level=ControlLevel(mode=OperatingMode.OFF),
+        window_level=ControlLevel(mode=OperatingMode.AUTOMATIC),
+    )
+
+    gate = _gate(engine().recompute(snapshot(sources=night(), controls=controls)))
+
+    assert gate.reason is ReasonCode.MODE_OFF
+
+
+# --- 5 Pause ------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("level", LEVELS)
+def test_pause_holds_back_comfort_only(level: str) -> None:
+    """Protection and fire are sent from a paused window."""
+    paused = on_level(level, paused=True)
+
+    def reason(sources: dict[str, Any]) -> ReasonCode:
+        return _gate(
+            engine().recompute(snapshot(sources=sources, controls=paused))
+        ).reason
+
+    assert _gate(
+        engine().recompute(snapshot(sources=night(), controls=paused))
+    ) == GateOutcome.suppress(GateRule.PAUSE, ReasonCode.PAUSED)
+    assert reason(storm()) is ReasonCode.SENT
+    assert reason(fire()) is ReasonCode.SENT
+
+
+# --- 6 and 7 The dams ---------------------------------------------------------------
+
+
+def test_the_person_at_the_window_dam_holds_protection_and_comfort_never_fire() -> None:
+    """A deferral until the dam ends."""
+    state = WindowState(person_at_window=PersonAtWindowDam(ends_at=LATER))
+
+    def gate(sources: dict[str, Any]) -> GateOutcome:
+        return _gate(engine().recompute(snapshot(sources=sources, state=state)))
+
+    held = GateOutcome.defer(
+        GateRule.PERSON_AT_WINDOW_DAM, ReasonCode.PERSON_AT_WINDOW, until=LATER
+    )
+    assert gate(storm()) == held
+    assert gate(night()) == held
+    assert gate(fire()) == GateOutcome.send()
+    assert PERSON_AT_WINDOW_DAM.holds_back == {WishClass.PROTECTION, WishClass.COMFORT}
+
+
+def test_the_manual_override_dam_holds_comfort_and_lets_protection_pass() -> None:
+    """With a known end it defers until then; without one it suppresses."""
+    timed = WindowState(manual_override=_override())
+    open_ended = WindowState(manual_override=_override(None))
+
+    def gate(sources: dict[str, Any], state: WindowState) -> GateOutcome:
+        return _gate(engine().recompute(snapshot(sources=sources, state=state)))
+
+    assert gate(night(), timed) == GateOutcome.defer(
+        GateRule.MANUAL_OVERRIDE_DAM, ReasonCode.MANUAL_OVERRIDE, until=LATER
+    )
+    assert gate(night(), open_ended) == GateOutcome.suppress(
+        GateRule.MANUAL_OVERRIDE_DAM, ReasonCode.MANUAL_OVERRIDE
+    )
+    assert gate(storm(), timed) == GateOutcome.send()
+    assert gate(fire(), open_ended) == GateOutcome.send()
+    assert MANUAL_OVERRIDE_DAM.holds_back == {WishClass.COMFORT}
+
+
+@pytest.mark.parametrize("ends_at", [NOW, NOW - timedelta(minutes=1)])
+def test_an_expired_dam_has_no_effect(ends_at: Any) -> None:
+    """The gate reads the end; it does not wait for somebody to clear the dam."""
+    state = WindowState(
+        manual_override=_override(ends_at),
+        person_at_window=PersonAtWindowDam(ends_at=ends_at),
+    )
+
+    assert _gate(engine().recompute(snapshot(sources=night(), state=state))) == (
+        GateOutcome.send()
+    )
+
+
+def test_the_override_dam_lets_exactly_the_return_to_the_manual_position_pass() -> None:
+    """It is a comfort wish, so every other rule still applies to it."""
+    back = day(return_to=SourceValue.of(40))
+    armed = WindowState(manual_override=_override())
+    both = replace(armed, person_at_window=PersonAtWindowDam(ends_at=LATER))
+
+    def decide(state: WindowState, controls: Controls = ARMED) -> Decision:
+        return engine().recompute(
+            snapshot(sources=back, state=state, controls=controls)
+        )
+
+    returned = decide(armed)
+    assert returned.winning_wish is not None
+    assert returned.winning_wish.reason is ReasonCode.PROTECTION_RETURN_MANUAL
+    assert returned.winning_wish.wish_class is WishClass.COMFORT
+    assert returned.target == Position(40)
+    assert _gate(returned) == GateOutcome.send()
+    assert MANUAL_OVERRIDE_DAM.lets_pass == {ReasonCode.PROTECTION_RETURN_MANUAL}
+    # (b) the person-at-the-window dam still holds it back
+    assert _gate(decide(both)).reason is ReasonCode.PERSON_AT_WINDOW
+    # every other gate rule applies as to any comfort wish
+    assert _gate(decide(armed, on_level("group", paused=True))).reason is (
+        ReasonCode.PAUSED
+    )
+    assert (
+        _gate(
+            decide(armed, on_level("window", mode=OperatingMode.PROTECTION_ONLY))
+        ).reason
+        is ReasonCode.MODE_PROTECTION_ONLY
+    )
+    clock = replace(armed, last_comfort_movement=NOW - timedelta(minutes=1))
+    assert _gate(decide(clock)).reason is ReasonCode.MIN_INTERVAL
+
+
+def test_a_dam_never_holds_back_fire() -> None:
+    """The mechanism refuses such a dam."""
+    with pytest.raises(ValueError, match="never holds back fire"):
+        Dam(
+            rule=GateRule.PERSON_AT_WINDOW_DAM,
+            reason=ReasonCode.PERSON_AT_WINDOW,
+            holds_back=ALL_CLASSES,
+            lets_pass=frozenset(),
+            armed=lambda _state: None,
+        )
+
+
+# --- 8 Movement in flight -----------------------------------------------------------
+
+
+def test_the_same_target_as_the_pending_own_command_is_a_duplicate() -> None:
+    """The member has not reported anything yet; the command is 5 seconds old."""
+    state = WindowState(members=(_commanded(0, 5),))
+
+    gate = _gate(
+        engine().recompute(snapshot(sources=night(), position=100, state=state))
+    )
+
+    assert gate == GateOutcome.suppress(
+        GateRule.MOVEMENT_IN_FLIGHT, ReasonCode.DUPLICATE_COMMAND
+    )
+
+
+def test_another_target_waits_until_the_members_have_come_to_rest() -> None:
+    """The end is not known; the bound is the travel end of the pending command."""
+    config = window(profiles={LEFT: profile(report_delay=timedelta(seconds=60))})
+    state = WindowState(members=(_commanded(30, 5),))
+
+    gate = _gate(
+        engine(config).recompute(
+            snapshot(sources=night(), observation=observed(left="down:80"), state=state)
+        )
+    )
+
+    assert gate == GateOutcome.defer(
+        GateRule.MOVEMENT_IN_FLIGHT,
+        ReasonCode.MOVEMENT_IN_FLIGHT,
+        reevaluate_no_later_than=NOW + timedelta(seconds=-5 + 18 + 60),
+    )
+
+
+def test_the_travel_time_of_a_command_follows_its_direction() -> None:
+    """Up takes 20 seconds here, down 18; afterwards the command is not pending."""
+    up = WindowState(members=(_commanded(100, 19, direction=TravelDirection.UP),))
+    down = WindowState(members=(_commanded(100, 19),))
+
+    def reason(state: WindowState) -> ReasonCode:
+        return _gate(
+            engine().recompute(snapshot(sources=night(), position=60, state=state))
+        ).reason
+
+    assert reason(up) is ReasonCode.MOVEMENT_IN_FLIGHT
+    assert reason(down) is ReasonCode.SENT
+
+
+def test_a_movement_nobody_commanded_is_waited_for_too() -> None:
+    """Somebody is moving the shutter right now; the bound is the general one."""
+    gate = _gate(
+        engine().recompute(
+            snapshot(sources=night(), observation=observed(left="up:40"))
+        )
+    )
+
+    assert gate == GateOutcome.defer(
+        GateRule.MOVEMENT_IN_FLIGHT,
+        ReasonCode.MOVEMENT_IN_FLIGHT,
+        reevaluate_no_later_than=NOW + timedelta(minutes=5),
+    )
+
+
+def test_a_duplicate_needs_every_member_to_be_commanded_to_its_target() -> None:
+    """One member is pending with the target, the other was never commanded."""
+    state = WindowState(members=(_commanded(0, 5), MemberState(RIGHT)))
+
+    gate = _gate(
+        engine(window(LEFT, RIGHT)).recompute(
+            snapshot(
+                sources=night(), observation=observed(left=100, right=100), state=state
+            )
+        )
+    )
+
+    assert gate.reason is ReasonCode.MOVEMENT_IN_FLIGHT
+    assert gate.reevaluate_no_later_than == NOW + timedelta(seconds=13)
+
+
+def test_protection_and_fire_retarget_at_once() -> None:
+    """Movement in flight holds back comfort only."""
+    state = WindowState(members=(_commanded(30, 5),))
+    moving = observed(left="down:80")
+
+    for sources in (storm(), fire()):
+        gate = _gate(
+            engine().recompute(
+                snapshot(sources=sources, observation=moving, state=state)
+            )
+        )
+        assert gate == GateOutcome.send()
+
+
+def test_a_command_to_a_member_the_window_no_longer_has_is_ignored() -> None:
+    """The persisted state may be older than the configuration."""
+    state = WindowState(members=(_commanded(30, 5, member=RIGHT),))
+
+    gate = _gate(engine().recompute(snapshot(sources=night(), state=state)))
+
+    assert gate == GateOutcome.send()
+
+
+# --- 9 Motor protection -------------------------------------------------------------
+
+
+@pytest.mark.parametrize(("position", "held"), [(4, True), (5, False), (3, True)])
+def test_a_comfort_movement_below_the_minimum_change_is_suppressed(
+    position: int, held: bool
+) -> None:
+    """The default minimum is 5 percent; the target here is 0."""
+    gate = _gate(engine().recompute(snapshot(sources=night(), position=position)))
+
+    assert (
+        gate == GateOutcome.suppress(GateRule.MOTOR_PROTECTION, ReasonCode.MIN_CHANGE)
+    ) is held
+
+
+def test_a_comfort_movement_inside_the_minimum_interval_is_deferred_until_it_ends() -> (
+    None
+):
+    """The clock is the time of the last own comfort movement."""
+    inside = WindowState(last_comfort_movement=NOW - timedelta(minutes=4))
+    outside = WindowState(last_comfort_movement=NOW - timedelta(minutes=10))
+
+    def gate(state: WindowState) -> GateOutcome:
+        return _gate(engine().recompute(snapshot(sources=night(), state=state)))
+
+    assert gate(inside) == GateOutcome.defer(
+        GateRule.MOTOR_PROTECTION,
+        ReasonCode.MIN_INTERVAL,
+        until=NOW + timedelta(minutes=6),
+    )
+    assert gate(outside) == GateOutcome.send()
+
+
+def test_motor_protection_never_holds_back_protection_or_fire() -> None:
+    """Below the minimum change and inside the interval, both are sent."""
+    state = WindowState(last_comfort_movement=NOW - timedelta(seconds=10))
+
+    closing = engine().recompute(snapshot(sources=storm(), position=4, state=state))
+    opening = engine().recompute(snapshot(sources=fire(), position=96, state=state))
+
+    assert _gate(closing) == GateOutcome.send()
+    assert _gate(opening) == GateOutcome.send()
+
+
+def test_motor_protection_judges_the_largest_change_among_the_members() -> None:
+    """One member has far to go: the window moves. A blind member is not counted."""
+    subject = engine(window(LEFT, RIGHT))
+
+    def reason(**members: int | None) -> ReasonCode:
+        world = snapshot(sources=night(), observation=observed(**members))
+        return _gate(subject.recompute(world)).reason
+
+    assert reason(left=4, right=3) is ReasonCode.MIN_CHANGE
+    assert reason(left=4, right=40) is ReasonCode.SENT
+    assert reason(left=4, right=None) is ReasonCode.MIN_CHANGE
+    assert reason(left=None, right=None) is ReasonCode.SENT
+
+
+def test_zero_switches_a_part_of_motor_protection_off() -> None:
+    """No minimum change, no minimum interval."""
+    config = window(motor_protection=MotorProtectionSettings(0, timedelta(0)))
+    state = WindowState(last_comfort_movement=NOW)
+
+    gate = _gate(
+        engine(config).recompute(snapshot(sources=night(), position=3, state=state))
+    )
+
+    assert gate == GateOutcome.send()
+
+
+# --- The order of the rules ---------------------------------------------------------
+
+
+def test_the_first_rule_that_applies_decides() -> None:
+    """Everything holds a comfort wish back at once; lift one rule after the other."""
+    controls = Controls(
+        dry_run=False,
+        global_level=ControlLevel(maintenance_lock=True),
+        group_level=ControlLevel(mode=OperatingMode.OFF),
+        window_level=ControlLevel(paused=True),
+    )
+    state = WindowState(
+        members=(_commanded(30, 5),),
+        person_at_window=PersonAtWindowDam(ends_at=LATER),
+        manual_override=_override(),
+        last_comfort_movement=NOW - timedelta(seconds=5),
+    )
+    steps: list[tuple[Controls, WindowState]] = [(controls, state)]
+    controls = replace(controls, global_level=ControlLevel())
+    steps.append((controls, state))
+    controls = replace(controls, group_level=ControlLevel())
+    steps.append((controls, state))
+    controls = replace(controls, window_level=ControlLevel())
+    steps.append((controls, state))
+    state = replace(state, person_at_window=None)
+    steps.append((controls, state))
+    state = replace(state, manual_override=None)
+    steps.append((controls, state))
+    state = replace(state, members=())
+    steps.append((controls, state))
+    state = replace(state, last_comfort_movement=None)
+    steps.append((controls, state))
+
+    reasons = [
+        _gate(
+            engine().recompute(
+                snapshot(sources=night(), state=state, controls=controls)
+            )
+        ).reason
+        for controls, state in steps
+    ]
+
+    assert reasons == [
+        ReasonCode.MAINTENANCE_LOCK,
+        ReasonCode.MODE_OFF,
+        ReasonCode.PAUSED,
+        ReasonCode.PERSON_AT_WINDOW,
+        ReasonCode.MANUAL_OVERRIDE,
+        ReasonCode.MOVEMENT_IN_FLIGHT,
+        ReasonCode.MIN_INTERVAL,
+        ReasonCode.SENT,
+    ]
+
+
+def test_every_deferral_names_its_time_or_its_upper_bound() -> None:
+    """Exactly one of the two, for every rule of this block that defers."""
+    situations = {
+        ReasonCode.COVER_UNAVAILABLE: snapshot(
+            sources=night(), observation=observed(left="unavailable")
+        ),
+        ReasonCode.PERSON_AT_WINDOW: snapshot(
+            sources=night(),
+            state=WindowState(person_at_window=PersonAtWindowDam(ends_at=LATER)),
+        ),
+        ReasonCode.MANUAL_OVERRIDE: snapshot(
+            sources=night(), state=WindowState(manual_override=_override())
+        ),
+        ReasonCode.MOVEMENT_IN_FLIGHT: snapshot(
+            sources=night(), observation=observed(left="up:40")
+        ),
+        ReasonCode.MIN_INTERVAL: snapshot(
+            sources=night(), state=WindowState(last_comfort_movement=NOW)
+        ),
+    }
+
+    for reason, world in situations.items():
+        gate = _gate(engine().recompute(world))
+        assert gate.kind is GateKind.DEFER
+        assert gate.reason is reason
+        assert (gate.until is None) != (gate.reevaluate_no_later_than is None)
+        known_end = reason in {
+            ReasonCode.PERSON_AT_WINDOW,
+            ReasonCode.MANUAL_OVERRIDE,
+            ReasonCode.MIN_INTERVAL,
+        }
+        assert (gate.until is not None) is known_end
+
+
+# --- Registration -------------------------------------------------------------------
+
+
+def _staggered(gate: GateInput) -> GateOutcome | None:
+    return GateOutcome.defer(
+        GateRule.STAGGERING,
+        ReasonCode.STAGGERED,
+        until=gate.snapshot.time + timedelta(seconds=4),
+    )
+
+
+STAGGERING = GateRuleRegistration(
+    GateRule.STAGGERING,
+    frozenset({WishClass.PROTECTION, WishClass.COMFORT}),
+    _staggered,
+)
+
+
+def test_adding_a_gate_rule_is_a_registration() -> None:
+    """A stand-in for staggering takes its place; fire skips it."""
+    arbiter = build_arbiter(STUB_LAYERS, gate_rules=[STAGGERING])
+
+    def gate(sources: dict[str, Any], **changes: Any) -> GateOutcome:
+        return _gate(arbiter.recompute(window(), snapshot(sources=sources, **changes)))
+
+    assert [entry.rule for entry in arbiter.gate_rules][-2:] == [
+        GateRule.STAGGERING,
+        GateRule.DRY_RUN,
+    ]
+    assert gate(storm()).reason is ReasonCode.STAGGERED
+    assert gate(night()).until == NOW + timedelta(seconds=4)
+    assert gate(night(), controls=on_level("window", paused=True)).reason is (
+        ReasonCode.PAUSED
+    )
+    assert gate(fire()) == GateOutcome.send()
+
+
+def test_the_registry_refuses_what_would_break_the_gate() -> None:
+    """Twice the same rule, no classes, no lock, no dry-run, a wrong place."""
+    bad: Any = "pause"
+    without_lock = tuple(
+        entry
+        for entry in BUILT_IN_GATE_RULES
+        if entry.rule is not GateRule.MAINTENANCE_LOCK
+    )
+
+    with pytest.raises(ValueError, match="'staggering' is registered twice"):
+        build_arbiter((), gate_rules=[STAGGERING, STAGGERING])
+    with pytest.raises(ValueError, match="names the wish classes"):
+        GateRuleRegistration(GateRule.STAGGERING, frozenset(), _staggered)
+    with pytest.raises(TypeError, match="member of 'GateRule'"):
+        GateRuleRegistration(bad, ALL_CLASSES, _staggered)
+    with pytest.raises(ValueError, match="without the gate rule 'maintenance_lock'"):
+        Arbiter(gate_rules=without_lock)
+    with pytest.raises(ValueError, match="without the gate rule 'dry_run'"):
+        Arbiter(gate_rules=BUILT_IN_GATE_RULES[:-1])
+
+
+def test_a_gate_rule_answers_in_its_own_name_and_never_sends() -> None:
+    """A rule either holds back or returns nothing."""
+    classes = frozenset({WishClass.COMFORT})
+    sends = GateRuleRegistration(
+        GateRule.STAGGERING, classes, lambda _gate: GateOutcome.send()
+    )
+    impostor = GateRuleRegistration(GateRule.COMMAND_BACKOFF, classes, _staggered)
+
+    for registration in (sends, impostor):
+        arbiter = build_arbiter(STUB_LAYERS, gate_rules=[registration])
+        with pytest.raises(ValueError, match="holds back in its own name"):
+            arbiter.recompute(window(), snapshot(sources=night()))
