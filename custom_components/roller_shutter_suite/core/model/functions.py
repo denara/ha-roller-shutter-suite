@@ -43,8 +43,17 @@ class FaultBehavior(StrEnum):
 
 @unique
 class FunctionId(StrEnum):
-    """The functions of the integration, each with one fault behavior."""
+    """The functions of the integration, each with one fault behavior.
 
+    **The order of the members has meaning.** The arbiter asks the parts of
+    one layer in the order in which the functions are defined here, so
+    reordering the members, or inserting one between two others, changes
+    behavior. Add a new member deliberately, at the place where its parts
+    shall be asked; a test pins names, values and order.
+    """
+
+    # The order has meaning, see the docstring: the arbiter evaluates the parts
+    # of a layer in this order. Do not sort, do not insert without intent.
     SCHEDULE = "schedule"
     SLEEP = "sleep"
     REQUEST = "request"

@@ -877,6 +877,36 @@ def test_every_function_has_its_fault_behavior() -> None:
     protects or restricts movement falls back; ventilation is one of them.
     """
     assert list(FunctionId) == [*PAUSABLE, *FALLING_BACK]
+
+
+def test_names_values_and_order_of_the_functions_are_pinned() -> None:
+    """The order is pinned because it has meaning, not for tidiness.
+
+    The arbiter asks the parts of one layer in the definition order of
+    ``FunctionId``. Reordering the members or inserting one between two
+    others therefore changes which part of a layer speaks first. Whoever
+    changes this list changes behavior and does it here on purpose.
+    """
+    assert [(function.name, function.value) for function in FunctionId] == [
+        ("SCHEDULE", "schedule"),
+        ("SLEEP", "sleep"),
+        ("REQUEST", "request"),
+        ("PRIVACY", "privacy"),
+        ("SHADING", "shading"),
+        ("SOLAR_HEATING", "solar_heating"),
+        ("FIRE", "fire"),
+        ("PROTECTION_EVENTS", "protection_events"),
+        ("LOCKOUT", "lockout"),
+        ("VENTILATION", "ventilation"),
+        ("FROST", "frost"),
+        ("MOTOR_PROTECTION", "motor_protection"),
+        ("COMMAND_VERIFICATION", "command_verification"),
+        ("MANUAL_OVERRIDE", "manual_override"),
+    ]
+
+
+def test_every_function_maps_to_its_fault_behavior() -> None:
+    """The mapping is complete, and ventilation falls back."""
     assert {function: function.fault_behavior for function in FunctionId} == (
         dict.fromkeys(PAUSABLE, FaultBehavior.PAUSE)
         | dict.fromkeys(FALLING_BACK, FaultBehavior.FALL_BACK)
