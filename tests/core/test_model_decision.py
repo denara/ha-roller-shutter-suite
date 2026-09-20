@@ -183,7 +183,7 @@ def test_wish_kind_and_payload_have_to_fit() -> None:
             {"ray_height": 1.2},
         ):
             with pytest.raises(ValueError, match="carries no position"):
-                Wish(Layer.SLEEP, kind, ReasonCode.SLEEP_MODE, **payload)  # type: ignore[arg-type]
+                Wish(Layer.SLEEP, kind, ReasonCode.SLEEP_MODE, **payload)
 
 
 def test_wish_types_are_checked() -> None:
@@ -282,8 +282,9 @@ def test_layer_reason_is_validated() -> None:
 
 def test_constraint_result_lists_the_targets_after_it() -> None:
     """A result names constraint, reason and every member's target."""
+    as_list: Any = list(_targets(30))
     result = ConstraintResult(
-        Constraint.VENTILATION_FLOOR, ReasonCode.VENTILATION_FLOOR, list(_targets(30))
+        Constraint.VENTILATION_FLOOR, ReasonCode.VENTILATION_FLOOR, as_list
     )
 
     assert result.targets == _targets(30)
@@ -606,20 +607,20 @@ def test_decision_evening_closing_with_a_tilted_window() -> None:
     """Reference situation 11: schedule_night / ventilation_floor / sent."""
     decision = Decision(
         winning_wish=_night_wish(),
-        other_layers=[
+        other_layers=(
             LayerReason(Layer.FIRE, ReasonCode.INACTIVE),
             LayerReason(Layer.PROTECTION, ReasonCode.INACTIVE),
             LayerReason(Layer.SLEEP, ReasonCode.NOT_CONFIGURED),
             LayerReason(Layer.SHADING, ReasonCode.OUTSIDE_EPISODE),
-        ],
-        constraints=[
+        ),
+        constraints=(
             ConstraintResult(
                 Constraint.VENTILATION_FLOOR,
                 ReasonCode.VENTILATION_FLOOR,
                 _targets(30, 30),
-            )
-        ],
-        targets=list(_targets(30, 30)),
+            ),
+        ),
+        targets=_targets(30, 30),
         gate=GateOutcome.send(),
     )
 
@@ -630,9 +631,6 @@ def test_decision_evening_closing_with_a_tilted_window() -> None:
         ReasonCode.VENTILATION_FLOOR
     ]
     assert decision.gate == GateOutcome.send()
-    assert isinstance(decision.other_layers, tuple)
-    assert isinstance(decision.constraints, tuple)
-    assert isinstance(decision.targets, tuple)
     assert hash(decision) == hash(dataclasses.replace(decision))
 
 
@@ -685,13 +683,13 @@ def test_decision_pinned_by_a_constraint_does_not_reach_the_gate() -> None:
         winning_wish=Wish.target(
             Layer.PROTECTION, ReasonCode.PROTECTION_EVENT, FULLY_CLOSED
         ),
-        constraints=[
+        constraints=(
             ConstraintResult(
                 Constraint.LOCKOUT_PROTECTION,
                 ReasonCode.LOCKOUT_DOOR_OPEN,
                 _targets(None),
-            )
-        ],
+            ),
+        ),
         targets=_targets(None),
     )
 
@@ -703,7 +701,7 @@ def test_decision_without_any_opinion() -> None:
     """A window without a configured schedule can end without a winner."""
     decision = Decision(
         winning_wish=None,
-        other_layers=[LayerReason(Layer.SCHEDULE, ReasonCode.NOT_CONFIGURED)],
+        other_layers=(LayerReason(Layer.SCHEDULE, ReasonCode.NOT_CONFIGURED),),
     )
 
     assert decision.winning_wish is None
@@ -719,11 +717,11 @@ def test_decision_with_one_pinned_and_one_moving_member() -> None:
             Position(60),
             direction=Direction.RAISE_ONLY,
         ),
-        constraints=[
+        constraints=(
             ConstraintResult(
                 Constraint.DIRECTION, ReasonCode.ONLY_RAISE, _targets(None, 60)
-            )
-        ],
+            ),
+        ),
         targets=_targets(None, 60),
         gate=GateOutcome.would_have_sent([MemberTarget(RIGHT, Position(60))]),
     )
@@ -829,11 +827,11 @@ def test_decision_types_are_checked() -> None:
     with pytest.raises(TypeError, match="winning wish"):
         Decision(winning_wish=bad)
     with pytest.raises(TypeError, match="layer reason"):
-        Decision(winning_wish=None, other_layers=[bad])
+        Decision(winning_wish=None, other_layers=(bad,))
     with pytest.raises(TypeError, match="constraint of a decision"):
-        Decision(winning_wish=_night_wish(), constraints=[bad], targets=_targets(0))
+        Decision(winning_wish=_night_wish(), constraints=(bad,), targets=_targets(0))
     with pytest.raises(TypeError, match="targets of a decision"):
-        Decision(winning_wish=_night_wish(), targets=[bad])
+        Decision(winning_wish=_night_wish(), targets=(bad,))
     with pytest.raises(TypeError, match="gate outcome"):
         Decision(winning_wish=_night_wish(), targets=_targets(0), gate=bad)
 
@@ -889,6 +887,29 @@ def test_every_other_wish_has_the_class_of_its_layer(reason: ReasonCode) -> None
 # --- The displayed target -------------------------------------------------------------
 
 
+def test_decision_stores_lists_as_tuples() -> None:
+    """A caller that hands in lists still gets an immutable, hashable record."""
+    layers: Any = [LayerReason(Layer.FIRE, ReasonCode.INACTIVE)]
+    constraints: Any = [
+        ConstraintResult(
+            Constraint.VENTILATION_FLOOR, ReasonCode.VENTILATION_FLOOR, _targets(30)
+        )
+    ]
+    targets: Any = list(_targets(30))
+    decision = Decision(
+        winning_wish=_night_wish(),
+        other_layers=layers,
+        constraints=constraints,
+        targets=targets,
+        gate=GateOutcome.send(),
+    )
+
+    assert isinstance(decision.other_layers, tuple)
+    assert isinstance(decision.constraints, tuple)
+    assert isinstance(decision.targets, tuple)
+    assert isinstance(hash(decision), int)
+
+
 def test_decision_shows_the_common_target_of_its_members() -> None:
     """The same target for all members is the target of the window."""
     decision = Decision(
@@ -911,9 +932,9 @@ def test_decision_with_a_pinned_member_shows_no_window_target() -> None:
                 Position(60),
                 direction=Direction.RAISE_ONLY,
             ),
-            constraints=[
-                ConstraintResult(Constraint.DIRECTION, ReasonCode.ONLY_RAISE, targets)
-            ],
+            constraints=(
+                ConstraintResult(Constraint.DIRECTION, ReasonCode.ONLY_RAISE, targets),
+            ),
             targets=targets,
             gate=GateOutcome.send(),
         )

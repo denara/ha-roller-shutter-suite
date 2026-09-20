@@ -69,7 +69,8 @@ def test_every_code_knows_its_category() -> None:
 
 def test_a_code_is_its_string_and_the_name_follows_the_value() -> None:
     """Codes serialize as their value; names are the upper-case value."""
-    assert ReasonCode.FIRE_ALARM == "fire_alarm"
+    assert ReasonCode.FIRE_ALARM.value == "fire_alarm"
+    assert str(ReasonCode.FIRE_ALARM) == "fire_alarm"
     assert ReasonCode("dry_run") is ReasonCode.DRY_RUN
     for code in ReasonCode:
         assert code.name == code.value.upper()

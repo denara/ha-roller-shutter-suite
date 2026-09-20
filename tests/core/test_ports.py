@@ -2,7 +2,7 @@
 
 import inspect
 from datetime import UTC, date, datetime, time, timedelta
-from typing import Protocol
+from typing import is_protocol
 
 from custom_components.roller_shutter_suite.core import ports
 from custom_components.roller_shutter_suite.core.model import (
@@ -110,7 +110,7 @@ def test_the_four_ports_are_protocols() -> None:
 
     assert found == {"Clock", "Sun", "Actuator", "Storage"}
     for port in (Clock, Sun, Actuator, Storage):
-        assert Protocol in port.__mro__
+        assert is_protocol(port)
 
 
 def test_clock_port() -> None:

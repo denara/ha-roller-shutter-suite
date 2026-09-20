@@ -59,7 +59,7 @@ def _full_state() -> WindowState:
     """Return a state that uses every field of section 11."""
     return WindowState(
         owner=PositionOwner.USER,
-        members=[
+        members=(
             MemberState(
                 LEFT,
                 last_own_command=_command(
@@ -71,7 +71,7 @@ def _full_state() -> WindowState:
                 last_attempt_at=LOCAL,
             ),
             MemberState(RIGHT, last_observation=Observation(MovementState.UNAVAILABLE)),
-        ],
+        ),
         manual_override=ManualOverrideDam(
             armed_at=NOW,
             end_rule=OverrideEndRule.FIXED_MINUTES,
@@ -79,7 +79,7 @@ def _full_state() -> WindowState:
             remembered_position=Position(55),
         ),
         person_at_window=PersonAtWindowDam(ends_at=NOW + timedelta(minutes=15)),
-        protection_events=[
+        protection_events=(
             ProtectionEventState(
                 "storm",
                 status=ProtectionEventStatus.ACTIVE,
@@ -89,7 +89,7 @@ def _full_state() -> WindowState:
                 remembered_owner=PositionOwner.ENGINE,
             ),
             ProtectionEventState("hail", ended_at=NOW - timedelta(minutes=10)),
-        ],
+        ),
         fire_unacknowledged=True,
         shading_episode=ShadingEpisodeState(
             active_since=NOW - timedelta(hours=2),
@@ -101,18 +101,18 @@ def _full_state() -> WindowState:
         external_request=ExternalRequest(
             Position(80), "alarm clock", expires_at=NOW + timedelta(hours=1)
         ),
-        latched_day_types=[
+        latched_day_types=(
             LatchedDayType(date(2026, 3, 1), DayType.WEEKEND),
             LatchedDayType(date(2026, 3, 2), DayType.WORKDAY),
-        ],
+        ),
         last_comfort_movement=NOW - timedelta(minutes=20),
         held_frost=HeldInput(value=True, seen_at=NOW - timedelta(hours=3)),
         held_season=HeldInput(value=False, seen_at=NOW - timedelta(days=2)),
         frost_waiver_until=NOW + timedelta(hours=18),
         simulated=SimulatedState(
-            commands=[
-                MemberCommand(LEFT, _command(Position(0), NOW, WishClass.PROTECTION))
-            ],
+            commands=(
+                MemberCommand(LEFT, _command(Position(0), NOW, WishClass.PROTECTION)),
+            ),
             last_comfort_movement=NOW - timedelta(minutes=1),
         ),
     )
@@ -186,24 +186,24 @@ def test_round_trip_in_the_repeated_hour_of_a_clock_change(fold: int) -> None:
     zone = ZoneInfo("Europe/Paris")
     repeated = datetime(2026, 10, 25, 2, 30, tzinfo=zone, fold=fold)
     state = WindowState(
-        members=[
+        members=(
             MemberState(
                 LEFT,
                 _command(Position(0), repeated, WishClass.COMFORT),
                 command_attempts=1,
                 last_attempt_at=repeated,
-            )
-        ],
+            ),
+        ),
         manual_override=ManualOverrideDam(
             repeated, OverrideEndRule.FIXED_MINUTES, ends_at=repeated
         ),
         person_at_window=PersonAtWindowDam(repeated),
-        protection_events=[
+        protection_events=(
             ProtectionEventState(
                 "storm", status=ProtectionEventStatus.ACTIVE, active_since=repeated
             ),
             ProtectionEventState("hail", ended_at=repeated),
-        ],
+        ),
         shading_episode=ShadingEpisodeState(repeated, repeated),
         solar_heating_episode=SolarHeatingEpisodeState(repeated),
         external_request=ExternalRequest(Position(1), "scene", expires_at=repeated),
@@ -472,30 +472,61 @@ def test_data_without_a_schema_version_is_refused() -> None:
 def test_window_state_lists_are_validated() -> None:
     """Members, events and latched dates are unique; two dates at most."""
     with pytest.raises(ValueError, match="occurs twice"):
-        WindowState(members=[MemberState(LEFT), MemberState(LEFT)])
-    with pytest.raises(ValueError, match="occurs twice"):
         WindowState(
-            protection_events=[
-                ProtectionEventState("storm"),
-                ProtectionEventState("storm"),
-            ]
+            members=(
+                MemberState(LEFT),
+                MemberState(LEFT),
+            )
         )
     with pytest.raises(ValueError, match="occurs twice"):
         WindowState(
-            latched_day_types=[
+            protection_events=(
+                ProtectionEventState("storm"),
+                ProtectionEventState("storm"),
+            )
+        )
+    with pytest.raises(ValueError, match="occurs twice"):
+        WindowState(
+            latched_day_types=(
                 LatchedDayType(date(2026, 3, 1), DayType.WORKDAY),
                 LatchedDayType(date(2026, 3, 1), DayType.HOLIDAY),
-            ]
+            )
         )
     with pytest.raises(ValueError, match="today and tomorrow"):
         WindowState(
-            latched_day_types=[
+            latched_day_types=tuple(
                 LatchedDayType(date(2026, 3, day), DayType.WORKDAY) for day in (1, 2, 3)
-            ]
+            )
         )
     command = _command(Position(0), NOW, WishClass.COMFORT)
     with pytest.raises(ValueError, match="occurs twice"):
-        SimulatedState([MemberCommand(LEFT, command), MemberCommand(LEFT, command)])
+        SimulatedState(
+            (
+                MemberCommand(LEFT, command),
+                MemberCommand(LEFT, command),
+            )
+        )
+
+
+def test_window_state_stores_lists_as_tuples() -> None:
+    """A caller that hands in lists still gets an immutable, hashable state."""
+    members: Any = [MemberState(LEFT)]
+    events: Any = [ProtectionEventState("storm")]
+    latches: Any = [LatchedDayType(date(2026, 3, 1), DayType.WORKDAY)]
+    commands: Any = [MemberCommand(LEFT, _command(Position(0), NOW, WishClass.COMFORT))]
+    state = WindowState(
+        members=members,
+        protection_events=events,
+        latched_day_types=latches,
+        simulated=SimulatedState(commands),
+    )
+
+    assert isinstance(state.members, tuple)
+    assert isinstance(state.protection_events, tuple)
+    assert isinstance(state.latched_day_types, tuple)
+    assert state.simulated is not None
+    assert isinstance(state.simulated.commands, tuple)
+    assert isinstance(hash(state), int)
 
 
 def test_window_state_types_are_checked() -> None:
@@ -504,15 +535,15 @@ def test_window_state_types_are_checked() -> None:
     with pytest.raises(TypeError, match="owner"):
         WindowState(owner=bad)
     with pytest.raises(TypeError, match="member state"):
-        WindowState(members=[bad])
+        WindowState(members=(bad,))
     with pytest.raises(TypeError, match="protection event state"):
-        WindowState(protection_events=[bad])
+        WindowState(protection_events=(bad,))
     with pytest.raises(TypeError, match="fire flag"):
         WindowState(fire_unacknowledged=bad)
     with pytest.raises(TypeError, match="latched day type"):
-        WindowState(latched_day_types=[bad])
+        WindowState(latched_day_types=(bad,))
     with pytest.raises(TypeError, match="simulated command"):
-        SimulatedState([bad])
+        SimulatedState((bad,))
 
 
 @pytest.mark.parametrize(

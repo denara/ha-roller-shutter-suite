@@ -329,10 +329,10 @@ def test_member_config_and_temperature_tier_are_validated() -> None:
 
 def _observed(*members: tuple[str, Observation]) -> WindowObservation:
     return WindowObservation(
-        [
+        tuple(
             MemberObservation(member_id, observation)
             for member_id, observation in members
-        ]
+        )
     )
 
 
@@ -364,9 +364,12 @@ def test_window_reports_movement_as_soon_as_one_member_does() -> None:
         (RIGHT, Observation(MovementState.MOVING_DOWN, Position(70))),
     )
 
+    as_list: Any = list(window.members)
+
     assert window.reports_movement is True
     assert window.available is True
-    assert isinstance(window.members, tuple)
+    assert isinstance(WindowObservation(as_list).members, tuple)
+    assert WindowObservation(as_list) == window
     assert not hasattr(window, "moving")
     assert _resting(20, 20).reports_movement is False
 
@@ -395,7 +398,12 @@ def test_the_smallest_tolerance_applies_when_members_have_different_ones() -> No
 
 def test_window_position_does_not_depend_on_what_was_commanded() -> None:
     """The signature takes no targets; the snapshot ignores the last commands too."""
-    state = WindowState(members=[_commanded(LEFT, 100), _commanded(RIGHT, 100)])
+    state = WindowState(
+        members=(
+            _commanded(LEFT, 100),
+            _commanded(RIGHT, 100),
+        )
+    )
 
     assert _snapshot(observation=_resting(40, 41), state=state).window_position(
         TOLERANCES
@@ -408,7 +416,7 @@ def test_window_position_does_not_depend_on_what_was_commanded() -> None:
 def test_single_member_window_has_a_position_right_after_a_movement_by_hand() -> None:
     """Last own command 100, a person moves the shutter to 40: the position is 40."""
     window = _observed((LEFT, Observation(MovementState.RESTING, Position(40))))
-    state = WindowState(members=[_commanded(LEFT, 100)])
+    state = WindowState(members=(_commanded(LEFT, 100),))
     snapshot = _snapshot(observation=window, state=state)
 
     assert window.position({LEFT: 2}) == Position(40)
@@ -567,8 +575,18 @@ def _commanded(member: str, target: int) -> MemberState:
 
 def test_snapshot_takes_the_commanded_targets_from_the_persisted_state() -> None:
     """The last own command per member is persisted; the snapshot combines the two."""
-    state = WindowState(members=[_commanded(LEFT, 30), _commanded(RIGHT, 30)])
-    partly = WindowState(members=[_commanded(LEFT, 30), MemberState(RIGHT)])
+    state = WindowState(
+        members=(
+            _commanded(LEFT, 30),
+            _commanded(RIGHT, 30),
+        )
+    )
+    partly = WindowState(
+        members=(
+            _commanded(LEFT, 30),
+            MemberState(RIGHT),
+        )
+    )
 
     assert state.commanded_targets == {LEFT: Position(30), RIGHT: Position(30)}
     assert partly.commanded_targets == {LEFT: Position(30)}
@@ -621,11 +639,11 @@ def test_window_observation_is_validated() -> None:
     resting = Observation(MovementState.RESTING)
     bad: Any = "x"
     with pytest.raises(ValueError, match="at least one member"):
-        WindowObservation([])
+        WindowObservation(())
     with pytest.raises(ValueError, match="occurs twice"):
         _observed((LEFT, resting), (LEFT, resting))
     with pytest.raises(TypeError, match="member observation"):
-        WindowObservation([bad])
+        WindowObservation((bad,))
     with pytest.raises(ValueError, match="must not be empty"):
         MemberObservation("", resting)
     with pytest.raises(TypeError, match="observation of a member"):
