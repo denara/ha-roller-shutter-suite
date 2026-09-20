@@ -32,6 +32,14 @@ by ``scripts/check_foreign_warnings.py``; that the filters in effect are exactly
 that list is checked at runtime in every test folder
 (``tests/core/test_pytest_configuration.py``, ``tests/ha/test_warning_filters.py``).
 
+**The guard fails closed.** "Could not check" means here, and ends with exit
+status 2: ``pyproject.toml`` is missing, unreadable or not valid TOML; a
+``pytest.ini`` cannot be read or parsed; the log guard (``tests/ha/conftest.py``)
+or its self-test does not exist, so there is nothing left to protect; the
+workflow folder holds no workflow; a scanned folder holds no Python file; a
+Python file cannot be read or parsed. Exit status 1 means findings; 0 means
+that the files were really read, and the last line says how many of each kind.
+
 Run it from anywhere: ``python scripts/check_log_guard.py``. It needs only the
 standard library.
 """
@@ -86,6 +94,13 @@ _WARNINGS_VARIABLE = "PYTHONWARNINGS"
 _EMPTYING_METHODS = {"clear", "pop", "remove"}
 _FILTER_FILES = (FILTER_INSTALLER, FILTER_CHECK)
 _OVERRIDING_FILES = ("pytest.ini", ".pytest.ini", "pytest.toml", ".pytest.toml")
+PROJECT_FILE = "pyproject.toml"
+EXIT_FINDINGS = 1
+EXIT_CANNOT_CHECK = 2
+
+
+class CannotCheckError(RuntimeError):
+    """The guard could not do its job. That is a failure, never a pass."""
 
 
 @dataclass(frozen=True)
@@ -129,7 +144,14 @@ def _empties_a_list(node: ast.AST) -> bool:
 def check_python_source(source: str, path: str) -> list[Finding]:
     """Check one Python file of the tests or of the integration."""
     findings: list[Finding] = []
-    for node in ast.walk(ast.parse(source, filename=path)):
+    try:
+        tree = ast.parse(source, filename=path)
+    except (SyntaxError, ValueError) as error:
+        raise CannotCheckError(
+            f"{path} cannot be parsed as Python ({type(error).__name__}); fix the "
+            "file, it cannot be judged like this"
+        ) from error
+    for node in ast.walk(tree):
         line = getattr(node, "lineno", 0)
         names = _names(node)
         is_string = isinstance(node, ast.Constant)
@@ -258,8 +280,11 @@ def check_workflow(text: str, path: str) -> list[Finding]:
 
 def check_pyproject(text: str, path: str) -> list[Finding]:
     """Check the pytest section of a ``pyproject.toml``."""
-    options = tomllib.loads(text).get("tool", {}).get("pytest", {})
-    options = options.get("ini_options", {})
+    try:
+        content = tomllib.loads(text)
+    except tomllib.TOMLDecodeError as error:
+        raise CannotCheckError(f"{path} is not valid TOML: {error}") from error
+    options = content.get("tool", {}).get("pytest", {}).get("ini_options", {})
     addopts = options.get("addopts", [])
     if isinstance(addopts, str):
         addopts = shlex.split(addopts)
@@ -269,7 +294,12 @@ def check_pyproject(text: str, path: str) -> list[Finding]:
 def check_pytest_ini(text: str, path: str) -> list[Finding]:
     """Check a ``pytest.ini``."""
     parser = configparser.ConfigParser(interpolation=None)
-    parser.read_string(text)
+    try:
+        parser.read_string(text)
+    except configparser.Error as error:
+        raise CannotCheckError(
+            f"{path} cannot be parsed ({type(error).__name__})"
+        ) from error
     options = parser["pytest"] if parser.has_section("pytest") else {}
     raw_filters = options.get(_FILTER_KEY)
     filters = (
@@ -289,37 +319,87 @@ def _overriding_configurations(root: Path) -> list[Finding]:
     ]
 
 
+@dataclass(frozen=True)
+class Inputs:
+    """The files a run reads, by kind. Every kind except ``ini`` has to exist."""
+
+    ini: list[Path]
+    workflows: list[Path]
+    python: list[Path]
+
+    def summary(self) -> str:
+        """Say how much is read."""
+        return (
+            f"{PROJECT_FILE}, {len(self.ini)} pytest.ini, {len(self.workflows)} "
+            f"workflow(s), {len(self.python)} Python file(s)"
+        )
+
+
+def inputs(root: Path) -> Inputs:
+    """Find what has to be read, and refuse a tree where it is not there."""
+    for required in (PROJECT_FILE, LOG_GUARD_FILE, LOG_GUARD_SELF_TEST):
+        if not (root / required).is_file():
+            raise CannotCheckError(
+                f"{required} does not exist. If it has moved, change its path in "
+                "this script; without it there is nothing to protect"
+            )
+    workflows = sorted((root / WORKFLOW_FOLDER).glob("*.y*ml"))
+    if not workflows:
+        raise CannotCheckError(
+            f"no workflow found under {WORKFLOW_FOLDER}/, so no pytest command "
+            "line of CI could be checked"
+        )
+    python: list[Path] = []
+    for folder in SCANNED_FOLDERS:
+        found = sorted((root / folder).rglob("*.py"))
+        if not found:
+            raise CannotCheckError(
+                f"no Python file found under {folder}/. If the folder has moved, "
+                "change SCANNED_FOLDERS in this script"
+            )
+        python += found
+    return Inputs(sorted((root / "tests").rglob("pytest.ini")), workflows, python)
+
+
+def _read(file: Path, relative: str) -> str:
+    try:
+        return file.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as error:
+        raise CannotCheckError(
+            f"{relative} cannot be read ({type(error).__name__})"
+        ) from error
+
+
 def check_tree(root: Path) -> list[Finding]:
     """Check the pytest configurations and every scanned Python file."""
-    findings = check_pyproject(
-        (root / "pyproject.toml").read_text(encoding="utf-8"), "pyproject.toml"
-    )
+    found = inputs(root)
+    findings = check_pyproject(_read(root / PROJECT_FILE, PROJECT_FILE), PROJECT_FILE)
     findings += _overriding_configurations(root)
-    for file in sorted((root / "tests").rglob("pytest.ini")):
-        findings += check_pytest_ini(
-            file.read_text(encoding="utf-8"), file.relative_to(root).as_posix()
-        )
-    for file in sorted((root / WORKFLOW_FOLDER).glob("*.y*ml")):
-        findings += check_workflow(
-            file.read_text(encoding="utf-8"), file.relative_to(root).as_posix()
-        )
-    for folder in SCANNED_FOLDERS:
-        for file in sorted((root / folder).rglob("*.py")):
-            findings += check_python_source(
-                file.read_text(encoding="utf-8"), file.relative_to(root).as_posix()
-            )
+    for files, check in (
+        (found.ini, check_pytest_ini),
+        (found.workflows, check_workflow),
+        (found.python, check_python_source),
+    ):
+        for file in files:
+            relative = file.relative_to(root).as_posix()
+            findings += check(_read(file, relative), relative)
     return findings
 
 
-def main() -> int:
+def main(root: Path = REPOSITORY_ROOT) -> int:
     """Run the guard on this repository."""
-    findings = check_tree(REPOSITORY_ROOT)
+    try:
+        summary = inputs(root).summary()
+        findings = check_tree(root)
+    except CannotCheckError as error:
+        sys.stdout.write(f"log guard: CANNOT CHECK, so this is a failure: {error}\n")
+        return EXIT_CANNOT_CHECK
     for finding in findings:
         sys.stdout.write(f"{finding}\n")
     if findings:
         sys.stdout.write(f"log guard: {len(findings)} finding(s)\n")
-        return 1
-    sys.stdout.write("log guard: ok\n")
+        return EXIT_FINDINGS
+    sys.stdout.write(f"log guard: ok (checked {summary})\n")
     return 0
 
 

@@ -22,6 +22,13 @@ doing that.
    must not exist. To change the set, change ``EXPECTED`` here in the same
    pull request, where the reviewer sees it.
 
+**The guard fails closed.** "Could not check" means here, and ends with exit
+status 2: ``pyproject.toml`` is missing, unreadable or not valid TOML; the
+scanned folder holds no Python file; a Python file cannot be read or split into
+tokens; a competing configuration file exists but cannot be read. Exit status 1
+means an unjustified pragma or a changed configuration; every run says how many
+files were searched.
+
 Run it from anywhere: ``python scripts/check_coverage_exclusions.py``. It needs
 only the standard library.
 """
@@ -59,6 +66,22 @@ _PRAGMA = re.compile(
     r"#\s*pragma\s*:\s*no\s+(cover|branch)\b(?P<rest>.*)", re.IGNORECASE
 )
 _REASON = re.compile(r"\s+-\s+(?P<reason>\S.*)")
+PROJECT_FILE = "pyproject.toml"
+EXIT_FINDINGS = 1
+EXIT_CANNOT_CHECK = 2
+
+
+class CannotCheckError(RuntimeError):
+    """The guard could not do its job. That is a failure, never a pass."""
+
+
+def _read(file: Path, relative: str) -> str:
+    try:
+        return file.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as error:
+        raise CannotCheckError(
+            f"{relative} cannot be read ({type(error).__name__})"
+        ) from error
 
 
 @dataclass(frozen=True)
@@ -79,7 +102,14 @@ class Pragma:
 def find_pragmas(source: str, path: str) -> list[Pragma]:
     """Return the pragmas in the comments of one Python file."""
     found: list[Pragma] = []
-    for token in tokenize.generate_tokens(io.StringIO(source).readline):
+    try:
+        tokens = list(tokenize.generate_tokens(io.StringIO(source).readline))
+    except (tokenize.TokenError, SyntaxError) as error:
+        raise CannotCheckError(
+            f"{path} cannot be split into tokens ({type(error).__name__}); fix the "
+            "file, its comments cannot be found like this"
+        ) from error
+    for token in tokens:
         if token.type != tokenize.COMMENT:
             continue
         if match := _PRAGMA.search(token.string):
@@ -91,19 +121,33 @@ def find_pragmas(source: str, path: str) -> list[Pragma]:
     return found
 
 
+def scanned_files(root: Path) -> list[Path]:
+    """Return the Python files of the integration; there has to be one."""
+    files = sorted((root / SCANNED_FOLDER).rglob("*.py"))
+    if not files:
+        raise CannotCheckError(
+            f"no Python file found under {SCANNED_FOLDER}/. If the folder has "
+            "moved, change SCANNED_FOLDER in this script"
+        )
+    return files
+
+
 def pragmas_in_tree(root: Path) -> list[Pragma]:
     """Return the pragmas of every Python file of the integration."""
     found: list[Pragma] = []
-    for file in sorted((root / SCANNED_FOLDER).rglob("*.py")):
-        found += find_pragmas(
-            file.read_text(encoding="utf-8"), file.relative_to(root).as_posix()
-        )
+    for file in scanned_files(root):
+        relative = file.relative_to(root).as_posix()
+        found += find_pragmas(_read(file, relative), relative)
     return found
 
 
 def configuration_problems(pyproject: str) -> list[str]:
     """Compare the coverage sections of a ``pyproject.toml`` with ``EXPECTED``."""
-    coverage = tomllib.loads(pyproject).get("tool", {}).get("coverage", {})
+    try:
+        content = tomllib.loads(pyproject)
+    except tomllib.TOMLDecodeError as error:
+        raise CannotCheckError(f"{PROJECT_FILE} is not valid TOML: {error}") from error
+    coverage = content.get("tool", {}).get("coverage", {})
     problems: list[str] = []
     for (section, key), expected in EXPECTED.items():
         actual = coverage.get(section, {}).get(key, _ABSENT)
@@ -121,24 +165,32 @@ def other_configuration_files(root: Path) -> list[str]:
     for name in _OTHER_CONFIGURATION_FILES:
         file = root / name
         if (name == ".coveragerc" and file.exists()) or (
-            file.exists() and "[coverage:" in file.read_text(encoding="utf-8")
+            file.exists() and "[coverage:" in _read(file, name)
         ):
             found.append(name)
     return found
 
 
-def main() -> int:
+def main(root: Path = REPOSITORY_ROOT) -> int:
     """Run the guard on this repository."""
-    pragmas = pragmas_in_tree(REPOSITORY_ROOT)
-    problems = configuration_problems(
-        (REPOSITORY_ROOT / "pyproject.toml").read_text(encoding="utf-8")
-    )
-    problems += [
-        f"{name} configures coverage; only pyproject.toml may"
-        for name in other_configuration_files(REPOSITORY_ROOT)
-    ]
+    try:
+        searched = len(scanned_files(root))
+        pragmas = pragmas_in_tree(root)
+        problems = configuration_problems(_read(root / PROJECT_FILE, PROJECT_FILE))
+        problems += [
+            f"{name} configures coverage; only pyproject.toml may"
+            for name in other_configuration_files(root)
+        ]
+    except CannotCheckError as error:
+        sys.stdout.write(
+            f"coverage exclusions: CANNOT CHECK, so this is a failure: {error}\n"
+        )
+        return EXIT_CANNOT_CHECK
     unjustified = [pragma for pragma in pragmas if pragma.reason is None]
-    sys.stdout.write(f"coverage exclusions: {len(pragmas)} pragma(s) in the code\n")
+    sys.stdout.write(
+        f"coverage exclusions: {len(pragmas)} pragma(s) in the {searched} "
+        f"Python file(s) under {SCANNED_FOLDER}/\n"
+    )
     for pragma in pragmas:
         sys.stdout.write(f"  {pragma}\n")
     for problem in problems:
@@ -149,7 +201,7 @@ def main() -> int:
             "Write '# pragma: no cover - <why this cannot be tested>'\n"
         )
     if problems or unjustified:
-        return 1
+        return EXIT_FINDINGS
     sys.stdout.write("coverage exclusions: ok\n")
     return 0
 

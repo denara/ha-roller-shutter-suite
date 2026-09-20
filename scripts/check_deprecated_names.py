@@ -17,6 +17,13 @@ can flag an unrelated attribute of the same name; ``allowed_receivers`` lists
 the objects on which the name is known to be fine. A deprecated name that is
 built at runtime (``getattr`` with a computed string) is not seen.
 
+**The guard fails closed.** "Could not check" means here, and ends with exit
+status 2: the list file is missing, unreadable, malformed or has no entry (a
+list without names checks nothing); one of the scanned folders does not exist
+or holds no Python file; a Python file cannot be read or parsed. Exit status 1
+means references to deprecated names; 0 means that the files were really
+parsed, and the last line says how many files and how many names.
+
 Run it from anywhere: ``python scripts/check_deprecated_names.py``. It needs
 only the standard library.
 """
@@ -36,6 +43,12 @@ _KINDS = {"identifier", "module", "attribute", "mapping"}
 _TEXT_FIELDS = ("kind", "name", "behavior", "reason", "replacement", "source")
 _RECEIVER_FIELD = "allowed_receivers"
 _KINDS_WITH_RECEIVERS = {"attribute", "mapping"}
+EXIT_FINDINGS = 1
+EXIT_CANNOT_CHECK = 2
+
+
+class CannotCheckError(RuntimeError):
+    """The guard could not do its job. That is a failure, never a pass."""
 
 
 class ListError(ValueError):
@@ -182,7 +195,13 @@ def _describe(entry: Deprecated) -> str:
 
 def check_source(source: str, path: str, entries: list[Deprecated]) -> list[Finding]:
     """Check one Python module against the list."""
-    tree = ast.parse(source, filename=path)
+    try:
+        tree = ast.parse(source, filename=path)
+    except (SyntaxError, ValueError) as error:
+        raise CannotCheckError(
+            f"{path} cannot be parsed as Python ({type(error).__name__}); fix the "
+            "file, its names cannot be judged like this"
+        ) from error
     identifiers = {e.name: e for e in entries if e.kind == "identifier"}
     modules = [e for e in entries if e.kind == "module"]
     attributes = [e for e in entries if e.kind == "attribute"]
@@ -203,33 +222,73 @@ def check_source(source: str, path: str, entries: list[Deprecated]) -> list[Find
     return findings
 
 
+def scanned_files(root: Path) -> list[Path]:
+    """Return the Python files to check; every scanned folder has to hold one."""
+    files: list[Path] = []
+    for folder in SCANNED_FOLDERS:
+        found = sorted((root / folder).rglob("*.py"))
+        if not found:
+            raise CannotCheckError(
+                f"no Python file found under {folder}/. If the folder has moved, "
+                "change SCANNED_FOLDERS in this script"
+            )
+        files += found
+    return files
+
+
 def check_tree(root: Path, entries: list[Deprecated]) -> list[Finding]:
     """Check every Python file in the scanned folders below ``root``."""
     findings: list[Finding] = []
-    for folder in SCANNED_FOLDERS:
-        for file in sorted((root / folder).rglob("*.py")):
-            findings += check_source(
-                file.read_text(encoding="utf-8"),
-                file.relative_to(root).as_posix(),
-                entries,
-            )
+    for file in scanned_files(root):
+        relative = file.relative_to(root).as_posix()
+        try:
+            source = file.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as error:
+            raise CannotCheckError(
+                f"{relative} cannot be read ({type(error).__name__})"
+            ) from error
+        findings += check_source(source, relative, entries)
     return findings
 
 
-def main() -> int:
+def load_list(list_file: Path) -> list[Deprecated]:
+    """Read the list file; a list that cannot be used cannot check anything."""
+    try:
+        entries = parse_list(list_file.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError) as error:
+        raise CannotCheckError(
+            f"{list_file.name} cannot be read ({type(error).__name__}); it belongs "
+            "next to this script"
+        ) from error
+    except (ListError, tomllib.TOMLDecodeError) as error:
+        raise CannotCheckError(f"{list_file.name} is not valid: {error}") from error
+    if not entries:
+        raise CannotCheckError(
+            f"{list_file.name} has no entry, so nothing would be checked"
+        )
+    return entries
+
+
+def main(root: Path = REPOSITORY_ROOT, list_file: Path = LIST_FILE) -> int:
     """Run the guard on this repository."""
     try:
-        entries = parse_list(LIST_FILE.read_text(encoding="utf-8"))
-    except (ListError, tomllib.TOMLDecodeError) as error:
-        sys.stdout.write(f"{LIST_FILE.name}: {error}\n")
-        return 1
-    findings = check_tree(REPOSITORY_ROOT, entries)
+        entries = load_list(list_file)
+        checked = len(scanned_files(root))
+        findings = check_tree(root, entries)
+    except CannotCheckError as error:
+        sys.stdout.write(
+            f"deprecated names: CANNOT CHECK, so this is a failure: {error}\n"
+        )
+        return EXIT_CANNOT_CHECK
     for finding in findings:
         sys.stdout.write(f"{finding}\n")
     if findings:
         sys.stdout.write(f"deprecated names: {len(findings)} reference(s)\n")
-        return 1
-    sys.stdout.write(f"deprecated names: ok ({len(entries)} names on the list)\n")
+        return EXIT_FINDINGS
+    sys.stdout.write(
+        f"deprecated names: ok (checked {checked} file(s) against "
+        f"{len(entries)} names on the list)\n"
+    )
     return 0
 
 

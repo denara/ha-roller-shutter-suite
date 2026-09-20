@@ -3,9 +3,14 @@
 import json
 from pathlib import Path
 
+import pytest
+
 from scripts.check_versions import (
+    EXIT_CANNOT_CHECK,
+    EXIT_FINDINGS,
     MANIFEST_FILE,
     PROJECT_FILE,
+    main,
     problems,
     read_versions,
 )
@@ -54,3 +59,29 @@ def test_missing_version_fails(tmp_path: Path) -> None:
 def test_this_repository_passes() -> None:
     """Both files of this repository state the same version."""
     assert problems(read_versions(Path(__file__).parents[2])) == []
+
+
+def test_missing_or_broken_file_cannot_be_checked(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A file that cannot be read or parsed is a failure with its own status."""
+    assert main(tmp_path) == EXIT_CANNOT_CHECK
+    _write(tmp_path, "1.2.3", "1.2.3")
+    assert main(tmp_path) == 0
+    (tmp_path / MANIFEST_FILE).write_text("[1]", encoding="utf-8")
+    assert main(tmp_path) == EXIT_CANNOT_CHECK
+    (tmp_path / MANIFEST_FILE).write_text("{", encoding="utf-8")
+    assert main(tmp_path) == EXIT_CANNOT_CHECK
+    (tmp_path / MANIFEST_FILE).unlink()
+    assert main(tmp_path) == EXIT_CANNOT_CHECK
+    (tmp_path / PROJECT_FILE).write_text("= =", encoding="utf-8")
+    assert main(tmp_path) == EXIT_CANNOT_CHECK
+
+    assert capsys.readouterr().out.count("CANNOT CHECK") == 5  # noqa: PLR2004 - cases above
+
+
+def test_different_versions_end_with_the_status_of_a_finding(tmp_path: Path) -> None:
+    """Findings and "could not check" are told apart."""
+    _write(tmp_path, "1.2.3", "1.2.4")
+
+    assert main(tmp_path) == EXIT_FINDINGS

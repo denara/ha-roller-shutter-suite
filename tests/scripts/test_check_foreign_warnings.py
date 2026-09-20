@@ -5,8 +5,11 @@ from pathlib import Path
 import pytest
 
 from scripts.check_foreign_warnings import (
+    EXIT_CANNOT_CHECK,
+    CannotCheckError,
     EntryError,
     load_entries,
+    main,
     own_module_names,
     parse_entries,
 )
@@ -134,3 +137,43 @@ def test_own_modules_cover_the_integration_and_the_tests() -> None:
 def test_list_of_this_repository_is_valid() -> None:
     """The list in the repository passes its own guard."""
     assert isinstance(load_entries(REPOSITORY_ROOT), list)
+
+
+def _tree(root: Path, *, with_list: bool) -> None:
+    for folder in ("custom_components", "tests", "scripts"):
+        (root / folder).mkdir()
+        (root / folder / "module.py").write_text("", encoding="utf-8")
+    if with_list:
+        (root / "tests" / "foreign_warnings.toml").write_text("", encoding="utf-8")
+
+
+def test_missing_list_cannot_be_checked(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """An empty list is a file without entries; a missing file is a failure."""
+    _tree(tmp_path, with_list=False)
+
+    with pytest.raises(CannotCheckError, match="cannot be read"):
+        load_entries(tmp_path)
+    assert main(tmp_path) == EXIT_CANNOT_CHECK
+    assert "CANNOT CHECK" in capsys.readouterr().out
+
+
+def test_repository_without_own_modules_cannot_be_checked(tmp_path: Path) -> None:
+    """Comparing a pattern with no module at all would accept every pattern."""
+    _tree(tmp_path, with_list=True)
+    (tmp_path / "scripts" / "module.py").unlink()
+
+    with pytest.raises(CannotCheckError, match="no Python file found under scripts/"):
+        own_module_names(tmp_path)
+    assert main(tmp_path) == EXIT_CANNOT_CHECK
+
+
+def test_pass_says_how_much_was_compared(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Zero entries is the normal state, so the pass names both numbers."""
+    _tree(tmp_path, with_list=True)
+
+    assert main(tmp_path) == 0
+    assert "0 entries, each compared with 7 module names" in capsys.readouterr().out

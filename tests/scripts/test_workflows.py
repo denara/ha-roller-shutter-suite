@@ -61,3 +61,60 @@ def test_workflow_follows_the_hardening_rules(workflow: Path) -> None:
     assert uses
     assert [line for line in uses if not PINNED_ACTION.fullmatch(line)] == []
     assert text.count("actions/checkout@") == text.count("persist-credentials: false")
+
+
+GUARDS = sorted((REPOSITORY_ROOT / "scripts").glob("check_*.py"))
+SWALLOWED_STATUS = re.compile(r"\|\||\bset \+e\b|;\s*true\b|(?<!\|)\|(?!\|)")
+
+
+def _commands(workflow: Path) -> list[str]:
+    """Return the shell lines of a workflow: ``run:`` lines and block content."""
+    lines = [line.strip() for line in _lines(workflow)]
+    code = [line for line in lines if line and not line.startswith("#")]
+    keys = re.compile(r"(- )?[\w-]+:( |$)")
+    commands = [
+        line.removeprefix("- ").removeprefix("run:").strip()
+        for line in code
+        if line.removeprefix("- ").startswith("run:") or not keys.match(line)
+    ]
+    # `run: |` only opens a block; its content follows as lines of its own.
+    return [line for line in commands if line not in {"|", ">"}]
+
+
+def test_every_guard_runs_in_ci_as_a_command_of_its_own() -> None:
+    """A guard fails closed only if CI runs it and sees its exit status."""
+    commands = _commands(REPOSITORY_ROOT / ".github" / "workflows" / "test.yml")
+
+    assert GUARDS, "the guards are expected under scripts/check_*.py"
+    for guard in GUARDS:
+        runs = [line for line in commands if f"scripts/{guard.name}" in line]
+        assert len(runs) == 1, guard.name
+        assert runs[0].startswith("uv run --no-sync python scripts/"), guard.name
+
+
+@pytest.mark.parametrize("workflow", WORKFLOWS, ids=lambda path: path.name)
+def test_no_command_swallows_an_exit_status(workflow: Path) -> None:
+    """No ``|| true``, no ``set +e``, no pipe that hides the status of a guard."""
+    commands = _commands(workflow)
+
+    assert [line for line in commands if SWALLOWED_STATUS.search(line)] == []
+
+
+def test_only_the_optional_beta_job_may_fail_without_turning_the_run_red() -> None:
+    """``continue-on-error`` anywhere else would hide a guard that failed."""
+    allowed = {"newest-home-assistant.yml": 1}
+
+    for workflow in WORKFLOWS:
+        code = [line for line in _lines(workflow) if not line.lstrip().startswith("#")]
+        found = sum("continue-on-error" in line for line in code)
+        assert found == allowed.get(workflow.name, 0), workflow.name
+
+
+@pytest.mark.parametrize(
+    "line",
+    ["python guard.py || true", "set +e", "python guard.py; true", "guard.py | tee x"],
+)
+def test_swallowed_exit_status_is_recognized(line: str) -> None:
+    """The pattern of the test above sees the usual ways of hiding a failure."""
+    assert SWALLOWED_STATUS.search(line)
+    assert not SWALLOWED_STATUS.search("uv run --no-sync python scripts/guard.py")

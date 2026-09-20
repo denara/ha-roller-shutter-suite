@@ -14,6 +14,12 @@ trigger or hide a finding. Calls of ``importlib.import_module`` and
 ``__import__`` with a literal module name are checked as well; a module name
 that is computed at runtime cannot be seen by a static check.
 
+**The guard fails closed.** "Could not check" means here, and ends with exit
+status 2: the core package does not exist where it is expected, it contains no
+Python file, or one of its files cannot be read or parsed. Exit status 1 means
+forbidden imports; 0 means that the modules were really parsed, and the last
+line says how many.
+
 Run it from anywhere: ``python scripts/check_core_purity.py``. It needs only
 the standard library.
 """
@@ -28,6 +34,12 @@ INTEGRATION_PACKAGE = "custom_components.roller_shutter_suite"
 CORE_PACKAGE = f"{INTEGRATION_PACKAGE}.core"
 FORBIDDEN_PACKAGE = "homeassistant"
 _DYNAMIC_IMPORT_FUNCTIONS = {"import_module", "__import__"}
+EXIT_FINDINGS = 1
+EXIT_CANNOT_CHECK = 2
+
+
+class CannotCheckError(RuntimeError):
+    """The guard could not do its job. That is a failure, never a pass."""
 
 
 @dataclass(frozen=True)
@@ -105,7 +117,14 @@ def check_source(source: str, package: str, path: str) -> list[Finding]:
     needed to resolve relative imports.
     """
     findings: list[Finding] = []
-    for node in ast.walk(ast.parse(source, filename=path)):
+    try:
+        tree = ast.parse(source, filename=path)
+    except (SyntaxError, ValueError) as error:
+        raise CannotCheckError(
+            f"{path} cannot be parsed as Python ({type(error).__name__}); fix the "
+            "file, its imports cannot be judged like this"
+        ) from error
+    for node in ast.walk(tree):
         modules: list[str] = []
         if isinstance(node, ast.Import):
             modules = [alias.name for alias in node.names]
@@ -120,30 +139,48 @@ def check_source(source: str, package: str, path: str) -> list[Finding]:
     return findings
 
 
+def core_files(root: Path) -> list[Path]:
+    """Return the Python files of the core package; there has to be one."""
+    core_dir = root.joinpath(*CORE_PACKAGE.split("."))
+    files = sorted(core_dir.rglob("*.py")) if core_dir.is_dir() else []
+    if not files:
+        raise CannotCheckError(
+            f"no Python file found under {'/'.join(CORE_PACKAGE.split('.'))}/. If "
+            "the core has moved, change CORE_PACKAGE in this script"
+        )
+    return files
+
+
 def check_tree(root: Path) -> list[Finding]:
     """Check every Python file of the core package below ``root``."""
-    core_dir = root.joinpath(*CORE_PACKAGE.split("."))
     findings: list[Finding] = []
-    for file in sorted(core_dir.rglob("*.py")):
+    for file in core_files(root):
         relative = file.relative_to(root)
         package_parts = relative.parent.parts
-        findings += check_source(
-            file.read_text(encoding="utf-8"),
-            ".".join(package_parts),
-            relative.as_posix(),
-        )
+        try:
+            source = file.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as error:
+            raise CannotCheckError(
+                f"{relative.as_posix()} cannot be read ({type(error).__name__})"
+            ) from error
+        findings += check_source(source, ".".join(package_parts), relative.as_posix())
     return findings
 
 
-def main() -> int:
+def main(root: Path = REPOSITORY_ROOT) -> int:
     """Run the guard on this repository."""
-    findings = check_tree(REPOSITORY_ROOT)
+    try:
+        checked = len(core_files(root))
+        findings = check_tree(root)
+    except CannotCheckError as error:
+        sys.stdout.write(f"core purity: CANNOT CHECK, so this is a failure: {error}\n")
+        return EXIT_CANNOT_CHECK
     for finding in findings:
         sys.stdout.write(f"{finding}\n")
     if findings:
         sys.stdout.write(f"core purity: {len(findings)} forbidden import(s)\n")
-        return 1
-    sys.stdout.write("core purity: ok\n")
+        return EXIT_FINDINGS
+    sys.stdout.write(f"core purity: ok (checked {checked} module(s) of the core)\n")
     return 0
 
 

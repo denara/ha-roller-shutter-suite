@@ -11,16 +11,19 @@ from pathlib import Path
 import pytest
 
 from scripts.check_log_guard import (
+    EXIT_CANNOT_CHECK,
     FILTER_INSTALLER,
     GUARD_FIXTURES,
     LOG_GUARD_FILE,
     LOG_GUARD_SELF_TEST,
+    CannotCheckError,
     check_pyproject,
     check_pytest_ini,
     check_python_source,
     check_tree,
     check_workflow,
     forbidden_options,
+    main,
 )
 
 OTHER_TEST = "tests/ha/test_example.py"
@@ -246,16 +249,78 @@ def test_ordinary_workflow_passes() -> None:
     assert check_workflow(text, ".github/workflows/test.yml") == []
 
 
+def _minimal_tree(root: Path) -> None:
+    """Write the smallest tree the guard accepts as complete."""
+    (root / "pyproject.toml").write_text(
+        PYPROJECT.format(addopts="[]", filters='["error"]'), encoding="utf-8"
+    )
+    for name in (
+        "custom_components/example/__init__.py",
+        LOG_GUARD_FILE,
+        LOG_GUARD_SELF_TEST,
+        ".github/workflows/test.yml",
+    ):
+        (root / name).parent.mkdir(parents=True, exist_ok=True)
+        (root / name).write_text("", encoding="utf-8")
+
+
+def test_minimal_complete_tree_passes(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The pass says how much was read."""
+    _minimal_tree(tmp_path)
+
+    assert main(tmp_path) == 0
+    assert "1 workflow(s), 3 Python file(s)" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(
+    "removed",
+    [
+        "pyproject.toml",
+        LOG_GUARD_FILE,
+        LOG_GUARD_SELF_TEST,
+        ".github/workflows/test.yml",
+        "custom_components/example/__init__.py",
+    ],
+)
+def test_incomplete_tree_cannot_be_checked(
+    tmp_path: Path, removed: str, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Whatever the guard has to read but cannot find is a failure, not a pass."""
+    _minimal_tree(tmp_path)
+    (tmp_path / removed).unlink()
+
+    with pytest.raises(CannotCheckError):
+        check_tree(tmp_path)
+    assert main(tmp_path) == EXIT_CANNOT_CHECK
+    assert "CANNOT CHECK" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(
+    ("name", "content"),
+    [
+        ("pyproject.toml", "= ="),
+        ("tests/ha/pytest.ini", "no section\n"),
+        ("tests/ha/test_broken.py", "def broken(:\n"),
+    ],
+)
+def test_file_that_cannot_be_parsed_cannot_be_checked(
+    tmp_path: Path, name: str, content: str
+) -> None:
+    """A file the guard cannot parse may hide anything."""
+    _minimal_tree(tmp_path)
+    (tmp_path / name).write_text(content, encoding="utf-8")
+
+    assert main(tmp_path) == EXIT_CANNOT_CHECK
+
+
 def test_configuration_file_that_would_override_the_project_is_found(
     tmp_path: Path,
 ) -> None:
     """A ``pytest.ini`` in the root would silently replace pyproject.toml."""
-    (tmp_path / "pyproject.toml").write_text(
-        PYPROJECT.format(addopts="[]", filters='["error"]'), encoding="utf-8"
-    )
+    _minimal_tree(tmp_path)
     (tmp_path / "pytest.ini").write_text("[pytest]\n", encoding="utf-8")
-    for folder in ("custom_components", "tests"):
-        (tmp_path / folder).mkdir()
 
     findings = check_tree(tmp_path)
 

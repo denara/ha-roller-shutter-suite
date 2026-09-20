@@ -5,8 +5,11 @@ from pathlib import Path
 import pytest
 
 from scripts.check_coverage_exclusions import (
+    EXIT_CANNOT_CHECK,
+    CannotCheckError,
     configuration_problems,
     find_pragmas,
+    main,
     other_configuration_files,
     pragmas_in_tree,
 )
@@ -129,3 +132,47 @@ def test_competing_configuration_file_is_found(tmp_path: Path) -> None:
 def test_this_repository_has_no_unjustified_pragma() -> None:
     """Every pragma in the integration, if any, carries its reason."""
     assert [p for p in pragmas_in_tree(REPOSITORY_ROOT) if p.reason is None] == []
+
+
+def _tree(root: Path) -> None:
+    (root / "custom_components").mkdir()
+    (root / "custom_components" / "module.py").write_text("X = 1\n", encoding="utf-8")
+    (root / "pyproject.toml").write_text(PYPROJECT, encoding="utf-8")
+
+
+def test_complete_tree_passes_and_names_the_number_of_files(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The counterpart of the cases below."""
+    _tree(tmp_path)
+
+    assert main(tmp_path) == 0
+    assert "0 pragma(s) in the 1 Python file(s)" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("removed", ["custom_components/module.py", "pyproject.toml"])
+def test_incomplete_tree_cannot_be_checked(
+    tmp_path: Path, removed: str, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """No file to search, or no configuration to compare, is a failure."""
+    _tree(tmp_path)
+    (tmp_path / removed).unlink()
+
+    assert main(tmp_path) == EXIT_CANNOT_CHECK
+    assert "CANNOT CHECK" in capsys.readouterr().out
+
+
+def test_file_that_cannot_be_read_as_python_cannot_be_checked(tmp_path: Path) -> None:
+    """A file without tokens may hide a pragma."""
+    _tree(tmp_path)
+    (tmp_path / "custom_components" / "module.py").write_text("X = (\n", "utf-8")
+
+    with pytest.raises(CannotCheckError, match="cannot be split into tokens"):
+        pragmas_in_tree(tmp_path)
+    assert main(tmp_path) == EXIT_CANNOT_CHECK
+
+
+def test_configuration_that_is_not_toml_cannot_be_checked() -> None:
+    """A broken ``pyproject.toml`` is not "no deviation"."""
+    with pytest.raises(CannotCheckError, match="not valid TOML"):
+        configuration_problems("= =")

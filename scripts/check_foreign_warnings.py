@@ -17,6 +17,14 @@ Every entry needs exactly four fields:
 - ``reason``: why the warning exists and cannot be avoided here.
 - ``upstream``: an ``https`` link to the upstream issue or change.
 
+**The guard fails closed.** "Could not check" means here, and ends with exit
+status 2: the list file is missing or unreadable (an empty list is a file
+without entries, not a missing file), or one of the folders of this repository
+holds no Python file, so that "must not match this repository" would compare
+with nothing. An invalid file or entry ends with exit status 1. With 0 the last
+line says how many entries were checked against how many module names; zero
+entries is the normal state.
+
 Run it from anywhere: ``python scripts/check_foreign_warnings.py``. It needs
 only the standard library.
 """
@@ -40,10 +48,20 @@ _PROTECTED_HELPERS = (
 _CATCH_ALL_PROBES = ("", "a", "zz_unrelated_package.module")
 _TOO_BROAD_CATEGORIES = {"Warning", "Exception", "BaseException"}
 _CATEGORY = re.compile(r"[A-Za-z_]\w*(\.[A-Za-z_]\w*)*")
+EXIT_FINDINGS = 1
+EXIT_CANNOT_CHECK = 2
 
 
 class EntryError(ValueError):
     """The list of foreign warnings is invalid."""
+
+
+class CannotCheckError(EntryError):
+    """The guard could not do its job. That is a failure, never a pass.
+
+    It is an :class:`EntryError`, so a test run (``tests/conftest.py``) refuses
+    to start in this case as well.
+    """
 
 
 @dataclass(frozen=True)
@@ -68,7 +86,14 @@ def own_module_names(root: Path) -> list[str]:
     """
     names: set[str] = set(_OWN_FOLDERS)
     for folder in _OWN_FOLDERS:
-        for file in (root / folder).rglob("*.py"):
+        files = sorted((root / folder).rglob("*.py"))
+        if not files:
+            raise CannotCheckError(
+                f"no Python file found under {folder}/, so no pattern could be "
+                "compared with the modules of this repository. If the folder has "
+                "moved, change _OWN_FOLDERS in this script"
+            )
+        for file in files:
             parts = list(file.relative_to(root).with_suffix("").parts)
             if parts[-1] == "__init__":
                 parts.pop()
@@ -140,18 +165,34 @@ def parse_entries(text: str, own_modules: list[str]) -> list[ForeignWarning]:
 
 def load_entries(root: Path = REPOSITORY_ROOT) -> list[ForeignWarning]:
     """Read and validate the list of this repository."""
-    text = (root / LIST_FILE).read_text(encoding="utf-8")
+    try:
+        text = (root / LIST_FILE).read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as error:
+        raise CannotCheckError(
+            f"the file cannot be read ({type(error).__name__}). An empty list is "
+            "a file with comments only, not a missing file"
+        ) from error
     return parse_entries(text, own_module_names(root))
 
 
-def main() -> int:
+def main(root: Path = REPOSITORY_ROOT) -> int:
     """Run the guard on this repository."""
     try:
-        entries = load_entries()
-    except (EntryError, OSError) as error:
+        entries = load_entries(root)
+        compared = len(own_module_names(root))
+    except CannotCheckError as error:
+        sys.stdout.write(
+            f"foreign warnings: CANNOT CHECK, so this is a failure: {LIST_FILE}: "
+            f"{error}\n"
+        )
+        return EXIT_CANNOT_CHECK
+    except EntryError as error:
         sys.stdout.write(f"{LIST_FILE}: {error}\n")
-        return 1
-    sys.stdout.write(f"foreign warnings: ok ({len(entries)} entries)\n")
+        return EXIT_FINDINGS
+    sys.stdout.write(
+        f"foreign warnings: ok ({len(entries)} entries, each compared with "
+        f"{compared} module names of this repository)\n"
+    )
     return 0
 
 

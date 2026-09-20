@@ -12,9 +12,16 @@ where a checkout or an environment lives.
     uv run pytest --junitxml=report.xml
     python scripts/summarize_test_report.py report.xml "Home Assistant 2026.9.2"
 
-The summary goes to standard output. The exit code is always 0; whether the
-run failed is decided by pytest, not by this script. It needs only the standard
-library.
+The summary goes to standard output. Whether the tests failed is decided by
+pytest, not by this script: a report with failures is summarized with exit
+status 0.
+
+**The script fails closed.** A summary that could not be written must not look
+like "nothing to report". "Could not summarize" means here, and ends with exit
+status 2: no report is named on the command line; the report is missing (pytest
+did not get as far as writing it), unreadable or not XML; or it contains not a
+single test. In each case the summary says so as well, so the page of the run
+is never empty. It needs only the standard library.
 """
 
 import re
@@ -26,6 +33,13 @@ from pathlib import Path
 
 MAX_LINES_PER_FAILURE = 12
 _MINIMUM_ARGUMENTS = 2
+EXIT_CANNOT_SUMMARIZE = 2
+
+
+class CannotSummarizeError(RuntimeError):
+    """There is no usable report. That is a failure, never an empty summary."""
+
+
 _ANCHORS = "custom_components|homeassistant|site-packages|tests|scripts"
 _PATH_PREFIX = re.compile(
     rf"(?:[A-Za-z]:)?[\\/][^\s'\":]*?[\\/](?=(?:{_ANCHORS})[\\/])"
@@ -41,8 +55,14 @@ def neutralize(text: str) -> str:
 def failures(report: str) -> list[tuple[str, list[str]]]:
     """Return the failed tests of a JUnit report with their first lines."""
     found: list[tuple[str, list[str]]] = []
-    root = ET.fromstring(report)  # noqa: S314 - see the import above
-    for case in root.iter("testcase"):
+    try:
+        root = ET.fromstring(report)  # noqa: S314 - see the import above
+    except ET.ParseError as error:
+        raise CannotSummarizeError("The test report is not valid XML.") from error
+    cases = list(root.iter("testcase"))
+    if not cases:
+        raise CannotSummarizeError("The test report contains not a single test.")
+    for case in cases:
         for outcome in (*case.findall("failure"), *case.findall("error")):
             name = f"{case.get('classname', '')}::{case.get('name', '')}"
             text = outcome.get("message") or outcome.text or ""
@@ -76,13 +96,21 @@ def main(arguments: list[str]) -> int:
     """Summarize the report named on the command line."""
     if len(arguments) < _MINIMUM_ARGUMENTS:
         sys.stdout.write("usage: summarize_test_report.py <report.xml> [title]\n")
-        return 0
+        return EXIT_CANNOT_SUMMARIZE
     path = Path(arguments[1])
     title = " ".join(arguments[2:]) or "Test run"
-    if not path.is_file():
-        sys.stdout.write(f"## {title}\n\nNo test report was written.\n")
-        return 0
-    sys.stdout.write(render(path.read_text(encoding="utf-8"), title))
+    try:
+        try:
+            report = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as error:
+            raise CannotSummarizeError(
+                "No readable test report was written; the tests did not get that far."
+            ) from error
+        summary = render(report, title)
+    except CannotSummarizeError as error:
+        sys.stdout.write(f"## {title}\n\n**No summary is possible.** {error}\n")
+        return EXIT_CANNOT_SUMMARIZE
+    sys.stdout.write(summary)
     return 0
 
 
