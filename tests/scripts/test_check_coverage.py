@@ -6,6 +6,8 @@ from pathlib import Path
 import pytest
 
 from scripts.check_coverage import (
+    EXIT_CANNOT_CHECK,
+    EXIT_FINDINGS,
     INTEGRATION_DIR,
     THRESHOLDS,
     collect,
@@ -30,6 +32,13 @@ def _summary(lines: int, covered: int, branches: int = 0, taken: int = 0) -> Sum
 
 def _report(files: dict[str, Summary]) -> Report:
     return {"files": {path: {"summary": summary} for path, summary in files.items()}}
+
+
+def _written(folder: Path, files: dict[str, Summary], *, branches: bool = True) -> str:
+    """Write a report the way coverage.py does and return its path."""
+    content = {"meta": {"branch_coverage": branches}, **_report(files)}
+    (folder / "coverage.json").write_text(json.dumps(content), encoding="utf-8")
+    return str(folder / "coverage.json")
 
 
 def test_thresholds_are_the_ones_of_the_block() -> None:
@@ -130,11 +139,68 @@ def test_module_missing_from_the_report_fails(tmp_path: Path) -> None:
 
 def test_command_line_reads_a_report_file(tmp_path: Path) -> None:
     """The script fails with exit code 1 on a report below the thresholds."""
-    report = tmp_path / "coverage.json"
-    report.write_text(
-        json.dumps(_report({f"{INTEGRATION_DIR}/config_flow.py": _summary(2, 1)})),
+    report = _written(tmp_path, {f"{INTEGRATION_DIR}/config_flow.py": _summary(2, 1)})
+
+    assert main(["check_coverage.py", report]) == EXIT_FINDINGS
+
+
+def _integration(root: Path) -> None:
+    (root / INTEGRATION_DIR).mkdir(parents=True)
+    (root / INTEGRATION_DIR / "cover.py").write_text("VALUE = 1\n", encoding="utf-8")
+
+
+def test_complete_report_passes_and_names_the_number_of_files(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The counterpart of the cases below: the same set-up, nothing missing."""
+    _integration(tmp_path)
+    report = _written(tmp_path, {f"{INTEGRATION_DIR}/cover.py": _summary(1, 1)})
+
+    assert main(["check_coverage.py", report], tmp_path) == 0
+    assert "coverage of home assistant: lines 100.0 %" in capsys.readouterr().out
+
+
+def test_report_that_is_missing_or_unusable_cannot_be_checked(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """No report, no JSON, no files, no branches: never a pass."""
+    _integration(tmp_path)
+    covered = {f"{INTEGRATION_DIR}/cover.py": _summary(1, 1)}
+    not_json = tmp_path / "broken.json"
+    not_json.write_text("{", encoding="utf-8")
+    incomplete = tmp_path / "incomplete.json"
+    incomplete.write_text(
+        json.dumps(
+            {
+                "meta": {"branch_coverage": True},
+                "files": {f"{INTEGRATION_DIR}/cover.py": {"summary": {}}},
+            }
+        ),
         encoding="utf-8",
     )
+    no_meta = tmp_path / "no_meta.json"
+    no_meta.write_text(json.dumps({"meta": [], **_report(covered)}), encoding="utf-8")
+    cases = [
+        ["check_coverage.py"],
+        ["check_coverage.py", str(no_meta)],
+        ["check_coverage.py", str(tmp_path / "none.json")],
+        ["check_coverage.py", str(not_json)],
+        ["check_coverage.py", str(incomplete)],
+    ]
 
-    assert main(["check_coverage.py", str(report)]) == 1
-    assert main(["check_coverage.py"]) == 2  # noqa: PLR2004 - usage error
+    for arguments in cases:
+        assert main(arguments, tmp_path) == EXIT_CANNOT_CHECK
+        assert "CANNOT CHECK" in capsys.readouterr().out
+    for files, branches in (({}, True), ({"tests/x.py": _summary(1, 1)}, True)):
+        report = _written(tmp_path, files, branches=branches)
+        assert main(["check_coverage.py", report], tmp_path) == EXIT_CANNOT_CHECK
+    report = _written(tmp_path, covered, branches=False)
+    assert main(["check_coverage.py", report], tmp_path) == EXIT_CANNOT_CHECK
+    assert "without branch measurement" in capsys.readouterr().out
+
+
+def test_missing_integration_cannot_be_checked(tmp_path: Path) -> None:
+    """Without modules on disk nothing could be reported as unmeasured."""
+    report = _written(tmp_path, {f"{INTEGRATION_DIR}/cover.py": _summary(1, 1)})
+
+    assert main(["check_coverage.py", report], tmp_path) == EXIT_CANNOT_CHECK
