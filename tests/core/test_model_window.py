@@ -1,7 +1,9 @@
 """Capability profile, observation, window configuration and world snapshot."""
 
 import dataclasses
+import re
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -11,7 +13,10 @@ from custom_components.roller_shutter_suite.core.model import (
     DEFAULT_TOLERANCE_MEASURED,
     MIN_TOLERANCE,
     CapabilityProfile,
+    CapabilityState,
     CoveringType,
+    FaultBehavior,
+    FunctionId,
     MemberConfig,
     MemberObservation,
     MembersAtTargets,
@@ -30,6 +35,7 @@ from custom_components.roller_shutter_suite.core.model import (
     TransitReporting,
     TravelDirection,
     WindowCapabilities,
+    WindowCapabilityStates,
     WindowConfig,
     WindowObservation,
     WindowState,
@@ -272,6 +278,107 @@ def test_window_capabilities_validate_their_flags() -> None:
         flags[position] = bad
         with pytest.raises(TypeError, match="the capability"):
             WindowCapabilities(*flags)
+
+
+FLAGS = (
+    "supports_open_close",
+    "supports_set_position",
+    "supports_stop",
+    "reports_position",
+)
+UNKNOWN_PROFILE: dict[str, Any] = dict.fromkeys(FLAGS, False) | {
+    "capabilities_known": False
+}
+CANNOT_STOP: dict[str, Any] = {"supports_stop": False}
+
+
+def test_capabilities_of_a_member_are_known_unless_stated_otherwise() -> None:
+    """A known profile answers present or missing, flag by flag."""
+    profile = _profile(supports_stop=False)
+
+    assert profile.capabilities_known is True
+    assert profile.capability_state("supports_stop") is CapabilityState.MISSING
+    assert profile.capability_state("reports_position") is CapabilityState.PRESENT
+
+
+def test_unknown_capabilities_say_nothing_definite() -> None:
+    """Nothing is known, so no flag claims anything and every state is "unknown"."""
+    profile = _profile(**UNKNOWN_PROFILE)
+
+    for name in FLAGS:
+        assert getattr(profile, name) is False
+        assert profile.capability_state(name) is CapabilityState.UNKNOWN
+
+
+@pytest.mark.parametrize("name", FLAGS)
+def test_unknown_capabilities_cannot_carry_a_claim(name: str) -> None:
+    """A last known state is handed in as known; "unknown" with a flag is refused."""
+    with pytest.raises(ValueError, match="must not claim a capability"):
+        _profile(**(UNKNOWN_PROFILE | {name: True}))
+
+
+def test_capability_state_is_asked_for_a_capability_flag_only() -> None:
+    """Another field of the profile is not a capability."""
+    with pytest.raises(ValueError, match="is not a capability"):
+        _profile().capability_state("capabilities_known")
+    with pytest.raises(TypeError, match="the capability 'capabilities_known'"):
+        _profile(capabilities_known=1)
+
+
+@pytest.mark.parametrize(
+    ("profiles", "expected"),
+    [
+        ([{}], CapabilityState.PRESENT),
+        ([{}, {}], CapabilityState.PRESENT),
+        ([CANNOT_STOP], CapabilityState.MISSING),
+        ([UNKNOWN_PROFILE], CapabilityState.UNKNOWN),
+        ([{}, UNKNOWN_PROFILE], CapabilityState.UNKNOWN),
+        ([{}, CANNOT_STOP], CapabilityState.MISSING),
+        ([UNKNOWN_PROFILE, CANNOT_STOP], CapabilityState.MISSING),
+        ([CANNOT_STOP, UNKNOWN_PROFILE, {}], CapabilityState.MISSING),
+    ],
+)
+def test_capability_states_of_a_window_missing_beats_unknown_beats_present(
+    profiles: list[dict[str, Any]], expected: CapabilityState
+) -> None:
+    """One member that cannot stop settles it, whatever is unknown about another."""
+    window = _window(
+        members=[
+            MemberConfig(f"cover.example_{number}", _profile(**changes))
+            for number, changes in enumerate(profiles)
+        ]
+    )
+
+    states = window.capability_states
+
+    assert states.supports_stop is expected
+    others = {states.supports_open_close, states.supports_set_position}
+    assert CapabilityState.MISSING not in others
+
+
+def test_boolean_capabilities_cannot_tell_missing_from_unknown() -> None:
+    """One never-seen member makes every flag read false; the states say why."""
+    window = _window(
+        members=[
+            MemberConfig(LEFT, _profile()),
+            MemberConfig(RIGHT, _profile(**UNKNOWN_PROFILE)),
+        ]
+    )
+
+    assert window.capabilities == WindowCapabilities(False, False, False, False)
+    assert window.capability_states == WindowCapabilityStates(
+        *[CapabilityState.UNKNOWN] * 4
+    )
+
+
+def test_window_capability_states_validate_their_states() -> None:
+    """An object that exists is valid: a boolean is not a state."""
+    bad: Any = True
+    for position in range(4):
+        states: list[Any] = [CapabilityState.PRESENT] * 4
+        states[position] = bad
+        with pytest.raises(TypeError, match="the capability"):
+            WindowCapabilityStates(*states)
 
 
 @pytest.mark.parametrize(
@@ -738,3 +845,116 @@ def test_world_snapshot_types_are_checked() -> None:
         _snapshot(state=bad)
     with pytest.raises(TypeError, match="time of a world snapshot"):
         _snapshot(time=bad)
+
+
+# --- Functions ------------------------------------------------------------------------
+
+
+PAUSABLE = [
+    FunctionId.SCHEDULE,
+    FunctionId.SLEEP,
+    FunctionId.REQUEST,
+    FunctionId.PRIVACY,
+    FunctionId.SHADING,
+    FunctionId.SOLAR_HEATING,
+]
+FALLING_BACK = [
+    FunctionId.FIRE,
+    FunctionId.PROTECTION_EVENTS,
+    FunctionId.LOCKOUT,
+    FunctionId.VENTILATION,
+    FunctionId.FROST,
+    FunctionId.MOTOR_PROTECTION,
+    FunctionId.COMMAND_VERIFICATION,
+    FunctionId.MANUAL_OVERRIDE,
+]
+
+
+def test_every_function_has_its_fault_behavior() -> None:
+    """The complete mapping, pinned: moving a function is a deliberate act.
+
+    Only functions that create wishes for convenience pause. Whatever
+    protects or restricts movement falls back; ventilation is one of them.
+    """
+    assert list(FunctionId) == [*PAUSABLE, *FALLING_BACK]
+
+
+def test_names_values_and_order_of_the_functions_are_pinned() -> None:
+    """The order is pinned because it has meaning, not for tidiness.
+
+    The arbiter asks the parts of one layer in the definition order of
+    ``FunctionId``. Reordering the members or inserting one between two
+    others therefore changes which part of a layer speaks first. Whoever
+    changes this list changes behavior and does it here on purpose.
+    """
+    assert [(function.name, function.value) for function in FunctionId] == [
+        ("SCHEDULE", "schedule"),
+        ("SLEEP", "sleep"),
+        ("REQUEST", "request"),
+        ("PRIVACY", "privacy"),
+        ("SHADING", "shading"),
+        ("SOLAR_HEATING", "solar_heating"),
+        ("FIRE", "fire"),
+        ("PROTECTION_EVENTS", "protection_events"),
+        ("LOCKOUT", "lockout"),
+        ("VENTILATION", "ventilation"),
+        ("FROST", "frost"),
+        ("MOTOR_PROTECTION", "motor_protection"),
+        ("COMMAND_VERIFICATION", "command_verification"),
+        ("MANUAL_OVERRIDE", "manual_override"),
+    ]
+
+
+def test_every_function_maps_to_its_fault_behavior() -> None:
+    """The mapping is complete, and ventilation falls back."""
+    assert {function: function.fault_behavior for function in FunctionId} == (
+        dict.fromkeys(PAUSABLE, FaultBehavior.PAUSE)
+        | dict.fromkeys(FALLING_BACK, FaultBehavior.FALL_BACK)
+    )
+    assert FunctionId.VENTILATION.fault_behavior is FaultBehavior.FALL_BACK
+    assert [behavior.value for behavior in FaultBehavior] == ["fall_back", "pause"]
+
+
+def test_list_of_functions_matches_the_documentation() -> None:
+    """``docs/dev/core-model.md`` lists every function with its behavior, and no other."""
+    page = (Path(__file__).parents[2] / "docs" / "dev" / "core-model.md").read_text(
+        encoding="utf-8"
+    )
+    rows = re.findall(r"^\| `([a-z_]+)` \| (fall_back|pause) \|", page, re.MULTILINE)
+
+    assert rows == [
+        (function.value, function.fault_behavior.value) for function in FunctionId
+    ]
+
+
+def test_window_without_a_fault_has_no_disabled_function() -> None:
+    """The default is the empty set, and a set of comfort functions is kept."""
+    assert _window().disabled_functions == frozenset()
+    window = _window(disabled_functions=[FunctionId.SHADING, FunctionId.SCHEDULE])
+    assert window.disabled_functions == {FunctionId.SHADING, FunctionId.SCHEDULE}
+    assert isinstance(window.disabled_functions, frozenset)
+
+
+@pytest.mark.parametrize("function", PAUSABLE)
+def test_every_pausable_function_can_be_disabled(function: FunctionId) -> None:
+    """Functions that create wishes for convenience."""
+    assert _window(disabled_functions={function}).disabled_functions == {function}
+
+
+@pytest.mark.parametrize("function", FALLING_BACK)
+def test_function_that_falls_back_can_never_be_disabled(function: FunctionId) -> None:
+    """Whatever protects or restricts movement is refused, alone or among others."""
+    with pytest.raises(ValueError, match="can never be switched off"):
+        _window(disabled_functions={function})
+    with pytest.raises(ValueError, match=repr(function.value)):
+        _window(disabled_functions={FunctionId.SHADING, function})
+
+
+@pytest.mark.parametrize(
+    ("given", "message"),
+    [({"shading"}, "a disabled function"), ("shading", "a set of identifiers")],
+)
+def test_free_string_is_no_function(given: Any, message: str) -> None:
+    """Only members of the closed list count."""
+    with pytest.raises(TypeError, match=message):
+        _window(disabled_functions=given)

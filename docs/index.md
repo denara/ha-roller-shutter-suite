@@ -9,6 +9,7 @@ Roller Shutter Suite is a custom integration for Home Assistant that controls ro
 - Installation: see the [README](../README.md#installation)
 - Setting up the integration: to be written
 - Adding groups and windows: to be written
+- [Concepts](concepts.md): how settings are inherited from the house to groups to windows, with a worked example
 - How the integration decides where a shutter goes: to be written
 - Actions and events for your own automations: to be written
 - Troubleshooting: to be written
