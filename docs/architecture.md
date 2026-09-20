@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Approved by the project owner: decisions 1 to 13 on 2026-09-19, decision 14 on 2026-09-20. All were accepted as recommended; the boxes keep the reasons and the rejected alternatives. |
+| Status | Approved by the project owner: decisions 1 to 13 on 2026-09-19, decision 14 on 2026-09-20. Decision 15 was made by the project owner on 2026-09-21. The boxes keep the reasons and the rejected alternatives. |
 | Refines | [project-brief.md](project-brief.md), where the brief refers to "the domain design specification" or "D00" |
 | Audience | Implementing agents and maintainers |
 
@@ -91,7 +91,7 @@ Constraints are applied to the winning wish in this order. Each one names the cl
 
 Fire is subject to no constraint at all.
 
-> **Decision 3 — Frost when the temperature is unavailable.** "Missing data is not good news", and frost is the warning here. Recommendation: hold the last known frost state for at most 24 hours; after that the constraint becomes inactive and a repair issue names the source. *Rejected:* treating "unavailable" as frost for an unlimited time (a dead sensor would limit all openings for weeks, and users would learn to disable the feature); treating it as "no frost" at once (contradicts D6's principle).
+> **Decision 3 — Frost when the temperature is unavailable.** "Missing data is not good news", and frost is the warning here. While the frost source has no value, the last known frost state is held for at most 24 hours. After that, or if there never was a known state, the source counts as **blind**: the frost limit applies as a cautious value until data returns or the operator waives it, and a repair issue and an event say so, as for every other blind source (section 10.1). It never silently becomes "no frost". The cost of the cautious value is small, because frost protection only limits opening to the frost position. *Rejected:* letting the constraint become inactive after the 24 hours (that is the silent all-clear the project rules out; revised by the project owner on 2026-09-20); treating "unavailable" as "no frost" at once (contradicts D6's principle).
 
 ### 2.3 The gate
 
@@ -106,8 +106,8 @@ The gate rules are evaluated in this order; the first rule that applies decides.
 | 5 | Pause (E4) | comfort | Suppress. |
 | 6 | Person-at-the-window dam (guardrail 3) | protection and comfort | Defer until the dam ends. |
 | 7 | Manual override dam (E1, E2) | comfort, except the return to the manual position after a protection event ([section 10.2](#102-return-after-a-protection-event-d5)) | Defer or suppress, depending on the end rule of the dam. |
-| 8 | Movement in flight | comfort | Same target as the pending own command: suppress as duplicate. Different target: defer until the members have come to rest. Protection retargets at once. |
-| 9 | Motor protection (E10) | comfort | Change below the minimum: suppress. Inside the minimum interval since the last own comfort movement: defer until it has passed. |
+| 8 | Movement in flight | duplicate: fire, protection, comfort; deferral: comfort | **Same target** as an own command that is still inside its expectation window: nothing is sent again, for every wish class, fire included. This hangs on the running expectation window, not on "was sent once": when the window closes without the target having been reached, the command may be sent again (fire at once and without backoff, as in N1). If the new wish is of a **higher class** than the command in flight, the movement is **taken over**: its wish class, its reason and the owner of the position become those of the new wish, so that dams, motor protection and the return logic see a fire or protection movement and not a comfort one (`movement_taken_over`); for the same or a lower class it is a plain duplicate. **Different target:** comfort defers until the members have come to rest; protection and fire retarget at once. |
+| 9 | Motor protection (E10) | comfort | **Minimum change:** a change below the minimum is suppressed. Exempt are an end position (a target of 0 or 100 that is not reached within tolerance is driven, so a shutter never stays a slit open at night) and a movement that restores a constraint the current position violates (for example a shutter just below the ventilation floor). **Minimum interval** (default 10 minutes): what counts is whether the wish is **fresh**. A wish is fresh if its trigger lies after the last own comfort movement: a schedule boundary fires, sleep mode or privacy is switched, a new request arrives, a shading or solar heating episode begins. A fresh wish is not subject to the interval: an evening closing two minutes after the return movement at the end of shading runs on time, and sleep mode switched on right after a tracking movement acts at once. Not fresh is tracking within an episode, and an older wish that wins again because another layer dropped out, such as the day position after the end of shading; for these the interval applies, so shading that toggles every three minutes yields at most one return movement per interval. Every comfort wish therefore carries the time of its trigger. Inside the interval a movement is deferred until it has passed; the exemptions of the minimum change do not lift the interval. **No absolute limit:** motor protection caps no total. Comfort movements are counted per window and day (protection and fire never count), shown in the diagnostics, and from a threshold (default 40, configurable) reported once per day by an event with a reason code, without blocking anything. A hard daily limit is deliberately not part of the first version: tracked shading exceeds twenty movements on an ordinary sunny day, and a limit would freeze it in the afternoon. |
 | 10 | Command backoff (N1) | protection and comfort | Defer until the next retry time. |
 | 11 | Staggering (E13) | protection and comfort | Defer by the window's slot in a collective movement. |
 | 12 | Dry-run (E11) | fire, protection, comfort | The last barrier before sending. Whatever reaches it would have been sent: suppress it and record the would-be command *(decided: dry-run never moves anything, not even at fire)*. |
@@ -126,7 +126,9 @@ Pause, operating mode and maintenance lock exist on global, group and window lev
 
 The fire bypass is a named construct of the gate, not a set of exceptions spread over the rules. A wish of class `fire` **skips** these gate rules:
 
-- 4 operating mode, 5 pause, 6 person-at-the-window dam, 7 manual override dam, 8 movement in flight (fire retargets at once), 9 motor protection, 10 command backoff, 11 staggering.
+- 4 operating mode, 5 pause, 6 person-at-the-window dam, 7 manual override dam, the deferral of 8 movement in flight (fire retargets at once), 9 motor protection, 10 command backoff, 11 staggering.
+
+Fire does not skip the duplicate part of rule 8: a fire command with the same target that is still inside its expectation window is not repeated on every recompute, and a movement in flight with the same target is taken over by fire. "Fire is sent" therefore means: sent, or taken over; and sent again at once when the expectation window of an unfinished fire command has closed.
 
 It does **not** skip:
 
@@ -271,7 +273,7 @@ Inputs, both optional and chosen by the user: a **workday source** (on = workday
 2. Otherwise workday source on → `workday`, off → `weekend`.
 3. No workday source → Monday to Friday `workday`, Saturday and Sunday `weekend`.
 
-The day type of a date is **latched**: determined at the first recompute after local midnight at which the configured inputs have a value, then persisted for that date. Without the latch, a source that changes in the middle of the day would move the morning trigger after the fact and flip the part of the day. If an input is unavailable at that moment, rule 3 applies for the time being with `day_type_fallback`, and the latch is set as soon as the input has a value, as long as the morning trigger of that day has not passed yet. School holidays are not part of the first version.
+The day type of a date is **latched at the first boundary between parts of the day of that date**, normally the morning trigger, and then persisted for that date. Until then nothing is latched and the preview may correct itself with every evaluation: the workday sensor of Home Assistant updates at midnight or shortly after it, and an evaluation before that update must not write yesterday's type down for the whole day. Without the latch, a source that changes in the middle of the day would move the morning trigger after the fact and flip the part of the day. If an input has no value at that boundary, rule 3 applies with `day_type_fallback`, and the latch says that it is a fallback. Only today's type is latched; for tomorrow the preview uses a latch if one exists and otherwise the rules above. Yesterday's latch is kept until today's is set: the night before today's morning trigger began at yesterday's evening boundary, and the instant at which the current part of the day began has to stay exact, because it is the trigger time of the night wish (section 2.3, rule 9). School holidays are not part of the first version.
 
 ### 6.4 Season (A5)
 
@@ -437,8 +439,9 @@ Persisted per window, versioned, all timestamps timezone-aware (naive ones are r
 - fire: unacknowledged flag;
 - episodes: as listed in [section 7](#7-episodes);
 - external request: position, reason, expires at;
-- latched day type per date (today and tomorrow);
-- time of the last own comfort movement (the motor protection clock);
+- latched day types, at most two entries, each with the mark whether it is a fallback: today's once it is set, until then yesterday's (needed for the exact start of the running night); one for tomorrow is kept if present;
+- time of the last own comfort movement (the motor protection clock; a wish whose trigger is later than this time is fresh);
+- the number of own comfort movements of the current local day, with that day's date, and whether the threshold was already reported for it;
 - last known values of inputs that are held (frost state, season, protection triggers);
 - frost waiver: active until; per member the position reference flag (`referenced` / `uncertain`);
 - in dry-run only: the simulated commands of [section 2.3](#23-the-gate), kept apart from the real state and discarded when the window is armed.
@@ -462,6 +465,20 @@ Removing a window deletes its persisted state (N4).
 > **Decision 12 — New windows start in dry-run.** Recommendation: yes. A window becomes active only by a deliberate step ("arm"), after the user has compared its decisions with reality. It also makes "one controller per window" the default during migration. *Rejected:* armed by default with a warning text; warnings are not read, and the first wrong movement on a live system costs more trust than one extra click.
 
 ---
+
+## 13a. Faulty stored settings
+
+Stored data can be faulty: written by hand, left behind by a failed migration, written by a newer version, or no longer fitting after a cover was replaced. Two things must never happen because of it: a window must never lose its protection, and a window must never move unexpectedly.
+
+> **Decision 15 — One rule for faulty settings on all three levels** (decided by the project owner on 2026-09-21). The rule is the same for window, group and house. Every setting declares the **function** it belongs to, from one closed enumeration in the core model, and every function has exactly one **fault behavior**: it **falls back**, or it **pauses**. What decides is the direction of the effect. A paused layer creates no wish: less movement, the cautious direction. A paused constraint or gate rule would remove a restriction: more movement, the wrong direction (a data fault would let a shutter close completely in front of a tilted window). Therefore **every function whose effect restricts movement (constraints, gate rules) and every function that protects people or hardware falls back and is never pausable; pausable are only functions that create comfort wishes.** Falling back: fire, protection events, lockout protection, the ventilation floor, frost protection, motor protection, command verification, manual operation detection with its dams. Pausing: schedule, sleep mode, requests from automations, privacy, shading, solar heating. A test fails when a function that is registered as a constraint or a gate rule is in the pausable class. The fault behavior is a different thing from the wish class of the arbiter (fire, protection, comfort).
+>
+> 1. **What falls back never fails.** A faulty setting of a function that falls back is skipped, and the next level supplies the value, last the built-in default. Fire and protection events keep running for every window, and no restriction is ever lifted by a data fault.
+> 2. **What creates wishes becomes cautious.** A faulty setting of a pausable function switches that function off, for exactly the windows for which the faulty value would have been the effective one. If a window, or a level closer to it than the fault, sets a valid value of its own for that key, the fault does not reach the window and the function keeps running there. The fault is reported all the same, with the level on which it lies. There is no fallback to a value that could trigger a movement. The arbiter skips the layers of a disabled function and says so in the decision.
+> 3. **Everything is reported** with level, key and reason, so that a repair issue can name it.
+> 4. **Unknown keys** in the settings are reported and never silently ignored, but they switch nothing off and do not make the entry invalid: this is what data written by a newer version looks like after a downgrade.
+> 5. **A level that is unreadable as a whole** counts as not present: all pausable functions of the affected windows pause, also for a window that overrides some keys, because it is unknown which keys would have been concerned; protection runs with the values of the next level.
+>
+> A window is not set up at all only if its covers themselves cannot be read. A missing capability is not a fault in this sense; it masks and reports ([section 8.1](#81-capability-profile) and the inheritance resolver). *Rejected:* "a faulty window gets no configuration" (it takes the window's protection away, and a faulty migration would hit every window at once); falling back to the house value or the default for comfort settings (the window could then do something that was explicitly excluded, for example open at a time the user had moved).
 
 ## 14. Module map of the domain core
 
@@ -509,5 +526,6 @@ Doors kept open, as places in the model and nothing more: covering type (C15); a
 | 12 | New windows start in dry-run | Yes |
 | 13 | Frost protection | Limits opening to the frost position; inherited source; waiver until the next morning; movements by hand exempt; optional release by sun, built with C10; preventive only |
 | 14 | Return to the manual position after a protection event | A comfort wish that the manual override dam lets pass, under four conditions; no fourth wish class |
+| 15 | Faulty stored settings | One rule on all levels: functions that protect or restrict movement fall back to the next level and never fail; a faulty setting of a function that creates comfort wishes pauses that function for the windows for which the value would have been effective; everything is reported; unknown keys are reported but harmless |
 
 Also worth a look, because they are proposals stated as rules: the position reference flag, the hint event and the reference run as an action of F1 (section 8.4); the default of one hour before a blind protection source or a blind blocking contact is reported (section 10.1); dry-run as the last gate rule with simulated commands (section 2.3); the final layer order of section 2.1, which follows the brief's starting order except for decisions 1 and 2; the order of the gate rules in section 2.3; the latch of the day type (section 6.3); an unavailable blocking contact counts as open (section 2.2, constraint 3); an unavailable window contact sets no ventilation floor (constraint 4); fire needs an acknowledgement before the window returns to normal operation (section 2.4); the staggering gap also applies between the members of one window (section 9); members of a window without position feedback are mapped to open or close at 50 (section 8.1).

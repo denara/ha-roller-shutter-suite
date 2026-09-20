@@ -58,11 +58,12 @@ def test_the_bypass_touches_exactly_the_rules_the_design_specification_lists() -
     """Section 2.4 names the rules by their number in the table of section 2.3."""
     text = ARCHITECTURE.read_text(encoding="utf-8")
     section = text.split("### 2.4 The fire bypass")[1].split("### 2.5")[0]
-    skipped = section.split("It does **not** skip:")[0]
-    numbers = {int(number) for number in re.findall(r"(?:^- |, )(\d+) ", skipped, re.M)}
+    skipped = next(line for line in section.splitlines() if line.startswith("- "))
+    numbers = {int(number) for number in re.findall(r"\b(\d{1,2}) [a-z]", skipped)}
     rules = list(GateRule)
 
     assert {rules[number - 1] for number in numbers} == bypassed_rules()
+    assert "the deferral of 8 movement in flight" in skipped
     assert len(bypassed_rules()) == 8  # noqa: PLR2004 - rules 4 to 11
 
 

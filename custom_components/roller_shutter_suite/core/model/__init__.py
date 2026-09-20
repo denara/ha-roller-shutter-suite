@@ -10,9 +10,10 @@ Position``. The modules exist so that blocks that work in parallel edit
 different files. Their dependencies run one way:
 
 ``_validation`` ← ``_data`` ← ``values`` ← ``decision`` ← ``observation`` ←
-``state`` ← ``snapshot``. ``window`` depends on ``_validation`` and ``values``,
-``controls`` on ``_validation`` only; ``snapshot`` also uses ``controls``.
-``functions`` depends on nothing; ``window`` and ``decision`` use it.
+``state`` ← ``snapshot``. ``functions`` depends on nothing; ``window`` depends
+on ``_validation``, ``functions`` and ``values``, ``controls`` on
+``_validation`` only; ``decision`` also uses ``functions``, and ``snapshot``
+also uses ``controls``.
 
 Conventions that hold for the whole package:
 
@@ -91,6 +92,7 @@ from .window import (
     DEFAULT_TOLERANCE_MEASURED,
     MIN_TOLERANCE,
     CapabilityProfile,
+    CapabilityState,
     CoveringType,
     FrostSettings,
     MemberConfig,
@@ -98,9 +100,11 @@ from .window import (
     PositionSource,
     PositionUpdates,
     ScheduleProfile,
+    SettingsCombinationError,
     TemperatureTier,
     TransitReporting,
     WindowCapabilities,
+    WindowCapabilityStates,
     WindowConfig,
 )
 
@@ -115,6 +119,7 @@ __all__ = [
     "WINDOW_STATE_SCHEMA_VERSION",
     "AnySourceValue",
     "CapabilityProfile",
+    "CapabilityState",
     "Constraint",
     "ConstraintResult",
     "ControlLevel",
@@ -159,6 +164,7 @@ __all__ = [
     "ProtectionEventState",
     "ProtectionEventStatus",
     "ScheduleProfile",
+    "SettingsCombinationError",
     "ShadingEpisodeState",
     "SimulatedState",
     "SolarHeatingEpisodeState",
@@ -170,6 +176,7 @@ __all__ = [
     "TransitReporting",
     "TravelDirection",
     "WindowCapabilities",
+    "WindowCapabilityStates",
     "WindowConfig",
     "WindowObservation",
     "WindowState",

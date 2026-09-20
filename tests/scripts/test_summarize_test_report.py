@@ -6,7 +6,15 @@ the instance data guard. They are made up.
 
 from pathlib import Path
 
-from scripts.summarize_test_report import main, neutralize, render
+import pytest
+
+from scripts.summarize_test_report import (
+    EXIT_CANNOT_SUMMARIZE,
+    CannotSummarizeError,
+    main,
+    neutralize,
+    render,
+)
 
 CHECKOUT = "/home" + "/runner/work/example/example"
 WINDOWS_CHECKOUT = "D" + ":\\" + "work\\example"
@@ -68,6 +76,35 @@ def test_passed_run_says_so() -> None:
     assert "All tests passed" in summary
 
 
-def test_missing_report_does_not_fail_the_step(tmp_path: Path) -> None:
-    """When pytest could not even start, the summary step stays quiet."""
-    assert main(["summarize_test_report.py", str(tmp_path / "none.xml"), "Title"]) == 0
+def test_missing_report_fails_the_step_and_says_so(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """When pytest wrote no report, the page says so and the step is red."""
+    arguments = ["summarize_test_report.py", str(tmp_path / "none.xml"), "Title"]
+
+    assert main(arguments) == EXIT_CANNOT_SUMMARIZE
+    output = capsys.readouterr().out
+    assert output.startswith("## Title")
+    assert "No summary is possible" in output
+    assert "All tests passed" not in output
+    assert main(["summarize_test_report.py"]) == EXIT_CANNOT_SUMMARIZE
+
+
+@pytest.mark.parametrize("report", ["<testsuites>", "<testsuites></testsuites>"])
+def test_report_without_tests_is_not_a_green_summary(
+    tmp_path: Path, report: str
+) -> None:
+    """Broken XML or zero tests must never read "All tests passed"."""
+    with pytest.raises(CannotSummarizeError):
+        render(report, "Title")
+    (tmp_path / "report.xml").write_text(report, encoding="utf-8")
+    arguments = ["summarize_test_report.py", str(tmp_path / "report.xml")]
+
+    assert main(arguments) == EXIT_CANNOT_SUMMARIZE
+
+
+def test_report_with_failures_is_summarized_with_status_zero(tmp_path: Path) -> None:
+    """Whether the tests failed is pytest's verdict, not this script's."""
+    (tmp_path / "report.xml").write_text(FAILED, encoding="utf-8")
+
+    assert main(["summarize_test_report.py", str(tmp_path / "report.xml")]) == 0

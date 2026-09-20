@@ -19,6 +19,9 @@ htmlcov/
 !.claude/agents/
 !.claude/commands/
 
+# Helper files of a contributor or an agent, local to one checkout
+.scratch/
+
 # Editors and OS
 .idea/
 .vscode/

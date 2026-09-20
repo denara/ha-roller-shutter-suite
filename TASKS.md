@@ -15,7 +15,7 @@ Status values: `planned` (file exists, dependencies open) · `ready` (can start)
 | [D00](tasks/D00-domain-design-spec.md) | Domain design specification (`docs/architecture.md`) | — | done |
 | [T01](tasks/T01-repository-scaffolding.md) | Repository scaffolding | — | done |
 | [T02](tasks/T02-test-setup.md) | Test setup | T01 | done |
-| [T03](tasks/T03-continuous-integration.md) | Continuous integration | T01, T02 | ready |
+| [T03](tasks/T03-continuous-integration.md) | Continuous integration | T01, T02 | done |
 | [S1](tasks/S1-spike-cover-behavior.md) | Spike: cover behavior and movement attribution | history data from the owner | done for the design (findings in `docs/architecture.md`; the public taxonomy document is still to be written) |
 | [S2](tasks/S2-spike-subentries-inheritance-ux.md) | Spike: subentries, sections and inheritance in the UI | T02 | done |
 | [S3](tasks/S3-spike-button-events.md) | Spike: button event semantics | T02 | planned |
@@ -26,21 +26,34 @@ Plain Python under `custom_components/roller_shutter_suite/core/`, tested withou
 
 | ID | Block | Features | Depends on | Status |
 |---|---|---|---|---|
-| [C01](tasks/C01-core-model-and-ports.md) | Core model and ports | E5, N2, N3; doors for C15, A7 | D00, T01, T02 | ready |
-| [C02](tasks/C02-inheritance-resolver.md) | Inheritance resolver | E12, N4 | C01 | planned |
-| [C03](tasks/C03-arbiter.md) | Arbiter: layers, constraints, gate | E5, E4, E9, E10, E11, A6, A12 | C01 | planned |
-| [C04](tasks/C04-schedule-and-day-types.md) | Schedule and day types | A1–A6, E13 (offset) | C01 | planned |
+| [C01](tasks/C01-core-model-and-ports.md) | Core model and ports | E5, N2, N3; doors for C15, A7 | D00, T01, T02 | done |
+| [C02](tasks/C02-inheritance-resolver.md) | Inheritance resolver | E12, N4 | C01 | in review (pull request 23) |
+| [C03](tasks/C03-arbiter.md) | Arbiter: layers, constraints, gate | E5, E4, E9, E10, E11, A6, A12 | C01 | in progress (merges after C02) |
+| [C04](tasks/C04-schedule-and-day-types.md) | Schedule and day types | A1–A6, E13 (offset) | C01 | in progress (merges after C03) |
 | [C05](tasks/C05-time-lapse-simulation.md) | Time-lapse simulation harness | N6 | C03, C04 | planned |
 
 ## Phase 2 — Home Assistant layer up to M1
 
 | ID | Block | Features | Depends on | Status |
 |---|---|---|---|---|
-| [H01](tasks/H01-config-entry-and-subentries.md) | Config entry, group and window subentries | E12, F4, F7 (part), N2, N3, N4 (part), N5 (part) | S2, C02, T03 | planned |
+| [H01](tasks/H01-config-entry-and-subentries.md) | Config entry, group and window subentries | E12, F4, F7 (part), N2, N3, N4 (part), N5 (part) | S2, C02, T03 | planned (ready once C02 is merged) |
 | [H02](tasks/H02-runtime-and-source-adapters.md) | Runtime and source adapters | guardrails 4 and 8, G3, G5 | C03, C04, H01 | planned |
 | [H03](tasks/H03-cover-actuator-adapter.md) | Cover actuator adapter | E11, E13, E10 (settings), N2 | H01, H02 | planned |
 | [H04](tasks/H04-status-entities-events-diagnostics.md) | Status entities, reason events, logbook, diagnostics | E7, E8 | H02 | planned |
 | [M1](tasks/M1-walking-skeleton.md) | **Milestone: walking skeleton** — one window, dry-run, schedule only, status entities | — | all of the above except S1, S3 | planned |
+
+## Maintenance
+
+Work outside the block plan. Done items are listed so the history of the tooling stays readable.
+
+| ID | Item | Status |
+|---|---|---|
+| X01 | Make the guards fail closed: a guard that cannot check fails, the instance data guard really checks in a WSL worktree, judges symbolic links, entries that cannot be examined and the path text of every entry (pull request 19) | done |
+| X02 | Guard refinements, to be started before R01 or as soon as a block trips over a false positive (a plausible own name is never renamed to get around a guard). First item: the fixed names of the high-resolution brand images (the icon and logo files whose name carries the scale factor `@2x` before the extension) are taken for an e-mail address, by the path text check and by the content check alike. Further: other false positives on names, entries of the deprecated-names list that Home Assistant logs anyway are matched narrowly and only silent ones broadly, the Python patch version is pinned, smaller notes from the reviews of T03 and X01 | planned |
+| X03 | A pre-push hook (`.githooks/pre-push`) that runs the instance data guard and refuses the push when it fails or cannot check; activated once per clone by a human with `core.hooksPath`, never by an agent | in review (PR #28) |
+| X04 | The pre-push hook also judges what is actually pushed: the added lines and the path texts of every commit in the ranges git hands to the hook, not only the checkout. Reason: a private value that was committed by mistake and corrected in the next commit passes the hook and CI, but leaves with the branch history and stays retrievable through the pull request reference, even after a squash merge and the deletion of the branch. Fails closed like the rest (a range that cannot be read refuses the push). Own pull request after X03, before X02 | planned |
+
+Transitional rule in `tasks/README.md` ("run the instance data guard on native Windows before every push"): to be removed once C02, C03 and C04 are merged.
 
 ## After M1 — listed only
 
@@ -48,7 +61,7 @@ Files are written after D00, S1 and S2 are approved. IDs and cuts may still chan
 
 | ID | Block | Features | Depends on |
 |---|---|---|---|
-| C06 | Movement tracking, manual detection, override dam; tolerance by position source, report delay, position reference flag, self-measurement for the diagnostics | E1, E2, E3 | C03 |
+| C06 | Movement tracking, manual detection, override dam; tolerance by position source, report delay, position reference flag, self-measurement for the diagnostics; records real own commands: the time of the last comfort movement and the daily count of comfort movements with its threshold event (new reason code, added to section 5 of the architecture document together with the enumeration) | E1, E2, E3, E10 (count) | C03 |
 | C07 | Protection events, fire, person-at-window dam, watchdog; test cases for the four conditions of the return to the manual position (architecture, decision 14) | D1–D6, D8, D9, guardrail 3; door for C13 | C03 |
 | C08 | Window interaction and tamper | B1–B4, B9, F6 | C03 |
 | C09 | Sun geometry and glass calibration; one curtain edge per element, mapped per member through its vertical offset (architecture, decision 9) | C1, C2, C7 | C01 |
@@ -60,9 +73,9 @@ Files are written after D00, S1 and S2 are approved. IDs and cuts may still chan
 | H07 | Actions for automations, including fire acknowledgement and reference run. Note: loading service descriptions with a `supported_features` or attribute filter makes Home Assistant import every base platform, including the voice pipeline, whose native packages are not part of the test environment; the block has to find out whether its tests reach that path. If they do: first try documented stand-in modules for the two native packages in `tests/ha/conftest.py` (no warning filter, nothing weakened); add the real packages as development dependencies only if that does not hold, because they have no wheel for the current Python, would be compiled in every CI run without a cache, and would make a C++ toolchain a build dependency of a pure Python project | F1, A11 | H02 |
 | H08 | Wiring: protection events, fire, watchdog and blind-source repairs | D1–D6, D8, D9 | C07, H03, H05 |
 | H09 | Wiring: window interaction, tamper, blind-contact repair | B1–B4, B9, F6 | C08, H03 |
-| H10 | Wiring: manual detection and override; per-member configuration steps (position source, report delay, travel times) | E1–E3 | C06, H03, H05 |
+| H10 | Wiring: manual detection and override; per-member configuration steps (position source, report delay, travel times); the daily count of comfort movements in the diagnostics, its threshold as a setting, its event | E1–E3, E10 (count) | C06, H03, H05 |
 | H11 | Wiring: shading (sun, forecast, radiation, indoor temperature); per-member measurement steps: glass height, glass calibration and the offset of the member's top edge within the element | C1–C9, C12, C14 | C10, H03 |
-| H12 | Capability-aware configuration and repairs; explains settings masked by the capability mask of C02 | F7 | H01, H03, C02 |
+| H12 | Capability-aware configuration and repairs; explains settings masked by the capability mask of C02 (inherited and own values; an own value stays stored and returns with the capability); mask and repair issue never flap at a restart or while an entity is unavailable, with a test | F7 | H01, H03, C02 |
 | H13 | Roof window profile | F3 | C09, C10, H11 |
 | H14 | Wall buttons | F5 | S3, C07, H07, H12 |
 | H15 | Command verification: detects that an actuator did not react, never that a curtain arrived; deadline from the report delay | N1 | C06, H03 |

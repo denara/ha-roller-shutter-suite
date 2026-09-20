@@ -102,6 +102,7 @@ For the Home Assistant tests, use WSL 2 with a current Ubuntu LTS distribution, 
 
 - Git and the GitHub CLI stay on the Windows side, where the commit identity and the login are configured. Nothing is committed or pushed from inside WSL.
 - Install `uv` inside the distribution. It downloads the required Python version by itself.
+- Install `git` inside the distribution as well, for reading only: the instance data guard and its test ask git for the list of files, and they fail when no git can answer. [Contributing](contributing.md#what-the-guards-enforce) explains what the guard needs.
 - The checkout stays where it is on the Windows drive; WSL sees it under its mount point. To get the path of a checkout as WSL sees it, run this in a Windows shell inside the checkout:
 
   ```sh

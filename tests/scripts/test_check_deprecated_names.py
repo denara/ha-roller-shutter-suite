@@ -1,15 +1,20 @@
 """The guard against deprecated Home Assistant names finds references, not words."""
 
+import re
 from pathlib import Path
 
 import pytest
 
 from scripts.check_deprecated_names import (
+    EXIT_CANNOT_CHECK,
     LIST_FILE,
+    CannotCheckError,
     Deprecated,
     ListError,
     check_source,
     check_tree,
+    load_list,
+    main,
     parse_list,
 )
 
@@ -177,3 +182,43 @@ def test_this_repository_passes() -> None:
     entries = parse_list(LIST_FILE.read_text(encoding="utf-8"))
 
     assert check_tree(Path(__file__).parents[2], entries) == []
+
+
+def test_missing_scanned_folder_cannot_be_checked(tmp_path: Path) -> None:
+    """Zero files in a scanned folder is a failure, not zero findings."""
+    (tmp_path / "custom_components").mkdir()
+    (tmp_path / "custom_components" / "module.py").write_text("X = 1\n", "utf-8")
+
+    with pytest.raises(CannotCheckError, match="no Python file found under tests/"):
+        check_tree(tmp_path, ENTRIES)
+    assert main(tmp_path) == EXIT_CANNOT_CHECK
+
+
+@pytest.mark.parametrize("content", [None, "", "[[deprecated]]\nkind = 'x'\n", "= ="])
+def test_list_that_cannot_be_used_cannot_check(
+    tmp_path: Path, content: str | None, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A missing, empty, malformed or unparsable list checks nothing."""
+    list_file = tmp_path / "names.toml"
+    if content is not None:
+        list_file.write_text(content, encoding="utf-8")
+
+    with pytest.raises(CannotCheckError):
+        load_list(list_file)
+    assert main(list_file=list_file) == EXIT_CANNOT_CHECK
+    assert "CANNOT CHECK" in capsys.readouterr().out
+
+
+def test_file_that_cannot_be_parsed_cannot_be_checked() -> None:
+    """A syntax error hides every name of the file."""
+    with pytest.raises(CannotCheckError, match="cannot be parsed"):
+        check_source("def broken(:\n", "tests/example.py", ENTRIES)
+
+
+def test_pass_says_how_much_was_checked(capsys: pytest.CaptureFixture[str]) -> None:
+    """The last line names the number of files and of names."""
+    assert main() == 0
+    assert re.search(
+        r"ok \(checked [1-9]\d* file\(s\) against [1-9]\d* names",
+        capsys.readouterr().out,
+    )

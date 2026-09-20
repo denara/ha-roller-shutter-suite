@@ -36,10 +36,12 @@ from custom_components.roller_shutter_suite.core.model import (
     ControlLevel,
     Controls,
     Direction,
+    FrostSettings,
     FunctionId,
     Layer,
     MemberConfig,
     MemberObservation,
+    MotorProtectionSettings,
     MovementState,
     Observation,
     Position,
@@ -79,8 +81,28 @@ def profile(**changes: Any) -> CapabilityProfile:
 
 
 def window(*member_ids: str, **changes: Any) -> WindowConfig:
-    """Return a window with the given members; one member by default."""
+    """Return a window with the given members; one member by default.
+
+    ``frost=`` and ``motor_protection=`` take the settings as one value and
+    spread them over the fields of the window configuration.
+    """
     profiles: Mapping[str, CapabilityProfile] = changes.pop("profiles", {})
+    frost: FrostSettings | None = changes.pop("frost", None)
+    if frost is not None:
+        changes |= {
+            "frost_source": frost.source,
+            "frost_threshold": frost.threshold,
+            "frost_hysteresis": frost.hysteresis,
+            "frost_position": frost.position,
+            "frost_applies_to_protection": frost.applies_to_protection,
+            "frost_hold_closed": frost.hold_closed,
+        }
+    motor: MotorProtectionSettings | None = changes.pop("motor_protection", None)
+    if motor is not None:
+        changes |= {
+            "motor_min_change": motor.min_change,
+            "motor_min_interval": motor.min_interval,
+        }
     members = tuple(
         MemberConfig(member_id, profiles.get(member_id, profile()))
         for member_id in (member_ids or (LEFT,))

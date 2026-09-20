@@ -159,9 +159,9 @@ def test_fire_and_protection_act_with_every_comfort_function_disabled(
 )
 def test_a_function_that_falls_back_is_refused_in_the_set(function: FunctionId) -> None:
     """Such a set cannot even be constructed; ventilation is among them."""
-    with pytest.raises(ValueError, match="never disabled"):
+    with pytest.raises(ValueError, match="can never be switched off"):
         window(disabled_functions={function})
-    with pytest.raises(ValueError, match="never disabled"):
+    with pytest.raises(ValueError, match="can never be switched off"):
         window(disabled_functions={FunctionId.SHADING, function})
     assert FunctionId.VENTILATION.fault_behavior is FaultBehavior.FALL_BACK
 

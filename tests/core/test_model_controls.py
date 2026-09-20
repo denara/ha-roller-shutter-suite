@@ -134,10 +134,32 @@ def test_a_window_carries_the_settings_of_the_arbiter_block() -> None:
     assert config.motor_protection == MotorProtectionSettings()
     assert config.frost == FrostSettings()
     assert config.reevaluate_after == timedelta(minutes=5)
-    with pytest.raises(TypeError, match="motor protection"):
-        window(motor_protection=bad)
-    with pytest.raises(TypeError, match="frost settings"):
-        window(frost=bad)
+    # One field per setting, so each can be inherited on its own; the two
+    # views put them together and hold their value rules.
+    changed = window(
+        frost_source="outdoor_temperature",
+        frost_threshold=1.5,
+        frost_hysteresis=2.0,
+        frost_position=Position(80),
+        frost_applies_to_protection=True,
+        frost_hold_closed=True,
+        motor_min_change=3,
+        motor_min_interval=timedelta(minutes=2),
+    )
+    assert changed.frost == FrostSettings(
+        "outdoor_temperature", 1.5, 2.0, Position(80), True, True
+    )
+    assert changed.motor_protection == MotorProtectionSettings(3, timedelta(minutes=2))
+    with pytest.raises(TypeError, match="minimum change"):
+        window(motor_min_change=bad)
+    with pytest.raises(ValueError, match="negative"):
+        window(motor_min_interval=timedelta(seconds=-1))
+    with pytest.raises(TypeError, match="frost threshold"):
+        window(frost_threshold=bad)
+    with pytest.raises(ValueError, match="must not be empty"):
+        window(frost_source="")
+    with pytest.raises(TypeError, match="frost position"):
+        window(frost_position=90)
     with pytest.raises(TypeError, match="re-evaluation bound"):
         window(reevaluate_after=bad)
     with pytest.raises(ValueError, match="longer than zero"):
