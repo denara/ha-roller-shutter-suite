@@ -31,6 +31,7 @@ from .registry import (
     GateRuleRegistration,
     LayerFunction,
     LayerRegistration,
+    ViolationFunction,
     outranks,
     reported_positions,
 )
@@ -57,6 +58,7 @@ __all__ = [
     "LayerFunction",
     "LayerRegistration",
     "ModeEntry",
+    "ViolationFunction",
     "apply_take_over",
     "arm",
     "bypassed_rules",

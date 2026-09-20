@@ -13,22 +13,32 @@ from custom_components.roller_shutter_suite.core.arbiter import (
     MODE_TABLE,
     PERSON_AT_WINDOW_DAM,
     Arbiter,
+    ConstraintInput,
+    ConstraintRegistration,
     Dam,
     GateInput,
     GateRuleRegistration,
+    LayerRegistration,
     apply_take_over,
     effective_controls,
 )
-from custom_components.roller_shutter_suite.core.engine import build_arbiter
+from custom_components.roller_shutter_suite.core.engine import (
+    BUILT_IN_CONSTRAINTS,
+    build_arbiter,
+)
 from custom_components.roller_shutter_suite.core.model import (
+    Constraint,
+    ConstraintResult,
     ControlLevel,
     Controls,
     Decision,
     GateKind,
     GateOutcome,
     GateRule,
+    Layer,
     ManualOverrideDam,
     MemberState,
+    MemberTarget,
     MotorProtectionSettings,
     OperatingMode,
     OverrideEndRule,
@@ -39,6 +49,7 @@ from custom_components.roller_shutter_suite.core.model import (
     SourceValue,
     TravelDirection,
     WindowState,
+    Wish,
     WishClass,
 )
 from custom_components.roller_shutter_suite.core.reasons import ReasonCode
@@ -698,16 +709,145 @@ def test_a_command_to_a_member_the_window_no_longer_has_is_ignored() -> None:
 # --- 9 Motor protection -------------------------------------------------------------
 
 
-@pytest.mark.parametrize(("position", "held"), [(4, True), (5, False), (3, True)])
+def _shaded(position: int) -> dict[str, Any]:
+    return day(shading_position=SourceValue.of(position))
+
+
+@pytest.mark.parametrize(
+    ("position", "held"), [(36, True), (44, True), (35, False), (45, False)]
+)
 def test_a_comfort_movement_below_the_minimum_change_is_suppressed(
     position: int, held: bool
 ) -> None:
-    """The default minimum is 5 percent; the target here is 0."""
-    gate = _gate(engine().recompute(snapshot(sources=night(), position=position)))
+    """The default minimum is 5 percent; the target here is 40."""
+    gate = _gate(engine().recompute(snapshot(sources=_shaded(40), position=position)))
 
     assert (
         gate == GateOutcome.suppress(GateRule.MOTOR_PROTECTION, ReasonCode.MIN_CHANGE)
     ) is held
+
+
+@pytest.mark.parametrize(
+    ("sources", "position"), [(night(), 3), (night(), 4), (day(), 97), (day(), 96)]
+)
+def test_an_end_position_is_driven_even_if_the_change_is_below_the_minimum(
+    sources: dict[str, Any], position: int
+) -> None:
+    """A shutter does not stay a few percent open because the rest is "too little"."""
+    gate = _gate(engine().recompute(snapshot(sources=sources, position=position)))
+
+    assert gate == GateOutcome.send()
+
+
+def test_the_exemption_of_end_positions_does_not_lift_the_minimum_interval() -> None:
+    """Three percent to go, but the last comfort movement was a minute ago."""
+    state = WindowState(last_comfort_movement=NOW - timedelta(minutes=1))
+
+    gate = _gate(engine().recompute(snapshot(sources=night(), position=3, state=state)))
+
+    assert gate.reason is ReasonCode.MIN_INTERVAL
+
+
+def test_an_end_position_within_tolerance_is_reached_not_driven() -> None:
+    """The exemption is for a target that is not reached."""
+    gate = _gate(engine().recompute(snapshot(sources=night(), position=2)))
+
+    assert gate.reason is ReasonCode.TARGET_REACHED
+
+
+def test_an_end_position_of_one_member_exempts_the_movement_of_the_window() -> None:
+    """Two members per-member: one goes to 0 from 4, the other barely moves."""
+    wish = Wish.target_per_member(
+        Layer.SHADING,
+        ReasonCode.SHADING_GEOMETRIC,
+        (MemberTarget(LEFT, Position(0)), MemberTarget(RIGHT, Position(40))),
+    )
+    arbiter = build_arbiter(
+        [LayerRegistration(Layer.SHADING, lambda _config, _world: wish)]
+    )
+
+    def reason(left: int, right: int) -> ReasonCode:
+        world = snapshot(observation=observed(left=left, right=right))
+        return _gate(arbiter.recompute(window(LEFT, RIGHT), world)).reason
+
+    assert reason(4, 38) is ReasonCode.SENT
+    assert reason(1, 36) is ReasonCode.MIN_CHANGE
+
+
+def _floor_of_30(*, knows_violation: bool) -> ConstraintRegistration:
+    """Return a stand-in for the ventilation floor: no member lower than 30."""
+    floor = Position(30)
+
+    def apply(constraint: ConstraintInput) -> ConstraintResult | None:
+        targets = tuple(
+            MemberTarget(
+                target.member_id,
+                None if target.position is None else max(target.position, floor),
+            )
+            for target in constraint.targets
+        )
+        if targets == constraint.targets:
+            return None
+        return ConstraintResult(
+            Constraint.VENTILATION_FLOOR, ReasonCode.VENTILATION_FLOOR, targets
+        )
+
+    def violated(constraint: ConstraintInput) -> bool:
+        return any(
+            position is not None and position < floor
+            for position in constraint.current_positions.values()
+        )
+
+    return ConstraintRegistration(
+        Constraint.VENTILATION_FLOOR,
+        frozenset({WishClass.COMFORT}),
+        apply,
+        violated_by_position=violated if knows_violation else None,
+    )
+
+
+def test_a_movement_that_restores_a_violated_constraint_is_exempt_from_the_minimum_change() -> (
+    None
+):
+    """The shutter stands at 27, just below the floor of 30: it is raised."""
+    restoring = build_arbiter(
+        STUB_LAYERS, constraints=[_floor_of_30(knows_violation=True)]
+    )
+    unaware = build_arbiter(
+        STUB_LAYERS, constraints=[_floor_of_30(knows_violation=False)]
+    )
+
+    def gate(arbiter: Arbiter, position: int, **changes: Any) -> GateOutcome:
+        world = snapshot(sources=night(), position=position, **changes)
+        decision = arbiter.recompute(window(), world)
+        assert decision.target == Position(30)
+        return _gate(decision)
+
+    assert gate(restoring, 27) == GateOutcome.send()
+    assert gate(unaware, 27).reason is ReasonCode.MIN_CHANGE
+    # Above the floor nothing is violated: 33 to 30 is simply too little.
+    assert gate(restoring, 33).reason is ReasonCode.MIN_CHANGE
+    # The minimum interval still applies to the restoring movement.
+    recently = WindowState(last_comfort_movement=NOW - timedelta(minutes=1))
+    assert gate(restoring, 27, state=recently).reason is ReasonCode.MIN_INTERVAL
+
+
+def test_a_constraint_that_does_not_apply_to_the_wish_restores_nothing() -> None:
+    """The floor is about comfort; a storm below it is not a restoring movement."""
+    arbiter = build_arbiter(
+        STUB_LAYERS, constraints=[_floor_of_30(knows_violation=True)]
+    )
+
+    for sources in (storm(), fire()):
+        decision = arbiter.recompute(window(), snapshot(sources=sources, position=27))
+        assert decision.constraints == ()
+        assert _gate(decision) == GateOutcome.send()
+
+
+def test_the_constraints_of_this_block_cannot_be_violated_by_a_position() -> None:
+    """Direction and frost say which movements are allowed, not where to stand."""
+    for registration in BUILT_IN_CONSTRAINTS:
+        assert registration.violated_by_position is None
 
 
 def test_a_comfort_movement_inside_the_minimum_interval_is_deferred_until_it_ends() -> (
@@ -744,12 +884,12 @@ def test_motor_protection_judges_the_largest_change_among_the_members() -> None:
     subject = engine(window(LEFT, RIGHT))
 
     def reason(**members: int | None) -> ReasonCode:
-        world = snapshot(sources=night(), observation=observed(**members))
+        world = snapshot(sources=_shaded(40), observation=observed(**members))
         return _gate(subject.recompute(world)).reason
 
-    assert reason(left=4, right=3) is ReasonCode.MIN_CHANGE
-    assert reason(left=4, right=40) is ReasonCode.SENT
-    assert reason(left=4, right=None) is ReasonCode.MIN_CHANGE
+    assert reason(left=44, right=37) is ReasonCode.MIN_CHANGE
+    assert reason(left=44, right=80) is ReasonCode.SENT
+    assert reason(left=44, right=None) is ReasonCode.MIN_CHANGE
     assert reason(left=None, right=None) is ReasonCode.SENT
 
 
@@ -759,7 +899,9 @@ def test_zero_switches_a_part_of_motor_protection_off() -> None:
     state = WindowState(last_comfort_movement=NOW)
 
     gate = _gate(
-        engine(config).recompute(snapshot(sources=night(), position=3, state=state))
+        engine(config).recompute(
+            snapshot(sources=_shaded(40), position=43, state=state)
+        )
     )
 
     assert gate == GateOutcome.send()

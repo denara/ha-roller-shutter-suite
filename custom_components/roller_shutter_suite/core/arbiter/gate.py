@@ -17,6 +17,8 @@ from datetime import datetime
 from typing import Final
 
 from custom_components.roller_shutter_suite.core.model import (
+    FULLY_CLOSED,
+    FULLY_OPEN,
     GateOutcome,
     GateRule,
     MemberConfig,
@@ -328,8 +330,29 @@ def _is_fresh(gate: GateInput) -> bool:
     return trigger is not None and moved_at is not None and trigger > moved_at
 
 
+def _drives_to_an_end_position(gate: GateInput) -> bool:
+    """Return whether a member is sent to 0 or 100 and is not there yet."""
+    reported = gate.current_positions
+    tolerances = {
+        member.member_id: member.capabilities.tolerance
+        for member in gate.config.members
+    }
+    return any(
+        target.position in (FULLY_OPEN, FULLY_CLOSED)
+        and (position := reported.get(target.member_id)) is not None
+        and abs(target.position.value - position.value) > tolerances[target.member_id]
+        for target in gate.to_send
+    )
+
+
 def _motor_protection(gate: GateInput) -> GateOutcome | None:
-    """Judge the largest change among the members, then the minimum interval."""
+    """Judge the largest change among the members, then the minimum interval.
+
+    Exempt from the minimum change, never from the minimum interval: a target
+    of 0 or 100 that is not reached (a shutter must not stay a few percent
+    open because the rest is "not worth a movement"), and a movement that
+    restores a constraint the current position violates.
+    """
     settings = gate.config.motor_protection
     reported = gate.current_positions
     changes = [
@@ -338,7 +361,8 @@ def _motor_protection(gate: GateInput) -> GateOutcome | None:
         if target.position is not None
         and (position := reported.get(target.member_id)) is not None
     ]
-    if changes and max(changes) < settings.min_change:
+    exempt = gate.restores_constraint or _drives_to_an_end_position(gate)
+    if changes and max(changes) < settings.min_change and not exempt:
         return GateOutcome.suppress(GateRule.MOTOR_PROTECTION, ReasonCode.MIN_CHANGE)
     if gate.last_comfort_movement is not None and not _is_fresh(gate):
         end = gate.last_comfort_movement + settings.min_interval

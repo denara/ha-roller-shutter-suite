@@ -158,6 +158,24 @@ class Arbiter:
             targets = result.targets
         return tuple(results), targets
 
+    def _violated_by_position(
+        self,
+        config: WindowConfig,
+        snapshot: WorldSnapshot,
+        wish: Wish,
+        targets: tuple[MemberTarget, ...],
+    ) -> bool:
+        """Say whether the window stands where a constraint on the wish forbids it."""
+        if wish.wish_class is WishClass.FIRE:
+            return False
+        constraint_input = ConstraintInput(config, snapshot, wish, targets)
+        return any(
+            registration.violated_by_position is not None
+            and wish.wish_class in registration.applies_to
+            and registration.violated_by_position(constraint_input)
+            for registration in self.constraints
+        )
+
     # --- Gate ---------------------------------------------------------------
 
     def _gate(
@@ -166,6 +184,8 @@ class Arbiter:
         snapshot: WorldSnapshot,
         wish: Wish,
         to_send: tuple[MemberTarget, ...],
+        *,
+        restores: bool = False,
     ) -> GateOutcome:
         """Evaluate the gate rules in order; the first rule that applies decides."""
         controls = effective_controls(snapshot.controls)
@@ -197,6 +217,7 @@ class Arbiter:
             controls=controls,
             own_commands=own_commands,
             last_comfort_movement=clock,
+            restores_constraint=restores,
         )
         for registration in self.gate_rules:
             if skips(wish.wish_class, registration.reasons):
@@ -241,6 +262,7 @@ class Arbiter:
         if winner is None or winner.kind is not WishKind.TARGET:
             return Decision(winning_wish=winner, other_layers=others)
         targets = _initial_targets(winner, member_ids)
+        restores = self._violated_by_position(config, snapshot, winner, targets)
         results, targets = self._constrain(config, snapshot, winner, targets)
         to_send = tuple(target for target in targets if target.position is not None)
         return Decision(
@@ -248,7 +270,11 @@ class Arbiter:
             other_layers=others,
             constraints=results,
             targets=targets,
-            gate=self._gate(config, snapshot, winner, to_send) if to_send else None,
+            gate=(
+                self._gate(config, snapshot, winner, to_send, restores=restores)
+                if to_send
+                else None
+            ),
         )
 
 

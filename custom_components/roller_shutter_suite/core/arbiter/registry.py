@@ -92,13 +92,26 @@ type ConstraintFunction = Callable[[ConstraintInput], ConstraintResult | None]
 """A constraint: returns its result, or ``None`` if it has nothing to report."""
 
 
+type ViolationFunction = Callable[[ConstraintInput], bool]
+"""Says whether the position a window has right now violates a constraint."""
+
+
 @dataclass(frozen=True, slots=True)
 class ConstraintRegistration:
-    """One constraint, the wish classes it applies to, and its function."""
+    """One constraint, the wish classes it applies to, and its function.
+
+    ``violated_by_position`` is for a constraint that says where a window may
+    *stand* (a floor, for example), as opposed to one that says which
+    *movements* are allowed. It answers whether a member stands on the wrong
+    side right now. A movement that restores such a constraint is exempt from
+    the minimum change of motor protection, however small it is. A constraint
+    about movements leaves it out.
+    """
 
     constraint: Constraint
     applies_to: frozenset[WishClass]
     apply: ConstraintFunction
+    violated_by_position: ViolationFunction | None = None
 
     def __post_init__(self) -> None:
         """Refuse a constraint on fire: fire is subject to no constraint at all."""
@@ -116,6 +129,9 @@ class GateInput:
     """What a gate rule sees.
 
     - ``to_send``: the targets that reached the gate (pinned members left out).
+    - ``restores_constraint``: whether a constraint that applies to the wish
+      is violated by the position the window has right now, so that the
+      movement restores it.
     - ``controls``: the effective pause, lock, mode and dry-run of the window.
     - ``own_commands`` and ``last_comfort_movement``: the own commands per
       member and the motor protection clock **as this window has to judge
@@ -133,6 +149,7 @@ class GateInput:
     controls: EffectiveControls
     own_commands: Mapping[str, OwnCommand]
     last_comfort_movement: datetime | None
+    restores_constraint: bool = False
 
     def __post_init__(self) -> None:
         """Copy and freeze the commands."""
