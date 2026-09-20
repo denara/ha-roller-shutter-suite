@@ -91,7 +91,7 @@ Constraints are applied to the winning wish in this order. Each one names the cl
 
 Fire is subject to no constraint at all.
 
-> **Decision 3 — Frost when the temperature is unavailable.** "Missing data is not good news", and frost is the warning here. Recommendation: hold the last known frost state for at most 24 hours; after that the constraint becomes inactive and a repair issue names the source. *Rejected:* treating "unavailable" as frost for an unlimited time (a dead sensor would limit all openings for weeks, and users would learn to disable the feature); treating it as "no frost" at once (contradicts D6's principle).
+> **Decision 3 — Frost when the temperature is unavailable.** "Missing data is not good news", and frost is the warning here. While the frost source has no value, the last known frost state is held for at most 24 hours. After that, or if there never was a known state, the source counts as **blind**: the frost limit applies as a cautious value until data returns or the operator waives it, and a repair issue and an event say so, as for every other blind source (section 10.1). It never silently becomes "no frost". The cost of the cautious value is small, because frost protection only limits opening to the frost position. *Rejected:* letting the constraint become inactive after the 24 hours (that is the silent all-clear the project rules out; revised by the project owner on 2026-09-20); treating "unavailable" as "no frost" at once (contradicts D6's principle).
 
 ### 2.3 The gate
 
@@ -106,8 +106,8 @@ The gate rules are evaluated in this order; the first rule that applies decides.
 | 5 | Pause (E4) | comfort | Suppress. |
 | 6 | Person-at-the-window dam (guardrail 3) | protection and comfort | Defer until the dam ends. |
 | 7 | Manual override dam (E1, E2) | comfort, except the return to the manual position after a protection event ([section 10.2](#102-return-after-a-protection-event-d5)) | Defer or suppress, depending on the end rule of the dam. |
-| 8 | Movement in flight | comfort | Same target as the pending own command: suppress as duplicate. Different target: defer until the members have come to rest. Protection retargets at once. |
-| 9 | Motor protection (E10) | comfort | Change below the minimum: suppress. Inside the minimum interval since the last own comfort movement: defer until it has passed. |
+| 8 | Movement in flight | duplicate: fire, protection, comfort; deferral: comfort | **Same target** as an own command that is still inside its expectation window: nothing is sent again, for every wish class, fire included. This hangs on the running expectation window, not on "was sent once": when the window closes without the target having been reached, the command may be sent again (fire at once and without backoff, as in N1). If the new wish is of a **higher class** than the command in flight, the movement is **taken over**: its wish class, its reason and the owner of the position become those of the new wish, so that dams, motor protection and the return logic see a fire or protection movement and not a comfort one (`movement_taken_over`); for the same or a lower class it is a plain duplicate. **Different target:** comfort defers until the members have come to rest; protection and fire retarget at once. |
+| 9 | Motor protection (E10) | comfort | **Minimum change:** a change below the minimum is suppressed. Exempt are an end position (a target of 0 or 100 that is not reached within tolerance is driven, so a shutter never stays a slit open at night) and a movement that restores a constraint the current position violates (for example a shutter just below the ventilation floor). **Minimum interval** (default 10 minutes): what counts is whether the wish is **fresh**. A wish is fresh if its trigger lies after the last own comfort movement: a schedule boundary fires, sleep mode or privacy is switched, a new request arrives, a shading or solar heating episode begins. A fresh wish is not subject to the interval: an evening closing two minutes after the return movement at the end of shading runs on time, and sleep mode switched on right after a tracking movement acts at once. Not fresh is tracking within an episode, and an older wish that wins again because another layer dropped out, such as the day position after the end of shading; for these the interval applies, so shading that toggles every three minutes yields at most one return movement per interval. Every comfort wish therefore carries the time of its trigger. Inside the interval a movement is deferred until it has passed; the exemptions of the minimum change do not lift the interval. **No absolute limit:** motor protection caps no total. Comfort movements are counted per window and day (protection and fire never count), shown in the diagnostics, and from a threshold (default 40, configurable) reported once per day by an event with a reason code, without blocking anything. A hard daily limit is deliberately not part of the first version: tracked shading exceeds twenty movements on an ordinary sunny day, and a limit would freeze it in the afternoon. |
 | 10 | Command backoff (N1) | protection and comfort | Defer until the next retry time. |
 | 11 | Staggering (E13) | protection and comfort | Defer by the window's slot in a collective movement. |
 | 12 | Dry-run (E11) | fire, protection, comfort | The last barrier before sending. Whatever reaches it would have been sent: suppress it and record the would-be command *(decided: dry-run never moves anything, not even at fire)*. |
@@ -126,7 +126,9 @@ Pause, operating mode and maintenance lock exist on global, group and window lev
 
 The fire bypass is a named construct of the gate, not a set of exceptions spread over the rules. A wish of class `fire` **skips** these gate rules:
 
-- 4 operating mode, 5 pause, 6 person-at-the-window dam, 7 manual override dam, 8 movement in flight (fire retargets at once), 9 motor protection, 10 command backoff, 11 staggering.
+- 4 operating mode, 5 pause, 6 person-at-the-window dam, 7 manual override dam, the deferral of 8 movement in flight (fire retargets at once), 9 motor protection, 10 command backoff, 11 staggering.
+
+Fire does not skip the duplicate part of rule 8: a fire command with the same target that is still inside its expectation window is not repeated on every recompute, and a movement in flight with the same target is taken over by fire. "Fire is sent" therefore means: sent, or taken over; and sent again at once when the expectation window of an unfinished fire command has closed.
 
 It does **not** skip:
 
@@ -438,7 +440,8 @@ Persisted per window, versioned, all timestamps timezone-aware (naive ones are r
 - episodes: as listed in [section 7](#7-episodes);
 - external request: position, reason, expires at;
 - latched day type per date (today and tomorrow);
-- time of the last own comfort movement (the motor protection clock);
+- time of the last own comfort movement (the motor protection clock; a wish whose trigger is later than this time is fresh);
+- the number of own comfort movements of the current local day, with that day's date, and whether the threshold was already reported for it;
 - last known values of inputs that are held (frost state, season, protection triggers);
 - frost waiver: active until; per member the position reference flag (`referenced` / `uncertain`);
 - in dry-run only: the simulated commands of [section 2.3](#23-the-gate), kept apart from the real state and discarded when the window is armed.

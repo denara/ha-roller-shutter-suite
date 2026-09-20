@@ -48,7 +48,7 @@ Files are written after D00, S1 and S2 are approved. IDs and cuts may still chan
 
 | ID | Block | Features | Depends on |
 |---|---|---|---|
-| C06 | Movement tracking, manual detection, override dam; tolerance by position source, report delay, position reference flag, self-measurement for the diagnostics | E1, E2, E3 | C03 |
+| C06 | Movement tracking, manual detection, override dam; tolerance by position source, report delay, position reference flag, self-measurement for the diagnostics; records real own commands: the time of the last comfort movement and the daily count of comfort movements with its threshold event (new reason code, added to section 5 of the architecture document together with the enumeration) | E1, E2, E3, E10 (count) | C03 |
 | C07 | Protection events, fire, person-at-window dam, watchdog; test cases for the four conditions of the return to the manual position (architecture, decision 14) | D1–D6, D8, D9, guardrail 3; door for C13 | C03 |
 | C08 | Window interaction and tamper | B1–B4, B9, F6 | C03 |
 | C09 | Sun geometry and glass calibration; one curtain edge per element, mapped per member through its vertical offset (architecture, decision 9) | C1, C2, C7 | C01 |
@@ -60,7 +60,7 @@ Files are written after D00, S1 and S2 are approved. IDs and cuts may still chan
 | H07 | Actions for automations, including fire acknowledgement and reference run. Note: loading service descriptions with a `supported_features` or attribute filter makes Home Assistant import every base platform, including the voice pipeline, whose native packages are not part of the test environment; the block has to find out whether its tests reach that path. If they do: first try documented stand-in modules for the two native packages in `tests/ha/conftest.py` (no warning filter, nothing weakened); add the real packages as development dependencies only if that does not hold, because they have no wheel for the current Python, would be compiled in every CI run without a cache, and would make a C++ toolchain a build dependency of a pure Python project | F1, A11 | H02 |
 | H08 | Wiring: protection events, fire, watchdog and blind-source repairs | D1–D6, D8, D9 | C07, H03, H05 |
 | H09 | Wiring: window interaction, tamper, blind-contact repair | B1–B4, B9, F6 | C08, H03 |
-| H10 | Wiring: manual detection and override; per-member configuration steps (position source, report delay, travel times) | E1–E3 | C06, H03, H05 |
+| H10 | Wiring: manual detection and override; per-member configuration steps (position source, report delay, travel times); the daily count of comfort movements in the diagnostics, its threshold as a setting, its event | E1–E3, E10 (count) | C06, H03, H05 |
 | H11 | Wiring: shading (sun, forecast, radiation, indoor temperature); per-member measurement steps: glass height, glass calibration and the offset of the member's top edge within the element | C1–C9, C12, C14 | C10, H03 |
 | H12 | Capability-aware configuration and repairs; explains settings masked by the capability mask of C02 (inherited and own values; an own value stays stored and returns with the capability); mask and repair issue never flap at a restart or while an entity is unavailable, with a test | F7 | H01, H03, C02 |
 | H13 | Roof window profile | F3 | C09, C10, H11 |
