@@ -273,7 +273,7 @@ Inputs, both optional and chosen by the user: a **workday source** (on = workday
 2. Otherwise workday source on → `workday`, off → `weekend`.
 3. No workday source → Monday to Friday `workday`, Saturday and Sunday `weekend`.
 
-The day type of a date is **latched**: determined at the first recompute after local midnight at which the configured inputs have a value, then persisted for that date. Without the latch, a source that changes in the middle of the day would move the morning trigger after the fact and flip the part of the day. If an input is unavailable at that moment, rule 3 applies for the time being with `day_type_fallback`, and the latch is set as soon as the input has a value, as long as the morning trigger of that day has not passed yet. School holidays are not part of the first version.
+The day type of a date is **latched at the first boundary between parts of the day of that date**, normally the morning trigger, and then persisted for that date. Until then nothing is latched and the preview may correct itself with every evaluation: the workday sensor of Home Assistant updates at midnight or shortly after it, and an evaluation before that update must not write yesterday's type down for the whole day. Without the latch, a source that changes in the middle of the day would move the morning trigger after the fact and flip the part of the day. If an input has no value at that boundary, rule 3 applies with `day_type_fallback`, and the latch says that it is a fallback. Only today's type is latched; for tomorrow the preview uses a latch if one exists and otherwise the rules above. School holidays are not part of the first version.
 
 ### 6.4 Season (A5)
 
@@ -439,7 +439,7 @@ Persisted per window, versioned, all timestamps timezone-aware (naive ones are r
 - fire: unacknowledged flag;
 - episodes: as listed in [section 7](#7-episodes);
 - external request: position, reason, expires at;
-- latched day type per date (today and tomorrow);
+- latched day type of today, with the mark whether it is a fallback (one for tomorrow is kept if present);
 - time of the last own comfort movement (the motor protection clock; a wish whose trigger is later than this time is fresh);
 - the number of own comfort movements of the current local day, with that day's date, and whether the threshold was already reported for it;
 - last known values of inputs that are held (frost state, season, protection triggers);
