@@ -29,12 +29,18 @@ says whether the proof was active or passive. A run that uses ``pytest.ini``
 next to this file is meant to be the proof; if ``homeassistant`` is already
 imported when such a run starts, the session is refused instead of going
 passive.
+
+A run with ``pytest.ini`` next to this file does not load ``tests/conftest.py``,
+because pytest looks for ``conftest.py`` files only from the folder of the
+active configuration file downwards. That file installs the filters for the
+approved foreign warnings (``tests/foreign_warnings.toml``), so this file calls
+it for such a run.
 """
 
 import sys
 from collections.abc import Iterator
 from importlib.machinery import ModuleSpec
-from importlib.util import module_from_spec
+from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
 
 import pytest
@@ -45,6 +51,7 @@ _INTEGRATION_DIR = (
     Path(__file__).parents[2] / "custom_components" / "roller_shutter_suite"
 )
 _CORE_CONFIG_FILE = Path(__file__).with_name("pytest.ini")
+_SHARED_CONFTEST = Path(__file__).parents[1] / "conftest.py"
 _PROOF_ACTIVE = pytest.StashKey[bool]()
 _STATUS_SHOWN = pytest.StashKey[bool]()
 
@@ -89,10 +96,35 @@ def _status_line(config: pytest.Config) -> str:
     )
 
 
+def _core_configuration_is_active(config: pytest.Config) -> bool:
+    """Tell whether ``pytest.ini`` next to this file configures the run.
+
+    Both paths are resolved, so a checkout behind a symbolic link or a path
+    written in another way is still recognized.
+    """
+    return (
+        config.inipath is not None
+        and config.inipath.resolve() == _CORE_CONFIG_FILE.resolve()
+    )
+
+
+def _install_foreign_warning_filters(config: pytest.Config) -> None:
+    """Run the filter installation of ``tests/conftest.py``."""
+    spec = spec_from_file_location("tests_shared_conftest", _SHARED_CONFTEST)
+    if spec is None or spec.loader is None:
+        raise pytest.UsageError("tests/conftest.py cannot be loaded")
+    shared = module_from_spec(spec)
+    spec.loader.exec_module(shared)
+    shared.install_foreign_warning_filters(config)
+
+
 def pytest_configure(config: pytest.Config) -> None:
     """Activate the proof unless Home Assistant is imported already."""
     already_imported = _home_assistant_modules()
-    if already_imported and config.inipath == _CORE_CONFIG_FILE:
+    core_run = _core_configuration_is_active(config)
+    if core_run:
+        _install_foreign_warning_filters(config)
+    if already_imported and core_run:
         raise pytest.UsageError(
             "tests/core/pytest.ini is the active configuration, but "
             f"homeassistant is already imported ({len(already_imported)} "

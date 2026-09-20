@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Approved by the project owner on 2026-09-19. All thirteen decisions were accepted as recommended; the boxes keep the reasons and the rejected alternatives. |
+| Status | Approved by the project owner on 2026-09-19. All fourteen decisions were accepted as recommended; the boxes keep the reasons and the rejected alternatives. |
 | Refines | [project-brief.md](project-brief.md), where the brief refers to "the domain design specification" or "D00" |
 | Audience | Implementing agents and maintainers |
 
@@ -30,7 +30,7 @@ Rules that the owner has already decided are stated as rules and marked *(decide
 | **Wish** | The answer of a layer: a **target position**, **leave alone**, or **no opinion**. Always carries a reason code and its wish class. |
 | **Wish class** | `fire`, `protection` or `comfort`. Constraints and gate rules state which classes they apply to. |
 | **Constraint** | A rule that limits the winning wish without replacing it, for example "do not go lower than …". |
-| **Gate** | The stage that answers "may the integration move now?". Its outcome is **send**, **defer until** a point in time, or **suppress**, always with a reason code. |
+| **Gate** | The stage that answers "may the integration move now?". Its outcome is **send**, **defer**, or **suppress**, always with a reason code. A deferral names the point in time at which it ends if that is known. If it is not known ("until a member is available", "until the members have come to rest"), it carries a mandatory upper bound instead: the latest time at which the window is evaluated again from its current state. Nothing is replayed when a deferral ends. |
 | **Dam** | A gate rule that holds back wishes of certain classes for a while. There are two: the manual override dam and the person-at-the-window dam. |
 | **Decision** | The complete result of one recompute: the winning wish, the constraints applied, the gate outcome, and for every other layer the reason why it did not win. |
 | **Reason code** | A machine-readable code from a closed list ([section 5](#5-reason-codes)). No free text anywhere in a decision. |
@@ -105,7 +105,7 @@ The gate rules are evaluated in this order; the first rule that applies decides.
 | 4 | Operating mode (E9) | `off`: protection and comfort. `protection only`: comfort. | Suppress. |
 | 5 | Pause (E4) | comfort | Suppress. |
 | 6 | Person-at-the-window dam (guardrail 3) | protection and comfort | Defer until the dam ends. |
-| 7 | Manual override dam (E1, E2) | comfort | Defer or suppress, depending on the end rule of the dam. |
+| 7 | Manual override dam (E1, E2) | comfort, except the return to the manual position after a protection event ([section 10.2](#102-return-after-a-protection-event-d5)) | Defer or suppress, depending on the end rule of the dam. |
 | 8 | Movement in flight | comfort | Same target as the pending own command: suppress as duplicate. Different target: defer until the members have come to rest. Protection retargets at once. |
 | 9 | Motor protection (E10) | comfort | Change below the minimum: suppress. Inside the minimum interval since the last own comfort movement: defer until it has passed. |
 | 10 | Command backoff (N1) | protection and comfort | Defer until the next retry time. |
@@ -169,7 +169,7 @@ Both dams are armed by the movement tracker ([section 8](#8-observing-a-movement
 
 ### 3.1 Manual override dam
 
-- **Holds back:** comfort. Protection and fire pass, which is why no rule "protection ignores the override" is needed.
+- **Holds back:** comfort. Protection and fire pass, which is why no rule "protection ignores the override" is needed. One comfort wish passes too: the return to the manual position after a protection event (`protection_return_manual`, [section 10.2](#102-return-after-a-protection-event-d5)), because it restores exactly what the dam protects.
 - **Armed when** an external movement is detected while no protection wish is winning. A movement the integration commanded itself never arms it, whatever layer it came from.
 - **Remembers** the position the person chose, with the time.
 - **Ends** by the configured rule (E2): after fixed minutes; when the shading episode ends (only if it was armed during one); at the next boundary between parts of the day (default); when the room has been empty for the configured time; or at once through the "resume automation" button or action. When it ends, the window is recomputed; nothing is replayed.
@@ -369,10 +369,10 @@ Rules for option (d):
 - **Configuration.** The user selects one or more cover entities. If a selected entity is a Home Assistant cover group, the configuration resolves it into its members, recursively, and shows the result before it is saved; the members are stored, never the group entity. Members are listed only where they differ: measurements, travel times, and what the capability profile found.
 - **Validation.** "A cover belongs to at most one window" applies per member. A group whose members are partly used by another window is refused with an explanation that names the member.
 - **Commands** go to every available member. Inside a window, the staggering gap applies between members as it does between windows, because the rule exists per motor; it can be switched off per window. Fire is never staggered.
-- **Observation** is per member, each with its own tracker, capability profile, travel times and command verification. The window is moving until the last member has settled. The window-level capabilities are the lowest common denominator; F7 explains which member limits what.
+- **Observation** is per member, each with its own tracker, capability profile, travel times and command verification. The window is moving as soon as one member moves and until the last member has settled. The window makes **two separate statements**, because one number cannot carry both. **Position:** one number as soon as all members report the same position within tolerance, whatever was last commanded (the rounded mean of the reports); otherwise none, and the members' values are shown individually. It is never the position of the first member: with unequal members that would state as the window's position a value that only one of them has. A window with a single member therefore always has a position when its member reports one, also right after it was moved by hand. **All members at their commanded targets:** yes, no, or cannot be judged, measured per member against its own last commanded target, which is part of the persisted state (section 11), within its own tolerance. "No" takes precedence: the question is whether all members are at their targets, and a single "no" refutes it. "Cannot be judged" is the answer only if no member says "no" and at least one cannot be judged (no position report, unavailable, never commanded). Members that stand correctly at different targets, as in geometric shading with unequal members, give "yes" and no position. The window-level capabilities are the lowest common denominator; F7 explains which member limits what.
 - **A member that is unavailable:** the others are commanded; the status shows `member_unavailable` with the member; when it returns it is brought to the common target, and that is an own movement. If all members are unavailable, the window is unavailable.
 
-> **Decision 8 — A single member moved by hand.** Recommendation: the override applies to the **whole window**. The other members stay where they are; nothing follows the hand-moved one. When the dam ends, the recompute brings all members to the common target. Reason: the person's intent is about the room, not about one motor; and one window must keep one status. *Rejected:* an override per member (four dams, four end times and a status that can no longer be stated in one sentence); and letting the other members follow the hand-moved one (a hand movement that triggers three motors is the kind of surprise the integration exists to remove).
+> **Decision 8 — A single member moved by hand.** Recommendation: the override applies to the **whole window**. The other members stay where they are; nothing follows the hand-moved one. Every member stays operable by hand on its own, at its own remote or button; the integration neither prevents that nor corrects it while the dam holds. When the dam ends, the recompute brings all members to their targets. Reason: the person's intent is about the room, not about one motor; and one window must keep one status. *Rejected:* an override per member (four dams, four end times and a status that can no longer be stated in one sentence); and letting the other members follow the hand-moved one (a hand movement that triggers three motors is the kind of surprise the integration exists to remove).
 
 > **Decision 9 — Geometry for members with different glass measurements.** Recommendation: **one decision, mapped per member.** The shading layer decides in a quantity that does not depend on the member: the height above the floor up to which the sun may enter (the "ray height" that follows from the permitted penetration depth and the sun position). Each member translates that height into its own position with its own measurements and its own glass calibration.
 >
@@ -385,7 +385,19 @@ Rules for option (d):
 > | 50° | 1.19 m | 21 % | 36 % | 21 % for both: the small member lets the sun in only 0.90 m (darker than necessary). 36 % for both: the large one lets it in 1.18 m. |
 > | 60° | 1.73 m | 59 % | 100 % | 59 % for both: small member 0.79 m. 100 % for both: large member 1.33 m, a third more than permitted. |
 >
-> Consequences. C1: measurements per member, orientation and field of view per window. C2: per member, as before. F3: the pitch is per window, the glass measurements per member. Status: the window shows one target, namely that of its first member, and lists the members' targets as attributes; the decision record carries the ray height and the per-member positions. Motor protection is judged on the largest change among the members. *Rejected:* one set of measurements and the same percentage for all members. It is simpler and perfectly adequate when the members are equal, which is why members **inherit the window's measurements unless they state their own**; with unequal members it shades visibly unevenly, as the table shows. A roof window example with a real pitch follows with block C09, when the roof geometry is specified.
+> Consequences. C1: measurements per member, orientation and field of view per window. C2: per member, as before. F3: the pitch is per window, the glass measurements per member. Status: the members' targets and positions are attributes of the window; the decision record carries the ray height and the per-member positions. The window itself shows a target only if all members have the same target, and a position only under the rule of the next paragraph. Motor protection is judged on the largest change among the members. *Rejected:* one set of measurements and the same percentage for all members. It is simpler and perfectly adequate when the members are equal, which is why members **inherit the window's measurements unless they state their own**; with unequal members it shades visibly unevenly, as the table shows. A roof window example with a real pitch follows with block C09, when the roof geometry is specified.
+>
+> **Members above each other: one element, one curtain edge.** Members of a window need not sit side by side. A common roof element is a matrix of two rows: larger windows above, smaller ones below, each with its own shutter, controller and remote. For shading, the element shall act like a single tall window. This needs no special mode, only one more measurement: per member, next to its glass height, the **offset of its top edge within the element**, measured from the top of the element along the glass. Members that sit side by side have the same offset. The shading layer computes the required curtain edge **once for the element**, as the covered length `e` measured from the top of the element (for vertical glass: element bottom above the floor plus element height, minus the ray height; clamped to the element). Each member covers the part of that length that falls into its own range: `covered = clamp(e - offset, 0, glass height)`, and its position follows from `covered / glass height` through its own glass calibration.
+>
+> Neutral example: upper row with offset 0 and glass height 1.0 m, lower row with offset 1.1 m (the frame in between counts) and glass height 0.6 m.
+>
+> | Curtain edge `e` | Upper members | Lower members |
+> |---|---|---|
+> | 0.4 m (in the upper row) | 0.4 of 1.0 m covered: position 60 | nothing covered: fully open |
+> | 1.05 m (in the frame) | fully closed | nothing covered: fully open |
+> | 1.4 m (in the lower row) | fully closed | 0.3 of 0.6 m covered: position 50 |
+>
+> If the edge lies in the lower row, the upper members are closed and the lower ones drive to the computed value; if it lies in the upper row, the upper members close partly and the lower ones stay open. The offset is a per-member measurement like the glass height and is configured with it (block H11); a member without an offset has offset 0, which is the side-by-side case.
 
 ---
 
@@ -401,6 +413,8 @@ The trigger has three states. **Active** and **inactive** come from a value of t
 
 ### 10.2 Return after a protection event (D5)
 
+> **Decision 14 — The return to the manual position and the override dam.** The return is a wish of class comfort from the protection layer with the reason `protection_return_manual`. As a comfort wish the manual override dam would hold it back, and that dam has to be armed for the return to happen at all. Decided: the manual override dam lets exactly this wish pass, under four conditions. (a) Only if the override is still armed when the waiting time after the protection event has passed; otherwise there is no return wish and the window is evaluated normally. (b) The person-at-the-window dam still holds the return back. (c) All constraints apply to it: lockout protection, the ventilation floor, frost protection, the direction of the wish. (d) The waiting time of this section has passed first; the end time of the event is persisted for that (section 11). Every other gate rule applies as to any comfort wish: maintenance lock, operating mode, pause, movement in flight, motor protection, backoff, staggering, dry-run. *Rejected:* a fourth wish class for the return. It would widen every table of constraints and gate rules for the sake of a single case.
+
 When an event starts, the window remembers its position and the owner of that position. When the event has ended and its waiting time has passed without a new activation, the window is recomputed. Only if the remembered owner was `user` **and** the manual override dam is still armed (decision 4), the remembered position is restored one to one; a remembered position that is unknown is skipped. Fire never returns automatically.
 
 ### 10.3 Watchdog (D9)
@@ -415,10 +429,11 @@ Locks: a maintenance lock or a pause that lasts longer than seven days is **repo
 
 Persisted per window, versioned, all timestamps timezone-aware (naive ones are rejected at the boundary):
 
-- owner of the position; per member the last own command (target, time, wish class) and the last observation;
+- owner of the position; per member the last own command (target, direction, time, wish class, context ID) and the last observation. The last commanded target per member is what the window-level position of section 9 is judged against, and what lets a reload during a movement continue the same expectation instead of seeing a manual movement or sending the command again;
+- per member the **command backoff as facts**: the number of attempts of the current command and the time of the last attempt. The next retry time is not stored; it is computed from these two facts with the current settings. A reload right after a failed attempt therefore cannot trigger an immediate second command;
 - manual override dam: armed at, end rule with its absolute end if it has one, remembered position;
 - person-at-the-window dam: ends at;
-- per protection event: state, active since, released flag, remembered position and owner;
+- per protection event: state, active since, **ended at**, **released at**, remembered position and owner. The two times are separate fields with one meaning each: "ended at" is when the trigger became inactive, "released at" is when the watchdog released the event (section 10.3) while its trigger was still active. The waiting time of section 10.2 runs from "released at" if it is set, otherwise from "ended at". An active event that is not released has neither. The times are persisted, not a remaining duration or a deadline: the waiting time of section 10.2 is configuration and is applied to the end time whenever it is evaluated, so it survives a restart and follows a changed setting;
 - fire: unacknowledged flag;
 - episodes: as listed in [section 7](#7-episodes);
 - external request: position, reason, expires at;
@@ -493,5 +508,6 @@ Doors kept open, as places in the model and nothing more: covering type (C15); a
 | 11 | Inputs of F2 | Light entities per window; dark = sun elevation below a threshold, or the brightness source |
 | 12 | New windows start in dry-run | Yes |
 | 13 | Frost protection | Limits opening to the frost position; inherited source; waiver until the next morning; movements by hand exempt; optional release by sun, built with C10; preventive only |
+| 14 | Return to the manual position after a protection event | A comfort wish that the manual override dam lets pass, under four conditions; no fourth wish class |
 
 Also worth a look, because they are proposals stated as rules: the position reference flag, the hint event and the reference run as an action of F1 (section 8.4); the default of one hour before a blind protection source or a blind blocking contact is reported (section 10.1); dry-run as the last gate rule with simulated commands (section 2.3); the final layer order of section 2.1, which follows the brief's starting order except for decisions 1 and 2; the order of the gate rules in section 2.3; the latch of the day type (section 6.3); an unavailable blocking contact counts as open (section 2.2, constraint 3); an unavailable window contact sets no ventilation floor (constraint 4); fire needs an acknowledgement before the window returns to normal operation (section 2.4); the staggering gap also applies between the members of one window (section 9); members of a window without position feedback are mapped to open or close at 50 (section 8.1).

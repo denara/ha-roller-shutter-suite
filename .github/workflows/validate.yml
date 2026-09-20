@@ -1,0 +1,73 @@
+# Validation by Home Assistant (hassfest) and by HACS.
+#
+# Rules for every workflow of this repository, because it is public (see
+# docs/dev/contributing.md): read-only permissions, no pull_request_target, no
+# secrets, every action pinned to a full commit SHA, no uploaded raw output.
+name: Validate
+
+on:
+  push:
+  pull_request:
+  schedule:
+    # Both validators follow Home Assistant and HACS as they change, so the
+    # repository is also checked when nobody pushes. Mondays, 04:41 UTC.
+    - cron: "41 4 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  hassfest:
+    # This name is a required status check of the branch protection. A renamed
+    # job silently drops out of the required checks; tests/scripts/test_workflows.py
+    # fails when the name changes.
+    name: hassfest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # home-assistant/actions publishes no usable version tags (the only tag
+      # is 1.0.0 from the early days); its documentation says to use the
+      # branch. Pinned to the commit of `master` of 2026-09-10. The action is
+      # a thin wrapper: it runs the current hassfest container image, which
+      # cannot be pinned through the action.
+      - name: Validate with hassfest
+        uses: home-assistant/actions/hassfest@58bff37c8947f690ace498be413a9b78d6f30f93 # master, 2026-09-10
+
+  hacs:
+    # This name is a required status check of the branch protection. A renamed
+    # job silently drops out of the required checks; tests/scripts/test_workflows.py
+    # fails when the name changes.
+    name: HACS
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      # The action inspects the repository on GitHub through the API with the
+      # default token, read-only. It needs no checkout.
+      #
+      # hacs/action has no current version tags (the newest is 22.5.0 from
+      # 2022); its documentation says to use the branch. Pinned to the commit
+      # of `main` of 2026-06-08. The action runs the container image
+      # `ghcr.io/hacs/action:main`, which cannot be pinned through the action.
+      - name: Validate with HACS
+        uses: hacs/action@1ebf01c408f29afcb6406bd431bc98fd8cbb15aa # main, 2026-06-08
+        with:
+          category: integration
+          # Commenting on the pull request would need write permission.
+          comment: "false"
+          # Exceptions, each for a reason outside the code. Remove an entry
+          # as soon as its reason is gone:
+          # - description: the repository on GitHub has no description yet.
+          #   Remove when the project owner has set one.
+          # - topics: the repository on GitHub has no topics yet. Remove when
+          #   the project owner has set them.
+          ignore: description topics

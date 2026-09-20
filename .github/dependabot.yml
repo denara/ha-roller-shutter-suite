@@ -1,0 +1,16 @@
+# Dependabot keeps the pinned SHAs of the GitHub Actions in the workflows
+# current. Nothing else: Python dependencies are updated deliberately by hand,
+# because the Home Assistant version the tests run against is a decision, not a
+# routine update. See docs/dev/contributing.md.
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    # "/" makes Dependabot look into .github/workflows.
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    # One pull request for all actions instead of one per action.
+    groups:
+      actions:
+        patterns:
+          - "*"

@@ -50,7 +50,7 @@ Run the tests:
 uv run pytest
 ```
 
-The Home Assistant tests do not run on native Windows. [Testing](docs/dev/testing.md) explains the two test folders and the way through WSL.
+The Home Assistant tests do not run on native Windows. [Testing](docs/dev/testing.md) explains the test folders and the way through WSL. [Contributing](docs/dev/contributing.md) lists every check that CI runs, including the guard scripts, and how to run it locally.
 
 Work is planned in blocks: see [`TASKS.md`](TASKS.md) and the [`tasks/`](tasks/) folder.
 
