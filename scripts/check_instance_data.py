@@ -256,6 +256,27 @@ PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
         "e-mail address",
         re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+"),
     ),
+    # A link to one session or conversation of an assistant tool, which some
+    # tools append to a commit message by themselves. It leads to a private
+    # page of whoever worked there. Matched narrowly: the host of a known tool,
+    # then the part of the path under which that tool keeps sessions, shared
+    # conversations included, then the beginning of an identifier. The plain
+    # link to a product (the attribution line of generated commits has one) has
+    # no such path and is not matched, nor is the co-author trailer.
+    (
+        "link to a session of an assistant tool",
+        re.compile(
+            r"(?i)(?<![\w.-])(?:www\.)?(?:"
+            r"claude\.ai/(?:code|chat|share)"
+            r"|chatgpt\.com/(?:c|share)"
+            r"|chat\.openai\.com/(?:c|share)"
+            r"|gemini\.google\.com/(?:app|share)"
+            r"|g\.co/gemini/share"
+            r"|copilot\.microsoft\.com/(?:chats|shares)"
+            r"|github\.com/copilot/(?:c|share)"
+            r")/[\w-]"
+        ),
+    ),
 )
 
 

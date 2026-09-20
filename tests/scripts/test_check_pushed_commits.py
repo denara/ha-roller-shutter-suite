@@ -89,6 +89,28 @@ def test_value_in_a_commit_message_only_is_found(repository: Repository) -> None
     assert PRIVATE_VALUE not in _shown(report)
 
 
+def test_session_link_in_a_commit_message_is_found(repository: Repository) -> None:
+    """Some tools append a link to their session; the usual attribution passes."""
+    attribution = (
+        "\N{ROBOT FACE} Generated with [Claude Code](https://claude.com/claude-code)\n\n"
+        "Co-Authored-By: Claude Fable 5.1 <noreply" + "@" + "anthropic.com>"
+    )
+    session = "https://claude" + ".ai/code/" + "session_0123ABCdef"
+    repository.write("notes.md", "harmless\nmore\n")
+    usual = repository.commit(f"Add more\n\n{attribution}")
+    repository.write("notes.md", "harmless\nmore\nand more\n")
+    linked = repository.commit(f"Add even more\n\n{session}\n\n{attribution}")
+
+    report = _judge(repository, hook_line(linked, _base(repository)))
+
+    assert _shown(report) == (
+        f"commit {linked[:10]}: message:3: looks like: "
+        "link to a session of an assistant tool"
+    )
+    assert usual[:10] not in _shown(report)
+    assert session not in _shown(report)
+
+
 def test_additional_header_of_a_commit_is_judged(repository: Repository) -> None:
     """Whatever else a commit object carries as text is published too."""
     repository.write("notes.md", "harmless\nmore\n")
