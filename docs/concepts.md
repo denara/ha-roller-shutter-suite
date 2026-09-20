@@ -91,4 +91,13 @@ A few things belong to exactly one window and are never taken from a group or th
 
 Home Assistant lets you delete a group even while windows still belong to it. Nothing breaks: from then on, such a window takes its values **from the house**, as if it had no group. In the example, living room and study would lose "shading on" and fall back to the house's "off"; the study's own evening position stays, because it never came from the group. The integration reports the window, so you notice it. To tidy up, open the window's settings and save them: you can choose another group there, or none.
 
-The same happens if the stored settings of a group cannot be read: the group is ignored as a whole, its windows follow the house, and the problem is reported. Other windows are never affected.
+### If a stored setting is faulty
+
+Stored settings can become faulty: a file was edited by hand, a backup from another version was restored, an update changed what a value may be. The integration is built so that such a fault can neither take the protection of your windows away nor move a shutter in a way you did not ask for.
+
+- **Whatever protects or holds a shutter back keeps working.** Fire, storm, frost protection, motor protection, the rule that a shutter stays partly open in front of a tilted window, and everything else that protects people or the hardware or limits a movement never stops because of a faulty setting. The faulty value is skipped and the value of the next level is used: the group's instead of the window's, the house's instead of the group's, and at last the built-in default.
+- **A convenience function that the fault concerns pauses.** For functions that move shutters for your convenience, such as the schedule or shading, the integration does not guess. If the faulty value is the one a window would have used, that function pauses for this window until the setting is repaired. The shutter then simply stays where it is as far as that function is concerned; everything else keeps running.
+- **Only the windows concerned.** A faulty setting of a group concerns the windows of that group that take this setting from the group. A window that has its own valid value for it keeps running, and so do the windows of other groups. A faulty setting of the house concerns every window that takes this setting from the house.
+- **You get a repair notice that names the setting** and the level it is stored on, so you know what to open and save again.
+
+If the settings of a whole level cannot be read at all, the integration cannot know which settings are concerned. It then pauses all convenience functions for the windows of that level, and everything that protects or holds back carries on with the values of the other levels.

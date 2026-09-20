@@ -11,6 +11,7 @@ from ._validation import (
     require_type,
     require_unique,
 )
+from .functions import FaultBehavior, FunctionId
 
 MIN_TOLERANCE: Final = 1
 DEFAULT_TOLERANCE_CALCULATED: Final = 2
@@ -173,8 +174,11 @@ class CapabilityProfile:
 class WindowCapabilities:
     """The capabilities of a window: the lowest common denominator of its members.
 
-    These are the flags the window is operated with. They do not say whether
-    they are confirmed; :class:`WindowCapabilityStates` does.
+    **These booleans cannot tell "missing" from "unknown".** A member about
+    which nothing is known carries no capability flag, so every flag of a
+    window with such a member reads ``False``, also when all other members
+    have the capability. Code that decides anything from a ``False`` must use
+    :class:`WindowCapabilityStates` (``WindowConfig.capability_states``).
     """
 
     supports_open_close: bool
@@ -270,6 +274,12 @@ class WindowConfig:
       accepted at present.
     - ``schedule_profile``: the key under which the schedule's targets are
       looked up; it has one value.
+    - ``disabled_functions``: the functions that are paused for this window
+      because a stored setting of theirs is faulty (the inheritance resolver
+      fills it; it is never stored). The arbiter skips the layers of such a
+      function and says so in the decision. Only a function whose fault
+      behavior is "pause" is accepted: whatever protects or restricts
+      movement can never be switched off by a data fault.
     """
 
     window_id: str
@@ -278,6 +288,7 @@ class WindowConfig:
     morning_condition_source: str | None = None
     shading_temperature_tiers: tuple[TemperatureTier, ...] = ()
     schedule_profile: ScheduleProfile = ScheduleProfile.DEFAULT
+    disabled_functions: frozenset[FunctionId] = frozenset()
 
     def __post_init__(self) -> None:
         """Validate identity, members and the doors kept open."""
@@ -303,10 +314,27 @@ class WindowConfig:
         if len(self.shading_temperature_tiers) > 1:
             raise ValueError("more than one temperature tier is not supported yet")
         require_type(self.schedule_profile, ScheduleProfile, "the schedule profile")
+        given: object = self.disabled_functions
+        if isinstance(given, str):
+            raise TypeError("the disabled functions must be a set of identifiers")
+        object.__setattr__(
+            self, "disabled_functions", frozenset(self.disabled_functions)
+        )
+        for function in self.disabled_functions:
+            require_type(function, FunctionId, "a disabled function")
+            if function.fault_behavior is not FaultBehavior.PAUSE:
+                raise ValueError(
+                    f"the function {function.value!r} falls back on a fault; it "
+                    "can never be switched off"
+                )
 
     @property
     def capabilities(self) -> WindowCapabilities:
-        """Return the lowest common denominator of the members' capabilities."""
+        """Return the lowest common denominator of the members' capability flags.
+
+        A ``False`` can mean "missing" or "unknown"; whoever decides anything
+        from it must read :attr:`capability_states` instead.
+        """
         profiles = [member.capabilities for member in self.members]
         return WindowCapabilities(
             supports_open_close=all(p.supports_open_close for p in profiles),

@@ -1,7 +1,9 @@
 """Capability profile, observation, window configuration and world snapshot."""
 
 import dataclasses
+import re
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -13,6 +15,8 @@ from custom_components.roller_shutter_suite.core.model import (
     CapabilityProfile,
     CapabilityState,
     CoveringType,
+    FaultBehavior,
+    FunctionId,
     MemberConfig,
     MemberObservation,
     MembersAtTargets,
@@ -350,6 +354,21 @@ def test_capability_states_of_a_window_missing_beats_unknown_beats_present(
     assert states.supports_stop is expected
     others = {states.supports_open_close, states.supports_set_position}
     assert CapabilityState.MISSING not in others
+
+
+def test_boolean_capabilities_cannot_tell_missing_from_unknown() -> None:
+    """One never-seen member makes every flag read false; the states say why."""
+    window = _window(
+        members=[
+            MemberConfig(LEFT, _profile()),
+            MemberConfig(RIGHT, _profile(**UNKNOWN_PROFILE)),
+        ]
+    )
+
+    assert window.capabilities == WindowCapabilities(False, False, False, False)
+    assert window.capability_states == WindowCapabilityStates(
+        *[CapabilityState.UNKNOWN] * 4
+    )
 
 
 def test_window_capability_states_validate_their_states() -> None:
@@ -826,3 +845,86 @@ def test_world_snapshot_types_are_checked() -> None:
         _snapshot(state=bad)
     with pytest.raises(TypeError, match="time of a world snapshot"):
         _snapshot(time=bad)
+
+
+# --- Functions ------------------------------------------------------------------------
+
+
+PAUSABLE = [
+    FunctionId.SCHEDULE,
+    FunctionId.SLEEP,
+    FunctionId.REQUEST,
+    FunctionId.PRIVACY,
+    FunctionId.SHADING,
+    FunctionId.SOLAR_HEATING,
+]
+FALLING_BACK = [
+    FunctionId.FIRE,
+    FunctionId.PROTECTION_EVENTS,
+    FunctionId.LOCKOUT,
+    FunctionId.VENTILATION,
+    FunctionId.FROST,
+    FunctionId.MOTOR_PROTECTION,
+    FunctionId.COMMAND_VERIFICATION,
+    FunctionId.MANUAL_OVERRIDE,
+]
+
+
+def test_every_function_has_its_fault_behavior() -> None:
+    """The complete mapping, pinned: moving a function is a deliberate act.
+
+    Only functions that create wishes for convenience pause. Whatever
+    protects or restricts movement falls back; ventilation is one of them.
+    """
+    assert list(FunctionId) == [*PAUSABLE, *FALLING_BACK]
+    assert {function: function.fault_behavior for function in FunctionId} == (
+        dict.fromkeys(PAUSABLE, FaultBehavior.PAUSE)
+        | dict.fromkeys(FALLING_BACK, FaultBehavior.FALL_BACK)
+    )
+    assert FunctionId.VENTILATION.fault_behavior is FaultBehavior.FALL_BACK
+    assert [behavior.value for behavior in FaultBehavior] == ["fall_back", "pause"]
+
+
+def test_list_of_functions_matches_the_documentation() -> None:
+    """``docs/dev/core-model.md`` lists every function with its behavior, and no other."""
+    page = (Path(__file__).parents[2] / "docs" / "dev" / "core-model.md").read_text(
+        encoding="utf-8"
+    )
+    rows = re.findall(r"^\| `([a-z_]+)` \| (fall_back|pause) \|", page, re.MULTILINE)
+
+    assert rows == [
+        (function.value, function.fault_behavior.value) for function in FunctionId
+    ]
+
+
+def test_window_without_a_fault_has_no_disabled_function() -> None:
+    """The default is the empty set, and a set of comfort functions is kept."""
+    assert _window().disabled_functions == frozenset()
+    window = _window(disabled_functions=[FunctionId.SHADING, FunctionId.SCHEDULE])
+    assert window.disabled_functions == {FunctionId.SHADING, FunctionId.SCHEDULE}
+    assert isinstance(window.disabled_functions, frozenset)
+
+
+@pytest.mark.parametrize("function", PAUSABLE)
+def test_every_pausable_function_can_be_disabled(function: FunctionId) -> None:
+    """Functions that create wishes for convenience."""
+    assert _window(disabled_functions={function}).disabled_functions == {function}
+
+
+@pytest.mark.parametrize("function", FALLING_BACK)
+def test_function_that_falls_back_can_never_be_disabled(function: FunctionId) -> None:
+    """Whatever protects or restricts movement is refused, alone or among others."""
+    with pytest.raises(ValueError, match="can never be switched off"):
+        _window(disabled_functions={function})
+    with pytest.raises(ValueError, match=repr(function.value)):
+        _window(disabled_functions={FunctionId.SHADING, function})
+
+
+@pytest.mark.parametrize(
+    ("given", "message"),
+    [({"shading"}, "a disabled function"), ("shading", "a set of identifiers")],
+)
+def test_free_string_is_no_function(given: Any, message: str) -> None:
+    """Only members of the closed list count."""
+    with pytest.raises(TypeError, match=message):
+        _window(disabled_functions=given)

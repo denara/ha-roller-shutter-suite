@@ -1,6 +1,7 @@
 """Partial settings, the resolver global → group → window, provenance, the mask."""
 
 import dataclasses
+from collections.abc import Mapping
 from datetime import time, timedelta
 from enum import StrEnum, unique
 from typing import Any
@@ -11,6 +12,8 @@ from custom_components.roller_shutter_suite.core.model import (
     CapabilityProfile,
     CapabilityState,
     CoveringType,
+    FaultBehavior,
+    FunctionId,
     JsonValue,
     MemberConfig,
     ScheduleProfile,
@@ -29,25 +32,31 @@ from custom_components.roller_shutter_suite.core.model._data import (
 from custom_components.roller_shutter_suite.core.settings import (
     INHERIT,
     STORED_NONE,
+    WINDOW_FIELDS_THAT_ARE_NO_SETTINGS,
     WINDOW_IDENTITY_FIELDS,
     WINDOW_SETTINGS,
     Capability,
     CapabilityRequirement,
-    GroupFallback,
-    GroupFallbackReason,
+    FaultAction,
     GroupLevel,
+    GroupMissing,
     Inherit,
     Level,
     MissingCapability,
     PartialSettings,
+    ReportedFault,
     ResolvedSettings,
     ResolvedValue,
     SettingDefinition,
-    SettingError,
     SettingFault,
     SettingKind,
     SettingProblem,
+    SettingRules,
     SettingsRegistry,
+    as_day_of_year,
+    as_duration,
+    as_time,
+    functions_with_settings,
     resolve_settings,
     resolve_window,
     settings_from_stored,
@@ -58,6 +67,8 @@ RIGHT = "cover.example_right"
 GROUP_ID = "group_example_south"
 
 OWN_OFFSET = 30
+DEFAULT_FROST_POSITION = 90
+DEFAULT_VENTILATION_POSITION = 30
 DEFAULT_SHADING_POSITION = 40
 DEFAULT_GLASS_HEIGHT = 100
 OWN_GLASS_HEIGHT = 140
@@ -79,32 +90,44 @@ class ExampleMode(StrEnum):
 REGISTRY = SettingsRegistry(
     (
         SettingDefinition(
-            key="enabled", kind=SettingKind.BOOLEAN, default=True, parse=as_bool
+            key="enabled",
+            kind=SettingKind.BOOLEAN,
+            function=FunctionId.SCHEDULE,
+            default=True,
+            parse=as_bool,
         ),
         SettingDefinition(
-            key="offset", kind=SettingKind.NUMBER, default=5, parse=as_int
+            key="offset",
+            kind=SettingKind.NUMBER,
+            function=FunctionId.SCHEDULE,
+            default=5,
+            parse=as_int,
         ),
         SettingDefinition(
             key="mode",
             kind=SettingKind.ENUMERATION,
+            function=FunctionId.SHADING,
             default=ExampleMode.PLAIN,
             parse=as_enum(ExampleMode),
         ),
         SettingDefinition[str | None](
             key="source",
             kind=SettingKind.OPTIONAL_REFERENCE,
+            function=FunctionId.FROST,
             default=None,
             parse=as_str,
         ),
         SettingDefinition[tuple[str, ...]](
             key="lights",
             kind=SettingKind.LIST,
+            function=FunctionId.PRIVACY,
             default=("light.example_default",),
             parse=tuple_of(as_str),
         ),
         SettingDefinition(
             key="hold_to_move",
             kind=SettingKind.BOOLEAN,
+            function=FunctionId.REQUEST,
             default=False,
             parse=as_bool,
             requires=CapabilityRequirement(Capability.SUPPORTS_STOP, False),
@@ -112,13 +135,29 @@ REGISTRY = SettingsRegistry(
         SettingDefinition[int | None](
             key="shading_position",
             kind=SettingKind.NUMBER,
+            function=FunctionId.SHADING,
             default=DEFAULT_SHADING_POSITION,
             parse=as_int,
             requires=CapabilityRequirement(Capability.SUPPORTS_SET_POSITION, None),
         ),
         SettingDefinition(
+            key="frost_position",
+            kind=SettingKind.NUMBER,
+            function=FunctionId.FROST,
+            default=DEFAULT_FROST_POSITION,
+            parse=as_int,
+        ),
+        SettingDefinition(
+            key="ventilation_position",
+            kind=SettingKind.NUMBER,
+            function=FunctionId.VENTILATION,
+            default=DEFAULT_VENTILATION_POSITION,
+            parse=as_int,
+        ),
+        SettingDefinition(
             key="glass_height",
             kind=SettingKind.NUMBER,
+            function=FunctionId.SHADING,
             default=DEFAULT_GLASS_HEIGHT,
             parse=as_int,
             inheritable=False,
@@ -143,16 +182,50 @@ FULL = (_member(LEFT),)
 RIGHT_CANNOT_STOP = (_member(LEFT), _member(RIGHT, supports_stop=False))
 
 
-def _resolve(
+MAX_POSITION = 100
+
+
+def _check_value(key: str, value: object) -> None:
+    """Refuse a number outside 0 to 100, as a window configuration would."""
+    if (
+        key in {"offset", "shading_position", "frost_position", "ventilation_position"}
+        and isinstance(value, int)
+        and not 0 <= value <= MAX_POSITION
+    ):
+        raise ValueError(f"{key} must be within 0 and 100")
+
+
+def _build(
+    effective: Mapping[str, Any], disabled: frozenset[FunctionId]
+) -> dict[str, Any]:
+    """Refuse two combinations: rules that span two settings.
+
+    A function that pauses: the mode "own" needs an offset. One that falls
+    back: a frost position of
+    zero needs a frost source.
+    """
+    if effective.get("mode") is ExampleMode.OWN and effective.get("offset") == 0:
+        raise ValueError("the mode 'own' needs an offset")
+    if effective.get("frost_position") == 0 and effective.get("source") is None:
+        raise ValueError("a frost position of zero needs a frost source")
+    return dict(effective) | {"disabled_functions": disabled}
+
+
+RULES = SettingRules(_check_value, _build)
+
+
+def _resolve(  # noqa: PLR0913 - one argument per input of the resolver
     *,
     house: PartialSettings | None = None,
     group: GroupLevel | None = None,
     window: PartialSettings | None = None,
     members: tuple[MemberConfig, ...] = FULL,
     registry: SettingsRegistry = REGISTRY,
+    rules: SettingRules | None = RULES,
 ) -> ResolvedSettings:
     return resolve_settings(
         registry,
+        rules=rules,
         capabilities=WindowConfig("window_example", members).capability_states,
         members=members,
         global_settings=house or PartialSettings(),
@@ -225,8 +298,8 @@ def test_strongest_level_that_sets_a_value_wins(
         window=_level(key, Level.WINDOW, window_sets),
     )
 
-    assert resolved.valid
-    assert resolved.group_fallback is None
+    assert resolved.faults == ()
+    assert resolved.group_missing is None
     assert resolved.values[key] == ResolvedValue(
         key=key,
         value=VALUES[key][winner],
@@ -255,8 +328,8 @@ def test_window_without_a_group_inherits_from_the_house_directly(
         window=_level(key, Level.WINDOW, window_sets),
     )
 
-    assert resolved.valid
-    assert resolved.group_fallback is None
+    assert resolved.faults == ()
+    assert resolved.group_missing is None
     assert resolved.values[key].value == VALUES[key][winner]
     assert resolved.values[key].level is winner
     assert resolved.values[key].group_id is None
@@ -307,7 +380,11 @@ def test_falsy_built_in_default_is_a_value() -> None:
     registry = SettingsRegistry(
         (
             SettingDefinition(
-                key="offset", kind=SettingKind.NUMBER, default=0, parse=as_int
+                key="offset",
+                kind=SettingKind.NUMBER,
+                function=FunctionId.SCHEDULE,
+                default=0,
+                parse=as_int,
             ),
         )
     )
@@ -423,11 +500,16 @@ def test_partial_settings_refuse_what_makes_no_sense(
         lambda: SettingFault("", "broken"),
         lambda: SettingFault("offset", ""),
         lambda: SettingDefinition(
-            key="", kind=SettingKind.NUMBER, default=0, parse=as_int
+            key="",
+            kind=SettingKind.NUMBER,
+            function=FunctionId.SCHEDULE,
+            default=0,
+            parse=as_int,
         ),
         lambda: SettingDefinition(
             key="offset",
             kind="number",  # type: ignore[arg-type]
+            function=FunctionId.SCHEDULE,
             default=0,
             parse=as_int,
         ),
@@ -435,6 +517,7 @@ def test_partial_settings_refuse_what_makes_no_sense(
         lambda: SettingDefinition(
             key="offset",
             kind=SettingKind.NUMBER,
+            function=FunctionId.SCHEDULE,
             default=0,
             parse=as_int,
             inheritable=1,  # type: ignore[arg-type]
@@ -442,6 +525,7 @@ def test_partial_settings_refuse_what_makes_no_sense(
         lambda: SettingDefinition(
             key="offset",
             kind=SettingKind.NUMBER,
+            function=FunctionId.SCHEDULE,
             default=0,
             parse=as_int,
             requires=Capability.SUPPORTS_STOP,  # type: ignore[arg-type]
@@ -451,10 +535,18 @@ def test_partial_settings_refuse_what_makes_no_sense(
         lambda: SettingsRegistry(
             (
                 SettingDefinition(
-                    key="offset", kind=SettingKind.NUMBER, default=0, parse=as_int
+                    key="offset",
+                    kind=SettingKind.NUMBER,
+                    function=FunctionId.SCHEDULE,
+                    default=0,
+                    parse=as_int,
                 ),
                 SettingDefinition(
-                    key="offset", kind=SettingKind.NUMBER, default=1, parse=as_int
+                    key="offset",
+                    kind=SettingKind.NUMBER,
+                    function=FunctionId.SCHEDULE,
+                    default=1,
+                    parse=as_int,
                 ),
             )
         ),
@@ -482,13 +574,14 @@ def test_descriptions_validate_themselves(build: Any) -> None:
         ({"mode": ""}, {}),
         ({"source": "sensor.example"}, {"source": "sensor.example"}),
         ({"mode": "south"}, {"mode": ExampleMode.SOUTH}),
-        ({"offset": 7, "covers": [LEFT], "group_id": GROUP_ID}, {"offset": 7}),
+        ({"source": "   "}, {}),
+        ({"source": "\t\n"}, {}),
     ],
 )
 def test_absent_key_means_inherit_and_falsy_values_are_set(
     stored: dict[str, JsonValue], expected: dict[str, object]
 ) -> None:
-    """Only an absent key and an empty string are "inherit"; foreign keys are left."""
+    """Only an absent key and empty or blank text are "inherit"."""
     partial = settings_from_stored(stored, REGISTRY)
 
     assert partial == PartialSettings(expected)
@@ -539,7 +632,7 @@ def test_window_says_none_although_its_group_names_a_source() -> None:
     )
 
     assert window == PartialSettings({"source": None})
-    assert resolved.valid
+    assert resolved.faults == ()
     assert resolved.values["source"] == ResolvedValue(
         key="source", value=None, effective=None, level=Level.WINDOW
     )
@@ -559,7 +652,7 @@ def test_group_says_none_and_a_window_can_still_name_a_source() -> None:
         window=settings_from_stored({"source": "sensor.example_window"}, REGISTRY),
     )
 
-    assert inherited.group_fallback is None
+    assert inherited.group_missing is None
     assert inherited.values["source"].value is None
     assert inherited.values["source"].level is Level.GROUP
     assert inherited.values["source"].group_id == GROUP_ID
@@ -580,7 +673,7 @@ def test_marker_for_none_on_another_kind_of_setting_is_a_fault(key: str) -> None
 
     resolved = _resolve(window=partial)
 
-    assert [(error.key, error.level, error.problem) for error in resolved.errors] == [
+    assert [(fault.key, fault.level, fault.problem) for fault in resolved.faults] == [
         (key, Level.WINDOW, SettingProblem.NONE_NOT_ALLOWED)
     ]
 
@@ -631,33 +724,131 @@ def test_marker_never_reaches_the_window_configuration_as_a_string() -> None:
     ]
 
 
-def _as_day_of_year(value: JsonValue) -> tuple[int, int]:
-    month, day = as_str(value).split("-")
-    return int(month), int(day)
-
-
 SCHEDULE_KINDS = SettingsRegistry(
     (
         SettingDefinition(
             key="morning_time",
             kind=SettingKind.TIME,
+            function=FunctionId.SCHEDULE,
             default=time(7, 0),
-            parse=lambda value: time.fromisoformat(as_str(value)),
+            parse=as_time,
         ),
         SettingDefinition(
             key="delay",
             kind=SettingKind.DURATION,
+            function=FunctionId.SCHEDULE,
             default=timedelta(0),
-            parse=lambda value: timedelta(seconds=as_int(value)),
+            parse=as_duration,
         ),
         SettingDefinition(
             key="summer_begins",
             kind=SettingKind.DAY_OF_YEAR,
+            function=FunctionId.SCHEDULE,
             default=(5, 1),
-            parse=_as_day_of_year,
+            parse=as_day_of_year,
         ),
     )
 )
+
+
+@pytest.mark.parametrize(
+    ("stored", "expected"),
+    [
+        ("06:30", time(6, 30)),
+        ("00:00", time(0, 0)),
+        ("23:59:59", time(23, 59, 59)),
+        ("06:30:15", time(6, 30, 15)),
+    ],
+)
+def test_time_is_read_in_its_two_spellings(stored: str, expected: time) -> None:
+    """Hours and minutes, with or without seconds, on the 24-hour clock."""
+    assert as_time(stored) == expected
+    assert as_time(stored).tzinfo is None
+
+
+@pytest.mark.parametrize(
+    "stored",
+    [
+        "6:30",
+        "24:00",
+        "06:60",
+        "06:30:60",
+        "0630",
+        "T06:30",
+        "06:30+01:00",
+        "06:30Z",
+        "06:30:15.5",
+        "06:30:15,5",
+        " 06:30",
+        "06:30 ",
+        "06:30\n",
+        "06",
+        "6 pm",
+        630,
+        6.5,
+        True,
+        ["06:30"],
+    ],
+)
+def test_time_in_any_other_spelling_is_refused(stored: JsonValue) -> None:
+    """No offset, no compact form, no fraction, nothing around it."""
+    with pytest.raises(ValueError, match="expected"):
+        as_time(stored)
+
+
+@pytest.mark.parametrize(
+    ("stored", "expected"),
+    [(0, timedelta(0)), (900, timedelta(minutes=15)), (86400, timedelta(days=1))],
+)
+def test_duration_is_a_whole_number_of_seconds(
+    stored: int, expected: timedelta
+) -> None:
+    """Zero is a duration."""
+    assert as_duration(stored) == expected
+
+
+@pytest.mark.parametrize("stored", [-1, 1.5, 900.0, True, False, "900", "00:15:00"])
+def test_duration_in_any_other_form_is_refused(stored: JsonValue) -> None:
+    """No negative number, no fraction, no boolean, no text."""
+    with pytest.raises(ValueError, match="expected"):
+        as_duration(stored)
+
+
+@pytest.mark.parametrize(
+    ("stored", "expected"),
+    [("05-01", (5, 1)), ("02-28", (2, 28)), ("12-31", (12, 31)), ("01-01", (1, 1))],
+)
+def test_day_of_year_is_month_and_day(stored: str, expected: tuple[int, int]) -> None:
+    """The result is (month, day)."""
+    assert as_day_of_year(stored) == expected
+
+
+@pytest.mark.parametrize(
+    "stored",
+    [
+        "02-29",
+        "02-30",
+        "04-31",
+        "13-01",
+        "00-10",
+        "05-00",
+        "5-1",
+        "05-1",
+        "0501",
+        "05/01",
+        "2026-05-01",
+        " 05-01",
+        "05-01\n",
+        501,
+        True,
+    ],
+)
+def test_day_that_does_not_exist_every_year_or_is_spelled_otherwise_is_refused(
+    stored: JsonValue,
+) -> None:
+    """The twenty-ninth of February is refused on purpose."""
+    with pytest.raises(ValueError, match="expected"):
+        as_day_of_year(stored)
 
 
 def test_time_duration_and_day_of_year_are_read_in_their_stored_forms() -> None:
@@ -703,140 +894,567 @@ def test_kinds_are_the_documented_ones() -> None:
     ]
 
 
-def test_only_the_optional_reference_of_the_window_accepts_the_marker() -> None:
-    """The kinds of the window's settings are declared in the registry."""
+def test_only_the_optional_references_of_the_window_accept_the_marker() -> None:
+    """Whatever the registry holds: the kind alone decides about the marker."""
+    for definition in WINDOW_SETTINGS.definitions:
+        partial = settings_from_stored({definition.key: STORED_NONE}, WINDOW_SETTINGS)
+        if definition.kind is SettingKind.OPTIONAL_REFERENCE:
+            assert partial == PartialSettings({definition.key: None})
+        else:
+            assert [(fault.key, fault.problem) for fault in partial.faults] == [
+                (definition.key, SettingProblem.NONE_NOT_ALLOWED)
+            ]
     kinds = {
         definition.key: definition.kind for definition in WINDOW_SETTINGS.definitions
     }
+    assert kinds["morning_condition_source"] is SettingKind.OPTIONAL_REFERENCE
+    assert kinds["schedule_profile"] is SettingKind.ENUMERATION
 
-    assert kinds == {
-        "covering_type": SettingKind.ENUMERATION,
-        "morning_condition_source": SettingKind.OPTIONAL_REFERENCE,
-        "shading_temperature_tiers": SettingKind.LIST,
-        "schedule_profile": SettingKind.ENUMERATION,
-    }
-    partial = settings_from_stored(
-        {"schedule_profile": STORED_NONE, "covering_type": STORED_NONE},
-        WINDOW_SETTINGS,
+
+# --- Faults: fall back or pause, by the fault behavior of the function ------------------
+
+# What the three levels store when nothing is wrong. "offset" belongs to the
+# schedule, which pauses on a fault; the two positions belong to functions that
+# fall back.
+SOUND: dict[Level, dict[str, JsonValue]] = {
+    Level.GLOBAL: {
+        "offset": 10,
+        "frost_position": 80,
+        "ventilation_position": 20,
+        "lights": [],
+    },
+    Level.GROUP: {"offset": 60, "frost_position": 85, "ventilation_position": 25},
+    Level.WINDOW: {},
+}
+LEVELS = [Level.GLOBAL, Level.GROUP, Level.WINDOW]
+# The level whose value applies when the given level is unreadable as a whole.
+NEXT_SOUND_LEVEL = {
+    Level.WINDOW: Level.GROUP,
+    Level.GROUP: Level.GLOBAL,
+    Level.GLOBAL: Level.GROUP,
+}
+# The level that supplies the value when the faulty value is passed by.
+FURTHER_OUT = {
+    Level.WINDOW: Level.GROUP,
+    Level.GROUP: Level.GLOBAL,
+    Level.GLOBAL: Level.BUILT_IN,
+}
+BUILT_IN_DEFAULTS: dict[str, JsonValue] = {
+    "offset": 5,
+    "frost_position": DEFAULT_FROST_POSITION,
+    "ventilation_position": DEFAULT_VENTILATION_POSITION,
+}
+# (the faulty stored value, the problem)
+FAULTY_VALUES = [
+    pytest.param("many", SettingProblem.UNREADABLE, id="unreadable"),
+    pytest.param(None, SettingProblem.UNREADABLE, id="null"),
+    pytest.param(True, SettingProblem.UNREADABLE, id="wrong-type"),
+    pytest.param(
+        STORED_NONE, SettingProblem.NONE_NOT_ALLOWED, id="marker-on-wrong-kind"
+    ),
+    pytest.param(101, SettingProblem.INVALID, id="refused-by-the-rules"),
+]
+
+
+def _stored(data: object) -> PartialSettings:
+    return settings_from_stored(data, REGISTRY)
+
+
+def _reached(level: Level, key: str, faulty: JsonValue) -> dict[Level, Any]:
+    """Store a faulty value that no closer level covers with a sound one."""
+    stored: dict[Level, Any] = SOUND | {level: SOUND[level] | {key: faulty}}
+    for closer in LEVELS[LEVELS.index(level) + 1 :]:
+        stored[closer] = {
+            name: value for name, value in SOUND[closer].items() if name != key
+        }
+    return stored
+
+
+def _expected(level: Level, key: str) -> JsonValue:
+    supplier = FURTHER_OUT[level]
+    if supplier is Level.BUILT_IN:
+        return BUILT_IN_DEFAULTS[key]
+    return SOUND[supplier][key]
+
+
+def _resolve_stored(stored: dict[Level, Any]) -> ResolvedSettings:
+    return _resolve(
+        house=_stored(stored[Level.GLOBAL]),
+        group=GroupLevel(GROUP_ID, _stored(stored[Level.GROUP])),
+        window=_stored(stored[Level.WINDOW]),
     )
-    assert sorted(fault.key for fault in partial.faults) == [
-        "covering_type",
-        "schedule_profile",
-    ]
 
 
-# --- Validation errors name the field and the level --------------------------------
-
-
-@pytest.mark.parametrize("level", [Level.GLOBAL, Level.WINDOW])
-def test_unreadable_value_of_house_or_window_is_an_error_of_that_level(
-    level: Level,
+# A setting of frost protection, which protects, and one of ventilation, a
+# comfort feature that restricts movement: both fall back, neither is paused.
+@pytest.mark.parametrize("key", ["frost_position", "ventilation_position"])
+@pytest.mark.parametrize("level", LEVELS)
+@pytest.mark.parametrize(("faulty", "problem"), FAULTY_VALUES)
+def test_faulty_setting_of_a_function_that_falls_back_takes_the_next_level(
+    key: str, level: Level, faulty: JsonValue, problem: SettingProblem
 ) -> None:
-    """The error names the key and the level whose stored data is broken."""
-    broken = settings_from_stored({"offset": "many"}, REGISTRY)
+    """Nothing is paused; the result says which level supplied the value."""
+    resolved = _resolve_stored(_reached(level, key, faulty))
 
-    resolved = _resolve(
-        house=broken if level is Level.GLOBAL else None,
-        window=broken if level is Level.WINDOW else None,
-    )
-
-    assert not resolved.valid
-    assert resolved.errors == (
-        SettingError(
-            "offset",
+    assert resolved.faults == (
+        ReportedFault(
+            key,
             level,
-            SettingProblem.UNREADABLE,
-            "expected an integer",
+            problem,
+            resolved.faults[0].detail,
+            FaultAction.FELL_BACK,
+            (),
+            GROUP_ID if level is Level.GROUP else None,
         ),
     )
-    assert resolved.values["offset"].level is Level.BUILT_IN
+    assert resolved.disabled_functions == frozenset()
+    item = resolved.values[key]
+    assert item.level is FURTHER_OUT[level]
+    assert item.value == _expected(level, key)
+    assert resolved.values["offset"].value == SOUND[Level.GROUP]["offset"]
 
 
-@pytest.mark.parametrize(
-    ("level", "group_id"), [(Level.GLOBAL, None), (Level.GROUP, GROUP_ID)]
-)
-def test_setting_that_cannot_be_inherited_is_refused_above_the_window(
-    level: Level, group_id: str | None
+@pytest.mark.parametrize("level", LEVELS)
+@pytest.mark.parametrize(("faulty", "problem"), FAULTY_VALUES)
+def test_faulty_setting_of_a_function_that_pauses_pauses_it_for_the_window(
+    level: Level, faulty: JsonValue, problem: SettingProblem
 ) -> None:
-    """A measurement of a window is read from the window alone."""
-    above = PartialSettings({"glass_height": OWN_GLASS_HEIGHT})
+    """The function pauses for the window; the other functions are untouched."""
+    resolved = _resolve_stored(_reached(level, "offset", faulty))
 
-    resolved = _resolve(
-        house=above if level is Level.GLOBAL else None,
-        group=GroupLevel(GROUP_ID, above) if level is Level.GROUP else None,
+    assert resolved.faults == (
+        ReportedFault(
+            "offset",
+            level,
+            problem,
+            resolved.faults[0].detail,
+            FaultAction.FUNCTIONS_DISABLED,
+            (FunctionId.SCHEDULE,),
+            GROUP_ID if level is Level.GROUP else None,
+        ),
+    )
+    assert resolved.disabled_functions == {FunctionId.SCHEDULE}
+    assert resolved.faults_of(FunctionId.SCHEDULE) == resolved.faults
+    assert resolved.faults_of(FunctionId.SHADING) == ()
+    assert resolved.values["offset"].value == _expected(level, "offset")
+    assert resolved.values["offset"].level is FURTHER_OUT[level]
+    assert (
+        resolved.values["frost_position"].value == SOUND[Level.GROUP]["frost_position"]
+    )
+    assert resolved.values["lights"].level is Level.GLOBAL
+
+
+@pytest.mark.parametrize("key", ["offset", "frost_position", "ventilation_position"])
+@pytest.mark.parametrize("level", [Level.GLOBAL, Level.GROUP])
+def test_fault_behind_a_sound_value_of_a_closer_level_has_no_effect(
+    level: Level, key: str
+) -> None:
+    """The window sets its own sound value: reported for the level, nothing paused."""
+    stored = SOUND | {level: SOUND[level] | {key: "many"}, Level.WINDOW: {key: 7}}
+
+    resolved = _resolve_stored(stored)
+
+    assert [
+        (fault.key, fault.level, fault.problem, fault.action, fault.disabled_functions)
+        for fault in resolved.faults
+    ] == [(key, level, SettingProblem.UNREADABLE, FaultAction.NO_EFFECT, ())]
+    assert resolved.disabled_functions == frozenset()
+    assert resolved.values[key].level is Level.WINDOW
+
+
+def test_setting_that_falls_back_and_is_faulty_on_every_level_gets_its_default() -> (
+    None
+):
+    """Window, group and house are faulty: the built-in default is the last resort."""
+    resolved = _resolve_stored(
+        {
+            Level.GLOBAL: {"frost_position": "low"},
+            Level.GROUP: {"frost_position": 101},
+            Level.WINDOW: {"frost_position": None},
+        }
+    )
+
+    assert [(fault.level, fault.action) for fault in resolved.faults] == [
+        (Level.WINDOW, FaultAction.FELL_BACK),
+        (Level.GROUP, FaultAction.FELL_BACK),
+        (Level.GLOBAL, FaultAction.FELL_BACK),
+    ]
+    assert resolved.values["frost_position"].value == DEFAULT_FROST_POSITION
+    assert resolved.values["frost_position"].level is Level.BUILT_IN
+    assert resolved.disabled_functions == frozenset()
+
+
+@pytest.mark.parametrize("level", [Level.GLOBAL, Level.GROUP])
+def test_setting_that_cannot_be_inherited_is_a_fault_above_the_window(
+    level: Level,
+) -> None:
+    """The glass height belongs to shading, a function that pauses."""
+    resolved = _resolve_stored(
+        SOUND | {level: SOUND[level] | {"glass_height": OWN_GLASS_HEIGHT}}
     )
 
     assert [
-        (error.key, error.level, error.problem, error.group_id)
-        for error in resolved.errors
-    ] == [("glass_height", level, SettingProblem.NOT_INHERITABLE, group_id)]
+        (fault.key, fault.level, fault.problem, fault.disabled_functions)
+        for fault in resolved.faults
+    ] == [
+        ("glass_height", level, SettingProblem.NOT_INHERITABLE, (FunctionId.SHADING,))
+    ]
     assert resolved.values["glass_height"].value == DEFAULT_GLASS_HEIGHT
     assert resolved.values["glass_height"].level is Level.BUILT_IN
 
 
 def test_setting_that_cannot_be_inherited_is_set_by_the_window() -> None:
-    """The window's own value applies, with the usual provenance."""
+    """On the window it is no fault: the own value applies."""
     resolved = _resolve(window=PartialSettings({"glass_height": OWN_GLASS_HEIGHT}))
 
-    assert resolved.valid
+    assert resolved.faults == ()
     assert resolved.values["glass_height"].value == OWN_GLASS_HEIGHT
     assert resolved.values["glass_height"].level is Level.WINDOW
 
 
-def test_key_the_registry_does_not_know_is_an_error_of_its_level() -> None:
-    """Partial settings built in code cannot smuggle in a setting nobody described."""
-    resolved = _resolve(group=GroupLevel(GROUP_ID, PartialSettings({"offse": 7})))
+@pytest.mark.parametrize("level", LEVELS)
+def test_unknown_key_is_reported_and_switches_nothing_off(level: Level) -> None:
+    """A newer version may have written it; a misspelling is noticed all the same."""
+    resolved = _resolve_stored(SOUND | {level: SOUND[level] | {"ofset": 3}})
 
     assert [
-        (error.key, error.level, error.problem, error.group_id)
-        for error in resolved.errors
-    ] == [("offse", Level.GROUP, SettingProblem.UNKNOWN_SETTING, GROUP_ID)]
-    assert "offse" not in resolved.values
+        (fault.key, fault.level, fault.problem, fault.action)
+        for fault in resolved.faults
+    ] == [("ofset", level, SettingProblem.UNKNOWN_SETTING, FaultAction.IGNORED)]
+    assert resolved.disabled_functions == frozenset()
+    assert resolved.values["offset"].value == SOUND[Level.GROUP]["offset"]
+    assert "ofset" not in resolved.values
 
 
-# --- A group reference that leads nowhere -----------------------------------------
+def test_unknown_key_in_stored_data_is_noticed() -> None:
+    """A misspelled key does not silently mean "inherit"; the good keys are read."""
+    partial = _stored({"ofset": 3, "offset": 7, 5: 1, "": 2})
+
+    assert partial.values == {"offset": 7}
+    assert [(fault.key, fault.problem) for fault in partial.faults] == [
+        ("ofset", SettingProblem.UNKNOWN_SETTING),
+        ("settings", SettingProblem.UNKNOWN_SETTING),
+    ]
+
+
+@pytest.mark.parametrize("level", LEVELS)
+@pytest.mark.parametrize("stored", [None, "text", 7, [["offset", 3]], True])
+def test_level_that_is_unreadable_as_a_whole_counts_as_not_present(
+    level: Level, stored: object
+) -> None:
+    """What pauses is paused for the window; what falls back uses the other levels."""
+    resolved = _resolve_stored(SOUND | {level: stored})
+
+    assert _stored(stored) == PartialSettings(unreadable=True)
+    assert [
+        (fault.key, fault.level, fault.problem, fault.action)
+        for fault in resolved.faults
+    ] == [
+        (
+            "settings",
+            level,
+            SettingProblem.LEVEL_UNREADABLE,
+            FaultAction.FUNCTIONS_DISABLED,
+        )
+    ]
+    assert resolved.disabled_functions == set(REGISTRY.pausable_functions)
+    assert resolved.disabled_functions == {
+        FunctionId.SCHEDULE,
+        FunctionId.SHADING,
+        FunctionId.PRIVACY,
+        FunctionId.REQUEST,
+    }
+    frost = resolved.values["frost_position"]
+    assert frost.level is NEXT_SOUND_LEVEL[level]
+    assert frost.value == SOUND[NEXT_SOUND_LEVEL[level]]["frost_position"]
+
+
+def test_partial_settings_built_in_code_are_judged_like_stored_ones() -> None:
+    """An unknown key or a refused value needs no detour through stored data."""
+    resolved = _resolve(
+        house=PartialSettings({"offse": 7}),
+        group=GroupLevel(GROUP_ID, PartialSettings({"frost_position": -1})),
+        window=PartialSettings({"offset": 101, "source": None}),
+    )
+
+    assert [
+        (fault.key, fault.level, fault.problem, fault.action)
+        for fault in resolved.faults
+    ] == [
+        (
+            "offset",
+            Level.WINDOW,
+            SettingProblem.INVALID,
+            FaultAction.FUNCTIONS_DISABLED,
+        ),
+        ("frost_position", Level.GROUP, SettingProblem.INVALID, FaultAction.FELL_BACK),
+        ("offse", Level.GLOBAL, SettingProblem.UNKNOWN_SETTING, FaultAction.IGNORED),
+    ]
+    assert resolved.values["source"].level is Level.WINDOW
+
+
+def test_unreadable_settings_set_nothing() -> None:
+    """The flag excludes values and faults."""
+    with pytest.raises(ValueError, match="set nothing"):
+        PartialSettings({"offset": 1}, unreadable=True)
+    with pytest.raises(TypeError):
+        PartialSettings(unreadable=1)  # type: ignore[arg-type]
+
+
+def test_without_rules_no_value_is_refused() -> None:
+    """The resolver has no value rules of its own."""
+    resolved = _resolve(window=PartialSettings({"offset": 101}), rules=None)
+
+    assert resolved.faults == ()
+    assert resolved.values["offset"].value == MAX_POSITION + 1
+
+
+def test_masked_own_value_is_validated_all_the_same() -> None:
+    """A value the rules refuse is a fault of the window, masked or not."""
+    resolved = _resolve(
+        window=PartialSettings({"shading_position": 150}),
+        members=(_member(LEFT, supports_set_position=False),),
+    )
+
+    assert [
+        (fault.key, fault.level, fault.problem, fault.disabled_functions)
+        for fault in resolved.faults
+    ] == [
+        (
+            "shading_position",
+            Level.WINDOW,
+            SettingProblem.INVALID,
+            (FunctionId.SHADING,),
+        )
+    ]
+    assert resolved.masked_own_values == ()
+
+
+# --- A fault reaches exactly the windows for which it would have been effective -------
+
+NORTH_ID = "group_example_north"
+
+
+def _four_windows(
+    *, house: object, south: object, north: object
+) -> dict[str, ResolvedSettings]:
+    """Resolve two windows of the group south, one of north, one without a group.
+
+    The second window of south sets its own sound mode and offset.
+    """
+    groups = {GROUP_ID: _stored(south), NORTH_ID: _stored(north)}
+    windows: dict[str, tuple[str | None, dict[str, JsonValue]]] = {
+        "south_inheriting": (GROUP_ID, {}),
+        "south_overriding": (GROUP_ID, {"mode": "own", "offset": 5}),
+        "north": (NORTH_ID, {}),
+        "alone": (None, {}),
+    }
+    return {
+        name: _resolve(
+            house=_stored(house),
+            group=None if group_id is None else GroupLevel(group_id, groups[group_id]),
+            window=_stored(own),
+        )
+        for name, (group_id, own) in windows.items()
+    }
+
+
+def _paused(results: dict[str, ResolvedSettings]) -> dict[str, set[FunctionId]]:
+    return {name: set(result.disabled_functions) for name, result in results.items()}
+
+
+def test_fault_of_a_group_pauses_the_function_for_windows_that_inherit_the_key() -> (
+    None
+):
+    """The window that overrides the key keeps running; the fault is reported anyway."""
+    results = _four_windows(
+        house={"offset": 10}, south={"mode": "sideways"}, north={"mode": "house"}
+    )
+
+    assert _paused(results) == {
+        "south_inheriting": {FunctionId.SHADING},
+        "south_overriding": set(),
+        "north": set(),
+        "alone": set(),
+    }
+    assert [
+        (fault.key, fault.level, fault.group_id, fault.action)
+        for fault in results["south_overriding"].faults
+    ] == [("mode", Level.GROUP, GROUP_ID, FaultAction.NO_EFFECT)]
+    assert results["south_overriding"].values["mode"].value is ExampleMode.OWN
+    assert [fault.action for fault in results["south_inheriting"].faults] == [
+        FaultAction.FUNCTIONS_DISABLED
+    ]
+    assert results["north"].faults == ()
+    assert results["alone"].faults == ()
+
+
+def test_fault_of_the_house_pauses_the_function_for_windows_that_inherit_the_key() -> (
+    None
+):
+    """A window or a group with a sound value of its own is not reached."""
+    results = _four_windows(
+        house={"offset": "many"}, south={"mode": "south"}, north={"offset": 60}
+    )
+
+    assert _paused(results) == {
+        "south_inheriting": {FunctionId.SCHEDULE},
+        "south_overriding": set(),
+        "north": set(),
+        "alone": {FunctionId.SCHEDULE},
+    }
+    for name, result in results.items():
+        assert [(fault.key, fault.level) for fault in result.faults] == [
+            ("offset", Level.GLOBAL)
+        ], name
+    assert results["south_overriding"].faults[0].action is FaultAction.NO_EFFECT
+    assert results["north"].faults[0].action is FaultAction.NO_EFFECT
+    assert results["north"].values["offset"].level is Level.GROUP
+
+
+def test_group_that_is_unreadable_as_a_whole_pauses_every_pausable_function() -> None:
+    """Also for the window that overrides some keys; what falls back takes the house's."""
+    results = _four_windows(
+        house={"frost_position": 80}, south="not a mapping", north={"mode": "house"}
+    )
+
+    everything = set(REGISTRY.pausable_functions)
+    assert _paused(results) == {
+        "south_inheriting": everything,
+        "south_overriding": everything,
+        "north": set(),
+        "alone": set(),
+    }
+    for name in ("south_inheriting", "south_overriding"):
+        assert [
+            (fault.key, fault.level, fault.group_id, fault.problem)
+            for fault in results[name].faults
+        ] == [("settings", Level.GROUP, GROUP_ID, SettingProblem.LEVEL_UNREADABLE)]
+        frost = results[name].values["frost_position"]
+        assert (frost.value, frost.level) == (80, Level.GLOBAL)
+    assert results["south_overriding"].values["mode"].value is ExampleMode.OWN
+
+
+def test_fault_of_the_house_in_a_setting_that_falls_back_pauses_nothing() -> None:
+    """Every window keeps all its functions and gets the default."""
+    results = _four_windows(
+        house={"frost_position": "low"}, south={"mode": "south"}, north={}
+    )
+
+    for name, result in results.items():
+        assert result.disabled_functions == frozenset(), name
+        assert result.values["frost_position"].level is Level.BUILT_IN, name
+        assert [fault.action for fault in result.faults] == [FaultAction.FELL_BACK]
+
+
+# --- A rule that spans two settings ------------------------------------------------------------
+# It cannot name the culprit. The level whose values make the whole fail first,
+# from the house to the window, is held responsible, and its last value in the
+# order of the registry becomes a fault of that level.
+
+
+def test_refusal_of_the_whole_caused_by_the_window_pauses_the_function() -> None:
+    """The house sets the offset to zero, the window the mode that needs one."""
+    resolved = _resolve(
+        house=PartialSettings({"offset": 0}),
+        window=PartialSettings({"mode": ExampleMode.OWN}),
+    )
+
+    assert resolved.faults == (
+        ReportedFault(
+            "mode",
+            Level.WINDOW,
+            SettingProblem.INVALID,
+            "the mode 'own' needs an offset",
+            FaultAction.FUNCTIONS_DISABLED,
+            (FunctionId.SHADING,),
+        ),
+    )
+    assert resolved.values["mode"].level is Level.BUILT_IN
+    assert resolved.values["offset"].value == 0
+
+
+def test_refusal_of_the_whole_caused_by_the_group_names_the_group() -> None:
+    """The innocent window above it is not blamed."""
+    resolved = _resolve(
+        house=PartialSettings({"offset": 0}),
+        group=GroupLevel(GROUP_ID, PartialSettings({"mode": ExampleMode.OWN})),
+        window=PartialSettings({"enabled": False}),
+    )
+
+    assert [
+        (fault.key, fault.level, fault.group_id, fault.disabled_functions)
+        for fault in resolved.faults
+    ] == [("mode", Level.GROUP, GROUP_ID, (FunctionId.SHADING,))]
+    assert resolved.values["enabled"].level is Level.WINDOW
+    assert resolved.values["offset"].level is Level.GLOBAL
+
+
+def test_refusal_of_the_whole_caused_by_the_house_costs_the_later_setting() -> None:
+    """Both values are the house's; the later one in the registry is the fault."""
+    resolved = _resolve(
+        house=PartialSettings({"offset": 0, "mode": ExampleMode.OWN}),
+        group=GroupLevel(GROUP_ID, PartialSettings({"enabled": False})),
+    )
+
+    assert [(fault.key, fault.level) for fault in resolved.faults] == [
+        ("mode", Level.GLOBAL)
+    ]
+    assert resolved.values["offset"].value == 0
+    assert resolved.values["enabled"].level is Level.GROUP
+
+
+def test_refusal_of_the_whole_by_a_rule_of_a_function_that_falls_back() -> None:
+    """A frost position of zero without a source: the group's position applies."""
+    resolved = _resolve(
+        group=GroupLevel(GROUP_ID, PartialSettings({"frost_position": 85})),
+        window=PartialSettings({"frost_position": 0}),
+    )
+
+    assert [(fault.key, fault.level, fault.action) for fault in resolved.faults] == [
+        ("frost_position", Level.WINDOW, FaultAction.FELL_BACK)
+    ]
+    assert resolved.values["frost_position"].level is Level.GROUP
+    assert resolved.disabled_functions == frozenset()
+
+
+def test_refusal_of_the_built_in_defaults_is_reported_and_not_raised() -> None:
+    """A broken registry is nobody's stored data, but it must not raise either."""
+
+    def refuse(
+        _effective: Mapping[str, Any], _disabled: frozenset[FunctionId]
+    ) -> object:
+        raise TypeError("nothing fits")
+
+    resolved = _resolve(rules=SettingRules(_check_value, refuse))
+
+    assert [(fault.level, fault.action) for fault in resolved.faults] == [
+        (Level.BUILT_IN, FaultAction.CONFIGURATION_WITHHELD)
+    ]
+
+
+# --- A group that no longer exists ------------------------------------------------------------
 
 
 def test_group_that_no_longer_exists_falls_back_to_the_house() -> None:
-    """The window inherits from the house, and the result says why."""
+    """The window inherits from the house; nothing is switched off."""
     resolved = _resolve(
         house=PartialSettings({"offset": 0}),
         group=GroupLevel(GROUP_ID, None),
         window=PartialSettings({"enabled": False}),
     )
 
-    assert resolved.valid
-    assert resolved.group_fallback == GroupFallback(
-        GROUP_ID, GroupFallbackReason.GROUP_MISSING
-    )
+    assert resolved.faults == ()
+    assert resolved.disabled_functions == frozenset()
+    assert resolved.group_missing == GroupMissing(GROUP_ID)
     assert resolved.values["offset"].value == 0
     assert resolved.values["offset"].level is Level.GLOBAL
     assert resolved.values["enabled"].level is Level.WINDOW
     assert resolved.values["mode"].level is Level.BUILT_IN
 
 
-def test_group_with_faulty_data_falls_back_to_the_house_as_a_whole() -> None:
-    """Nothing of a group that cannot be read is used, not even its good values."""
-    group = settings_from_stored({"offset": "many", "mode": "south"}, REGISTRY)
-
-    resolved = _resolve(
-        house=PartialSettings({"mode": ExampleMode.HOUSE}),
-        group=GroupLevel(GROUP_ID, group),
-    )
-
-    assert resolved.valid
-    assert resolved.group_fallback == GroupFallback(
-        GROUP_ID,
-        GroupFallbackReason.GROUP_DATA_FAULTY,
-        (SettingFault("offset", "expected an integer"),),
-    )
-    assert resolved.values["mode"].value is ExampleMode.HOUSE
-    assert resolved.values["mode"].level is Level.GLOBAL
-    assert resolved.values["offset"].level is Level.BUILT_IN
-
-
-def test_dangling_group_of_one_window_does_not_stop_the_others() -> None:
-    """Three windows are resolved in a row; the middle one lost its group."""
+def test_lost_group_of_one_window_does_not_touch_the_others() -> None:
+    """Four windows in a row: two of a sound group, one of a lost one, one alone."""
     house = PartialSettings({"offset": 10})
     south = GroupLevel(GROUP_ID, PartialSettings({"offset": 60}))
     gone = GroupLevel("group_example_removed", None)
@@ -846,13 +1464,13 @@ def test_dangling_group_of_one_window_does_not_stop_the_others() -> None:
     ]
 
     assert [result.values["offset"].value for result in results] == [60, 10, 60, 10]
-    assert [result.group_fallback is not None for result in results] == [
+    assert [result.group_missing is not None for result in results] == [
         False,
         True,
         False,
         False,
     ]
-    assert all(result.valid for result in results)
+    assert all(result.faults == () for result in results)
 
 
 # --- The capability mask -----------------------------------------------------------
@@ -910,7 +1528,7 @@ def test_present_missing_and_unknown_for_inherited_and_own_values(
     resolved = _resolve(members=members, **_hold_to_move_set_by(level))
 
     item = resolved.values["hold_to_move"]
-    assert resolved.valid
+    assert resolved.faults == ()
     assert item == ResolvedValue(
         key="hold_to_move",
         value=True,
@@ -945,7 +1563,7 @@ def test_built_in_default_is_masked_too_and_every_limiting_member_is_named() -> 
     resolved = _resolve(members=members)
 
     item = resolved.values["shading_position"]
-    assert resolved.valid
+    assert resolved.faults == ()
     assert item.value == DEFAULT_SHADING_POSITION
     assert item.effective is None
     assert item.level is Level.BUILT_IN
@@ -1002,7 +1620,7 @@ def test_own_value_survives_a_missing_capability_and_applies_again() -> None:
     after = _resolve(window=own, members=CAN_STOP)
 
     assert before.values["hold_to_move"].effective is True
-    assert during.valid
+    assert during.faults == ()
     assert during.values["hold_to_move"].value is True
     assert during.values["hold_to_move"].effective is False
     assert during.values["hold_to_move"].level is Level.WINDOW
@@ -1031,7 +1649,7 @@ def test_mask_and_report_stay_while_the_entity_is_unavailable(level: Level) -> N
     assert sequence[0] == sequence[1] == sequence[2]
     for result in sequence:
         item = result.values["hold_to_move"]
-        assert result.valid
+        assert result.faults == ()
         assert item.capability is CapabilityState.MISSING
         assert item.unavailable == MISSING_STOP
         assert item.effective is False
@@ -1052,7 +1670,7 @@ def test_present_unknown_present_never_reports(level: Level) -> None:
         CapabilityState.PRESENT,
     ]
     for result in sequence:
-        assert result.valid
+        assert result.faults == ()
         assert result.masked_own_values == ()
         assert result.values["hold_to_move"].available
         assert result.values["hold_to_move"].effective is True
@@ -1066,8 +1684,7 @@ def test_window_with_a_masked_own_value_keeps_a_valid_result() -> None:
         members=RIGHT_CANNOT_STOP,
     )
 
-    assert resolved.valid
-    assert resolved.errors == ()
+    assert resolved.faults == ()
     assert resolved.values["offset"].value == 0
     assert resolved.values["shading_position"].effective == 0
     assert [item.key for item in resolved.masked_own_values] == ["hold_to_move"]
@@ -1088,7 +1705,7 @@ def test_registry_of_the_window_covers_every_field_of_the_window_configuration()
         fields={
             field.name: getattr(defaults, field.name)
             for field in dataclasses.fields(WindowConfig)
-            if field.name not in WINDOW_IDENTITY_FIELDS
+            if field.name not in WINDOW_FIELDS_THAT_ARE_NO_SETTINGS
         },
         entries={
             definition.key: definition.default
@@ -1097,9 +1714,13 @@ def test_registry_of_the_window_covers_every_field_of_the_window_configuration()
     )
 
     assert not mismatches, "\n".join(mismatches)
-    assert set(WINDOW_IDENTITY_FIELDS) <= {
+    assert set(WINDOW_FIELDS_THAT_ARE_NO_SETTINGS) <= {
         field.name for field in dataclasses.fields(WindowConfig)
     }
+    assert (
+        *WINDOW_IDENTITY_FIELDS,
+        "disabled_functions",
+    ) == WINDOW_FIELDS_THAT_ARE_NO_SETTINGS
 
 
 def _registry_mismatches(
@@ -1111,10 +1732,12 @@ def _registry_mismatches(
     messages = [
         f"WindowConfig has the field {name!r}, but WINDOW_SETTINGS has no entry for "
         f"it. Add SettingDefinition(key={name!r}, kind=SettingKind.<kind>, "
-        f"default={default!r}, parse=<reader of the stored value>) to "
-        f"WINDOW_SETTINGS in {settings_module}. Only if the caller hands the field "
-        f"in and it is never stored as a setting, add {name!r} to "
-        f"WINDOW_IDENTITY_FIELDS there instead."
+        f"function=FunctionId.<function>, default={default!r}, "
+        f"parse=<reader of the stored value>) to WINDOW_SETTINGS in "
+        f"{settings_module}; the function decides whether a fault in the setting "
+        f"falls back or pauses the function (FunctionId.fault_behavior). Only if "
+        f"the field is never stored as a setting, add {name!r} to "
+        f"WINDOW_FIELDS_THAT_ARE_NO_SETTINGS there instead."
         for name, default in fields.items()
         if name not in entries
     ]
@@ -1131,7 +1754,8 @@ def _registry_mismatches(
         f"WINDOW_SETTINGS ({settings_module}) and {default!r} in WindowConfig "
         f"({window_module}). Make them the same value."
         for key, default in fields.items()
-        if key in entries and entries[key] != default
+        if key in entries
+        and (type(entries[key]) is not type(default) or entries[key] != default)
     ]
     return messages
 
@@ -1139,20 +1763,22 @@ def _registry_mismatches(
 def test_mismatch_between_registry_and_window_configuration_says_what_to_add() -> None:
     """A contributor who forgot one half reads where the other half goes."""
     messages = _registry_mismatches(
-        fields={"morning_position": 100, "evening_position": 0},
-        entries={"evening_position": 10, "night_position": 0},
+        fields={"morning_position": 100, "evening_position": 0, "enabled": False},
+        entries={"evening_position": 10, "night_position": 0, "enabled": 0},
     )
 
-    missing_entry, missing_field, different_defaults = messages
+    missing_entry, missing_field, different_defaults, different_types = messages
+    assert "'enabled' has two different defaults: 0" in different_types
     assert "SettingDefinition(key='morning_position'" in missing_entry
     assert "WINDOW_SETTINGS in custom_components" in missing_entry
-    assert "WINDOW_IDENTITY_FIELDS" in missing_entry
+    assert "function=FunctionId.<function>" in missing_entry
+    assert "WINDOW_FIELDS_THAT_ARE_NO_SETTINGS" in missing_entry
     assert "Add the field 'night_position'" in missing_field
     assert "core/model/window.py" in missing_field
     assert "'evening_position' has two different defaults: 10" in different_defaults
 
 
-def test_only_the_covering_type_cannot_be_inherited() -> None:
+def test_covering_type_cannot_be_inherited() -> None:
     """What cannot be inherited is marked in the registry and nowhere else."""
     marked = [
         definition.key
@@ -1160,7 +1786,8 @@ def test_only_the_covering_type_cannot_be_inherited() -> None:
         if not definition.inheritable
     ]
 
-    assert marked == ["covering_type"]
+    assert "covering_type" in marked
+    assert "morning_condition_source" not in marked
 
 
 def test_window_is_resolved_from_stored_data_of_three_levels() -> None:
@@ -1179,7 +1806,6 @@ def test_window_is_resolved_from_stored_data_of_three_levels() -> None:
         {
             "covering_type": "roller_shutter",
             "shading_temperature_tiers": [],
-            "covers": [LEFT, RIGHT],
         },
         WINDOW_SETTINGS,
     )
@@ -1192,21 +1818,21 @@ def test_window_is_resolved_from_stored_data_of_three_levels() -> None:
         window_settings=window,
     )
 
-    assert resolution.settings.valid
-    assert resolution.config == WindowConfig(
-        window_id="window_example",
-        members=(_member(LEFT), _member(RIGHT)),
-        covering_type=CoveringType.ROLLER_SHUTTER,
-        morning_condition_source="binary_sensor.example_south",
-        shading_temperature_tiers=(),
-        schedule_profile=ScheduleProfile.DEFAULT,
-    )
-    assert {key: item.level for key, item in resolution.settings.values.items()} == {
-        "covering_type": Level.WINDOW,
-        "morning_condition_source": Level.GROUP,
-        "shading_temperature_tiers": Level.WINDOW,
-        "schedule_profile": Level.BUILT_IN,
-    }
+    assert resolution.settings.faults == ()
+    config = resolution.config
+    assert config is not None
+    assert config.window_id == "window_example"
+    assert config.members == (_member(LEFT), _member(RIGHT))
+    assert config.covering_type is CoveringType.ROLLER_SHUTTER
+    assert config.morning_condition_source == "binary_sensor.example_south"
+    assert config.shading_temperature_tiers == ()
+    assert config.schedule_profile is ScheduleProfile.DEFAULT
+    levels = {key: item.level for key, item in resolution.settings.values.items()}
+    assert levels["covering_type"] is Level.WINDOW
+    assert levels["morning_condition_source"] is Level.GROUP
+    assert levels["shading_temperature_tiers"] is Level.WINDOW
+    assert levels["schedule_profile"] is Level.BUILT_IN
+    assert tuple(levels) == WINDOW_SETTINGS.keys
     assert house.get("shading_temperature_tiers") == (TemperatureTier(24.0, 1.5),)
 
 
@@ -1232,66 +1858,189 @@ def test_temperature_tier_that_cannot_be_read_is_a_fault(
     assert detail in partial.faults[0].detail
 
 
-def test_value_the_window_configuration_refuses_names_field_and_level() -> None:
-    """Two tiers come from the group; the error says so and no configuration exists."""
-    tiers = (TemperatureTier(24.0, 1.0), TemperatureTier(28.0, 1.0))
+TWO_TIERS = (TemperatureTier(24.0, 1.0), TemperatureTier(28.0, 1.0))
+HOUSE_SOURCE = "binary_sensor.example_house"
+
+
+@pytest.mark.parametrize("level", LEVELS)
+def test_value_the_model_refuses_pauses_shading_and_keeps_the_window(
+    level: Level,
+) -> None:
+    """Two tiers on any level: the window is configured, shading is switched off."""
+    faulty = PartialSettings({"shading_temperature_tiers": TWO_TIERS})
+    sound = PartialSettings({"morning_condition_source": HOUSE_SOURCE})
 
     resolution = resolve_window(
         window_id="window_example",
         members=FULL,
-        global_settings=PartialSettings({"morning_condition_source": ""}),
+        global_settings=faulty if level is Level.GLOBAL else sound,
         group=GroupLevel(
-            GROUP_ID, PartialSettings({"shading_temperature_tiers": tiers})
+            GROUP_ID, faulty if level is Level.GROUP else PartialSettings()
         ),
-        window_settings=PartialSettings(),
+        window_settings=faulty if level is Level.WINDOW else PartialSettings(),
     )
 
-    assert resolution.config is None
+    config = resolution.config
+    assert config is not None
+    assert config.disabled_functions == {FunctionId.SHADING}
+    assert config.shading_temperature_tiers == ()
     assert [
-        (error.key, error.level, error.problem, error.group_id)
-        for error in resolution.settings.errors
+        (fault.key, fault.level, fault.problem, fault.action)
+        for fault in resolution.settings.faults
     ] == [
-        ("morning_condition_source", Level.GLOBAL, SettingProblem.INVALID, None),
-        ("shading_temperature_tiers", Level.GROUP, SettingProblem.INVALID, GROUP_ID),
+        (
+            "shading_temperature_tiers",
+            level,
+            SettingProblem.INVALID,
+            FaultAction.FUNCTIONS_DISABLED,
+        )
     ]
-    assert "more than one temperature tier" in resolution.settings.errors[1].detail
+    assert "more than one temperature tier" in resolution.settings.faults[0].detail
+    if level is not Level.GLOBAL:
+        assert config.morning_condition_source == HOUSE_SOURCE
 
 
-def test_errors_of_the_levels_leave_the_window_without_a_configuration() -> None:
-    """An unreadable own value is reported; the provenance is still there."""
+def test_group_that_sets_the_covering_type_costs_nothing() -> None:
+    """The covering type names no function: a fault in it falls back."""
     resolution = resolve_window(
         window_id="window_example",
         members=FULL,
         global_settings=PartialSettings(),
-        window_settings=settings_from_stored(
-            {"schedule_profile": "holiday_home"}, WINDOW_SETTINGS
+        group=GroupLevel(
+            GROUP_ID,
+            settings_from_stored({"covering_type": "roller_shutter"}, WINDOW_SETTINGS),
         ),
+        window_settings=PartialSettings(),
     )
 
-    assert resolution.config is None
+    assert resolution.config is not None
+    assert resolution.config.disabled_functions == frozenset()
     assert [
-        (error.key, error.level, error.problem) for error in resolution.settings.errors
-    ] == [("schedule_profile", Level.WINDOW, SettingProblem.UNREADABLE)]
-    assert resolution.settings.values["schedule_profile"].level is Level.BUILT_IN
+        (fault.key, fault.level, fault.problem, fault.action)
+        for fault in resolution.settings.faults
+    ] == [
+        (
+            "covering_type",
+            Level.GROUP,
+            SettingProblem.NOT_INHERITABLE,
+            FaultAction.FELL_BACK,
+        )
+    ]
 
 
-def test_window_with_a_dangling_group_still_gets_its_configuration() -> None:
-    """The fallback is reported next to a complete configuration."""
+@pytest.mark.parametrize(
+    ("own", "problem", "disabled"),
+    [
+        (
+            PartialSettings({"morning_condition_source": 7}),
+            SettingProblem.INVALID,
+            {FunctionId.SCHEDULE},
+        ),
+        (
+            settings_from_stored({"schedule_profile": "holiday_home"}, WINDOW_SETTINGS),
+            SettingProblem.UNREADABLE,
+            {FunctionId.SCHEDULE},
+        ),
+        (
+            settings_from_stored({"schedule_profil": "default"}, WINDOW_SETTINGS),
+            SettingProblem.UNKNOWN_SETTING,
+            set(),
+        ),
+        (
+            settings_from_stored({"covering_type": "awning"}, WINDOW_SETTINGS),
+            SettingProblem.UNREADABLE,
+            set(),
+        ),
+        (
+            settings_from_stored("not a mapping", WINDOW_SETTINGS),
+            SettingProblem.LEVEL_UNREADABLE,
+            {FunctionId.SCHEDULE, FunctionId.SHADING},
+        ),
+    ],
+)
+def test_fault_in_the_windows_own_data_never_costs_it_its_configuration(
+    own: PartialSettings, problem: SettingProblem, disabled: set[FunctionId]
+) -> None:
+    """Fire and protection need a configured window; convenience pauses instead."""
     resolution = resolve_window(
         window_id="window_example",
         members=FULL,
-        global_settings=PartialSettings(
-            {"morning_condition_source": "binary_sensor.example_house"}
-        ),
+        global_settings=PartialSettings(),
+        window_settings=own,
+    )
+
+    assert resolution.config is not None
+    assert resolution.config.disabled_functions == disabled
+    assert resolution.settings.disabled_functions == disabled
+    assert [(fault.level, fault.problem) for fault in resolution.settings.faults] == [
+        (Level.WINDOW, problem)
+    ]
+    assert tuple(resolution.settings.values) == WINDOW_SETTINGS.keys
+
+
+def test_settings_of_the_window_name_their_function() -> None:
+    """The decisions for today's settings, stated once."""
+    declared = {
+        definition.key: (definition.function, definition.fault_behavior)
+        for definition in WINDOW_SETTINGS.definitions
+    }
+
+    assert declared["covering_type"] == (None, FaultBehavior.FALL_BACK)
+    assert declared["morning_condition_source"] == (
+        FunctionId.SCHEDULE,
+        FaultBehavior.PAUSE,
+    )
+    assert declared["schedule_profile"] == (FunctionId.SCHEDULE, FaultBehavior.PAUSE)
+    assert declared["shading_temperature_tiers"] == (
+        FunctionId.SHADING,
+        FaultBehavior.PAUSE,
+    )
+    assert functions_with_settings() >= {FunctionId.SCHEDULE, FunctionId.SHADING}
+    assert functions_with_settings() == WINDOW_SETTINGS.functions
+    assert functions_with_settings(REGISTRY) == {
+        FunctionId.SCHEDULE,
+        FunctionId.SHADING,
+        FunctionId.FROST,
+        FunctionId.VENTILATION,
+        FunctionId.PRIVACY,
+        FunctionId.REQUEST,
+    }
+
+
+def test_setting_without_a_function_is_allowed_for_what_is_not_inherited_only() -> None:
+    """Whatever can be inherited belongs to a function, and only members count."""
+    with pytest.raises(ValueError, match="belongs to a function"):
+        SettingDefinition(
+            key="offset",
+            kind=SettingKind.NUMBER,
+            function=None,
+            default=0,
+            parse=as_int,
+        )
+    with pytest.raises(TypeError, match="the function of a setting"):
+        SettingDefinition(
+            key="offset",
+            kind=SettingKind.NUMBER,
+            function="schedule",  # type: ignore[arg-type]
+            default=0,
+            parse=as_int,
+        )
+
+
+def test_window_with_a_lost_group_still_gets_its_configuration() -> None:
+    """The lost group is reported next to a complete configuration."""
+    resolution = resolve_window(
+        window_id="window_example",
+        members=FULL,
+        global_settings=PartialSettings({"morning_condition_source": HOUSE_SOURCE}),
         group=GroupLevel(GROUP_ID, None),
         window_settings=PartialSettings(),
     )
 
     assert resolution.config is not None
-    assert resolution.config.morning_condition_source == "binary_sensor.example_house"
-    assert resolution.settings.group_fallback == GroupFallback(
-        GROUP_ID, GroupFallbackReason.GROUP_MISSING
-    )
+    assert resolution.config.morning_condition_source == HOUSE_SOURCE
+    assert resolution.config.disabled_functions == frozenset()
+    assert resolution.settings.group_missing == GroupMissing(GROUP_ID)
 
 
 @pytest.mark.parametrize(
@@ -1307,7 +2056,7 @@ def test_window_with_a_dangling_group_still_gets_its_configuration() -> None:
 def test_identity_the_model_refuses_is_an_error_and_not_an_exception(
     window_id: Any, members: Any, key: str
 ) -> None:
-    """A window without a cover must not stop the windows next to it."""
+    """The one case without a configuration: the covers themselves are unusable."""
     resolution = resolve_window(
         window_id=window_id,
         members=members,
@@ -1318,5 +2067,13 @@ def test_identity_the_model_refuses_is_an_error_and_not_an_exception(
     assert resolution.config is None
     assert resolution.settings.values == {}
     assert [
-        (error.key, error.level, error.problem) for error in resolution.settings.errors
-    ] == [(key, Level.WINDOW, SettingProblem.INVALID)]
+        (fault.key, fault.level, fault.problem, fault.action)
+        for fault in resolution.settings.faults
+    ] == [
+        (
+            key,
+            Level.WINDOW,
+            SettingProblem.INVALID,
+            FaultAction.CONFIGURATION_WITHHELD,
+        )
+    ]
