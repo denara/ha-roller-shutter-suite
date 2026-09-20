@@ -9,6 +9,7 @@ Roller Shutter Suite is a custom integration for Home Assistant that controls ro
 - Installation: see the [README](../README.md#installation)
 - Setting up the integration: to be written
 - Adding groups and windows: to be written
+- [The daily routine](features/daily-routine.md): morning and evening, workdays, weekends and public holidays, sun times with "not before" and "not after", and what happens after a restart
 - How the integration decides where a shutter goes: to be written
 - Actions and events for your own automations: to be written
 - Troubleshooting: to be written
@@ -18,6 +19,7 @@ Roller Shutter Suite is a custom integration for Home Assistant that controls ro
 - [Project brief](project-brief.md): goals, feature catalog and architectural guardrails
 - [Development setup](../README.md#development)
 - [The core model](dev/core-model.md): the data types and ports of the domain core, with a worked example of a decision
+- [The schedule](dev/schedule.md): parts of the day, triggers and clamps, day types and their latch, the rule for clock changes, random offsets, and how the schedule plugs into the arbiter
 - [Testing](dev/testing.md): the two test folders, how to run them, how to add a scenario, and how to run the Home Assistant tests on Windows
 - [Contributing](dev/contributing.md): every check that CI runs and how to run it locally, the guards, the workflows and the recommended repository settings
 - [Configuration flow findings](dev/config-flow-findings.md): what config subentry flows can do, the pattern for inherited values in forms, reloading exactly once, cover groups, and the module layout for configuration steps

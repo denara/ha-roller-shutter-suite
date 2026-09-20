@@ -121,9 +121,11 @@ A window with one member therefore has a position whenever its member reports on
 | `ShadingEpisodeState` | Active since, and the end of the rain lock. |
 | `SolarHeatingEpisodeState` | Active since, and the "opened once" flag. |
 | `ExternalRequest` | A position requested by an automation, the text the caller gave as reason, and the expiry. |
-| `DayType`, `LatchedDayType` | `workday`, `weekend` or `holiday`, and the day type that was fixed for one date. |
+| `DayType`, `LatchedDayType` | `workday`, `weekend` or `holiday`, and the day type that was fixed for one date. `fallback` is true if the day of the week was fixed because a day-type input had no value until the morning trigger had passed; see [the schedule](schedule.md#day-types-and-the-latch). |
 | `HeldInput` | The last known value of an on/off input that is held while its source is missing (frost, season), and when it was seen. |
 | `SimulatedState` | Only in dry-run: the would-be commands per member and a motor protection clock of their own, kept apart from the real state. |
+
+Two plain instants of the window state belong to the brightness trigger of the evening: `brightness_below_since`, the time since which the outdoor brightness has been seen below its threshold without interruption, and `evening_brightness_at`, the instant at which the brightness began the evening. [The schedule](schedule.md#the-evening-by-brightness) explains why both are needed.
 
 ### Reason codes
 
