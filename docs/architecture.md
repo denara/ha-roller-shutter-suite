@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Approved by the project owner: decisions 1 to 13 on 2026-09-19, decision 14 on 2026-09-20. All were accepted as recommended; the boxes keep the reasons and the rejected alternatives. |
+| Status | Approved by the project owner: decisions 1 to 13 on 2026-09-19, decision 14 on 2026-09-20. Decision 15 was made by the project owner on 2026-09-21. The boxes keep the reasons and the rejected alternatives. |
 | Refines | [project-brief.md](project-brief.md), where the brief refers to "the domain design specification" or "D00" |
 | Audience | Implementing agents and maintainers |
 
@@ -466,6 +466,20 @@ Removing a window deletes its persisted state (N4).
 
 ---
 
+## 13a. Faulty stored settings
+
+Stored data can be faulty: written by hand, left behind by a failed migration, written by a newer version, or no longer fitting after a cover was replaced. Two things must never happen because of it: a window must never lose its protection, and a window must never move unexpectedly.
+
+> **Decision 15 — One rule for faulty settings on all three levels** (decided by the project owner on 2026-09-21). The rule is the same for window, group and house, and it distinguishes protection from comfort. Every setting declares the **function** it belongs to and its **class**, protection or comfort; "protection" includes everything that protects people or hardware, so the settings of frost protection and of motor protection are protection class.
+>
+> 1. **Protection never fails.** A faulty protection setting falls back to the next level and last to the built-in default. Fire and protection events keep running for every window.
+> 2. **Comfort becomes cautious.** A faulty comfort setting switches off the function it belongs to, for exactly the windows in whose inheritance chain the fault lies. There is no fallback to a value that could trigger a movement. The arbiter skips the layers of a disabled function and says so in the decision.
+> 3. **Everything is reported** with level, key and reason, so that a repair issue can name it.
+> 4. **Unknown keys** in the settings are reported and never silently ignored, but they switch nothing off and do not make the entry invalid: this is what data written by a newer version looks like after a downgrade.
+> 5. **A level that is unreadable as a whole** counts as not present: the comfort functions of the affected windows pause, protection runs with the values of the next level.
+>
+> A window is not set up at all only if its covers themselves cannot be read. A missing capability is not a fault in this sense; it masks and reports ([section 8.1](#81-capability-profile) and the inheritance resolver). *Rejected:* "a faulty window gets no configuration" (it takes the window's protection away, and a faulty migration would hit every window at once); falling back to the house value or the default for comfort settings (the window could then do something that was explicitly excluded, for example open at a time the user had moved).
+
 ## 14. Module map of the domain core
 
 Everything under `custom_components/roller_shutter_suite/core/`. No import from `homeassistant` and none from the rest of the integration. Time, sun, sources, actuator and storage reach the core only through ports.
@@ -512,5 +526,6 @@ Doors kept open, as places in the model and nothing more: covering type (C15); a
 | 12 | New windows start in dry-run | Yes |
 | 13 | Frost protection | Limits opening to the frost position; inherited source; waiver until the next morning; movements by hand exempt; optional release by sun, built with C10; preventive only |
 | 14 | Return to the manual position after a protection event | A comfort wish that the manual override dam lets pass, under four conditions; no fourth wish class |
+| 15 | Faulty stored settings | One rule on all levels: protection falls back to the next level and never fails, a faulty comfort setting switches its function off for the windows concerned, everything is reported, unknown keys are reported but harmless |
 
 Also worth a look, because they are proposals stated as rules: the position reference flag, the hint event and the reference run as an action of F1 (section 8.4); the default of one hour before a blind protection source or a blind blocking contact is reported (section 10.1); dry-run as the last gate rule with simulated commands (section 2.3); the final layer order of section 2.1, which follows the brief's starting order except for decisions 1 and 2; the order of the gate rules in section 2.3; the latch of the day type (section 6.3); an unavailable blocking contact counts as open (section 2.2, constraint 3); an unavailable window contact sets no ventilation floor (constraint 4); fire needs an acknowledgement before the window returns to normal operation (section 2.4); the staggering gap also applies between the members of one window (section 9); members of a window without position feedback are mapped to open or close at 50 (section 8.1).
