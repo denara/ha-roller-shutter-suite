@@ -73,6 +73,18 @@ SUSPICIOUS = {
         "someone" + AT + "provider.test",
         "a.b" + AT + "mail.provider.test",
     ],
+    "link to a session of an assistant tool": [
+        "https://claude" + ".ai/code/" + "session_0123ABCdef",
+        "https://www.claude" + ".ai/chat/" + "0a1b2c3d-0000-4000-8000-000000000000",
+        "see claude" + ".ai/share/" + "0a1b2c3d",
+        "https://chatgpt" + ".com/c/" + "0a1b2c3d-0000-4000-8000-000000000000",
+        "https://ChatGPT" + ".com/share/" + "0a1b2c3d",
+        "https://chat.openai" + ".com/share/" + "0a1b2c3d",
+        "https://gemini.google" + ".com/app/" + "0a1b2c3d4e5f",
+        "https://g" + ".co/gemini/share/" + "0a1b2c3d",
+        "https://copilot.microsoft" + ".com/chats/" + "0a1b2c3d",
+        "https://github" + ".com/copilot/c/" + "0a1b2c3d",
+    ],
 }
 HARMLESS = [
     "cover.example_window",
@@ -94,6 +106,15 @@ HARMLESS = [
     "the documentation address 2001:db8::1 and the loopback ::1",
     "http://homeassistant.local:8123 and threading.local()",
     "relative: ../local/file and a.local_name",
+    # The attribution line and the trailer of generated commits, and plain
+    # links to a product: none of them leads to somebody's session.
+    "\N{ROBOT FACE} Generated with [Claude Code](https://claude.com/claude-code)",
+    "Co-Authored-By: Claude Fable 5.1 <noreply" + AT + "anthropic.com>",
+    "https://claude.ai and https://claude.ai/code and https://claude.ai/code/",
+    "https://claude.ai/download and https://docs.claude.com/en/docs/claude-code",
+    "https://chatgpt.com/ and https://chatgpt.com/gpts and https://gemini.google.com/app",
+    "https://github.com/copilot and https://github.com/features/copilot/c",
+    "https://notclaude.ai/code/session and https://example.com/claude.ai/code",
 ]
 
 
