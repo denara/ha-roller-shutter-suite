@@ -1,0 +1,173 @@
+# The arbiter
+
+One arbiter decides for one window. Every feature of the integration only contributes a **layer**, a **constraint** or a **gate rule**; the evaluation itself never changes for a feature. This page explains the evaluation and shows how to add each of the three. The rules themselves come from the [domain design specification](../architecture.md), sections 2 to 5; the data types are described in [The core model](core-model.md).
+
+```text
+world snapshot ─► layers (first opinion wins) ─► constraints ─► gate ─► send / defer / suppress
+```
+
+| Module under `core/` | Content |
+|---|---|
+| `arbiter/arbiter.py` | `Arbiter`: the three registries and the evaluation |
+| `arbiter/registry.py` | what a feature registers: `LayerRegistration`, `ConstraintRegistration`, `GateRuleRegistration`, and what their functions receive |
+| `arbiter/fire_bypass.py` | the fire bypass |
+| `arbiter/gate.py` | the gate rules that belong to no single feature, and the dam mechanism |
+| `arbiter/controls.py` | operating modes as a table; the effective pause, lock and mode over three levels |
+| `arbiter/dry_run.py` | the simulated state of a window in dry-run; arming |
+| `arbiter/capabilities.py` | the one place where the gate asks what a member can do |
+| `arbiter/layers.py` | help for layers: what a missing input means |
+| `constraints/` | one module per constraint; so far `direction` and `frost` |
+| `engine.py` | the façade: `recompute(snapshot) → decision`, the state after a decision, arming |
+
+## No state, no clock
+
+`Arbiter` and `Engine` are immutable. A recompute is a pure function of the window configuration and the world snapshot, and the same inputs always give the same decision. Time comes from `snapshot.time`. Whatever has to survive between two recomputes is part of the persisted window state (`snapshot.state`), and a function that changes it takes a state and returns a state.
+
+What a person has set for the window is part of the snapshot too (`snapshot.controls`): pause, maintenance lock and operating mode on global, group and window level, and dry-run. `effective_controls` combines the three levels into what is in effect: **the most restrictive value wins**. A window is paused if any level is paused, locked if any level is locked, and its mode is the most restrictive of the three modes. A window cannot loosen what its group or the installation restricts.
+
+## Evaluation order
+
+The order of layers, constraints and gate rules is the order of the enumerations `Layer`, `Constraint` and `GateRule` of the model, which is the order of the specification. The order in which things are registered does not matter.
+
+1. **Layers.** Every layer is asked, from fire down to the schedule. The first one that answers with a target or with "leave alone" wins. "Leave alone" wins like a target does: no lower layer acts, and nothing moves. Every other layer ends up in `Decision.other_layers` with a reason: a layer above the winner says why it stepped aside (`inactive`, `input_unavailable` …), a layer below the winner says what it would have wanted (`schedule_night`), and a layer nobody registered says `not_configured`. Lower layers are asked although they cannot win, because the status of a window shall be able to say "the schedule wants the night position, but the storm has priority".
+2. **Constraints** are applied to the winning target, in order, each only to the wish classes it names. A constraint returns the target of every member after it, or nothing if it has nothing to report. A member whose target is `None` is pinned: it stays where it is, and no later constraint can give it a target again. If every member is pinned, nothing reaches the gate, `Decision.gate` is `None`, and the reason of the constraint is the reason why nothing moves. **No constraint applies to a wish of class fire.**
+3. **The gate.** The rules are evaluated in order, each only for the wish classes it names, and the first rule that applies decides. If none applies, the outcome is `send` with the reason `sent`.
+
+| # | Gate rule | Holds back | Built by |
+|---|---|---|---|
+| 1 | maintenance lock | fire, protection, comfort | this block |
+| 2 | no member can execute the command | all | this block |
+| 3 | target reached | all | this block |
+| 4 | operating mode | what `MODE_TABLE` says | this block |
+| 5 | pause | comfort | this block |
+| 6 | person-at-the-window dam | protection, comfort | this block (the mechanism; arming it is a later block) |
+| 7 | manual override dam | comfort, except the return to the manual position | this block (the mechanism; arming it is a later block) |
+| 8 | movement in flight | comfort | this block |
+| 9 | motor protection | comfort | this block |
+| 10 | command backoff | protection, comfort | a later block |
+| 11 | staggering | protection, comfort | a later block |
+| 12 | dry-run | fire, protection, comfort | this block |
+
+An arbiter without the rules 1 and 12 is refused when it is built: nothing may ever move under a maintenance lock or in dry-run because somebody forgot a registration. `build_arbiter` in `engine.py` always adds the built-in constraints and gate rules.
+
+Details of the built-in rules that the table of the specification leaves to the implementation:
+
+- **No member can execute (2).** Only the members that have a target and are available right now are looked at. None of them: defer with `cover_unavailable`. All of them definitely lack both "set position" and "open and close": suppress with `capability_missing`. Capabilities are asked through `arbiter/capabilities.py` only; a capability that is not known never blocks.
+- **Target reached (3)** always compares with the real, reported position, also in dry-run. Unavailable members are not judged. A member without position feedback counts as reached if its last real own command had this target.
+- **Movement in flight (8).** An own command is pending until its travel end: the time of the command plus the full travel time of its direction plus the report delay of the member. That is an upper bound, not the tracker's verdict. For an armed window a member that reports a movement counts as well, whoever started it, so a comfort movement never interrupts a person. The same targets as the pending command: `duplicate_command`. Anything else: deferred with `movement_in_flight`.
+- **Motor protection (9)** judges the largest change among the members that report a position, then the minimum interval since `last_comfort_movement`. Zero switches a part off.
+
+### Operating modes are a table
+
+`MODE_TABLE` in `arbiter/controls.py` has one row per `OperatingMode`: its rank among the modes, the wish classes it holds back, and the reason code. The gate rule reads the table and nothing else. No row holds back fire.
+
+## The fire bypass
+
+The fire bypass is one named construct, `FIRE_BYPASS` in `arbiter/fire_bypass.py`, and not a set of exceptions spread over the rules. A wish of class fire skips exactly these gate rules: operating mode, pause, both dams, movement in flight, motor protection, command backoff and staggering. It never skips the maintenance lock and never dry-run, and it never skips "no member can execute" and "target reached", which describe what is possible or already true.
+
+The registry keeps this exact in both directions. A rule that is part of the bypass cannot be registered for the class fire, and a rule that is not part of it has to apply to all three classes. A test compares `FIRE_BYPASS` with the list in section 2.4 of the specification. A dam cannot be defined to hold back fire either, and a constraint cannot be registered for fire.
+
+Under a maintenance lock and in dry-run the decision still names the fire wish as the winner, with its target, so the fire event can be fired although nothing moves.
+
+The fire layer itself belongs to a later block. What the arbiter guarantees for it: while its wish is a target, the bypass applies; while its wish is "leave alone" (`fire_unacknowledged`, after the alarm has ended and until somebody acknowledges it), it wins, no lower layer acts, and nothing is sent.
+
+## Dams
+
+A dam is a gate rule that holds back wishes of certain classes for a while. `Dam` in `arbiter/gate.py` is the mechanism: a dam names the classes it holds back (never fire), the reason codes of wishes it lets pass anyway, and how to read it from the persisted state. The gate only reads a dam. **Arming and ending a dam is not the gate's business**; the blocks that detect a movement by hand do that.
+
+- A dam whose end lies in the past has no effect, whether or not somebody has cleared it.
+- A dam with a known end defers until that end. A dam without one (the room becomes empty, the shading episode ends) suppresses.
+- The manual override dam lets exactly one comfort wish pass: the return to the manual position after a protection event, which a layer expresses as a wish of the protection layer with the reason `protection_return_manual`. It restores what the dam protects. It is still a comfort wish: every constraint applies to it, the person-at-the-window dam stands before the override dam and holds it back, and pause, operating mode, movement in flight and motor protection apply as to any comfort wish. Whether that wish exists at all (the override is still armed, the waiting time after the event has passed) is decided by the protection layer.
+
+## Deferrals
+
+A deferral never waits forever. It states exactly one of two times, and the model refuses a deferral with neither:
+
+| Deferred by | States | Value |
+|---|---|---|
+| a dam with a known end | `until` | the end of the dam |
+| motor protection, minimum interval | `until` | last own comfort movement plus the interval |
+| no member available | `reevaluate_no_later_than` | the time of the recompute plus `WindowConfig.reevaluate_after` (default 5 minutes) |
+| movement in flight | `reevaluate_no_later_than` | the latest travel end of the pending own commands; without one (somebody else is moving the window), the time of the recompute plus `reevaluate_after` |
+
+**What ends a deferral without a time** is the condition it waits for: a member becomes available again, or the members come to rest. Both are changes of the observed state, and the runtime recomputes a window whenever its observed state changes. `reevaluate_no_later_than` is only the safety net for the case that no such change is ever reported: at that time at the latest, the runtime recomputes the window from the state it has then. Nothing is replayed when a deferral ends; the window is simply recomputed, and the new decision may well be another deferral.
+
+## Dry-run
+
+Dry-run is the last gate rule on purpose: whatever reaches it would have been sent. The decision of a window in dry-run therefore shows the complete hypothetical outcome. `GateOutcome.dry_run` is true, and either the rule `dry_run` decided and `would_send` lists the command, or an earlier rule decided and its reason says what would have held the wish back. No rule except the last one knows about dry-run; the arbiter marks the outcome.
+
+Rules that depend on own commands must not read them from `snapshot.state`. They read `GateInput.own_commands` and `GateInput.last_comfort_movement`. For an armed window these are the real commands and the real motor protection clock. For a window in dry-run they are the **simulated** ones from `WindowState.simulated`, and never the real ones. `Engine.state_after(snapshot, decision)` returns the state with a would-be send remembered as simulated commands (and, for a comfort wish, the simulated clock); it never touches a real command, the real clock, a dam or the owner of the position. `Engine.arm(state)` discards the simulated state and starts the window clean: no dam, owner unknown.
+
+**The standing would-be command.** An armed window that has sent a command moves, arrives, and reads `target_reached` from then on. A window in dry-run does not move. If its simulated command counted against the very wish it stands for, the record would flap between "would have sent 30" and `duplicate_command` or `min_interval`. So while the simulated commands have the same targets as the wish at the gate, they *are* that wish's command: the own-command rules do not count them against it, the outcome stays "would have sent", and nothing new is remembered, which also means that a recompute that changes nothing writes nothing. A wish with other targets is judged against the simulated commands and the simulated clock like any new command: inside the minimum interval it reads `min_interval` with the time at which it ends. A test recomputes a hundred times under constant inputs, also with advancing time, and expects one distinct record.
+
+## How to add a layer
+
+A layer is a pure function from the window configuration and the world snapshot to a `Wish`; the persisted state is `snapshot.state`.
+
+```python
+def sleep_layer(config: WindowConfig, snapshot: WorldSnapshot) -> Wish:
+    switch = snapshot.sources.get(SLEEP_SOURCE)
+    missing = wish_for_missing_input(Layer.SLEEP, switch, hold=False)
+    if missing is not None:
+        return missing
+    ...
+    return Wish.target(Layer.SLEEP, ReasonCode.SLEEP_MODE, night_position)
+
+
+SLEEP_LAYER = LayerRegistration(Layer.SLEEP, sleep_layer)
+```
+
+- The layer answers for its own place in `Layer`; an answer in another layer's name is refused. The wish class follows from the layer.
+- Always return a wish with a reason code: a target, "leave alone", or "no opinion" with the reason why the layer steps aside.
+- **A missing input never becomes a position.** Decide per input whether its absence means "no opinion" (comfort steps aside) or "leave alone" (safety holds the window); `wish_for_missing_input` builds either answer.
+- Read time from `snapshot.time`. Keep nothing in the function or in a module.
+- Settings of the feature are added to `WindowConfig`, state that has to survive to `WindowState`.
+- Hand the registration to `build_arbiter(layers=[...])`. Nothing in `arbiter/` changes.
+
+## How to add a constraint
+
+A constraint is a pure function from a `ConstraintInput` (configuration, snapshot, the winning wish, the targets so far) to a `ConstraintResult`, or to `None` if it has nothing to report.
+
+```python
+LOCKOUT = ConstraintRegistration(
+    constraint=Constraint.LOCKOUT_PROTECTION,
+    applies_to=frozenset({WishClass.PROTECTION, WishClass.COMFORT}),
+    apply=_apply,
+)
+```
+
+- Its place is its member of `Constraint`; `CONSTRAINT_REASONS` of the model says which reason codes it can report.
+- Name the wish classes it applies to. Fire cannot be named. A constraint that applies to a class only under a setting names the class and checks the setting itself, as `frost` does for protection.
+- Return the target of **every** member, in order. Limit a target, or pin a member with `None`; never give a pinned member a target again, and never invent a target.
+- Compare with `ConstraintInput.current_positions`. A member that reports no position cannot be judged; say in the module what that means for the constraint.
+- Put it in its own module under `constraints/` and hand it to `build_arbiter(constraints=[...])`.
+
+The two constraints of this block:
+
+- **Direction** (`raise_only`, `lower_only`): a member whose target lies in the forbidden direction is pinned. A member without a known position passes.
+- **Frost** (`FrostSettings` of the window): while frost is active and not waived, an opening goes only up to the frost position; a member that already stands at or above it is pinned, never closed; closing is never limited. Comfort always, protection only with `applies_to_protection`, fire never. `hold_closed` ("do not raise a closed window at all") is off by default and reports `frost_hold`. Frost is active below the threshold and ends at threshold plus hysteresis; inside the band, and while the source has no value, `WindowState.held_frost` decides, the latter for at most 24 hours. `held_frost_after` returns what to persist; the constraint itself only reads. The waiver is an input: `WindowState.frost_waiver_until`. Who sets it, on which level, and the release by sun are later blocks.
+
+## How to add a gate rule
+
+A gate rule is a pure function from a `GateInput` to a `GateOutcome`, or to `None` if it does not apply.
+
+```python
+STAGGERING = GateRuleRegistration(
+    rule=GateRule.STAGGERING,
+    applies_to=frozenset({WishClass.PROTECTION, WishClass.COMFORT}),
+    evaluate=_evaluate,
+)
+```
+
+- Its place is its member of `GateRule`; `GATE_RULE_REASONS` says which reason codes it can give.
+- Name the classes it can hold back. Do not write an exception for fire into the rule: a rule that is part of the fire bypass cannot name fire, and the arbiter skips it.
+- Return `GateOutcome.suppress(...)` or `GateOutcome.defer(...)` under the rule's own name, never `send`. A deferral states `until` or `reevaluate_no_later_than`.
+- Do not think about dry-run. Read own commands from `GateInput.own_commands` and the motor protection clock from `GateInput.last_comfort_movement`, and the rule works for a dry-run window as well.
+- Ask about capabilities through `arbiter/capabilities.py`.
+- Hand it to `build_arbiter(gate_rules=[...])`.
+
+A new dam is a `Dam(...)` and its `registration()`.
+
+## Reason codes
+
+Every wish, constraint result and gate outcome carries a code from the closed list in `core/reasons.py`, and the model refuses a code from the wrong group. A new code needs an entry in the specification, in the enumeration and in both translations.
