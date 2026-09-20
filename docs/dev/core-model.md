@@ -229,21 +229,33 @@ All three always have a value, so `"__none__"` is a fault on them.
 
 ### Adding a setting
 
-A setting is described once, as an entry of `WINDOW_SETTINGS` whose key is the name of its field of `WindowConfig`:
+A real entry of the registry, the optional source of the morning condition:
 
 ```python
-WINDOW_SETTINGS = SettingsRegistry(
-    (
-        ...,  # the entries that exist
-        SettingDefinition(
-            key="hold_to_move",
-            kind=SettingKind.BOOLEAN,
-            default=False,
-            parse=as_bool,
-            requires=CapabilityRequirement(Capability.SUPPORTS_STOP, False),
-        ),
-    )
+SettingDefinition[str | None](
+    key="morning_condition_source",
+    kind=SettingKind.OPTIONAL_REFERENCE,
+    default=None,
+    parse=as_str,
 )
 ```
 
-The block that builds a feature adds the field to `WindowConfig`, where the setting and its value rules live, and this one entry. Nothing else in `settings` changes: reading stored data, the order of the levels, provenance, the mask, validation and the construction of the `WindowConfig` follow from the entry. A test compares the registry with the fields of `WindowConfig` and fails when a field has no entry, an entry has no field, or the two state different defaults. Its message says what to add where: the `SettingDefinition` to add to `WINDOW_SETTINGS`, or the field to add to `WindowConfig`, with the file of each.
+| Field | Meaning |
+|---|---|
+| `key` | The name of the setting in stored data and in the result; for a setting of a window it is the name of its field of `WindowConfig`. |
+| `kind` | The declared kind. It decides whether stored data may say `"__none__"`: only an `optional_reference` may. |
+| `default` | The built-in default, used when no level sets the value. It equals the default of the field of `WindowConfig`. |
+| `parse` | Reads the stored value and raises a `ValueError` if it cannot. It is never called for an absent key, `""`, `null` or `"__none__"`. |
+| `inheritable` | Left out here, so `True`. `False` for what belongs to one window only; such a setting is read from the window alone. |
+| `requires` | Left out here: the setting needs no capability. Otherwise `CapabilityRequirement(capability, value_when_missing)`, where `value_when_missing` is the value the configuration carries while the capability is definitely missing (`False` for a switch, `None` for an optional position). |
+
+For this entry the resolver returns a `ResolvedValue` with `value` (what the levels yield, for example the group's `"binary_sensor.example_south"`, or `None` if the window said "none"), `effective` (the same, because nothing can mask it), `level` and `group_id` (for example `group` and the group's identifier), `capability` (`None`, because it requires none) and `unavailable` (`None`). For an entry with `requires`, `capability` is `present`, `missing` or `unknown`; while it is `missing`, `unavailable` names the capability and the limiting members, `effective` is `value_when_missing`, and `own_value_masked` is true if the masked value is the window's own.
+
+**How a later block adds a setting**, step by step:
+
+1. **The field.** Add the field to `WindowConfig` in `core/model/window.py`, with its default, and validate it in `__post_init__`. The value rules of a setting live there and nowhere else; the resolver hands every resolved value to `WindowConfig` and turns a refusal into an error of that setting.
+2. **The one entry.** Add one `SettingDefinition` to `WINDOW_SETTINGS` in `core/settings.py`: `key` is the name of the field, `default` is the default of the field, `kind` is its declared kind, `parse` reads the stored form. Add `inheritable=False` if only a window can set it, and `requires=CapabilityRequirement(...)` if it needs a capability. Nothing else in `settings` changes: reading stored data, the order of the levels, provenance, the mask, validation and the construction of the `WindowConfig` follow from the entry.
+3. **The safety net.** `test_registry_of_the_window_covers_every_field_of_the_window_configuration` in `tests/core/test_settings.py` fails if either half is forgotten or the two defaults differ. Its message says what to add where: for a field without an entry, the `SettingDefinition(key=…, kind=…, default=…, parse=…)` to add to `WINDOW_SETTINGS` and its file; for an entry without a field, the field to add to `WindowConfig` and its file; for different defaults, both values and both files.
+4. **The stored form.** Decide how the value is stored and write `parse` for it; the forms expected per kind are listed under [From stored data to partial settings](#from-stored-data-to-partial-settings). An absent key and `""` mean "inherit" and `null` is a fault, for every setting, without any code of yours. `"__none__"` is accepted only if the kind is `optional_reference` and then arrives as the set value `None`, so the type of such a field is `str | None`; on every other kind it is a fault.
+5. **Tests.** Test the parser with stored values it accepts and refuses, and the value rules in the tests of the model. The order of the levels, provenance and the mask are tested once for all settings and need no new test.
+6. **Documentation.** Describe the field in the `WindowConfig` row of this page, and the setting for users on the page of its feature: what it does, its default, and, if it requires a capability, what happens on a window that lacks it.
