@@ -77,7 +77,9 @@ A group does not know the shutters of its windows. It can therefore switch on an
 
 The integration does not pretend otherwise and does not fail either. For the study, the option counts as **not available**: it is simply not used for this window, the other windows of the group keep it, and the integration tells you the reason: which ability is missing, which shutter lacks it, and that the value came from the group South side. If a window has several shutters that move together, one shutter without the ability is enough; it is named.
 
-On the window itself you cannot switch such an option on. If it was switched on earlier, for example before a shutter was replaced, the integration refuses the window's own value and explains it in the same way, instead of silently ignoring what you entered.
+The same holds for an option you switched on **on the window itself**, for example before a shutter was replaced by a simpler one. The integration keeps what you entered, does not use it while the shutter cannot do it, and reports the window so you know. Everything else about the window keeps working. If the shutter can do it again later, your value applies again without any action of yours.
+
+"Cannot do it" means that a shutter really lacks the ability. If a shutter is merely not reachable for a while, for example right after a restart, the integration does not know what it can do. It then neither switches anything off nor reports anything; it waits until the shutter answers again.
 
 ### What cannot be inherited
 

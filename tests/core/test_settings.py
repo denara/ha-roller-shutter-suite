@@ -9,12 +9,14 @@ import pytest
 
 from custom_components.roller_shutter_suite.core.model import (
     CapabilityProfile,
+    CapabilityState,
     CoveringType,
     JsonValue,
     MemberConfig,
     ScheduleProfile,
     TemperatureTier,
     WindowCapabilities,
+    WindowCapabilityStates,
     WindowConfig,
 )
 from custom_components.roller_shutter_suite.core.model._data import (
@@ -131,7 +133,7 @@ def _resolve(
 ) -> ResolvedSettings:
     return resolve_settings(
         registry,
-        capabilities=WindowConfig("window_example", members).capabilities,
+        capabilities=WindowConfig("window_example", members).capability_states,
         members=members,
         global_settings=house or PartialSettings(),
         window_settings=window or PartialSettings(),
@@ -610,42 +612,80 @@ def test_dangling_group_of_one_window_does_not_stop_the_others() -> None:
 
 # --- The capability mask -----------------------------------------------------------
 
+CAN_STOP = (_member(LEFT), _member(RIGHT))
+RIGHT_UNKNOWN = (_member(LEFT), _member(RIGHT, capabilities_known=False))
+# The last known state of the right member says "cannot stop", but nobody could
+# ask it: that is unknown, not missing.
+RIGHT_UNKNOWN_LAST_KNOWN_NO = (
+    _member(LEFT),
+    _member(RIGHT, supports_stop=False, capabilities_known=False),
+)
+MISSING_STOP = MissingCapability(Capability.SUPPORTS_STOP, (RIGHT,))
+
 
 def test_capabilities_are_the_fields_of_the_window_capabilities() -> None:
     """A setting can require exactly what the model knows about a window."""
-    fields = [field.name for field in dataclasses.fields(WindowCapabilities)]
+    names = [capability.value for capability in Capability]
 
-    assert [capability.value for capability in Capability] == fields
+    assert names == [field.name for field in dataclasses.fields(WindowCapabilities)]
+    assert names == [field.name for field in dataclasses.fields(WindowCapabilityStates)]
 
 
+def _hold_to_move_set_by(level: Level) -> dict[str, Any]:
+    own = PartialSettings({"hold_to_move": True})
+    return {
+        "house": own if level is Level.GLOBAL else None,
+        "group": GroupLevel(
+            GROUP_ID, own if level is Level.GROUP else PartialSettings()
+        ),
+        "window": own if level is Level.WINDOW else None,
+    }
+
+
+@pytest.mark.parametrize("level", [Level.GLOBAL, Level.GROUP, Level.WINDOW])
 @pytest.mark.parametrize(
-    ("level", "group_id"),
-    [(Level.GLOBAL, None), (Level.GROUP, GROUP_ID)],
+    ("members", "state", "effective", "unavailable"),
+    [
+        (CAN_STOP, CapabilityState.PRESENT, True, None),
+        (RIGHT_CANNOT_STOP, CapabilityState.MISSING, False, MISSING_STOP),
+        (RIGHT_UNKNOWN, CapabilityState.UNKNOWN, True, None),
+        (RIGHT_UNKNOWN_LAST_KNOWN_NO, CapabilityState.UNKNOWN, True, None),
+    ],
 )
-def test_inherited_option_the_members_cannot_execute_is_masked(
-    level: Level, group_id: str | None
+def test_present_missing_and_unknown_for_inherited_and_own_values(
+    level: Level,
+    members: tuple[MemberConfig, ...],
+    state: CapabilityState,
+    effective: bool,
+    unavailable: MissingCapability | None,
 ) -> None:
-    """Not available: provenance kept, capability and limiting member named."""
-    above = PartialSettings({"hold_to_move": True})
-
-    resolved = _resolve(
-        house=above if level is Level.GLOBAL else None,
-        group=GroupLevel(GROUP_ID, above) if level is Level.GROUP else None,
-        members=RIGHT_CANNOT_STOP,
-    )
+    """Only "missing" masks; the provenance stays; nothing here is an error."""
+    resolved = _resolve(members=members, **_hold_to_move_set_by(level))
 
     item = resolved.values["hold_to_move"]
     assert resolved.valid
     assert item == ResolvedValue(
         key="hold_to_move",
         value=True,
-        effective=False,
+        effective=effective,
         level=level,
-        group_id=group_id,
-        unavailable=MissingCapability(Capability.SUPPORTS_STOP, (RIGHT,)),
+        group_id=GROUP_ID if level is Level.GROUP else None,
+        capability=state,
+        unavailable=unavailable,
     )
-    assert not item.available
-    assert resolved.effective()["hold_to_move"] is False
+    assert item.available is (unavailable is None)
+    assert resolved.effective()["hold_to_move"] is effective
+    reported = level is Level.WINDOW and state is CapabilityState.MISSING
+    assert item.own_value_masked is reported
+    assert resolved.masked_own_values == ((item,) if reported else ())
+
+
+def test_setting_without_a_requirement_has_no_capability_state() -> None:
+    """Nothing is claimed about a capability nobody asked for."""
+    resolved = _resolve(members=RIGHT_CANNOT_STOP)
+
+    assert resolved.values["offset"].capability is None
+    assert resolved.values["offset"].available
 
 
 def test_built_in_default_is_masked_too_and_every_limiting_member_is_named() -> None:
@@ -665,45 +705,105 @@ def test_built_in_default_is_masked_too_and_every_limiting_member_is_named() -> 
     assert item.unavailable == MissingCapability(
         Capability.SUPPORTS_SET_POSITION, (LEFT, RIGHT)
     )
-    assert resolved.values["hold_to_move"].available
+    assert resolved.masked_own_values == ()
+    assert resolved.values["hold_to_move"].capability is CapabilityState.PRESENT
 
 
-def test_own_value_for_an_option_the_members_cannot_execute_is_an_error() -> None:
-    """The window's own value is refused with the explanation of the mask."""
+@pytest.mark.parametrize(
+    ("members", "state", "limiting"),
+    [
+        (
+            (
+                _member(LEFT),
+                _member(RIGHT, capabilities_known=False),
+                _member("cover.example_third", supports_stop=False),
+            ),
+            CapabilityState.MISSING,
+            ("cover.example_third",),
+        ),
+        (
+            (
+                _member(LEFT, supports_stop=False),
+                _member(RIGHT, supports_stop=False, capabilities_known=False),
+            ),
+            CapabilityState.MISSING,
+            (LEFT,),
+        ),
+        (RIGHT_UNKNOWN, CapabilityState.UNKNOWN, None),
+        (CAN_STOP, CapabilityState.PRESENT, None),
+    ],
+)
+def test_with_several_members_missing_beats_unknown_beats_present(
+    members: tuple[MemberConfig, ...],
+    state: CapabilityState,
+    limiting: tuple[str, ...] | None,
+) -> None:
+    """Only members that definitely lack the capability are named as limiting."""
+    resolved = _resolve(window=PartialSettings({"hold_to_move": True}), members=members)
+
+    item = resolved.values["hold_to_move"]
+    assert item.capability is state
+    if limiting is None:
+        assert item.unavailable is None
+    else:
+        assert item.unavailable == MissingCapability(Capability.SUPPORTS_STOP, limiting)
+
+
+def test_own_value_survives_a_missing_capability_and_applies_again() -> None:
+    """The cover is replaced by one that cannot stop, and later by one that can."""
+    own = PartialSettings({"hold_to_move": True})
+
+    before = _resolve(window=own, members=CAN_STOP)
+    during = _resolve(window=own, members=RIGHT_CANNOT_STOP)
+    after = _resolve(window=own, members=CAN_STOP)
+
+    assert before.values["hold_to_move"].effective is True
+    assert during.valid
+    assert during.values["hold_to_move"].value is True
+    assert during.values["hold_to_move"].effective is False
+    assert during.values["hold_to_move"].level is Level.WINDOW
+    assert [item.key for item in during.masked_own_values] == ["hold_to_move"]
+    assert during.masked_own_values[0].unavailable == MISSING_STOP
+    assert own.get("hold_to_move") is True
+    assert after == before
+    assert after.masked_own_values == ()
+
+
+@pytest.mark.parametrize("level", [Level.GROUP, Level.WINDOW])
+def test_member_that_is_unavailable_for_a_while_causes_no_flapping(
+    level: Level,
+) -> None:
+    """Present, unknown, present: never masked, never reported, never an error."""
+    sequence = [
+        _resolve(members=members, **_hold_to_move_set_by(level))
+        for members in (CAN_STOP, RIGHT_UNKNOWN_LAST_KNOWN_NO, CAN_STOP)
+    ]
+
+    assert [result.values["hold_to_move"].capability for result in sequence] == [
+        CapabilityState.PRESENT,
+        CapabilityState.UNKNOWN,
+        CapabilityState.PRESENT,
+    ]
+    for result in sequence:
+        assert result.valid
+        assert result.masked_own_values == ()
+        assert result.values["hold_to_move"].available
+        assert result.values["hold_to_move"].effective is True
+
+
+def test_window_with_a_masked_own_value_keeps_a_valid_result() -> None:
+    """Mask and report, never withhold: the other settings resolve as usual."""
     resolved = _resolve(
-        group=GroupLevel(GROUP_ID, PartialSettings({"hold_to_move": True})),
-        window=PartialSettings({"hold_to_move": True}),
+        house=PartialSettings({"offset": 0}),
+        window=PartialSettings({"hold_to_move": True, "shading_position": 0}),
         members=RIGHT_CANNOT_STOP,
     )
 
-    missing = MissingCapability(Capability.SUPPORTS_STOP, (RIGHT,))
-    assert not resolved.valid
-    assert resolved.errors == (
-        SettingError(
-            "hold_to_move",
-            Level.WINDOW,
-            SettingProblem.CAPABILITY_MISSING,
-            "the window lacks the capability 'supports_stop'",
-            missing=missing,
-        ),
-    )
-    assert resolved.values["hold_to_move"].unavailable == missing
-    assert resolved.values["hold_to_move"].level is Level.WINDOW
-    assert resolved.values["hold_to_move"].effective is False
-
-
-def test_option_is_available_when_every_member_can_execute_it() -> None:
-    """With capable members the same settings resolve without a mask."""
-    resolved = _resolve(
-        group=GroupLevel(GROUP_ID, PartialSettings({"hold_to_move": True})),
-        window=PartialSettings({"shading_position": 0}),
-        members=(_member(LEFT), _member(RIGHT)),
-    )
-
     assert resolved.valid
-    assert resolved.values["hold_to_move"].available
-    assert resolved.values["hold_to_move"].effective is True
+    assert resolved.errors == ()
+    assert resolved.values["offset"].value == 0
     assert resolved.values["shading_position"].effective == 0
+    assert [item.key for item in resolved.masked_own_values] == ["hold_to_move"]
 
 
 # --- The settings of a window ------------------------------------------------------

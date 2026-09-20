@@ -36,12 +36,13 @@ from types import MappingProxyType
 from typing import Any, Final
 
 from .model import (
+    CapabilityState,
     CoveringType,
     JsonValue,
     MemberConfig,
     ScheduleProfile,
     TemperatureTier,
-    WindowCapabilities,
+    WindowCapabilityStates,
     WindowConfig,
 )
 from .model._data import as_enum, as_object, as_str, read, tuple_of
@@ -73,7 +74,7 @@ class Level(StrEnum):
 
 @unique
 class Capability(StrEnum):
-    """A capability a setting can require; the fields of ``WindowCapabilities``."""
+    """A capability a setting can require; the fields of ``WindowCapabilityStates``."""
 
     SUPPORTS_OPEN_CLOSE = "supports_open_close"
     SUPPORTS_SET_POSITION = "supports_set_position"
@@ -86,8 +87,9 @@ class CapabilityRequirement[T]:
     """A setting works only if every member of the window has a capability.
 
     ``value_when_missing`` is the value the complete configuration carries
-    when the capability is missing: the one that makes the arbiter leave the
-    option alone (``False`` for a switch, ``None`` for an optional position).
+    when the capability is definitely missing: the one that makes the arbiter
+    leave the option alone (``False`` for a switch, ``None`` for an optional
+    position). A capability that is merely unknown masks nothing.
     """
 
     capability: Capability
@@ -291,7 +293,7 @@ class GroupFallback:
 
 @dataclass(frozen=True, slots=True)
 class MissingCapability:
-    """A capability the window lacks, and the members that lack it."""
+    """A capability the window definitely lacks, and the members that lack it."""
 
     capability: Capability
     limiting_members: tuple[str, ...]
@@ -302,11 +304,20 @@ class ResolvedValue[T]:
     """One resolved setting with its provenance.
 
     ``value`` is what the levels yield and ``level`` where it came from
-    (``group_id`` names the group if that is the level). ``unavailable`` is
-    set when the setting requires a capability the window lacks: the setting
-    is then **not available**, the provenance stays, and ``effective`` is the
-    stand-in of the setting instead of ``value``. ``effective`` is what the
-    complete configuration carries.
+    (``group_id`` names the group if that is the level). ``effective`` is
+    what the complete configuration carries.
+
+    ``capability`` is the state of the capability the setting requires, or
+    ``None`` if it requires none:
+
+    - ``PRESENT``: the value applies.
+    - ``MISSING``: the setting is **not available**. ``unavailable`` names the
+      capability and the limiting members, the provenance stays, and
+      ``effective`` is the stand-in of the setting instead of ``value``. This
+      holds for an inherited value and for the window's own value alike; the
+      own value stays stored and applies again once the capability is back.
+    - ``UNKNOWN``: nobody could be asked. The value applies unmasked and
+      nothing is reported, but it is not confirmed either.
     """
 
     key: str
@@ -314,12 +325,23 @@ class ResolvedValue[T]:
     effective: T
     level: Level
     group_id: str | None = None
+    capability: CapabilityState | None = None
     unavailable: MissingCapability | None = None
 
     @property
     def available(self) -> bool:
-        """Return whether the window can use the setting."""
+        """Return whether the setting is in use: it is not masked."""
         return self.unavailable is None
+
+    @property
+    def own_value_masked(self) -> bool:
+        """Return whether the window's **own** value is the one that is masked.
+
+        The user asked for this option on this very window, so the Home
+        Assistant layer raises a repair issue, worded differently from the
+        explanation of a masked inherited value.
+        """
+        return self.unavailable is not None and self.level is Level.WINDOW
 
 
 @unique
@@ -334,8 +356,6 @@ class SettingProblem(StrEnum):
     """A group or the house sets what only a window can set."""
     UNKNOWN_SETTING = "unknown_setting"
     """The level sets a key that the registry does not know."""
-    CAPABILITY_MISSING = "capability_missing"
-    """The window sets an option itself that its members cannot execute."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -343,8 +363,7 @@ class SettingError:
     """A validation error: the field, the level that set the value, the problem.
 
     ``detail`` is English text for logs and diagnostics, never for the user.
-    ``missing`` is set for :attr:`SettingProblem.CAPABILITY_MISSING` and is the
-    same explanation a masked value carries.
+    A missing capability is never an error; see :class:`ResolvedValue`.
     """
 
     key: str
@@ -352,7 +371,6 @@ class SettingError:
     problem: SettingProblem
     detail: str
     group_id: str | None = None
-    missing: MissingCapability | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -376,6 +394,17 @@ class ResolvedSettings:
     def valid(self) -> bool:
         """Return whether the result has no error. A group fallback is no error."""
         return not self.errors
+
+    @property
+    def masked_own_values(self) -> tuple[ResolvedValue[Any], ...]:
+        """Return the settings the window sets itself and cannot use at present.
+
+        This is what the Home Assistant layer reports as a repair issue. It is
+        no error: the window keeps its configuration, and the entry disappears
+        by itself when the capability is back. A capability that is unknown
+        never appears here.
+        """
+        return tuple(item for item in self.values.values() if item.own_value_masked)
 
     def effective(self) -> dict[str, Any]:
         """Return the value the complete configuration carries, per key."""
@@ -430,31 +459,23 @@ def _level_errors(
             )
 
 
-def _missing_capability(
-    definition: SettingDefinition[Any],
-    capabilities: WindowCapabilities,
-    members: tuple[MemberConfig, ...],
-) -> MissingCapability | None:
-    """Return the capability the setting needs and the window lacks, if any."""
-    if definition.requires is None:
-        return None
-    name = definition.requires.capability.value
-    if getattr(capabilities, name):
-        return None
-    return MissingCapability(
-        definition.requires.capability,
-        tuple(
-            member.member_id
-            for member in members
-            if not getattr(member.capabilities, name)
-        ),
+def _limiting_members(
+    capability: Capability, members: tuple[MemberConfig, ...]
+) -> tuple[str, ...]:
+    """Return the members that definitely lack the capability."""
+    return tuple(
+        member.member_id
+        for member in members
+        if member.capabilities.capability_state(capability.value)
+        is CapabilityState.MISSING
     )
 
 
 def _resolve_one(
     definition: SettingDefinition[Any],
     levels: tuple[_LevelInput, ...],
-    missing: MissingCapability | None,
+    capabilities: WindowCapabilityStates,
+    members: tuple[MemberConfig, ...],
 ) -> ResolvedValue[Any]:
     """Return the value of the strongest level that sets it, else the default."""
     value: Any = definition.default
@@ -468,14 +489,21 @@ def _resolve_one(
             value, found, found_group = own, level, group_id
             break
     effective = value
-    if missing is not None and definition.requires is not None:
-        effective = definition.requires.value_when_missing
+    state: CapabilityState | None = None
+    missing: MissingCapability | None = None
+    if definition.requires is not None:
+        required = definition.requires.capability
+        state = getattr(capabilities, required.value)
+        if state is CapabilityState.MISSING:
+            effective = definition.requires.value_when_missing
+            missing = MissingCapability(required, _limiting_members(required, members))
     return ResolvedValue(
         key=definition.key,
         value=value,
         effective=effective,
         level=found,
         group_id=found_group,
+        capability=state,
         unavailable=missing,
     )
 
@@ -483,7 +511,7 @@ def _resolve_one(
 def resolve_settings(  # noqa: PLR0913 - the three levels and the window are the input
     registry: SettingsRegistry,
     *,
-    capabilities: WindowCapabilities,
+    capabilities: WindowCapabilityStates,
     members: tuple[MemberConfig, ...],
     global_settings: PartialSettings,
     window_settings: PartialSettings,
@@ -493,16 +521,18 @@ def resolve_settings(  # noqa: PLR0913 - the three levels and the window are the
 
     The value of a window beats the value of its group, which beats the value
     of the house, which beats the built-in default. ``capabilities`` are those
-    of the window, the lowest common denominator of ``members``
-    (``WindowConfig.capabilities``); the members are needed to name who limits.
+    of the window in three states (``WindowConfig.capability_states`` of
+    ``members``); the members are needed to name who limits.
 
     - **No group:** the window inherits from the house directly.
     - **A group that is gone or whose data is faulty:** the same, and the
       result carries a :class:`GroupFallback`. That is not an error.
     - **Capability mask:** a setting that requires a capability the window
-      lacks is not available. Inherited, it is masked: provenance kept,
-      capability and limiting members named, ``effective`` is the stand-in.
-      Set by the window itself, it is an error with the same explanation.
+      definitely lacks is not available: provenance kept, capability and
+      limiting members named, ``effective`` is the stand-in. That is never an
+      error, also not for the window's own value, which is listed in
+      ``masked_own_values`` instead. A capability that is unknown masks
+      nothing and reports nothing.
     - **Errors** name the key and the level that set the offending value.
 
     The function does not raise for anything a user could have stored.
@@ -518,21 +548,10 @@ def resolve_settings(  # noqa: PLR0913 - the three levels and the window are the
     for level_input in levels:
         errors.extend(_level_errors(registry, level_input))
 
-    values: dict[str, ResolvedValue[Any]] = {}
-    for definition in registry.definitions:
-        missing = _missing_capability(definition, capabilities, members)
-        item = _resolve_one(definition, levels, missing)
-        values[definition.key] = item
-        if missing is not None and item.level is Level.WINDOW:
-            errors.append(
-                SettingError(
-                    definition.key,
-                    Level.WINDOW,
-                    SettingProblem.CAPABILITY_MISSING,
-                    f"the window lacks the capability {missing.capability.value!r}",
-                    missing=missing,
-                )
-            )
+    values = {
+        definition.key: _resolve_one(definition, levels, capabilities, members)
+        for definition in registry.definitions
+    }
     return ResolvedSettings(values, tuple(errors), fallback)
 
 
@@ -632,7 +651,7 @@ def resolve_window(
 
     resolved = resolve_settings(
         WINDOW_SETTINGS,
-        capabilities=identity.capabilities,
+        capabilities=identity.capability_states,
         members=identity.members,
         global_settings=global_settings,
         window_settings=window_settings,
