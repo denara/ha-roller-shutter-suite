@@ -27,8 +27,8 @@ Plain Python under `custom_components/roller_shutter_suite/core/`, tested withou
 | ID | Block | Features | Depends on | Status |
 |---|---|---|---|---|
 | [C01](tasks/C01-core-model-and-ports.md) | Core model and ports | E5, N2, N3; doors for C15, A7 | D00, T01, T02 | done |
-| [C02](tasks/C02-inheritance-resolver.md) | Inheritance resolver | E12, N4 | C01 | in review (pull request 23) |
-| [C03](tasks/C03-arbiter.md) | Arbiter: layers, constraints, gate | E5, E4, E9, E10, E11, A6, A12 | C01 | in progress (merges after C02) |
+| [C02](tasks/C02-inheritance-resolver.md) | Inheritance resolver | E12, N4 | C01 | done |
+| [C03](tasks/C03-arbiter.md) | Arbiter: layers, constraints, gate | E5, E4, E9, E10, E11, A6, A12 | C01 | in progress (pull request follows; C02 is merged) |
 | [C04](tasks/C04-schedule-and-day-types.md) | Schedule and day types | A1–A6, E13 (offset) | C01 | in progress (merges after C03) |
 | [C05](tasks/C05-time-lapse-simulation.md) | Time-lapse simulation harness | N6 | C03, C04 | planned |
 
@@ -36,7 +36,7 @@ Plain Python under `custom_components/roller_shutter_suite/core/`, tested withou
 
 | ID | Block | Features | Depends on | Status |
 |---|---|---|---|---|
-| [H01](tasks/H01-config-entry-and-subentries.md) | Config entry, group and window subentries | E12, F4, F7 (part), N2, N3, N4 (part), N5 (part) | S2, C02, T03 | planned (ready once C02 is merged) |
+| [H01](tasks/H01-config-entry-and-subentries.md) | Config entry, group and window subentries | E12, F4, F7 (part), N2, N3, N4 (part), N5 (part) | S2, C02, T03 | in progress |
 | [H02](tasks/H02-runtime-and-source-adapters.md) | Runtime and source adapters | guardrails 4 and 8, G3, G5 | C03, C04, H01 | planned |
 | [H03](tasks/H03-cover-actuator-adapter.md) | Cover actuator adapter | E11, E13, E10 (settings), N2 | H01, H02 | planned |
 | [H04](tasks/H04-status-entities-events-diagnostics.md) | Status entities, reason events, logbook, diagnostics | E7, E8 | H02 | planned |
@@ -49,9 +49,9 @@ Work outside the block plan. Done items are listed so the history of the tooling
 | ID | Item | Status |
 |---|---|---|
 | X01 | Make the guards fail closed: a guard that cannot check fails, the instance data guard really checks in a WSL worktree, judges symbolic links, entries that cannot be examined and the path text of every entry (pull request 19) | done |
-| X02 | Guard refinements, to be started before R01 or as soon as a block trips over a false positive (a plausible own name is never renamed to get around a guard). First item: the fixed names of the high-resolution brand images (the icon and logo files whose name carries the scale factor `@2x` before the extension) are taken for an e-mail address, by the path text check and by the content check alike. Further: other false positives on names, entries of the deprecated-names list that Home Assistant logs anyway are matched narrowly and only silent ones broadly, the Python patch version is pinned, smaller notes from the reviews of T03 and X01 | planned |
-| X03 | A pre-push hook (`.githooks/pre-push`) that runs the instance data guard and refuses the push when it fails or cannot check; activated once per clone by a human with `core.hooksPath`, never by an agent | in review (PR #28) |
-| X04 | The pre-push hook also judges what is actually pushed: the added lines and the path texts of every commit in the ranges git hands to the hook, not only the checkout. Reason: a private value that was committed by mistake and corrected in the next commit passes the hook and CI, but leaves with the branch history and stays retrievable through the pull request reference, even after a squash merge and the deletion of the branch. Fails closed like the rest (a range that cannot be read refuses the push). Own pull request after X03, before X02 | planned |
+| X02 | Guard refinements, to be started before R01 or as soon as a block trips over a false positive (a plausible own name is never renamed to get around a guard). First item: the fixed names of the high-resolution brand images (the icon and logo files whose name carries the scale factor `@2x` before the extension) are taken for an e-mail address, by the path text check and by the content check alike. Further: other false positives on names, entries of the deprecated-names list that Home Assistant logs anyway are matched narrowly and only silent ones broadly, the Python patch version is pinned, smaller notes from the reviews of T03 and X01. From the work on X03 and X04: a Python slice that takes every second element of a sequence (start, empty stop, step two; not spelled out here because the guard flags it) is taken for an IPv6 address, and an attribute named `.local` for a host name; the summary of the pushed-commits check counts compared tag objects as commits; one vague sentence in the hook documentation ("a fresh clone of another kind"); a comment in the guard about a trailing line end that is stricter than what the shell does; the structural test of the hook and the token probe as noted in the reviews | planned |
+| X03 | A pre-push hook (`.githooks/pre-push`) that runs the instance data guard and refuses the push when it fails or cannot check; activated once per clone by a human with `core.hooksPath`, never by an agent | done |
+| X04 | The pre-push hook also judges what is actually pushed: the added lines and the path texts of every commit in the ranges git hands to the hook, not only the checkout. Reason: a private value that was committed by mistake and corrected in the next commit passes the hook and CI, but leaves with the branch history and stays retrievable through the pull request reference, even after a squash merge and the deletion of the branch. Fails closed like the rest (a range that cannot be read refuses the push). Also: the identity of every pushed commit (author, committer, tagger) must equal the address configured for the clone, links to a session of an assistant tool are flagged, and the hook makes the guard prove that it knows the mode | done |
 
 Transitional rule in `tasks/README.md` ("run the instance data guard on native Windows before every push"): to be removed once C02, C03 and C04 are merged.
 
@@ -64,7 +64,7 @@ Files are written after D00, S1 and S2 are approved. IDs and cuts may still chan
 | C06 | Movement tracking, manual detection, override dam; tolerance by position source, report delay, position reference flag, self-measurement for the diagnostics; records real own commands: the time of the last comfort movement and the daily count of comfort movements with its threshold event (new reason code, added to section 5 of the architecture document together with the enumeration) | E1, E2, E3, E10 (count) | C03 |
 | C07 | Protection events, fire, person-at-window dam, watchdog; test cases for the four conditions of the return to the manual position (architecture, decision 14) | D1–D6, D8, D9, guardrail 3; door for C13 | C03 |
 | C08 | Window interaction and tamper | B1–B4, B9, F6 | C03 |
-| C09 | Sun geometry and glass calibration; one curtain edge per element, mapped per member through its vertical offset (architecture, decision 9) | C1, C2, C7 | C01 |
+| [C09](tasks/C09-sun-geometry-and-glass-calibration.md) (file written, block started before M1 because it depends on C01 and C02 only) | Sun geometry and glass calibration; one curtain edge per element, mapped per member through its vertical offset (architecture, decision 9) | C1, C2, C7 | C01 |
 | C10 | Shading episodes, conditions, solar heating; frost release by sun | C3–C6, C8, C9, C12, C14, A12 (part); doors for C3b, C10, C11 | C03, C09 |
 | C11 | Sleep mode and privacy | A9, F2 | C03 |
 | C12 | Persistence model and restart reconciliation | E6, D5, N5 | C06, C07, C10 |
