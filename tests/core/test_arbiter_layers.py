@@ -14,6 +14,7 @@ from custom_components.roller_shutter_suite.core.engine import build_arbiter
 from custom_components.roller_shutter_suite.core.model import (
     FULLY_CLOSED,
     FULLY_OPEN,
+    FunctionId,
     GateKind,
     Layer,
     LayerReason,
@@ -82,13 +83,15 @@ def test_every_layer_that_did_not_win_reports_why() -> None:
     decision = engine().recompute(snapshot(sources=storm(sleep=SourceValue.of(True))))
 
     assert decision.other_layers == (
-        LayerReason(Layer.FIRE, ReasonCode.INACTIVE),
-        LayerReason(Layer.SLEEP, ReasonCode.SLEEP_MODE),
+        LayerReason(Layer.FIRE, ReasonCode.INACTIVE, FunctionId.FIRE),
+        LayerReason(Layer.SLEEP, ReasonCode.SLEEP_MODE, FunctionId.SLEEP),
         LayerReason(Layer.EXTERNAL_REQUEST, ReasonCode.NOT_CONFIGURED),
         LayerReason(Layer.PRIVACY, ReasonCode.NOT_CONFIGURED),
-        LayerReason(Layer.SHADING, ReasonCode.OUTSIDE_EPISODE),
-        LayerReason(Layer.SCHEDULE, ReasonCode.SCHEDULE_DAY),
+        LayerReason(Layer.SHADING, ReasonCode.OUTSIDE_EPISODE, FunctionId.SHADING),
+        LayerReason(Layer.SCHEDULE, ReasonCode.SCHEDULE_DAY, FunctionId.SCHEDULE),
     )
+    # The function that spoke comes from the registration, also for the winner.
+    assert decision.winning_function is FunctionId.PROTECTION_EVENTS
 
 
 def test_leave_alone_from_a_higher_layer_stops_the_lower_layers() -> None:
@@ -106,9 +109,13 @@ def test_leave_alone_from_a_higher_layer_stops_the_lower_layers() -> None:
     assert decision.targets == ()
     assert decision.target is None
     assert decision.gate is None
-    assert LayerReason(Layer.PROTECTION, ReasonCode.PROTECTION_EVENT) in (
-        decision.other_layers
+    assert (
+        LayerReason(
+            Layer.PROTECTION, ReasonCode.PROTECTION_EVENT, FunctionId.PROTECTION_EVENTS
+        )
+        in decision.other_layers
     )
+    assert decision.winning_function is FunctionId.FIRE
 
 
 def test_the_fire_layer_opens_while_the_alarm_is_active() -> None:
@@ -188,7 +195,10 @@ def test_a_comfort_layer_with_an_unavailable_input_steps_aside() -> None:
 
     assert decision.winning_wish is not None
     assert decision.winning_wish.layer is Layer.SCHEDULE
-    assert LayerReason(Layer.SHADING, ReasonCode.INPUT_UNKNOWN) in decision.other_layers
+    assert (
+        LayerReason(Layer.SHADING, ReasonCode.INPUT_UNKNOWN, FunctionId.SHADING)
+        in decision.other_layers
+    )
 
 
 # --- Members ----------------------------------------------------------------------

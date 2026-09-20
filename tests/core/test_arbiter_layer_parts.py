@@ -66,9 +66,17 @@ def _decide(arbiter: Arbiter, *disabled: FunctionId) -> Decision:
     return arbiter.recompute(config, snapshot(sources=day(), position=70))
 
 
-def _shading_reason(decision: Decision) -> ReasonCode:
-    (entry,) = [e for e in decision.other_layers if e.layer is Layer.SHADING]
-    return entry.reason
+def _shading_entries(decision: Decision) -> list[LayerReason]:
+    """Return what the parts of the shading layer that did not win say."""
+    return [entry for entry in decision.other_layers if entry.layer is Layer.SHADING]
+
+
+def _shading(reason: ReasonCode) -> LayerReason:
+    return LayerReason(Layer.SHADING, reason, FunctionId.SHADING)
+
+
+def _heating(reason: ReasonCode) -> LayerReason:
+    return LayerReason(Layer.SHADING, reason, FunctionId.SOLAR_HEATING)
 
 
 # --- None disabled -------------------------------------------------------------------
@@ -81,34 +89,46 @@ def test_with_nothing_disabled_the_first_part_with_an_opinion_is_the_layers_wish
     decision = _decide(_arbiter(_answers(NO_SUN), _answers(HEAT)))
 
     assert decision.winning_wish == HEAT
-    assert decision.paused_functions == ()
-    assert _decide(_arbiter(_answers(SHADE), _answers(NOT_COLD))).winning_wish == SHADE
+    assert decision.winning_function is FunctionId.SOLAR_HEATING
+    assert _shading_entries(decision) == [_shading(ReasonCode.OUTSIDE_EPISODE)]
 
 
-def test_without_an_opinion_the_layer_gives_the_reason_of_the_first_part_asked() -> (
+def test_when_both_parts_have_an_opinion_the_order_decides_and_the_record_shows_both() -> (
     None
 ):
-    """The schedule below decides; the shading layer says why it stepped aside."""
+    """Shading stands before solar heating; the part that lost says what it wanted."""
+    decision = _decide(_arbiter(_answers(SHADE), _answers(HEAT)))
+
+    assert decision.winning_wish == SHADE
+    assert decision.winning_function is FunctionId.SHADING
+    assert decision.target == Position(40)
+    assert _shading_entries(decision) == [_heating(ReasonCode.SOLAR_HEATING)]
+
+
+def test_without_an_opinion_every_part_gives_its_own_reason() -> None:
+    """The schedule below decides; each part says why it stepped aside."""
     decision = _decide(_arbiter(_answers(NO_SUN), _answers(NOT_COLD)))
 
     assert decision.winning_wish is not None
     assert decision.winning_wish.layer is Layer.SCHEDULE
-    assert _shading_reason(decision) is ReasonCode.OUTSIDE_EPISODE
-    assert decision.paused_functions == ()
+    assert decision.winning_function is FunctionId.SCHEDULE
+    assert _shading_entries(decision) == [
+        _shading(ReasonCode.OUTSIDE_EPISODE),
+        _heating(ReasonCode.INACTIVE),
+    ]
 
 
 # --- One disabled --------------------------------------------------------------------
 
 
 def test_with_one_function_disabled_only_the_enabled_part_is_called() -> None:
-    """Its wish wins, and the decision still names the function that was paused."""
+    """Its wish wins, and the record still names the function that was skipped."""
     decision = _decide(_arbiter(_never_called, _answers(HEAT)), FunctionId.SHADING)
 
     assert decision.winning_wish == HEAT
+    assert decision.winning_function is FunctionId.SOLAR_HEATING
     assert decision.target == FULLY_OPEN
-    assert decision.paused_functions == (FunctionId.SHADING,)
-    # The winning layer is not one of the other layers; the fault is shown above.
-    assert all(entry.layer is not Layer.SHADING for entry in decision.other_layers)
+    assert _shading_entries(decision) == [_shading(DISABLED)]
 
 
 def test_the_wish_of_a_disabled_function_never_comes_about() -> None:
@@ -117,8 +137,10 @@ def test_the_wish_of_a_disabled_function_never_comes_about() -> None:
 
     assert decision.winning_wish is not None
     assert decision.winning_wish.layer is Layer.SCHEDULE
-    assert _shading_reason(decision) is DISABLED
-    assert decision.paused_functions == (FunctionId.SHADING,)
+    assert _shading_entries(decision) == [
+        _shading(DISABLED),
+        _heating(ReasonCode.INACTIVE),
+    ]
 
 
 def test_the_other_part_can_be_the_disabled_one() -> None:
@@ -129,15 +151,19 @@ def test_the_other_part_can_be_the_disabled_one() -> None:
     idle = _decide(_arbiter(_answers(NO_SUN), _never_called), FunctionId.SOLAR_HEATING)
 
     assert decision.winning_wish == SHADE
-    assert decision.paused_functions == (FunctionId.SOLAR_HEATING,)
-    assert _shading_reason(idle) is DISABLED
+    assert decision.winning_function is FunctionId.SHADING
+    assert _shading_entries(decision) == [_heating(DISABLED)]
+    assert _shading_entries(idle) == [
+        _shading(ReasonCode.OUTSIDE_EPISODE),
+        _heating(DISABLED),
+    ]
 
 
 # --- Both disabled -------------------------------------------------------------------
 
 
 def test_with_both_functions_disabled_neither_part_is_called() -> None:
-    """The layer has no opinion, with the reason, and both functions are named."""
+    """Each part says so with its function; the schedule decides."""
     decision = _decide(
         _arbiter(_never_called, _never_called),
         FunctionId.SHADING,
@@ -146,8 +172,7 @@ def test_with_both_functions_disabled_neither_part_is_called() -> None:
 
     assert decision.winning_wish is not None
     assert decision.winning_wish.layer is Layer.SCHEDULE
-    assert LayerReason(Layer.SHADING, DISABLED) in decision.other_layers
-    assert decision.paused_functions == (FunctionId.SHADING, FunctionId.SOLAR_HEATING)
+    assert _shading_entries(decision) == [_shading(DISABLED), _heating(DISABLED)]
 
 
 def test_the_stub_that_proves_never_called_does_raise_when_it_is_called() -> None:

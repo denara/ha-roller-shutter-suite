@@ -62,7 +62,10 @@ def test_a_disabled_comfort_function_yields_no_wish_and_says_why() -> None:
     assert decision.winning_wish is not None
     assert decision.winning_wish.layer is Layer.SCHEDULE
     assert decision.target == FULLY_OPEN
-    assert LayerReason(Layer.SHADING, DISABLED) in decision.other_layers
+    assert LayerReason(Layer.SHADING, DISABLED, FunctionId.SHADING) in (
+        decision.other_layers
+    )
+    assert decision.winning_function is FunctionId.SCHEDULE
     assert DISABLED.category is ReasonCategory.LAYER_INACTIVE
 
 
@@ -82,7 +85,10 @@ def test_the_layer_of_a_disabled_function_is_not_even_asked() -> None:
 
     assert decision.winning_wish is None
     assert decision.gate is None
-    assert LayerReason(Layer.SCHEDULE, DISABLED) in decision.other_layers
+    assert LayerReason(Layer.SCHEDULE, DISABLED, FunctionId.SCHEDULE) in (
+        decision.other_layers
+    )
+    assert decision.winning_function is None
     with pytest.raises(AssertionError, match="was evaluated"):
         arbiter.recompute(window(), snapshot(sources=night()))
 

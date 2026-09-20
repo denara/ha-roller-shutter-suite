@@ -28,10 +28,11 @@ from ._validation import (
     require_aware_or_none,
     require_finite,
     require_identifier,
+    require_optional_type,
     require_type,
     require_unique,
 )
-from .functions import FaultBehavior, FunctionId
+from .functions import FunctionId
 from .values import Position
 
 
@@ -300,15 +301,26 @@ class Wish:
 
 @dataclass(frozen=True, slots=True)
 class LayerReason:
-    """Why one layer did not win a recompute."""
+    """Why one layer, or one part of a layer, did not win a recompute.
+
+    ``function`` is the function of the integration that spoke: the one the
+    registration of the layer, or of the part of the layer, declares. The
+    arbiter fills it from the registration, never the layer itself, so a
+    reader of the record does not need the registry. It is ``None`` for a
+    registration that declares no function and for a layer nobody registered.
+    """
 
     layer: Layer
     reason: ReasonCode
+    function: FunctionId | None = None
 
     def __post_init__(self) -> None:
         """Validate the types, so a reason is never free text."""
         require_type(self.layer, Layer, "the layer of a layer reason")
         _require_reason(self.reason, _LAYER_GROUPS, "the reason of a layer reason")
+        require_optional_type(
+            self.function, FunctionId, "the function of a layer reason"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -616,18 +628,22 @@ class Decision:
 
     - ``winning_wish``: the wish of the first layer with an opinion; ``None``
       if no layer had one (a window without a configured schedule).
-    - ``other_layers``: for every other layer the reason why it did not win.
+    - ``winning_function``: the function of the registration whose wish won,
+      written by the arbiter from that registration; ``None`` if nothing won
+      or the registration declares no function.
+    - ``other_layers``: for every other layer the reason why it did not win,
+      each with the function that spoke. A layer that is registered in parts
+      (one per function) has one entry per part that did not win, so entries
+      are unique per layer and function. The winning layer appears here only
+      through its other parts: with a function, and not the winner's. A part
+      whose function is disabled for the window by a faulty stored setting
+      was not asked and says ``function_disabled_by_fault``.
     - ``constraints``: the results of the constraints that applied, in order.
     - ``targets``: the target of every member after the constraints, on the
       motor scale. Empty if the winning wish is not a target. A member with
       the position ``None`` was pinned by a constraint.
     - ``gate``: the outcome of the gate; ``None`` if nothing reached the gate,
       because there is no target or a constraint pinned every member.
-    - ``paused_functions``: the functions whose registered layer was not asked
-      in this recompute because the function is disabled for the window by a
-      faulty stored setting. A layer of which no part had an opinion says so
-      in ``other_layers`` too (``function_disabled_by_fault``); this list also
-      names a paused function when another part of its layer won.
 
     The member positions of the wish, the targets of every constraint result
     and ``targets`` name the same members in the same order.
@@ -638,22 +654,10 @@ class Decision:
     constraints: tuple[ConstraintResult, ...] = ()
     targets: tuple[MemberTarget, ...] = ()
     gate: GateOutcome | None = None
-    paused_functions: tuple[FunctionId, ...] = ()
+    winning_function: FunctionId | None = None
 
     def __post_init__(self) -> None:
         """Reject records whose parts contradict each other."""
-        object.__setattr__(self, "paused_functions", tuple(self.paused_functions))
-        for function in self.paused_functions:
-            require_type(function, FunctionId, "a paused function of a decision")
-            if function.fault_behavior is not FaultBehavior.PAUSE:
-                raise ValueError(
-                    f"the function {function.value!r} falls back on a fault; it "
-                    "is never paused"
-                )
-        require_unique(
-            (function.value for function in self.paused_functions),
-            "the paused functions of a decision",
-        )
         object.__setattr__(self, "other_layers", tuple(self.other_layers))
         object.__setattr__(self, "constraints", tuple(self.constraints))
         object.__setattr__(self, "targets", tuple(self.targets))
@@ -681,14 +685,25 @@ class Decision:
             require_type(self.winning_wish, Wish, "the winning wish")
             if self.winning_wish.kind is WishKind.NO_OPINION:
                 raise ValueError("a wish without an opinion cannot win")
-        seen: set[Layer] = set()
+        require_optional_type(
+            self.winning_function, FunctionId, "the winning function of a decision"
+        )
+        if self.winning_function is not None and self.winning_wish is None:
+            raise ValueError("without a winning wish there is no winning function")
+        seen: set[tuple[Layer, FunctionId | None]] = set()
         for entry in self.other_layers:
             require_type(entry, LayerReason, "a layer reason of a decision")
-            if entry.layer in seen:
+            if (entry.layer, entry.function) in seen:
                 raise ValueError(f"the layer {entry.layer.value!r} is listed twice")
-            seen.add(entry.layer)
-        if self.winning_wish is not None and self.winning_wish.layer in seen:
-            raise ValueError("the winning layer is not one of the other layers")
+            seen.add((entry.layer, entry.function))
+            if self.winning_wish is None or entry.layer is not self.winning_wish.layer:
+                continue
+            if entry.function is None or entry.function is self.winning_function:
+                raise ValueError(
+                    "the winning layer is one of the other layers only through "
+                    "another part of it: an entry with a function that is not the "
+                    "winner's"
+                )
 
     def _validate_members(self) -> None:
         members = _member_ids(self.targets)

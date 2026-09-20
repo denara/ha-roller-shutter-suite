@@ -147,50 +147,39 @@ class Arbiter:
 
     # --- Layers -------------------------------------------------------------
 
-    def _wishes(
+    def _answers(
         self, config: WindowConfig, snapshot: WorldSnapshot
-    ) -> tuple[list[Wish], tuple[FunctionId, ...]]:
-        """Ask every layer, in order; return its wish and the functions not asked.
+    ) -> list[tuple[Wish, FunctionId | None]]:
+        """Ask every layer, in order; return each answer with the function that spoke.
 
         A layer that is not registered steps aside. A layer can have several
-        parts, one registration per function; they are asked in the order of
-        ``FunctionId``, and the first part with an opinion is the layer's wish.
-        Every part that is not disabled is asked, as every layer is.
-        A part whose function is disabled for the window is not asked at all:
-        comfort becomes cautious, a faulty stored setting never moves a window,
-        and its code does not even run. If no part has an opinion, the layer
-        says so with ``function_disabled_by_fault`` if a part was skipped,
-        otherwise with the reason of the first part that was asked.
+        parts, one registration per function; they stand in the order of
+        ``FunctionId``, and each part answers for itself. Every part is
+        asked, as every layer is, except a part whose function is disabled
+        for the window: comfort becomes cautious, a faulty stored setting
+        never moves a window, and its code does not even run. Such a part
+        answers "no opinion" with ``function_disabled_by_fault``.
         """
         disabled = disabled_functions(config)
-        wishes: list[Wish] = []
-        paused: list[FunctionId] = []
+        answers: list[tuple[Wish, FunctionId | None]] = []
         for layer in Layer:
             parts = [entry for entry in self.layers if entry.layer is layer]
-            answer = Wish.no_opinion(layer, ReasonCode.NOT_CONFIGURED)
-            asked: list[Wish] = []
-            skipped = False
+            if not parts:
+                answers.append(
+                    (Wish.no_opinion(layer, ReasonCode.NOT_CONFIGURED), None)
+                )
             for part in parts:
                 if part.function is not None and part.function in disabled:
-                    paused.append(part.function)
-                    skipped = True
-                    continue
-                wish = part.evaluate(config, snapshot)
+                    wish = Wish.no_opinion(layer, ReasonCode.FUNCTION_DISABLED_BY_FAULT)
+                else:
+                    wish = part.evaluate(config, snapshot)
                 if wish.layer is not layer:
                     raise ValueError(
                         f"the layer {layer.value!r} answered with a wish of the "
                         f"layer {wish.layer.value!r}"
                     )
-                asked.append(wish)
-            opinions = [w for w in asked if w.kind is not WishKind.NO_OPINION]
-            if opinions:
-                answer = opinions[0]
-            elif skipped:
-                answer = Wish.no_opinion(layer, ReasonCode.FUNCTION_DISABLED_BY_FAULT)
-            elif asked:
-                answer = asked[0]
-            wishes.append(answer)
-        return wishes, tuple(paused)
+                answers.append((wish, part.function))
+        return answers
 
     # --- Constraints --------------------------------------------------------
 
@@ -315,18 +304,26 @@ class Arbiter:
                 "the snapshot observes other members than the window is configured "
                 "with, or in another order"
             )
-        wishes, paused = self._wishes(config, snapshot)
-        winner = next(
-            (wish for wish in wishes if wish.kind is not WishKind.NO_OPINION), None
+        answers = self._answers(config, snapshot)
+        won = next(
+            (
+                index
+                for index, (wish, _) in enumerate(answers)
+                if wish.kind is not WishKind.NO_OPINION
+            ),
+            None,
         )
+        winner, winning_function = (None, None) if won is None else answers[won]
         others = tuple(
-            LayerReason(wish.layer, wish.reason)
-            for wish in wishes
-            if wish is not winner
+            LayerReason(wish.layer, wish.reason, function)
+            for index, (wish, function) in enumerate(answers)
+            if index != won
         )
         if winner is None or winner.kind is not WishKind.TARGET:
             return Decision(
-                winning_wish=winner, other_layers=others, paused_functions=paused
+                winning_wish=winner,
+                other_layers=others,
+                winning_function=winning_function,
             )
         targets = _initial_targets(winner, member_ids)
         restores = self._violated_by_position(config, snapshot, winner, targets)
@@ -342,7 +339,7 @@ class Arbiter:
                 if to_send
                 else None
             ),
-            paused_functions=paused,
+            winning_function=winning_function,
         )
 
 

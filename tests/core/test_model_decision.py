@@ -205,32 +205,71 @@ def test_a_wish_for_a_target_can_state_the_time_of_its_trigger() -> None:
         Wish.leave_alone(Layer.FIRE, ReasonCode.FIRE_UNACKNOWLEDGED).triggered(LATER)
 
 
-def test_a_decision_names_the_functions_that_were_paused() -> None:
-    """Only functions that can be paused, each once, never free text."""
-    wish = Wish.target(Layer.SCHEDULE, ReasonCode.SCHEDULE_NIGHT, FULLY_CLOSED)
+def test_a_layer_reason_names_the_function_that_spoke() -> None:
+    """Optional, and never free text."""
+    bad: Any = "shading"
+    entry = LayerReason(Layer.SHADING, ReasonCode.OUTSIDE_EPISODE, FunctionId.SHADING)
+
+    assert entry.function is FunctionId.SHADING
+    assert LayerReason(Layer.SHADING, ReasonCode.OUTSIDE_EPISODE).function is None
+    assert entry != LayerReason(Layer.SHADING, ReasonCode.OUTSIDE_EPISODE)
+    assert hash(entry) == hash(
+        LayerReason(Layer.SHADING, ReasonCode.OUTSIDE_EPISODE, FunctionId.SHADING)
+    )
+    with pytest.raises(TypeError, match="function of a layer reason"):
+        LayerReason(Layer.SHADING, ReasonCode.OUTSIDE_EPISODE, bad)
+
+
+def test_a_decision_names_the_winning_function_and_the_other_parts_of_its_layer() -> (
+    None
+):
+    """One entry per layer and function; the winning layer only through another part."""
+    shade = Wish.target(Layer.SHADING, ReasonCode.SHADING_GEOMETRIC, Position(40))
+    lost = LayerReason(
+        Layer.SHADING, ReasonCode.SOLAR_HEATING, FunctionId.SOLAR_HEATING
+    )
+    paused = LayerReason(
+        Layer.SHADING, ReasonCode.FUNCTION_DISABLED_BY_FAULT, FunctionId.SOLAR_HEATING
+    )
     bad: Any = "shading"
 
-    def decide(*functions: FunctionId) -> Decision:
+    def decide(
+        *others: LayerReason, winning: FunctionId | None = FunctionId.SHADING
+    ) -> Decision:
         return Decision(
-            winning_wish=wish,
-            targets=_targets(0),
+            winning_wish=shade,
+            other_layers=others,
+            targets=_targets(40),
             gate=GateOutcome.send(),
-            paused_functions=functions,
+            winning_function=winning,
         )
 
-    assert Decision(winning_wish=None).paused_functions == ()
-    assert decide(FunctionId.SHADING, FunctionId.PRIVACY).paused_functions == (
-        FunctionId.SHADING,
-        FunctionId.PRIVACY,
+    assert decide(lost).winning_function is FunctionId.SHADING
+    assert decide(lost).other_layers == (lost,)
+    assert decide(paused).other_layers == (paused,)
+    assert decide(winning=None).winning_function is None
+    assert decide(lost) != decide(lost, winning=None)
+    with pytest.raises(ValueError, match="listed twice"):
+        decide(lost, paused)
+    with pytest.raises(ValueError, match="only through another part of it"):
+        decide(LayerReason(Layer.SHADING, ReasonCode.OUTSIDE_EPISODE))
+    with pytest.raises(ValueError, match="only through another part of it"):
+        decide(
+            LayerReason(Layer.SHADING, ReasonCode.OUTSIDE_EPISODE, FunctionId.SHADING)
+        )
+    with pytest.raises(ValueError, match="no winning function"):
+        Decision(winning_wish=None, winning_function=FunctionId.SHADING)
+    with pytest.raises(TypeError, match="winning function"):
+        decide(winning=bad)
+    # Two parts of a layer that did not win are two entries.
+    both = Decision(
+        winning_wish=None,
+        other_layers=(
+            LayerReason(Layer.SHADING, ReasonCode.OUTSIDE_EPISODE, FunctionId.SHADING),
+            LayerReason(Layer.SHADING, ReasonCode.INACTIVE, FunctionId.SOLAR_HEATING),
+        ),
     )
-    assert decide(FunctionId.SHADING) == decide(FunctionId.SHADING)
-    assert decide(FunctionId.SHADING) != decide()
-    with pytest.raises(ValueError, match="falls back on a fault"):
-        decide(FunctionId.FROST)
-    with pytest.raises(ValueError, match="occurs twice"):
-        decide(FunctionId.SHADING, FunctionId.SHADING)
-    with pytest.raises(TypeError, match="paused function"):
-        decide(bad)
+    assert len(both.other_layers) == 2  # noqa: PLR2004 - the two parts above
 
 
 def test_wish_types_are_checked() -> None:
@@ -791,7 +830,7 @@ def test_decision_with_one_pinned_and_one_moving_member() -> None:
                 ),
                 "other_layers": [LayerReason(Layer.FIRE, ReasonCode.INACTIVE)],
             },
-            "not one of the other layers",
+            "only through another part of it",
         ),
         (
             {
