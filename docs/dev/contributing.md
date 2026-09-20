@@ -60,6 +60,31 @@ Validation by `hassfest` and HACS runs on GitHub only. `hassfest` can be run loc
 
 A local run speeds up the work. The authoritative result is the run on GitHub.
 
+## The pre-push hook
+
+The repository is public, and CI sees a push only when it is already published. The instance data guard therefore has to run before every push. Remembering that is not reliable: a chain of commands once sent the guard's output through a pipe, the pipe swallowed exit status 1, and a flagged commit was pushed. The hook `.githooks/pre-push` makes the step mechanical.
+
+Activate it once per clone, by hand:
+
+```sh
+git config core.hooksPath .githooks
+```
+
+This is the only step, and a human takes it. **Agents never change git configuration**, this setting included; an agent that finds the hook inactive runs the guard itself, without a pipe behind it, and looks at the exit status. The setting is stored in the clone, so every worktree of that clone shares it, and each worktree runs the hook and the guard of its own checkout.
+
+What the hook does on every `git push`:
+
+- It asks git for the top of the checkout (`git rev-parse --show-toplevel`), so it works from a subfolder and in a worktree, and runs `scripts/check_instance_data.py` of that checkout.
+- It refuses the push unless the guard ends with exit status 0. Findings (status 1) and `CANNOT CHECK` (status 2) both refuse. The guard's output is shown; it names file, line and kind, never the text or a private name.
+- It fails closed: if git cannot name the checkout, the guard is missing, or no Python is found that can run the guard, the push is refused. A hook that cannot check never lets a push through.
+- It looks for Python in this order, each through `PATH`: the interpreter that `uv python find` names (the one `uv run` would use; the hook does not call `uv run`, which may create an environment), then `python3`, `python`, and `py -3`. A candidate counts only if it can compile the guard, so an interpreter that is too old is passed over. The hook installs, creates and configures nothing.
+
+**Never bypass the hook with `--no-verify`.** If the guard flags something harmless, change the example or report the false positive; the guard is then made narrower.
+
+What the hook does not cover: the guard judges the checkout as it is, not the exact commits of the push. If you push commits that differ from your checkout (another branch, changes you stashed or reverted), the hook does not see them. CI is the second net, and reading what you publish stays your job.
+
+On Windows, git for Windows runs the hook with the `sh` it ships; nothing else is needed, and the executable bit does not matter there. On Linux, macOS and inside WSL the file has to be executable, which git takes care of because the mode is recorded in the repository. Pushes happen on the Windows side (see [Running the Home Assistant tests on Windows](testing.md#running-the-home-assistant-tests-on-windows)); the hook also runs under the `sh` of a WSL distribution, where the guard reaches git in the ways described below.
+
 ## What the guards enforce
 
 Each guard is a small script under `scripts/` with a description at its top, and each has tests under `tests/scripts/`.
