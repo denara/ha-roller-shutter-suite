@@ -40,7 +40,7 @@ from pathlib import Path
 
 import pytest
 
-from scripts.check_instance_data import listing_commands
+from scripts.check_instance_data import SUPPORTED_MODES, listing_commands
 from tests.scripts.throwaway_repository import (
     ADDRESS,
     MAIN,
@@ -56,6 +56,9 @@ HOOKS_FOLDER = REPOSITORY_ROOT / ".githooks"
 HOOK = HOOKS_FOLDER / "pre-push"
 HOOK_IN_GIT = ".githooks/pre-push"
 GUARD = "scripts/check_instance_data.py"
+SUPPORTS_CALL = (
+    'supports_answer=$("$@" "$guard" --supports pushed 2>/dev/null </dev/null)'
+)
 CHECKOUT_CALL = '"$@" "$guard" </dev/null'
 PUSHED_CALL = '"$@" "$guard" --pushed "$remote_name" "$remote_url"'
 PRIVATE_VALUE = ".".join(["192", "168", "9", "9"])
@@ -137,8 +140,27 @@ def test_nothing_in_the_hook_can_swallow_or_pass_by_a_status() -> None:
 
     assert [line for line in code if GUARD in line] == [f'guard_path="{GUARD}"']
     assert [line for line in code if '"$@" "$guard"' in line] == [
+        SUPPORTS_CALL,
         CHECKOUT_CALL,
         PUSHED_CALL,
+    ]
+    # The guard proves that it knows the mode before its status 0 is trusted.
+    token = SUPPORTED_MODES["pushed"]
+    position = code.index(SUPPORTS_CALL)
+    assert code[position - 1] == f'supports_token="{token}"'
+    assert code[position + 1 : position + 6] == [
+        "supports_status=$?",
+        'if [ "$supports_status" -ne 0 ]; then',
+        'supports_answer=""',
+        "fi",
+        'if [ "$supports_answer" != "$supports_token" ]; then',
+    ]
+    assert code[position + 6].startswith('refuse "the instance data guard of this')
+    assert [line for line in code if line.startswith("supports_")] == [
+        f'supports_token="{token}"',
+        SUPPORTS_CALL,
+        "supports_status=$?",
+        'supports_answer=""',
     ]
     assert code[code.index(CHECKOUT_CALL) + 1] == "checkout_status=$?"
     assert code[code.index(PUSHED_CALL) + 1] == "pushed_status=$?"
@@ -176,7 +198,7 @@ def test_standard_input_reaches_exactly_one_call() -> None:
         if ('"$@"' in line or "$(" in line or line.startswith("if command "))
         and line != PUSHED_CALL
     ]
-    assert len(starts_a_program) == 5  # noqa: PLR2004 - git, the probe, uv twice, the guard
+    assert len(starts_a_program) == 6  # noqa: PLR2004 - git, the probe, uv twice, the guard twice
     assert [line for line in starts_a_program if "</dev/null" not in line] == []
 
 
@@ -540,6 +562,46 @@ def test_mistake_that_the_next_commit_corrected_is_refused(
     assert "exit status 1;" in output
     assert PRIVATE_VALUE not in output
     assert remote.tip() == checkout.git("rev-parse", "main~2")
+
+
+TOKEN = SUPPORTED_MODES["pushed"]
+GUARDS_THAT_PROVE_NOTHING = [
+    # A guard that predates the mode: it ignores its arguments and passes.
+    'import sys; sys.stdout.write("instance data: ok; judged 2 path text(s)\\n")',
+    f'import sys; sys.stdout.write("{TOKEN} and more")',
+    f'import sys; sys.stdout.write("{TOKEN}\\n{TOKEN}")',
+    f'import sys; sys.stderr.write("{TOKEN}")',
+    f'import sys; sys.stdout.write("{TOKEN}"); sys.exit(3)',
+    "",
+]
+
+
+@needs_sh
+@pytest.mark.parametrize("source", GUARDS_THAT_PROVE_NOTHING)
+def test_guard_that_does_not_prove_the_mode_is_refused(
+    checkout: Repository, remote: Repository, source: str
+) -> None:
+    """A branch from before the mode, pushed through a newer hook.
+
+    With the hook folder of another checkout, the hook is newer than the guard
+    of the branch. Such a guard ends with status 0 whatever it is asked, so its
+    status proves nothing: the flagged history below would leave unjudged.
+    """
+    checkout.write("docs/notes.md", f"harmless\nhost: {PRIVATE_VALUE}\n")
+    checkout.commit("Add a host")
+    checkout.write("docs/notes.md", "harmless\n")
+    checkout.write(GUARD, f"{source}\n")
+    checkout.commit("Use a neutral host")
+
+    refused = _push(checkout, remote, "main")
+
+    assert refused.returncode != 0
+    assert "PUSH REFUSED: the instance data guard of this checkout is older" in (
+        refused.stderr
+    )
+    assert "git merge origin/main" in refused.stderr
+    assert "ok;" not in refused.stdout + refused.stderr
+    assert _refs(remote) == []
 
 
 @needs_sh

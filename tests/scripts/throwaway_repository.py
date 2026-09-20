@@ -142,10 +142,17 @@ class Repository:
         )
         return self.store("commit", text.encode(), ref)
 
-    def tag(self, name: str, target: str, message: str, kind: str = "commit") -> str:
+    def tag(
+        self,
+        name: str,
+        target: str,
+        message: str,
+        kind: str = "commit",
+        tagger: str = ADDRESS,
+    ) -> str:
         """Write an annotated tag by hand and return the name of the tag object."""
         text = _TAG.format(
-            target=target, kind=kind, name=name, message=message, tagger=ADDRESS
+            target=target, kind=kind, name=name, message=message, tagger=tagger
         )
         return self.store("tag", text.encode(), f"refs/tags/{name}")
 

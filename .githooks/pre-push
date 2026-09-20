@@ -27,6 +27,13 @@
 # when no Python is found that can run it, the push is refused. A hook that
 # cannot check never lets a push through.
 #
+# The hook and the guard can be of different age: with an absolute hook folder
+# this file comes from one checkout and the guard from the checkout that is
+# pushed from. Before the second run the guard therefore has to answer
+# `--supports pushed` with one exact token and status 0. A guard that predates
+# the mode prints something else, and the push is refused: merge the main line
+# into the branch first.
+#
 # What is NOT covered: content that is on the remote already, and a push with
 # --no-verify, which skips this script and is never to be used.
 #
@@ -131,6 +138,19 @@ if [ "$#" -eq 0 ]; then
 fi
 if [ "$#" -eq 0 ]; then
     refuse "no Python that can run the instance data guard was found (tried: uv python find, python3, python, py -3), so nothing was checked. Install uv or the Python version that pyproject.toml requires."
+fi
+
+# The guard of this checkout has to prove that it knows the mode `--pushed`. A
+# guard that predates the mode ignores its arguments, judges the checkout a
+# second time and ends with status 0, and no commit would have been judged.
+supports_token="instance data guard: the mode 'pushed' is supported"
+supports_answer=$("$@" "$guard" --supports pushed 2>/dev/null </dev/null)
+supports_status=$?
+if [ "$supports_status" -ne 0 ]; then
+    supports_answer=""
+fi
+if [ "$supports_answer" != "$supports_token" ]; then
+    refuse "the instance data guard of this checkout is older than this hook and cannot judge pushed commits, so nothing was checked. Merge the main line into this branch ('git fetch', then 'git merge origin/main'), then push again."
 fi
 
 "$@" "$guard" </dev/null

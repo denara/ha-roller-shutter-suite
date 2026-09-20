@@ -136,8 +136,18 @@ with another identity. A finding names the commit and says whether it is the
 author or the committer; it prints neither address. Without a configured
 address the identity cannot be compared, and that is a failure. Commits that
 the remote already has, such as a merge made on the server with the address of
-the server as committer, are outside the range and are not compared. The
-tagger of a tag object is not compared.
+the server as committer, are outside the range and are not compared. They are
+recognized by the remote-tracking refs, so a clone that has none of the remote
+has to fetch first. The tagger of a pushed tag object is compared in the same
+way.
+
+Before the hook relies on this mode it asks ``--supports pushed``, which prints
+one exact token and nothing else. A guard that predates the mode ignores its
+arguments, judges the checkout again and ends with status 0; without the
+question such a run would pass for "the commits were judged".
+
+The git calls of this mode do not depend on settings of the repository, of its
+content or of the user; ``_LISTING_OPTIONS`` says how.
 A line whose local object name consists of zeros deletes a ref, sends nothing
 and is only counted.
 
@@ -642,6 +652,11 @@ def check_checkout(root: Path, own_path: str = OWN_PATH) -> Report:
 
 
 PUSHED_OPTION = "--pushed"
+# The hook asks with ``--supports pushed`` before it relies on ``--pushed``: a
+# guard that predates the mode ignores its arguments, judges the checkout and
+# ends with status 0, which must never count as "the commits were judged".
+SUPPORTS_OPTION = "--supports"
+SUPPORTED_MODES = {"pushed": "instance data guard: the mode 'pushed' is supported"}
 _OBJECT_NAME = re.compile(r"[0-9a-f]{40}|[0-9a-f]{64}")
 _RAW_ENTRY = re.compile(r":(\d{6}) (\d{6}) ([0-9a-f]+) ([0-9a-f]+) ([AMDT])")
 _ABBREVIATED = 10
@@ -667,6 +682,24 @@ _UNJUDGED_HEADERS = frozenset(
     }
 )
 _HOOK_INPUT = "what git handed to the hook"
+# How the entries of a commit are listed. Every option is there so that no
+# setting of the repository, of its content or of the user changes the list:
+# ``-z`` prints path texts as they are, whatever ``core.quotePath`` says;
+# ``--no-renames`` and ``--no-relative`` override ``diff.renames`` and
+# ``diff.relative``; ``--ignore-submodules=none`` overrides ``diff.ignoreSubmodules``
+# and an ``ignore`` entry in ``.gitmodules``, which would hide a nested checkout;
+# ``--no-abbrev`` overrides ``core.abbrev``. Only names, modes and object names
+# are asked for, never a patch, so attributes, external diff programs and text
+# conversion have nothing to act on. ``diff.orderFile`` may change the order,
+# which changes no judgment. Contents come from ``git cat-file``, as stored.
+_LISTING_OPTIONS = (
+    "-r",
+    "-z",
+    "--no-renames",
+    "--no-relative",
+    "--ignore-submodules=none",
+    "--no-abbrev",
+)
 # The line of an author or committer: a name, the address, seconds, time zone.
 _IDENTITY_ADDRESS = re.compile(r"[^<>]*<([^<>]*)> -?\d+ [+-]\d{4}")
 
@@ -685,15 +718,15 @@ class PlaceFinding:
 
 @dataclass(frozen=True)
 class IdentityFinding:
-    """A commit that was not made with the identity of this clone. No address is kept."""
+    """A commit or tag not made with the identity of this clone. No address is kept."""
 
-    commit: str
+    subject: str
     role: str
 
     def __str__(self) -> str:
         """Render without any address."""
         return (
-            f"commit {self.commit}: the e-mail address of its {self.role} is not the "
+            f"{self.subject}: the e-mail address of its {self.role} is not the "
             "one configured for this clone ('git config user.email'); neither "
             "address is printed here"
         )
@@ -727,6 +760,9 @@ class PushedReport:
     binary: int = 0
     generated: int = 0
     nested: int = 0
+    # Whether any remote-tracking ref limited the range; looked up only when an
+    # identity differs, to explain it. ``None``: not looked up.
+    tracking_refs: bool | None = None
 
     def summary(self) -> str:
         """Say how much was judged; the number of commits comes first."""
@@ -922,7 +958,9 @@ def _judge_object_text(
             ]
 
 
-def _commit_behind(objects: _Objects, ref: PushedRef, report: PushedReport) -> str:
+def _commit_behind(
+    git: _Git, objects: _Objects, ref: PushedRef, report: PushedReport
+) -> str:
     """Return the commit a local object leads to; judge tag objects on the way."""
     name = ref.local_object
     where = f"line {ref.line} of {_HOOK_INPUT}"
@@ -939,6 +977,9 @@ def _commit_behind(objects: _Objects, ref: PushedRef, report: PushedReport) -> s
             )
         headers, message = _split_object(content, f"the tag object of {where}")
         _judge_object_text(headers, message, f"{where}: tag object", report)
+        # Git allows a tag without a tagger; then no address is published.
+        if any(key == "tagger" for key, _ in headers):
+            _judge_identity(git, headers, f"{where}: tag object", ("tagger",), report)
         name = dict(headers).get("object")
         if name is not None and _OBJECT_NAME.fullmatch(name) is None:
             name = None
@@ -968,7 +1009,7 @@ def _changed_entries(
     else:
         ends = ["--root", "--no-commit-id", name]
         by_hand = f"--root --no-commit-id {short}"
-    raw = git.output("diff-tree", "-r", "-z", "--no-renames", "--no-abbrev", *ends)
+    raw = git.output("diff-tree", *_LISTING_OPTIONS, *ends)
     fields = raw.split(b"\0")
     if fields.pop() or len(fields) % 2:
         raise CannotCheckError(f"git listed the entries of commit {short} unreadably")
@@ -996,7 +1037,10 @@ def _changed_entries(
             raise CannotCheckError(
                 f"a path text of commit {short} is not UTF-8, so it cannot be judged"
             ) from error
-    return f"git diff-tree -r --no-renames --name-only {by_hand}", entries
+    return (
+        f"git diff-tree -r --no-renames --ignore-submodules=none --name-only {by_hand}",
+        entries,
+    )
 
 
 def _configured_address(git: _Git) -> str:
@@ -1021,9 +1065,15 @@ def _configured_address(git: _Git) -> str:
 
 
 def _judge_identity(
-    git: _Git, headers: list[tuple[str, str]], short: str, report: PushedReport
+    git: _Git,
+    headers: list[tuple[str, str]],
+    subject: str,
+    roles: tuple[str, ...],
+    report: PushedReport,
 ) -> None:
     """Compare the addresses of author and committer with the one of this clone.
+
+    For a tag object the role is the tagger.
 
     Not a content rule: which address is right is the business of whoever owns
     the clone. What is caught is a commit made in another environment, with an
@@ -1031,13 +1081,13 @@ def _judge_identity(
     are not told apart, as mail systems do not tell them apart in practice.
     """
     expected = _configured_address(git)
-    for role in ("author", "committer"):
+    for role in roles:
         lines = [value for key, value in headers if key == role]
         match = _IDENTITY_ADDRESS.fullmatch(lines[0]) if len(lines) == 1 else None
         if match is None:
-            raise CannotCheckError(f"commit {short} names its {role} unreadably")
+            raise CannotCheckError(f"{subject} names its {role} unreadably")
         if match[1].strip().casefold() != expected:
-            report.findings.append(IdentityFinding(short, role))
+            report.findings.append(IdentityFinding(subject, role))
     report.identities += 1
 
 
@@ -1055,7 +1105,7 @@ def _judge_commit(
         raise CannotCheckError(f"commit {short} names a parent unreadably")
     report.commits += 1
     _judge_object_text(headers, message, f"commit {short}", report)
-    _judge_identity(git, headers, short, report)
+    _judge_identity(git, headers, f"commit {short}", ("author", "committer"), report)
     by_hand, entries = _changed_entries(git, name, parents)
     for position, entry in enumerate(entries, start=1):
         if entry.status == "D":
@@ -1130,7 +1180,7 @@ def check_pushed(
                 PlaceFinding(f"{where}: the name of the remote ref", kind)
                 for kind in name_kinds(ref.remote_ref)
             ]
-            commit = _commit_behind(objects, ref, report)
+            commit = _commit_behind(git, objects, ref, report)
             exclude = [known]
             if ref.remote_object is not None:
                 if objects.read(ref.remote_object) is None:
@@ -1150,6 +1200,11 @@ def check_pushed(
                 if name not in judged:
                     judged.add(name)
                     _judge_commit(git, objects, name, report)
+    if any(isinstance(finding, IdentityFinding) for finding in report.findings):
+        prefix = "refs/remotes/" + ("" if known == "--remotes" else f"{remote_name}/")
+        report.tracking_refs = bool(
+            git.output("for-each-ref", "--count=1", "--format=%(objectname)", prefix)
+        )
     return report
 
 
@@ -1184,9 +1239,19 @@ def main_pushed(remote_name: str, remote_url: str) -> int:
         return EXIT_CANNOT_CHECK
     for finding in report.findings:
         sys.stdout.write(f"{finding}\n")
-    if any(isinstance(finding, IdentityFinding) for finding in report.findings):
+    if report.tracking_refs is False:
         sys.stdout.write(
-            "A commit with another address was made in another environment (inside "
+            "This clone has no remote-tracking ref of this remote, so the commits "
+            "the remote already has could not be left out, and commits made on the "
+            "server or by others were compared too. Run 'git fetch <remote>' first, "
+            "then push again.\n"
+        )
+    if report.tracking_refs is not None:
+        sys.stdout.write(
+            "Commits the remote already has are recognized by the remote-tracking "
+            "refs; if the flagged commits came from the remote, run 'git fetch "
+            "<remote>' and push again. Otherwise: "
+            "a commit with another address was made in another environment (inside "
             "WSL, on another computer), or it is the work of somebody else. Do not "
             "change the configured identity to get past this. Make your own commit "
             "again in this clone, on a new branch if the old one was never pushed "
@@ -1207,10 +1272,20 @@ def main(arguments: Sequence[str] = ()) -> int:
     """Run the guard: on this checkout, or with ``--pushed`` on what a push sends."""
     if len(arguments) == 3 and arguments[0] == PUSHED_OPTION:  # noqa: PLR2004 - option, name, URL
         return main_pushed(arguments[1], arguments[2])
+    if (
+        len(arguments) == 2  # noqa: PLR2004 - option and mode
+        and arguments[0] == SUPPORTS_OPTION
+        and arguments[1] in SUPPORTED_MODES
+    ):
+        # Exactly the token, without a line end, which Windows would write as two
+        # characters; the hook compares the whole output.
+        sys.stdout.write(SUPPORTED_MODES[arguments[1]])
+        return 0
     if arguments:
         sys.stdout.write(
             "instance data: CANNOT CHECK, so this is a failure: unknown arguments; "
-            f"use none, or '{PUSHED_OPTION} <name of the remote> <URL of the remote>'\n"
+            f"use none, '{PUSHED_OPTION} <name of the remote> <URL of the remote>', "
+            f"or '{SUPPORTS_OPTION} pushed'\n"
         )
         return EXIT_CANNOT_CHECK
     try:

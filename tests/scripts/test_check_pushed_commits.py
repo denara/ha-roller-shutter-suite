@@ -20,7 +20,9 @@ from scripts import check_instance_data
 from scripts.check_instance_data import (
     EXIT_CANNOT_CHECK,
     EXIT_FINDINGS,
+    SUPPORTED_MODES,
     CannotCheckError,
+    IdentityFinding,
     PushedReport,
     check_pushed,
     main,
@@ -177,15 +179,143 @@ def test_commit_with_another_identity_is_found_without_any_address(
 
     report = _judge(repository, hook_line(own, _base(repository)))
 
-    assert _shown(report).splitlines() == [
-        f"commit {foreign[:10]}: the e-mail address of its {role} is not the one "
-        "configured for this clone ('git config user.email'); neither address is "
-        "printed here"
-        for role in roles
-    ]
+    assert [
+        (finding.subject, finding.role)
+        for finding in report.findings
+        if isinstance(finding, IdentityFinding)
+    ] == [(f"commit {foreign[:10]}", role) for role in roles]
+    assert len(report.findings) == len(roles)
+    assert all(
+        f"commit {foreign[:10]}: " in line for line in _shown(report).splitlines()
+    )
     assert ADDRESS not in _shown(report)
     assert OTHER_ADDRESS not in _shown(report)
     assert report.identities == 2  # noqa: PLR2004 - both commits were compared
+    assert report.tracking_refs is True
+
+
+def test_tagger_of_a_pushed_tag_is_compared_too(repository: Repository) -> None:
+    """A tag made in another environment publishes that address like a commit."""
+    base = _base(repository)
+    own = repository.tag("own", base, "harmless")
+    foreign = repository.tag("foreign", base, "harmless", tagger=OTHER_ADDRESS)
+
+    report = _judge(
+        repository,
+        hook_line(own, ZEROS, "refs/tags/own"),
+        hook_line(foreign, ZEROS, "refs/tags/foreign"),
+    )
+
+    assert [
+        (finding.subject, finding.role)
+        for finding in report.findings
+        if isinstance(finding, IdentityFinding)
+    ] == [("line 2 of what git handed to the hook: tag object", "tagger")]
+    assert len(report.findings) == 1
+    assert OTHER_ADDRESS not in _shown(report)
+    assert report.identities == 2  # noqa: PLR2004 - both tag objects were compared
+
+
+def test_refusal_says_to_fetch_when_no_remote_tracking_ref_exists(
+    repository: Repository,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A clone without them compares what came from the server, and says so.
+
+    A squash made on the server has the address of the server as committer.
+    With the remote-tracking ref it is outside the range; without any, it is
+    compared, and the explanation names the fetch as the way out.
+    """
+    repository.write("notes.md", "harmless\nmore\n")
+    squashed = repository.commit(addresses=(ADDRESS, OTHER_ADDRESS))
+    repository.write("notes.md", "harmless\nmore\nand more\n")
+    own = repository.commit()
+    line = hook_line(own, ZEROS, "refs/heads/topic").encode()
+    specific = "has no remote-tracking ref of this remote"
+
+    repository.git("update-ref", "-d", TRACKED_MAIN)
+    status, output = _run_main(repository, line, monkeypatch, capsys)
+
+    assert status == EXIT_FINDINGS
+    assert f"commit {squashed[:10]}: " in output
+    assert specific in output
+    assert "git fetch <remote>" in output
+    assert OTHER_ADDRESS not in output
+
+    repository.git("update-ref", TRACKED_MAIN, _first(repository))
+    status, output = _run_main(repository, line, monkeypatch, capsys)
+
+    assert status == EXIT_FINDINGS
+    assert specific not in output
+    assert "git fetch <remote>" in output
+
+    repository.git("update-ref", TRACKED_MAIN, squashed)
+    status, output = _run_main(repository, line, monkeypatch, capsys)
+
+    assert status == 0, output
+    assert "git fetch" not in output
+
+
+def _first(repository: Repository) -> str:
+    return repository.git("rev-list", "--max-parents=0", MAIN)
+
+
+def test_nested_checkout_is_listed_whatever_its_settings_say(
+    repository: Repository,
+) -> None:
+    """``ignore = all`` in ``.gitmodules`` hides an entry from a plain listing."""
+    name = f"module-{PRIVATE_VALUE}"
+    repository.write(
+        ".gitmodules",
+        '[submodule "example"]\n\tpath = module\n\turl = https://example.com/m.git\n'
+        "\tignore = all\n",
+    )
+    settings = repository.root / ".git" / "config"
+    with settings.open("a", encoding="utf-8", newline="\n") as file:
+        file.write("[diff]\n\tignoreSubmodules = all\n")
+    repository.git("update-index", "--add", "--cacheinfo", f"160000,{'1' * 40},module")
+    repository.git("update-index", "--add", "--cacheinfo", f"160000,{'2' * 40},{name}")
+    added = repository.commit()
+    repository.git("update-index", "--add", "--cacheinfo", f"160000,{'3' * 40},module")
+    repository.git("update-index", "--add", "--cacheinfo", f"160000,{'4' * 40},{name}")
+    moved = repository.commit()
+
+    report = _judge(repository, hook_line(moved, _base(repository)))
+
+    # The settings file and two entries, then the two entries once more.
+    assert (report.commits, report.nested, report.names) == (2, 4, 5)
+    assert [str(finding).split(":")[0] for finding in report.findings] == [
+        f"commit {added[:10]}",
+        f"commit {moved[:10]}",
+    ]
+    assert PRIVATE_VALUE not in _shown(report)
+
+
+def test_path_text_outside_ascii_is_judged_as_it_is(tmp_path: Path) -> None:
+    """With ``core.quotePath`` git prints such a path in quotes and as octal codes.
+
+    The setting is written into the configuration file of the throw-away
+    repository, both ways; the listing must not depend on it.
+    """
+    for number, setting in enumerate(("true", "false")):
+        repository = Repository.create(tmp_path / f"checkout-{number}")
+        settings = repository.root / ".git" / "config"
+        with settings.open("a", encoding="utf-8", newline="\n") as file:
+            file.write(f"[core]\n\tquotePath = {setting}\n")
+        clean = "docs/\N{LATIN SMALL LETTER U WITH DIAERESIS}bersicht \N{SNOWMAN}.md"
+        private = f"docs/\N{LATIN SMALL LETTER U WITH DIAERESIS}ber-{PRIVATE_VALUE}.md"
+        repository.write(clean, f"host: {PRIVATE_VALUE}\n")
+        repository.write(private, "harmless\n")
+        commit = repository.commit()
+
+        report = _judge(repository, hook_line(commit, ZEROS))
+
+        shown = _shown(report).splitlines()
+        assert len(shown) == 2, shown  # noqa: PLR2004 - one line, one path text
+        assert f"commit {commit[:10]}: {clean}:1: looks like: " in "".join(shown)
+        assert "its name, which is not printed here" in "".join(shown)
+        assert PRIVATE_VALUE not in "".join(shown)
 
 
 def test_identity_of_what_the_remote_has_is_not_compared(
@@ -273,10 +403,8 @@ def test_value_in_a_path_text_only_is_found_without_naming_it(
         "path inside a user's home directory",
     ]
     assert f"commit {short}: entry 1 of its changed entries: its name" in shown
-    assert (
-        f"line 1 of the output of 'git diff-tree -r --no-renames --name-only {_base(repository)[:10]} {short}'"
-        in shown
-    )
+    assert "line 1 of the output of 'git diff-tree " in shown
+    assert f" --name-only {_base(repository)[:10]} {short}'" in shown
     # The finding in the content of that file does not give the name away either.
     assert f"commit {short}: entry 1 of its changed entries:2: looks like: " in shown
     assert PRIVATE_VALUE not in shown
@@ -685,7 +813,26 @@ def test_unknown_arguments_are_a_failure(capsys: pytest.CaptureFixture[str]) -> 
     assert main(["--pushed"]) == EXIT_CANNOT_CHECK
     assert main(["--pushed", REMOTE, URL, "more"]) == EXIT_CANNOT_CHECK
     assert main(["--other"]) == EXIT_CANNOT_CHECK
-    assert "instance data: ok" not in capsys.readouterr().out
+    assert main(["--supports"]) == EXIT_CANNOT_CHECK
+    assert main(["--supports", "something-else"]) == EXIT_CANNOT_CHECK
+    assert main(["--supports", "pushed", "more"]) == EXIT_CANNOT_CHECK
+    output = capsys.readouterr().out
+    assert "instance data: ok" not in output
+    assert SUPPORTED_MODES["pushed"] not in output
+
+
+def test_guard_proves_that_it_knows_the_mode() -> None:
+    """The hook compares the whole output, so it is the token and nothing else."""
+    answer = subprocess.run(  # noqa: S603 - this interpreter, the guard of this checkout
+        [sys.executable, str(GUARD), "--supports", "pushed"],
+        check=False,
+        capture_output=True,
+        stdin=subprocess.DEVNULL,
+    )
+
+    assert answer.returncode == 0
+    assert answer.stdout == SUPPORTED_MODES["pushed"].encode()
+    assert answer.stderr == b""
 
 
 def _start_guard(data: bytes | None) -> subprocess.CompletedProcess[bytes]:
