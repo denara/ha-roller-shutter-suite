@@ -86,6 +86,11 @@ class SettingKind(StrEnum):
     NUMBER = "number"
     ENUMERATION = "enumeration"
     LIST = "list"
+    TIME = "time"
+    """A local time of day, without a date and without a zone."""
+    DURATION = "duration"
+    DAY_OF_YEAR = "day_of_year"
+    """A month and a day without a year, for example the first day of summer."""
     OPTIONAL_REFERENCE = "optional_reference"
     """A reference to a source or an entity that may be absent: ``str | None``."""
 

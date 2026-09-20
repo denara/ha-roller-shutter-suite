@@ -1,7 +1,7 @@
 """Partial settings, the resolver global → group → window, provenance, the mask."""
 
 import dataclasses
-from datetime import timedelta
+from datetime import time, timedelta
 from enum import StrEnum, unique
 from typing import Any
 
@@ -631,6 +631,78 @@ def test_marker_never_reaches_the_window_configuration_as_a_string() -> None:
     ]
 
 
+def _as_day_of_year(value: JsonValue) -> tuple[int, int]:
+    month, day = as_str(value).split("-")
+    return int(month), int(day)
+
+
+SCHEDULE_KINDS = SettingsRegistry(
+    (
+        SettingDefinition(
+            key="morning_time",
+            kind=SettingKind.TIME,
+            default=time(7, 0),
+            parse=lambda value: time.fromisoformat(as_str(value)),
+        ),
+        SettingDefinition(
+            key="delay",
+            kind=SettingKind.DURATION,
+            default=timedelta(0),
+            parse=lambda value: timedelta(seconds=as_int(value)),
+        ),
+        SettingDefinition(
+            key="summer_begins",
+            kind=SettingKind.DAY_OF_YEAR,
+            default=(5, 1),
+            parse=_as_day_of_year,
+        ),
+    )
+)
+
+
+def test_time_duration_and_day_of_year_are_read_in_their_stored_forms() -> None:
+    """The kinds exist for the schedule; zero seconds is a set duration."""
+    partial = settings_from_stored(
+        {"morning_time": "06:30", "delay": 0, "summer_begins": "06-15"},
+        SCHEDULE_KINDS,
+    )
+
+    assert partial == PartialSettings(
+        {
+            "morning_time": time(6, 30),
+            "delay": timedelta(0),
+            "summer_begins": (6, 15),
+        }
+    )
+
+
+@pytest.mark.parametrize("key", ["morning_time", "delay", "summer_begins"])
+def test_marker_for_none_on_a_time_a_duration_or_a_day_of_year_is_a_fault(
+    key: str,
+) -> None:
+    """A time of day, a duration and a day of the year always have a value."""
+    partial = settings_from_stored({key: STORED_NONE}, SCHEDULE_KINDS)
+
+    assert partial.values == {}
+    assert [(fault.key, fault.problem) for fault in partial.faults] == [
+        (key, SettingProblem.NONE_NOT_ALLOWED)
+    ]
+
+
+def test_kinds_are_the_documented_ones() -> None:
+    """A new kind is a decision: it needs a documented stored form."""
+    assert [kind.value for kind in SettingKind] == [
+        "boolean",
+        "number",
+        "enumeration",
+        "list",
+        "time",
+        "duration",
+        "day_of_year",
+        "optional_reference",
+    ]
+
+
 def test_only_the_optional_reference_of_the_window_accepts_the_marker() -> None:
     """The kinds of the window's settings are declared in the registry."""
     kinds = {
@@ -1007,14 +1079,77 @@ def test_window_with_a_masked_own_value_keeps_a_valid_result() -> None:
 def test_registry_of_the_window_covers_every_field_of_the_window_configuration() -> (
     None
 ):
-    """A field without an entry, or an entry without a field, fails here."""
-    fields = [field.name for field in dataclasses.fields(WindowConfig)]
+    """A field without an entry, or an entry without a field, fails here.
 
-    assert sorted(fields) == sorted(WINDOW_IDENTITY_FIELDS + WINDOW_SETTINGS.keys)
+    The failure says what to add where; see ``_registry_mismatches``.
+    """
     defaults = WindowConfig("window_example", FULL)
-    for definition in WINDOW_SETTINGS.definitions:
-        assert definition.default == getattr(defaults, definition.key)
-        assert definition.requires is None
+    mismatches = _registry_mismatches(
+        fields={
+            field.name: getattr(defaults, field.name)
+            for field in dataclasses.fields(WindowConfig)
+            if field.name not in WINDOW_IDENTITY_FIELDS
+        },
+        entries={
+            definition.key: definition.default
+            for definition in WINDOW_SETTINGS.definitions
+        },
+    )
+
+    assert not mismatches, "\n".join(mismatches)
+    assert set(WINDOW_IDENTITY_FIELDS) <= {
+        field.name for field in dataclasses.fields(WindowConfig)
+    }
+
+
+def _registry_mismatches(
+    *, fields: dict[str, object], entries: dict[str, object]
+) -> list[str]:
+    """Compare the fields of ``WindowConfig`` with the registry, with advice."""
+    settings_module = "custom_components/roller_shutter_suite/core/settings.py"
+    window_module = "custom_components/roller_shutter_suite/core/model/window.py"
+    messages = [
+        f"WindowConfig has the field {name!r}, but WINDOW_SETTINGS has no entry for "
+        f"it. Add SettingDefinition(key={name!r}, kind=SettingKind.<kind>, "
+        f"default={default!r}, parse=<reader of the stored value>) to "
+        f"WINDOW_SETTINGS in {settings_module}. Only if the caller hands the field "
+        f"in and it is never stored as a setting, add {name!r} to "
+        f"WINDOW_IDENTITY_FIELDS there instead."
+        for name, default in fields.items()
+        if name not in entries
+    ]
+    messages += [
+        f"WINDOW_SETTINGS has the entry {key!r}, but WindowConfig has no field of "
+        f"that name. Add the field {key!r} with the default {default!r} to "
+        f"WindowConfig in {window_module} (the key of an entry is the name of its "
+        f"field), or remove the entry from WINDOW_SETTINGS in {settings_module}."
+        for key, default in entries.items()
+        if key not in fields
+    ]
+    messages += [
+        f"The setting {key!r} has two different defaults: {entries[key]!r} in "
+        f"WINDOW_SETTINGS ({settings_module}) and {default!r} in WindowConfig "
+        f"({window_module}). Make them the same value."
+        for key, default in fields.items()
+        if key in entries and entries[key] != default
+    ]
+    return messages
+
+
+def test_mismatch_between_registry_and_window_configuration_says_what_to_add() -> None:
+    """A contributor who forgot one half reads where the other half goes."""
+    messages = _registry_mismatches(
+        fields={"morning_position": 100, "evening_position": 0},
+        entries={"evening_position": 10, "night_position": 0},
+    )
+
+    missing_entry, missing_field, different_defaults = messages
+    assert "SettingDefinition(key='morning_position'" in missing_entry
+    assert "WINDOW_SETTINGS in custom_components" in missing_entry
+    assert "WINDOW_IDENTITY_FIELDS" in missing_entry
+    assert "Add the field 'night_position'" in missing_field
+    assert "core/model/window.py" in missing_field
+    assert "'evening_position' has two different defaults: 10" in different_defaults
 
 
 def test_only_the_covering_type_cannot_be_inherited() -> None:

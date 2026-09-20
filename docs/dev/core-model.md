@@ -176,7 +176,7 @@ Configuration is stored on three levels: the house (global), a group, a window. 
 | `INHERIT` (type `Inherit`) | The one marker for "this level does not set the value". It is never `None`: for a setting whose type allows `None`, a set `None` is a set value that beats the levels below it. |
 | `PartialSettings` | What one level sets itself: a read-only mapping from key to value; every other key is `INHERIT`. `get(key)` returns the value or the marker, `with_value` and `with_inherit` return changed copies. `faults` lists stored values that could not be read (`SettingFault`: key, English detail, and a `SettingProblem` code). Compared by value; not hashable, because it holds a mapping. |
 | `SettingDefinition` | Everything the resolver knows about one setting, in one place: `key`, `kind`, built-in `default`, `parse` (reads the value from stored data), `inheritable`, `requires`. |
-| `SettingKind` | The declared kind of a setting: `boolean`, `number`, `enumeration`, `list`, `optional_reference`. Only an optional reference (a source or an entity that may be absent, `str \| None`) can be "explicitly none". |
+| `SettingKind` | The declared kind of a setting: `boolean`, `number`, `enumeration`, `list`, `time`, `duration`, `day_of_year`, `optional_reference`. The stored forms expected for the last three before it are listed [below](#from-stored-data-to-partial-settings). Only an optional reference (a source or an entity that may be absent, `str \| None`) can be "explicitly none". |
 | `STORED_NONE` | The string `"__none__"`: how stored data says "explicitly none" for an optional reference. It exists in stored data only. |
 | `CapabilityRequirement` | A setting needs a capability of the window (`Capability`, the four fields of `WindowCapabilityStates`), and the value the configuration carries when the capability is definitely missing. |
 | `SettingsRegistry` | The settings that exist. The resolver is generic over it. `WINDOW_SETTINGS` is the registry of the settings of `WindowConfig`. |
@@ -202,6 +202,14 @@ Configuration is stored on three levels: the house (global), a group, a window. 
 | `"__none__"` on a setting of any other kind | a fault with the code `none_not_allowed`: a switch, a number, a choice and a list always have a value |
 | a value that `parse` refuses | a fault with the message of the refusal |
 | a key the registry does not know | left alone: the stored data of a window also holds its covers and its group reference |
+
+**Stored forms of the kinds that block C04 brings.** No setting of these kinds is registered yet; the parser of each entry is the block's business. The forms below are what the kinds expect, chosen so that a stored value reads the same to a person and to the parser:
+
+- `time`, a local time of day: text `"HH:MM"` or `"HH:MM:SS"` on the 24-hour clock, for example `"06:30"`. No date, no zone, no offset: the zone is the local zone of the installation, which the core gets from the clock port.
+- `duration`: a whole number of seconds, zero or more, for example `900`. It is a number and not text, so there is one spelling of every duration; a form that offers hours, minutes and seconds converts before it stores.
+- `day_of_year`, a month and a day: text `"MM-DD"`, for example `"05-01"`. No year. `"02-29"` should be refused by the parser, so that the day exists in every year.
+
+All three always have a value, so `"__none__"` is a fault on them.
 
 ### The resolver
 
@@ -238,4 +246,4 @@ WINDOW_SETTINGS = SettingsRegistry(
 )
 ```
 
-The block that builds a feature adds the field to `WindowConfig`, where the setting and its value rules live, and this one entry. Nothing else in `settings` changes: reading stored data, the order of the levels, provenance, the mask, validation and the construction of the `WindowConfig` follow from the entry. A test compares the registry with the fields of `WindowConfig` and fails when a field has no entry, an entry has no field, or the two state different defaults.
+The block that builds a feature adds the field to `WindowConfig`, where the setting and its value rules live, and this one entry. Nothing else in `settings` changes: reading stored data, the order of the levels, provenance, the mask, validation and the construction of the `WindowConfig` follow from the entry. A test compares the registry with the fields of `WindowConfig` and fails when a field has no entry, an entry has no field, or the two state different defaults. Its message says what to add where: the `SettingDefinition` to add to `WINDOW_SETTINGS`, or the field to add to `WindowConfig`, with the file of each.
