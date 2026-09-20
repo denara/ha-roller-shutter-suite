@@ -93,7 +93,7 @@ A test must not end with a raised log level for Home Assistant or the integratio
 
 Some deprecated parts of Home Assistant are compatibility shims that log nothing, `DeviceEntry.config_entries` for example. No test can notice them, so the static list `scripts/deprecated_names.toml` is the only net. Each entry says how the name is matched, whether Home Assistant logs a report or stays silent, why the name is deprecated, what replaces it, and where that was verified. Add an entry when you learn of a deprecation that concerns this integration, and verify it in the Core source of the tested version first.
 
-The script does not know types. For names that are common, it reports the attribute on every object except the ones on the entry's allow-list: `.config_entries` is fine on `hass` (also `self.hass`, `entry.hass`, `self._hass`) and on the module `homeassistant`, and is reported everywhere else. If the script flags an attribute of your own that only shares the name, rename yours; it is cheaper than a hole in the net.
+The script does not know types. For names that are common, it reports the attribute on every object except the ones on the entry's allow-list: `.config_entries` is fine on `hass` (also `self.hass`, `entry.hass`, `self._hass`) and on the module `homeassistant`, and is reported everywhere else. If the script flags an attribute of your own that only shares the name, **do not rename a plausible name to get around the guard**. Report the false positive; the guard is then made narrower. The rule for that: an entry for something Home Assistant logs anyway is matched narrowly, because the log guard of the tests is a second net there; only entries for silent shims, which no test can notice, stay broad.
 
 ### Coverage
 
@@ -155,7 +155,7 @@ Under **Branches** (or **Rules** > **Rulesets**), a rule for `main` with exactly
   - `HACS`
   - `Static checks and guards`
   - `Tests and coverage`
-- **Require linear history.**
+- **Require linear history.** Block pull requests are **squash-merged**: every work block becomes one commit on `main`, with the pull request title as its subject and the description as its body. Every commit on a block branch still has to import and pass the tests on its own, because reviewers read a branch commit by commit and a follow-up after a review has to be checkable on its own.
 - **Do not allow force pushes.**
 - The rule **applies to administrators** as well ("Do not allow bypassing the above settings").
 

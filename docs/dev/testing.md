@@ -65,6 +65,13 @@ The plugin also ships a `custom_components` package of its own inside its test c
 
 An empty `custom_components/__init__.py` is not needed for this and would not help: if the plugin's package were imported first, it would win with or without that file. `tests/ha/test_harness.py` checks that Home Assistant resolves the integration to the folder in the repository.
 
+## Service descriptions and the voice packages
+
+When Home Assistant validates a service description that contains a `supported_features` or an attribute filter, it imports every base platform (`homeassistant/helpers/service.py`, `_base_components`). One of them is the voice pipeline, which needs two native packages, `pymicro-vad` and `pyspeex-noise`. They are not part of this project's test environment, and for the Python version Home Assistant requires today they have no pre-built wheel.
+
+- **In tests** nothing reaches this path at the moment: the integration has no `services.yaml` and no test loads service descriptions. A test that does (`async_get_all_descriptions`, the websocket command `get_services`) while an integration with such a filter is loaded, Home Assistant's own `cover` integration for example, fails with a `ModuleNotFoundError`. The block that adds this integration's actions decides how to handle it: documented stand-in modules in `tests/ha/conftest.py` first, the real packages only if that does not hold. Never a warning filter.
+- **When you start a real Home Assistant** from the development environment for a manual check (`uv run hass -c <empty configuration directory>`), the frontend asks for the service descriptions right after the onboarding. Without the two packages the page stays on "Loading". Home Assistant then tries to build them, which needs a C++ compiler and the Python development headers of the interpreter in use. Install them once in your environment, or put two stand-in modules into that throw-away virtual environment. `hass` runs in the foreground and returns no prompt; it is up when the onboarding appears in the browser.
+
 ## Adding a scenario
 
 For a rule of the domain core:
