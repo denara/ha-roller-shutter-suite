@@ -28,12 +28,14 @@ the standard library.
 """
 
 import ast
+import os
 import sys
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
+# ``__file__`` is absolute; nothing at module level touches the file system.
+REPOSITORY_ROOT = Path(__file__).parents[1]
 INTEGRATION_PACKAGE = "custom_components.roller_shutter_suite"
 CORE_PACKAGE = f"{INTEGRATION_PACKAGE}.core"
 FORBIDDEN_PACKAGE = "homeassistant"
@@ -143,10 +145,51 @@ def check_source(source: str, package: str, path: str) -> list[Finding]:
     return findings
 
 
+def _exists(path: Path, shown: str) -> bool:
+    """Tell whether a path exists; an error other than "not there" is not a "no".
+
+    ``Path.exists`` and its relatives answer ``False`` for every error of the
+    operating system, so a file that cannot be examined would look absent.
+    """
+    try:
+        path.lstat()
+    except FileNotFoundError, NotADirectoryError:
+        return False
+    except OSError as error:
+        raise CannotCheckError(
+            f"{shown} cannot be examined ({type(error).__name__})"
+        ) from error
+    return True
+
+
+def _walk(folder: Path, shown: str, wanted: Callable[[str], bool]) -> list[Path]:
+    """Return the wanted files below ``folder``, sorted; empty if it is not there.
+
+    ``Path.rglob`` passes over a folder it cannot read without a word, and the
+    files in it would simply not be checked. Here such a folder is a failure.
+    """
+    if not _exists(folder, shown):
+        return []
+
+    def refuse(error: OSError) -> None:
+        raise CannotCheckError(
+            f"a folder under {shown}/ cannot be listed ({type(error).__name__})"
+        ) from error
+
+    found: list[Path] = []
+    for directory, _folders, names in os.walk(folder, onerror=refuse):
+        found += [Path(directory) / name for name in names if wanted(name)]
+    return sorted(found)
+
+
+def _is_python(name: str) -> bool:
+    return name.endswith(".py")
+
+
 def core_files(root: Path) -> list[Path]:
     """Return the Python files of the core package; there has to be one."""
     core_dir = root.joinpath(*CORE_PACKAGE.split("."))
-    files = sorted(core_dir.rglob("*.py")) if core_dir.is_dir() else []
+    files = _walk(core_dir, "/".join(CORE_PACKAGE.split(".")), _is_python)
     if not files:
         raise CannotCheckError(
             f"no Python file found under {'/'.join(CORE_PACKAGE.split('.'))}/. If "

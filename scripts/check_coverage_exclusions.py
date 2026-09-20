@@ -37,6 +37,7 @@ only the standard library.
 """
 
 import io
+import os
 import re
 import sys
 import tokenize
@@ -46,7 +47,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
+# ``__file__`` is absolute; nothing at module level touches the file system.
+REPOSITORY_ROOT = Path(__file__).parents[1]
 SCANNED_FOLDER = "custom_components"
 MINIMUM_REASON_WORDS = 3
 _ABSENT = None
@@ -138,9 +140,50 @@ def find_pragmas(source: str, path: str) -> list[Pragma]:
     return found
 
 
+def _exists(path: Path, shown: str) -> bool:
+    """Tell whether a path exists; an error other than "not there" is not a "no".
+
+    ``Path.exists`` and its relatives answer ``False`` for every error of the
+    operating system, so a file that cannot be examined would look absent.
+    """
+    try:
+        path.lstat()
+    except FileNotFoundError, NotADirectoryError:
+        return False
+    except OSError as error:
+        raise CannotCheckError(
+            f"{shown} cannot be examined ({type(error).__name__})"
+        ) from error
+    return True
+
+
+def _walk(folder: Path, shown: str, wanted: Callable[[str], bool]) -> list[Path]:
+    """Return the wanted files below ``folder``, sorted; empty if it is not there.
+
+    ``Path.rglob`` passes over a folder it cannot read without a word, and the
+    files in it would simply not be checked. Here such a folder is a failure.
+    """
+    if not _exists(folder, shown):
+        return []
+
+    def refuse(error: OSError) -> None:
+        raise CannotCheckError(
+            f"a folder under {shown}/ cannot be listed ({type(error).__name__})"
+        ) from error
+
+    found: list[Path] = []
+    for directory, _folders, names in os.walk(folder, onerror=refuse):
+        found += [Path(directory) / name for name in names if wanted(name)]
+    return sorted(found)
+
+
+def _is_python(name: str) -> bool:
+    return name.endswith(".py")
+
+
 def scanned_files(root: Path) -> list[Path]:
     """Return the Python files of the integration; there has to be one."""
-    files = sorted((root / SCANNED_FOLDER).rglob("*.py"))
+    files = _walk(root / SCANNED_FOLDER, SCANNED_FOLDER, _is_python)
     if not files:
         raise CannotCheckError(
             f"no Python file found under {SCANNED_FOLDER}/. If the folder has "
@@ -180,8 +223,8 @@ def other_configuration_files(root: Path) -> list[str]:
     found: list[str] = []
     for name in _OTHER_CONFIGURATION_FILES:
         file = root / name
-        if (name == ".coveragerc" and file.exists()) or (
-            file.exists() and "[coverage:" in _read(file, name)
+        if _exists(file, name) and (
+            name == ".coveragerc" or "[coverage:" in _read(file, name)
         ):
             found.append(name)
     return found

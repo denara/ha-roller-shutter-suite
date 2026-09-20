@@ -41,12 +41,14 @@ text or a traceback, which may name a local path.
 
 import ast
 import json
+import os
 import sys
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 
-REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
+# ``__file__`` is absolute; nothing at module level touches the file system.
+REPOSITORY_ROOT = Path(__file__).parents[1]
 INTEGRATION_DIR = "custom_components/roller_shutter_suite"
 CORE_DIR = f"{INTEGRATION_DIR}/core"
 THRESHOLDS = {"flow": 100.0, "home assistant": 90.0, "core": 95.0}
@@ -127,6 +129,47 @@ def collect(
     return totals
 
 
+def _exists(path: Path, shown: str) -> bool:
+    """Tell whether a path exists; an error other than "not there" is not a "no".
+
+    ``Path.exists`` and its relatives answer ``False`` for every error of the
+    operating system, so a file that cannot be examined would look absent.
+    """
+    try:
+        path.lstat()
+    except FileNotFoundError, NotADirectoryError:
+        return False
+    except OSError as error:
+        raise CannotCheckError(
+            f"{shown} cannot be examined ({type(error).__name__})"
+        ) from error
+    return True
+
+
+def _walk(folder: Path, shown: str, wanted: Callable[[str], bool]) -> list[Path]:
+    """Return the wanted files below ``folder``, sorted; empty if it is not there.
+
+    ``Path.rglob`` passes over a folder it cannot read without a word, and the
+    files in it would simply not be checked. Here such a folder is a failure.
+    """
+    if not _exists(folder, shown):
+        return []
+
+    def refuse(error: OSError) -> None:
+        raise CannotCheckError(
+            f"a folder under {shown}/ cannot be listed ({type(error).__name__})"
+        ) from error
+
+    found: list[Path] = []
+    for directory, _folders, names in os.walk(folder, onerror=refuse):
+        found += [Path(directory) / name for name in names if wanted(name)]
+    return sorted(found)
+
+
+def _is_python(name: str) -> bool:
+    return name.endswith(".py")
+
+
 def unmeasured_files(root: Path, totals: dict[str, Totals]) -> list[str]:
     """Return the modules of the integration that the report does not contain.
 
@@ -135,7 +178,7 @@ def unmeasured_files(root: Path, totals: dict[str, Totals]) -> list[str]:
     """
     measured = {path for group in totals.values() for path in group.files}
     missing: list[str] = []
-    modules = sorted((root / INTEGRATION_DIR).rglob("*.py"))
+    modules = _walk(root / INTEGRATION_DIR, INTEGRATION_DIR, _is_python)
     if not modules:
         raise CannotCheckError(
             f"no Python file found under {INTEGRATION_DIR}/. If the integration "

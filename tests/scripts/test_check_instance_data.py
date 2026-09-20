@@ -253,6 +253,100 @@ def test_path_of_an_unknown_kind_cannot_be_judged(tmp_path: Path) -> None:
         check_tree(tmp_path, ["pipe"])
 
 
+def _refuse_lstat(monkeypatch: pytest.MonkeyPatch, name: str) -> None:
+    """Make the operating system refuse to examine every path called ``name``."""
+    original = Path.lstat
+
+    def lstat(path: Path) -> os.stat_result:
+        if path.name == name:
+            raise PermissionError(13, "refused for the test", str(path))
+        return original(path)
+
+    monkeypatch.setattr(Path, "lstat", lstat)
+
+
+def test_file_that_cannot_be_examined_is_not_counted_as_deleted(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Any error but "no such file" is a failure; runs on every platform."""
+    (tmp_path / "locked.md").write_text(".".join(["10", "9", "8", "7"]), "utf-8")
+    _refuse_lstat(monkeypatch, "locked.md")
+
+    with pytest.raises(CannotCheckError, match="cannot be examined") as caught:
+        check_tree(tmp_path, ["locked.md"])
+    assert "PermissionError" in str(caught.value)
+    assert "entry 1 of the list of git" in str(caught.value)
+    assert str(tmp_path) not in str(caught.value)
+
+
+def test_unexaminable_file_with_a_private_looking_name_is_not_named(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The message of the failure keeps to the position of the entry."""
+    name = "notes-" + ".".join(["10", "9", "8", "7"]) + ".md"
+    (tmp_path / name).write_text("harmless\n", encoding="utf-8")
+    _refuse_lstat(monkeypatch, name)
+
+    with pytest.raises(CannotCheckError) as caught:
+        check_tree(tmp_path, ["harmless.md", name])
+    assert str(caught.value).startswith("entry 2 of the list of git is listed but")
+    assert name not in str(caught.value)
+
+
+def test_failure_to_examine_ends_the_run_with_status_two(
+    checkout: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Through ``main``: never "deleted but still listed", never a pass."""
+    _refuse_lstat(monkeypatch, "new.md")
+
+    status, output = _run_on(checkout, monkeypatch, capsys)
+
+    assert status == EXIT_CANNOT_CHECK
+    assert "CANNOT CHECK" in output
+    assert "instance data: ok" not in output
+
+
+CAN_LOCK_FOLDERS = os.name == "posix" and getattr(os, "geteuid", lambda: 0)() != 0
+
+
+@pytest.mark.skipif(
+    not CAN_LOCK_FOLDERS, reason="permissions cannot be taken away here"
+)
+def test_staged_file_in_a_folder_without_permission_is_not_a_pass(
+    checkout: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The real case: git has the content staged, the folder can no longer be entered.
+
+    Skipped where a folder cannot be locked (Windows, or a run as root, for
+    which permissions do not hold). Nothing is hidden by that: the test above
+    forces the same answer of the operating system on every platform, and this
+    one runs on Linux, which is where CI runs.
+    """
+    folder = checkout / "locked"
+    folder.mkdir()
+    (folder / "staged.md").write_text(".".join(["10", "9", "8", "7"]), "utf-8")
+    _git(checkout, "add", "locked/staged.md")
+    folder.chmod(0)
+    try:
+        status, output = _run_on(checkout, monkeypatch, capsys)
+    finally:
+        folder.chmod(0o700)
+
+    assert status == EXIT_CANNOT_CHECK
+    assert "cannot be examined (PermissionError)" in output
+    assert "deleted but still listed" not in output
+
+
+def test_entry_that_is_really_gone_is_still_counted_as_deleted(tmp_path: Path) -> None:
+    """Only "no such file" means deleted, also below a path that is a file now."""
+    (tmp_path / "now-a-file").write_text("harmless\n", encoding="utf-8")
+
+    report = check_tree(tmp_path, ["gone.md", "now-a-file/inner.md", "now-a-file"])
+
+    assert report.absent == ["gone.md", "now-a-file/inner.md"]
+    assert report.checked == ["now-a-file"]
+
+
 def test_text_in_another_encoding_cannot_be_judged(tmp_path: Path) -> None:
     """A text file that is not UTF-8 is not waved through as binary."""
     (tmp_path / "legacy.txt").write_bytes("caf\xe9 and more".encode("latin-1"))

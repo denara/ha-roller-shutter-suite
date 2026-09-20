@@ -25,7 +25,8 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
+# ``__file__`` is absolute; nothing at module level touches the file system.
+REPOSITORY_ROOT = Path(__file__).parents[1]
 PROJECT_FILE = "pyproject.toml"
 MANIFEST_FILE = "custom_components/roller_shutter_suite/manifest.json"
 EXIT_FINDINGS = 1

@@ -34,6 +34,9 @@ pass. "Could not check" means here, and ends with exit status 2:
 - git answered, but this script is not on its list or was not among the files
   checked, so the list does not describe this checkout (this also rules out a
   run that checked no file at all);
+- a listed path exists but cannot be examined (no permission for its folder, a
+  path that is too long, an input/output error): only "there is no such file"
+  counts as deleted, every other answer of the operating system is a failure;
 - a listed file cannot be read, or it is neither UTF-8 text nor binary (binary
   means it contains a NUL byte, which is how git decides it), so it cannot be
   judged;
@@ -91,13 +94,15 @@ and the standard library.
 import os
 import re
 import shutil
+import stat
 import subprocess
 import sys
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
-REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
+# ``__file__`` is absolute; nothing at module level touches the file system.
+REPOSITORY_ROOT = Path(__file__).parents[1]
 # A correct list of this checkout contains the guard itself.
 OWN_PATH = "scripts/check_instance_data.py"
 EXIT_FINDINGS = 1
@@ -350,9 +355,15 @@ def _unreachable_git_dir(root: Path) -> str | None:
     if not lines or not lines[0].startswith(_GITDIR_PREFIX):
         return None
     target = lines[0].removeprefix(_GITDIR_PREFIX).strip()
-    if not target or (root / target).exists():
+    if not target:
         return None
-    return target
+    try:
+        (root / target).stat()
+    except OSError:
+        # Not reachable, for whatever reason: worth a translation. If that does
+        # not help either, no way answers and the guard fails closed.
+        return target
+    return None
 
 
 def _translated_git_dir(root: Path) -> str | None:
@@ -377,7 +388,14 @@ def listing_commands(root: Path) -> list[list[str]]:
     commands: list[list[str]] = []
     git = shutil.which("git")
     if git is not None:
-        safe = [git, "-c", f"safe.directory={root.as_posix()}"]
+        # Git compares safe.directory with the real path of the checkout.
+        try:
+            real_root = root.resolve().as_posix()
+        except (OSError, RuntimeError) as error:
+            raise CannotCheckError(
+                f"the folder of the checkout cannot be resolved ({type(error).__name__})"
+            ) from error
+        safe = [git, "-c", f"safe.directory={real_root}"]
         commands.append([*safe, *_LIST_ARGUMENTS])
         git_dir = _translated_git_dir(root)
         if git_dir is not None:
@@ -447,6 +465,29 @@ def _link_text(file: Path, relative: str) -> str:
     return os.fsdecode(target)
 
 
+def _mode(file: Path, entry: int, shown: str) -> int | None:
+    """Return the kind of a listed path without following a link; ``None`` if gone.
+
+    Exactly one question is put to the file system, and only "there is no such
+    file" counts as deleted. ``Path.exists``, ``is_dir`` and ``is_symlink``
+    answer ``False`` for every error (no permission, a path that is too long,
+    an input/output error of a mounted drive), and a file that exists but cannot
+    be examined would then pass as deleted while git publishes its content.
+    """
+    try:
+        return file.lstat().st_mode
+    except FileNotFoundError, NotADirectoryError:
+        return None
+    except OSError as error:
+        label = entry_label(entry)
+        where = shown if shown == label else f"{shown} ({label})"
+        raise CannotCheckError(
+            f"{where} is listed but cannot be examined "
+            f"({type(error).__name__}), so it cannot be told whether it still "
+            "exists; make it and its folder accessible, or have git ignore it"
+        ) from error
+
+
 def check_tree(root: Path, paths: list[str]) -> Report:
     """Check the given files below ``root`` and account for every one of them."""
     report = Report()
@@ -460,18 +501,19 @@ def check_tree(root: Path, paths: list[str]) -> Report:
         report.names_judged += 1
         # What is printed about this entry: never a name that looks private.
         shown = entry_label(entry) if named else relative
-        if file.is_symlink():
+        mode = _mode(file, entry, shown)
+        if mode is None:
+            report.absent.append(relative)
+        elif stat.S_ISLNK(mode):
             # First of all: a link is never followed, whatever it points to.
             report.links.append(relative)
             report.checked.append(relative)
             report.findings += check_text(_link_text(file, shown), shown)
         elif relative in SKIPPED_FILES:
             report.generated.append(relative)
-        elif file.is_dir():
+        elif stat.S_ISDIR(mode):
             report.nested.append(relative)
-        elif not file.exists():
-            report.absent.append(relative)
-        elif not file.is_file():
+        elif not stat.S_ISREG(mode):
             raise CannotCheckError(
                 f"{shown} is neither a file, a link nor a folder, so it cannot "
                 "be judged; remove it or have git ignore it"

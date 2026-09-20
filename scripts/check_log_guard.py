@@ -49,6 +49,7 @@ standard library.
 
 import ast
 import configparser
+import os
 import shlex
 import sys
 import tomllib
@@ -57,7 +58,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
+# ``__file__`` is absolute; nothing at module level touches the file system.
+REPOSITORY_ROOT = Path(__file__).parents[1]
 SCANNED_FOLDERS = ("custom_components", "tests")
 LOG_GUARD_FILE = "tests/ha/conftest.py"
 LOG_GUARD_SELF_TEST = "tests/ha/test_report_guard.py"
@@ -333,8 +335,53 @@ def _overriding_configurations(root: Path) -> list[Finding]:
     return [
         Finding(name, 0, "this file would replace the pytest section of pyproject.toml")
         for name in _OVERRIDING_FILES
-        if (root / name).exists()
+        if _exists(root / name, name)
     ]
+
+
+def _exists(path: Path, shown: str) -> bool:
+    """Tell whether a path exists; an error other than "not there" is not a "no".
+
+    ``Path.exists`` and its relatives answer ``False`` for every error of the
+    operating system, so a file that cannot be examined would look absent.
+    """
+    try:
+        path.lstat()
+    except FileNotFoundError, NotADirectoryError:
+        return False
+    except OSError as error:
+        raise CannotCheckError(
+            f"{shown} cannot be examined ({type(error).__name__})"
+        ) from error
+    return True
+
+
+def _walk(folder: Path, shown: str, wanted: Callable[[str], bool]) -> list[Path]:
+    """Return the wanted files below ``folder``, sorted; empty if it is not there.
+
+    ``Path.rglob`` passes over a folder it cannot read without a word, and the
+    files in it would simply not be checked. Here such a folder is a failure.
+    """
+    if not _exists(folder, shown):
+        return []
+
+    def refuse(error: OSError) -> None:
+        raise CannotCheckError(
+            f"a folder under {shown}/ cannot be listed ({type(error).__name__})"
+        ) from error
+
+    found: list[Path] = []
+    for directory, _folders, names in os.walk(folder, onerror=refuse):
+        found += [Path(directory) / name for name in names if wanted(name)]
+    return sorted(found)
+
+
+def _is_python(name: str) -> bool:
+    return name.endswith(".py")
+
+
+def _is_workflow(name: str) -> bool:
+    return name.endswith((".yml", ".yaml"))
 
 
 @dataclass(frozen=True)
@@ -356,12 +403,12 @@ class Inputs:
 def inputs(root: Path) -> Inputs:
     """Find what has to be read, and refuse a tree where it is not there."""
     for required in (PROJECT_FILE, LOG_GUARD_FILE, LOG_GUARD_SELF_TEST):
-        if not (root / required).is_file():
+        if not _exists(root / required, required):
             raise CannotCheckError(
                 f"{required} does not exist. If it has moved, change its path in "
                 "this script; without it there is nothing to protect"
             )
-    workflows = sorted((root / WORKFLOW_FOLDER).glob("*.y*ml"))
+    workflows = _walk(root / WORKFLOW_FOLDER, WORKFLOW_FOLDER, _is_workflow)
     if not workflows:
         raise CannotCheckError(
             f"no workflow found under {WORKFLOW_FOLDER}/, so no pytest command "
@@ -369,14 +416,15 @@ def inputs(root: Path) -> Inputs:
         )
     python: list[Path] = []
     for folder in SCANNED_FOLDERS:
-        found = sorted((root / folder).rglob("*.py"))
+        found = _walk(root / folder, folder, _is_python)
         if not found:
             raise CannotCheckError(
                 f"no Python file found under {folder}/. If the folder has moved, "
                 "change SCANNED_FOLDERS in this script"
             )
         python += found
-    return Inputs(sorted((root / "tests").rglob("pytest.ini")), workflows, python)
+    ini = _walk(root / "tests", "tests", lambda name: name == "pytest.ini")
+    return Inputs(ini, workflows, python)
 
 
 def _read(file: Path, relative: str) -> str:

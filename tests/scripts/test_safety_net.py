@@ -5,6 +5,7 @@ script, and its message may name anything. Each script therefore runs its
 ``main`` through ``run``, which prints the type of the error and nothing else.
 """
 
+import ast
 import subprocess
 import sys
 from collections.abc import Callable
@@ -86,3 +87,83 @@ def test_malformed_report_on_the_command_line_shows_no_traceback(
     assert result.returncode == CANNOT_CHECK
     assert "CANNOT CHECK" in result.stdout
     assert "Traceback" not in result.stdout + result.stderr
+
+
+# Calls that may run while a script is imported: they build constants from
+# literals and touch neither the file system nor anything that can fail at
+# runtime. ``dataclass`` and ``field`` belong to class definitions.
+PURE_CALLS = {
+    "Path",
+    "Path(__file__).with_name",
+    "re.compile",
+    "frozenset",
+    "dataclass",
+    "field",
+}
+
+
+def _import_time_calls(node: ast.AST) -> list[str]:
+    """Return the calls a top-level statement makes when the module is imported."""
+    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+        arguments = node.args
+        evaluated: list[ast.AST] = [
+            *node.decorator_list,
+            *arguments.defaults,
+            *(default for default in arguments.kw_defaults if default is not None),
+        ]
+    elif isinstance(node, ast.ClassDef):
+        evaluated = [*node.decorator_list, *node.bases]
+        calls = [call for inner in node.body for call in _import_time_calls(inner)]
+        return calls + [call for part in evaluated for call in _import_time_calls(part)]
+    else:
+        evaluated = [node]
+    return [
+        ast.unparse(found.func)
+        for part in evaluated
+        for found in ast.walk(part)
+        if isinstance(found, ast.Call)
+    ]
+
+
+@pytest.mark.parametrize("script", sorted(RUNNERS))
+def test_nothing_happens_at_import_that_the_net_could_miss(script: str) -> None:
+    """Imports of the standard library, constants, definitions, and the start.
+
+    The net begins inside ``run``. Whatever a module does while it is imported
+    happens before that, so it must not be able to fail: no file is read, no
+    program is started, nothing is resolved. This test reads the syntax tree,
+    so a later edit cannot move work to the module level unnoticed.
+    """
+    tree = ast.parse((SCRIPTS_FOLDER / script).read_text(encoding="utf-8"))
+    docstring, *body, start = tree.body
+
+    assert isinstance(docstring, ast.Expr)
+    assert isinstance(docstring.value, ast.Constant)
+    for node in body:
+        assert isinstance(
+            node,
+            (
+                ast.Import,
+                ast.ImportFrom,
+                ast.Assign,
+                ast.AnnAssign,
+                ast.FunctionDef,
+                ast.ClassDef,
+            ),
+        ), f"line {node.lineno}: {type(node).__name__} at module level"
+        if isinstance(node, ast.Import):
+            modules = [alias.name for alias in node.names]
+        elif isinstance(node, ast.ImportFrom):
+            assert node.level == 0
+            modules = [node.module or ""]
+        else:
+            modules = []
+        for module in modules:
+            assert module.split(".")[0] in sys.stdlib_module_names, module
+        assert set(_import_time_calls(node)) <= PURE_CALLS, f"line {node.lineno}"
+    assert ast.unparse(start).startswith(
+        "if __name__ == '__main__':\n    sys.exit(run("
+    )
+    assert isinstance(start, ast.If)
+    assert len(start.body) == 1
+    assert start.orelse == []

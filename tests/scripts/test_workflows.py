@@ -71,10 +71,18 @@ GUARD_WORKFLOW = "test.yml"
 ALLOWED_CONTINUE_ON_ERROR = {"newest-home-assistant.yml": 1}
 # The only condition in the workflow of the guards, and the step it belongs to.
 ALLOWED_CONDITION = ("- name: Coverage summary", "if: always()")
+TRIGGER_FILTERS = (
+    "paths:",
+    "paths-ignore:",
+    "branches:",
+    "branches-ignore:",
+    "tags:",
+    "tags-ignore:",
+)
 SWALLOWED_STATUS = re.compile(
     r"\|\|"  # a || b
     r"|(?<!\|)\|(?!\|)"  # a pipe: the status of its left side is lost
-    r"|\bset\s+\+"  # set +e, set +o errexit, set +o pipefail
+    r"|\bset\b[^\n]*\s\+[a-z]"  # set +e, set +o errexit, set -o pipefail +e
     r"|\bexit\b"  # ; exit 0
     r"|\btrap\b"
     r"|;\s*(true|:)\s*$"
@@ -112,6 +120,13 @@ def status_problems(name: str, text: str) -> list[str]:
     tolerated = sum("continue-on-error" in line for line in code)
     if tolerated != ALLOWED_CONTINUE_ON_ERROR.get(name, 0):
         problems.append(f"continue-on-error appears {tolerated} time(s)")
+    if name in REQUIRED_CHECKS:
+        # A required check that a filter keeps from running looks like a pass.
+        problems += [
+            f"filters a trigger of a required check: {line}"
+            for line in code
+            if line.startswith(TRIGGER_FILTERS)
+        ]
     if name != GUARD_WORKFLOW:
         return problems
     conditions = [
@@ -165,6 +180,10 @@ COVERAGE_GUARD = "uv run --no-sync python scripts/check_coverage.py coverage.jso
         (VERSIONS_GUARD, f"{VERSIONS_GUARD}\n        {VERSIONS_GUARD}"),
         (COVERAGE_GUARD, f"set +e\n          {COVERAGE_GUARD}"),
         (COVERAGE_GUARD, f"set +o errexit\n          {COVERAGE_GUARD}"),
+        (COVERAGE_GUARD, f"set -o pipefail +e\n          {COVERAGE_GUARD}"),
+        (COVERAGE_GUARD, f"set -eu +o errexit\n          {COVERAGE_GUARD}"),
+        ("  push:\n", "  push:\n    paths-ignore:\n      - docs/**\n"),
+        ("  pull_request:\n", "  pull_request:\n    branches-ignore:\n      - main\n"),
         (COVERAGE_GUARD, f"trap 'exit 0' ERR\n          {COVERAGE_GUARD}"),
         (COVERAGE_GUARD, COVERAGE_GUARD.removesuffix(" coverage.json")),
         ("permissions:\n", "defaults:\n  run:\n    shell: sh\n\npermissions:\n"),
@@ -178,3 +197,17 @@ def test_every_known_way_of_hiding_a_failure_is_found(old: str, new: str) -> Non
     assert text.count(old) == 1
 
     assert status_problems(GUARD_WORKFLOW, text.replace(old, new)) != []
+
+
+def test_trigger_filter_on_the_validators_is_found() -> None:
+    """``hassfest`` and ``HACS`` are required checks as well."""
+    text = (REPOSITORY_ROOT / ".github" / "workflows" / "validate.yml").read_text(
+        encoding="utf-8"
+    )
+    assert text.count("  push:\n") == 1
+    filtered = text.replace(
+        "  push:\n", "  push:\n    paths-ignore:\n      - docs/**\n"
+    )
+
+    assert status_problems("validate.yml", text) == []
+    assert status_problems("validate.yml", filtered) != []
