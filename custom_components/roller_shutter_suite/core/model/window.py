@@ -57,8 +57,8 @@ class PositionUpdates(StrEnum):
 class CapabilityState(StrEnum):
     """Whether the members of a window have a capability.
 
-    ``UNKNOWN`` is not ``MISSING``: nobody could be asked, so nothing may be
-    concluded from it.
+    ``UNKNOWN`` is not ``MISSING``: nothing was ever known, not even a last
+    state, so nothing may be concluded from it.
     """
 
     PRESENT = "present"
@@ -88,12 +88,17 @@ class CapabilityProfile:
     equals the command, so a deviation means an intervention) and 3 for a
     measured one. The minimum is 1.
 
-    ``capabilities_known`` is ``False`` while the member could not be asked
-    what it can do, for example because its entity is not available. All four
-    capability flags come from the same report of the member, so they are
-    known or unknown together. They then hold the last known state, and the
-    member is operated with it; but a flag that is off says nothing definite,
-    see :meth:`capability_state`.
+    ``capabilities_known`` is ``False`` only when **nothing** is known about
+    what the member can do, not even a last state: a member that was never
+    seen. The four capability flags then carry no information, and to make
+    that unmistakable they must all be off; a profile that claims a capability
+    it does not know is refused. :meth:`capability_state` answers ``UNKNOWN``.
+    All four flags come from the same report of the member, so they are known
+    or unknown together.
+
+    A member that merely cannot be reached at present is **not** unknown: its
+    last known capabilities apply, and whoever builds the profile hands them
+    in as known.
     """
 
     supports_open_close: bool
@@ -113,6 +118,13 @@ class CapabilityProfile:
         """Validate types and durations."""
         for name in (*_CAPABILITY_FLAGS, "capabilities_known"):
             require_type(getattr(self, name), bool, f"the capability {name!r}")
+        if not self.capabilities_known and any(
+            getattr(self, name) for name in _CAPABILITY_FLAGS
+        ):
+            raise ValueError(
+                "a profile whose capabilities are not known must not claim a "
+                "capability; hand the last known capabilities in as known"
+            )
         require_type(self.position_source, PositionSource, "the position source")
         require_type(
             self.reports_transit_states, TransitReporting, "the transit reporting"
@@ -146,8 +158,7 @@ class CapabilityProfile:
     def capability_state(self, name: str) -> CapabilityState:
         """Return the state of one capability flag, given by its field name.
 
-        While the capabilities are not known, every flag is ``UNKNOWN``,
-        whatever the last known state says.
+        While nothing is known about the member, every flag is ``UNKNOWN``.
         """
         if name not in _CAPABILITY_FLAGS:
             raise ValueError(f"{name!r} is not a capability")

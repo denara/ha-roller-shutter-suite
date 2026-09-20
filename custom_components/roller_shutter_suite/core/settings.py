@@ -385,8 +385,10 @@ class ResolvedValue[T]:
       ``effective`` is the stand-in of the setting instead of ``value``. This
       holds for an inherited value and for the window's own value alike; the
       own value stays stored and applies again once the capability is back.
-    - ``UNKNOWN``: nobody could be asked. The value applies unmasked and
-      nothing is reported, but it is not confirmed either.
+    - ``UNKNOWN``: nothing was ever known about a member. The value applies
+      unmasked and nothing is reported, but it is not confirmed either. A
+      member that is merely unreachable is not unknown: its last known
+      capabilities are handed in as known, so a mask stays while it is away.
     """
 
     key: str

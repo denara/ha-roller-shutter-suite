@@ -276,6 +276,18 @@ def test_window_capabilities_validate_their_flags() -> None:
             WindowCapabilities(*flags)
 
 
+FLAGS = (
+    "supports_open_close",
+    "supports_set_position",
+    "supports_stop",
+    "reports_position",
+)
+UNKNOWN_PROFILE: dict[str, Any] = dict.fromkeys(FLAGS, False) | {
+    "capabilities_known": False
+}
+CANNOT_STOP: dict[str, Any] = {"supports_stop": False}
+
+
 def test_capabilities_of_a_member_are_known_unless_stated_otherwise() -> None:
     """A known profile answers present or missing, flag by flag."""
     profile = _profile(supports_stop=False)
@@ -286,13 +298,19 @@ def test_capabilities_of_a_member_are_known_unless_stated_otherwise() -> None:
 
 
 def test_unknown_capabilities_say_nothing_definite() -> None:
-    """The flags hold the last known state, but every state is "unknown"."""
-    profile = _profile(supports_stop=False, capabilities_known=False)
+    """Nothing is known, so no flag claims anything and every state is "unknown"."""
+    profile = _profile(**UNKNOWN_PROFILE)
 
-    assert profile.supports_stop is False
-    assert profile.supports_set_position is True
-    assert profile.capability_state("supports_stop") is CapabilityState.UNKNOWN
-    assert profile.capability_state("supports_set_position") is CapabilityState.UNKNOWN
+    for name in FLAGS:
+        assert getattr(profile, name) is False
+        assert profile.capability_state(name) is CapabilityState.UNKNOWN
+
+
+@pytest.mark.parametrize("name", FLAGS)
+def test_unknown_capabilities_cannot_carry_a_claim(name: str) -> None:
+    """A last known state is handed in as known; "unknown" with a flag is refused."""
+    with pytest.raises(ValueError, match="must not claim a capability"):
+        _profile(**(UNKNOWN_PROFILE | {name: True}))
 
 
 def test_capability_state_is_asked_for_a_capability_flag_only() -> None:
@@ -301,10 +319,6 @@ def test_capability_state_is_asked_for_a_capability_flag_only() -> None:
         _profile().capability_state("capabilities_known")
     with pytest.raises(TypeError, match="the capability 'capabilities_known'"):
         _profile(capabilities_known=1)
-
-
-UNKNOWN_PROFILE = {"capabilities_known": False}
-CANNOT_STOP = {"supports_stop": False}
 
 
 @pytest.mark.parametrize(
@@ -318,13 +332,12 @@ CANNOT_STOP = {"supports_stop": False}
         ([{}, CANNOT_STOP], CapabilityState.MISSING),
         ([UNKNOWN_PROFILE, CANNOT_STOP], CapabilityState.MISSING),
         ([CANNOT_STOP, UNKNOWN_PROFILE, {}], CapabilityState.MISSING),
-        ([CANNOT_STOP | UNKNOWN_PROFILE, {}], CapabilityState.UNKNOWN),
     ],
 )
 def test_capability_states_of_a_window_missing_beats_unknown_beats_present(
     profiles: list[dict[str, Any]], expected: CapabilityState
 ) -> None:
-    """One member that definitely cannot stop settles it; a last known "no" does not."""
+    """One member that cannot stop settles it, whatever is unknown about another."""
     window = _window(
         members=[
             MemberConfig(f"cover.example_{number}", _profile(**changes))

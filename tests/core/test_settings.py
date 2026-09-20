@@ -786,13 +786,16 @@ def test_dangling_group_of_one_window_does_not_stop_the_others() -> None:
 # --- The capability mask -----------------------------------------------------------
 
 CAN_STOP = (_member(LEFT), _member(RIGHT))
-RIGHT_UNKNOWN = (_member(LEFT), _member(RIGHT, capabilities_known=False))
-# The last known state of the right member says "cannot stop", but nobody could
-# ask it: that is unknown, not missing.
-RIGHT_UNKNOWN_LAST_KNOWN_NO = (
-    _member(LEFT),
-    _member(RIGHT, supports_stop=False, capabilities_known=False),
-)
+# Nothing was ever known about a member: no flag claims anything. A member
+# that is merely unreachable is handed in with its last known flags, as known.
+NEVER_SEEN: dict[str, Any] = {
+    "supports_open_close": False,
+    "supports_set_position": False,
+    "supports_stop": False,
+    "reports_position": False,
+    "capabilities_known": False,
+}
+RIGHT_UNKNOWN = (_member(LEFT), _member(RIGHT, **NEVER_SEEN))
 MISSING_STOP = MissingCapability(Capability.SUPPORTS_STOP, (RIGHT,))
 
 
@@ -822,7 +825,6 @@ def _hold_to_move_set_by(level: Level) -> dict[str, Any]:
         (CAN_STOP, CapabilityState.PRESENT, True, None),
         (RIGHT_CANNOT_STOP, CapabilityState.MISSING, False, MISSING_STOP),
         (RIGHT_UNKNOWN, CapabilityState.UNKNOWN, True, None),
-        (RIGHT_UNKNOWN_LAST_KNOWN_NO, CapabilityState.UNKNOWN, True, None),
     ],
 )
 def test_present_missing_and_unknown_for_inherited_and_own_values(
@@ -888,17 +890,14 @@ def test_built_in_default_is_masked_too_and_every_limiting_member_is_named() -> 
         (
             (
                 _member(LEFT),
-                _member(RIGHT, capabilities_known=False),
+                _member(RIGHT, **NEVER_SEEN),
                 _member("cover.example_third", supports_stop=False),
             ),
             CapabilityState.MISSING,
             ("cover.example_third",),
         ),
         (
-            (
-                _member(LEFT, supports_stop=False),
-                _member(RIGHT, supports_stop=False, capabilities_known=False),
-            ),
+            (_member(LEFT, supports_stop=False), _member(RIGHT, **NEVER_SEEN)),
             CapabilityState.MISSING,
             (LEFT,),
         ),
@@ -943,13 +942,36 @@ def test_own_value_survives_a_missing_capability_and_applies_again() -> None:
 
 
 @pytest.mark.parametrize("level", [Level.GROUP, Level.WINDOW])
-def test_member_that_is_unavailable_for_a_while_causes_no_flapping(
-    level: Level,
-) -> None:
+def test_mask_and_report_stay_while_the_entity_is_unavailable(level: Level) -> None:
+    """The last known "cannot stop" is handed in as known: nothing flaps.
+
+    While the entity of the right member is unavailable, the Home Assistant
+    layer builds its profile from the last known capabilities. For the
+    resolver the three steps are therefore the same input, and the result is
+    identical at every step: masked, and reported for an own value.
+    """
+    last_known = (_member(LEFT), _member(RIGHT, supports_stop=False))
+    sequence = [
+        _resolve(members=members, **_hold_to_move_set_by(level))
+        for members in (RIGHT_CANNOT_STOP, last_known, RIGHT_CANNOT_STOP)
+    ]
+
+    assert sequence[0] == sequence[1] == sequence[2]
+    for result in sequence:
+        item = result.values["hold_to_move"]
+        assert result.valid
+        assert item.capability is CapabilityState.MISSING
+        assert item.unavailable == MISSING_STOP
+        assert item.effective is False
+        assert result.masked_own_values == ((item,) if level is Level.WINDOW else ())
+
+
+@pytest.mark.parametrize("level", [Level.GROUP, Level.WINDOW])
+def test_present_unknown_present_never_reports(level: Level) -> None:
     """Present, unknown, present: never masked, never reported, never an error."""
     sequence = [
         _resolve(members=members, **_hold_to_move_set_by(level))
-        for members in (CAN_STOP, RIGHT_UNKNOWN_LAST_KNOWN_NO, CAN_STOP)
+        for members in (CAN_STOP, RIGHT_UNKNOWN, CAN_STOP)
     ]
 
     assert [result.values["hold_to_move"].capability for result in sequence] == [

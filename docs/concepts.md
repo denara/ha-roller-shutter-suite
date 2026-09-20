@@ -81,7 +81,7 @@ The integration does not pretend otherwise and does not fail either. For the stu
 
 The same holds for an option you switched on **on the window itself**, for example before a shutter was replaced by a simpler one. The integration keeps what you entered, does not use it while the shutter cannot do it, and reports the window so you know. Everything else about the window keeps working. If the shutter can do it again later, your value applies again without any action of yours.
 
-"Cannot do it" means that a shutter really lacks the ability. If a shutter is merely not reachable for a while, for example right after a restart, the integration does not know what it can do. It then neither switches anything off nor reports anything; it waits until the shutter answers again.
+A shutter that is merely not reachable for a while changes nothing: the integration goes on with what it last knew about it, so an option stays switched off, and stays reported, while the shutter is away. Only for a shutter the integration has never seen does it know nothing; then it neither switches anything off nor reports anything until the shutter has answered once.
 
 ### What cannot be inherited
 
