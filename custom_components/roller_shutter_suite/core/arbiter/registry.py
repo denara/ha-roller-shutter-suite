@@ -15,7 +15,7 @@ from custom_components.roller_shutter_suite.core.model import (
     GATE_RULE_REASONS,
     Constraint,
     ConstraintResult,
-    FunctionClass,
+    FaultBehavior,
     FunctionId,
     GateOutcome,
     GateRule,
@@ -47,6 +47,25 @@ def outranks(wish_class: WishClass, other: WishClass) -> bool:
     return _CLASS_RANK[wish_class] > _CLASS_RANK[other]
 
 
+def _require_restricting_function(function: FunctionId | None, what: str) -> None:
+    """Refuse a function that can be paused on a constraint or a gate rule.
+
+    A constraint and a gate rule restrict movement. Pausing a restriction
+    because of a data fault would mean more movement, the wrong direction, so
+    their functions fall back and are never paused.
+    """
+    if function is None:
+        return
+    if not isinstance(function, FunctionId):
+        raise TypeError(f"the function of a {what} is a member of 'FunctionId'")
+    if function.fault_behavior is not FaultBehavior.FALL_BACK:
+        raise ValueError(
+            f"a {what} restricts movement; pausing it would mean more movement, "
+            f"so it cannot declare {function.value!r}, a function that is paused "
+            "on a fault"
+        )
+
+
 def reported_positions(snapshot: WorldSnapshot) -> dict[str, Position | None]:
     """Return what every observed member reports as its position, if anything."""
     return {
@@ -67,11 +86,12 @@ class LayerRegistration:
     """One layer, the function that answers for it, and the function it belongs to.
 
     ``function`` is the function of the integration the layer belongs to, a
-    member of ``FunctionId``. A comfort layer has to declare a comfort
-    function: a window can have such a function disabled because a stored
-    setting of it is faulty, and the arbiter then does not ask the layer. The
-    fire layer and the protection layer are never disabled; what they declare
-    is ignored.
+    member of ``FunctionId``. A comfort layer has to declare one, and one that
+    is paused on a fault: a window can have such a function disabled because
+    a stored setting of it is faulty, and the arbiter then does not ask the
+    layer. The fire layer and the protection layer are never paused: they may
+    declare a function that falls back (``FIRE``, ``PROTECTION_EVENTS``) or
+    none, and a function that can be paused is refused for them.
     """
 
     layer: Layer
@@ -84,19 +104,25 @@ class LayerRegistration:
             raise TypeError("a layer is registered for a member of 'Layer'")
         if self.function is not None and not isinstance(self.function, FunctionId):
             raise TypeError("the function of a layer is a member of 'FunctionId'")
-        if self.can_be_disabled and (
-            self.function is None
-            or self.function.function_class is not FunctionClass.COMFORT
-        ):
+        comfort = self.layer.wish_class is WishClass.COMFORT
+        if comfort and not self.can_be_paused:
             raise ValueError(
-                f"the comfort layer {self.layer.value!r} declares the comfort "
-                "function it belongs to"
+                f"the comfort layer {self.layer.value!r} declares the function it "
+                "belongs to, one that is paused on a fault"
+            )
+        if not comfort and self.can_be_paused:
+            raise ValueError(
+                f"the layer {self.layer.value!r} is never paused and cannot declare "
+                "a function that is"
             )
 
     @property
-    def can_be_disabled(self) -> bool:
-        """Return whether the layer is a comfort layer; only those can be disabled."""
-        return self.layer.wish_class is WishClass.COMFORT
+    def can_be_paused(self) -> bool:
+        """Return whether the layer belongs to a function that is paused on a fault."""
+        return (
+            self.function is not None
+            and self.function.fault_behavior is FaultBehavior.PAUSE
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -137,7 +163,8 @@ class ConstraintRegistration:
     a member of ``FunctionId``. It has no default, so it is stated on purpose.
     ``None`` is for a constraint that belongs to no function of its own but to
     whatever function the limited wish comes from; the direction of a wish is
-    the one such constraint.
+    the one such constraint. A constraint is never skipped because a function
+    is disabled, and it cannot declare a function that can be.
     """
 
     constraint: Constraint
@@ -150,8 +177,7 @@ class ConstraintRegistration:
         """Refuse a constraint on fire: fire is subject to no constraint at all."""
         if not isinstance(self.constraint, Constraint):
             raise TypeError("a constraint is registered for a member of 'Constraint'")
-        if self.function is not None and not isinstance(self.function, FunctionId):
-            raise TypeError("the function of a constraint is a member of 'FunctionId'")
+        _require_restricting_function(self.function, "constraint")
         object.__setattr__(self, "applies_to", frozenset(self.applies_to))
         if not self.applies_to:
             raise ValueError("a constraint names the wish classes it applies to")
@@ -211,17 +237,25 @@ class GateRuleRegistration:
     wish classes is registered once per part, each with its own reasons (the
     rule "movement in flight" is); the parts must not depend on the order in
     which they are asked.
+
+    ``function`` is the function of the integration the rule belongs to
+    (motor protection, the dams), or ``None`` for a rule without a feature of
+    its own (maintenance lock, operating mode, pause, dry-run ...). It has no
+    default, so it is stated on purpose. A gate rule is never skipped because
+    a function is disabled, and it cannot declare a function that can be.
     """
 
     rule: GateRule
     applies_to: frozenset[WishClass]
     evaluate: GateFunction
+    function: FunctionId | None
     reasons: frozenset[ReasonCode] = frozenset()
 
     def __post_init__(self) -> None:
         """Keep the fire bypass exact in both directions."""
         if not isinstance(self.rule, GateRule):
             raise TypeError("a gate rule is registered for a member of 'GateRule'")
+        _require_restricting_function(self.function, "gate rule")
         object.__setattr__(self, "applies_to", frozenset(self.applies_to))
         if not self.applies_to:
             raise ValueError("a gate rule names the wish classes it applies to")

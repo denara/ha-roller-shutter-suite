@@ -44,7 +44,7 @@ from .decision import (
     WishClass,
     WishKind,
 )
-from .functions import FunctionClass, FunctionId
+from .functions import FaultBehavior, FunctionId
 from .observation import (
     MemberCommand,
     MemberObservation,
@@ -124,8 +124,8 @@ __all__ = [
     "Decision",
     "Direction",
     "ExternalRequest",
+    "FaultBehavior",
     "FrostSettings",
-    "FunctionClass",
     "FunctionId",
     "GateKind",
     "GateOutcome",

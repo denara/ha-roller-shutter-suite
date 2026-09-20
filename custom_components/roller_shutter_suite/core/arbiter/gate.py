@@ -19,6 +19,7 @@ from typing import Final
 from custom_components.roller_shutter_suite.core.model import (
     FULLY_CLOSED,
     FULLY_OPEN,
+    FunctionId,
     GateOutcome,
     GateRule,
     MemberConfig,
@@ -181,7 +182,9 @@ class Dam:
 
     def registration(self) -> GateRuleRegistration:
         """Return the dam as a gate rule."""
-        return GateRuleRegistration(self.rule, self.holds_back, self.evaluate)
+        return GateRuleRegistration(
+            self.rule, self.holds_back, self.evaluate, FunctionId.MANUAL_OVERRIDE
+        )
 
 
 def _person_at_window(state: WindowState) -> ArmedDam | None:
@@ -390,32 +393,41 @@ def _dry_run(gate: GateInput) -> GateOutcome | None:
 
 
 BUILT_IN_GATE_RULES: Final = (
-    GateRuleRegistration(GateRule.MAINTENANCE_LOCK, ALL_CLASSES, _maintenance_lock),
     GateRuleRegistration(
-        GateRule.NO_MEMBER_CAN_EXECUTE, ALL_CLASSES, _no_member_can_execute
+        GateRule.MAINTENANCE_LOCK, ALL_CLASSES, _maintenance_lock, None
     ),
-    GateRuleRegistration(GateRule.TARGET_REACHED, ALL_CLASSES, _target_reached),
     GateRuleRegistration(
-        GateRule.OPERATING_MODE, _PROTECTION_AND_COMFORT, _operating_mode
+        GateRule.NO_MEMBER_CAN_EXECUTE, ALL_CLASSES, _no_member_can_execute, None
     ),
-    GateRuleRegistration(GateRule.PAUSE, _COMFORT, _pause),
+    GateRuleRegistration(GateRule.TARGET_REACHED, ALL_CLASSES, _target_reached, None),
+    GateRuleRegistration(
+        GateRule.OPERATING_MODE, _PROTECTION_AND_COMFORT, _operating_mode, None
+    ),
+    GateRuleRegistration(GateRule.PAUSE, _COMFORT, _pause, None),
     PERSON_AT_WINDOW_DAM.registration(),
     MANUAL_OVERRIDE_DAM.registration(),
     GateRuleRegistration(
         GateRule.MOVEMENT_IN_FLIGHT,
         _COMFORT,
         _wait_for_rest,
+        None,
         reasons=frozenset({ReasonCode.MOVEMENT_IN_FLIGHT}),
     ),
     GateRuleRegistration(
         GateRule.MOVEMENT_IN_FLIGHT,
         ALL_CLASSES,
         _same_command_pending,
+        None,
         reasons=frozenset(
             {ReasonCode.DUPLICATE_COMMAND, ReasonCode.MOVEMENT_TAKEN_OVER}
         ),
     ),
-    GateRuleRegistration(GateRule.MOTOR_PROTECTION, _COMFORT, _motor_protection),
-    GateRuleRegistration(GateRule.DRY_RUN, ALL_CLASSES, _dry_run),
+    GateRuleRegistration(
+        GateRule.MOTOR_PROTECTION,
+        _COMFORT,
+        _motor_protection,
+        FunctionId.MOTOR_PROTECTION,
+    ),
+    GateRuleRegistration(GateRule.DRY_RUN, ALL_CLASSES, _dry_run, None),
 )
 """The gate rules of this block. The arbiter sorts rules by their place."""

@@ -120,7 +120,7 @@ class Arbiter:
                 wishes.append(Wish.no_opinion(layer, ReasonCode.NOT_CONFIGURED))
                 continue
             if (
-                registration.can_be_disabled
+                registration.can_be_paused
                 and registration.function in disabled_functions(config)
             ):
                 # Comfort becomes cautious: a faulty stored setting never moves a

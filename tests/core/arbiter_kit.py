@@ -245,13 +245,15 @@ def schedule_layer(_config: WindowConfig, world: WorldSnapshot) -> Wish:
 
 
 FUNCTION_OF = {
+    Layer.FIRE: FunctionId.FIRE,
+    Layer.PROTECTION: FunctionId.PROTECTION_EVENTS,
     Layer.SLEEP: FunctionId.SLEEP,
     Layer.EXTERNAL_REQUEST: FunctionId.REQUEST,
     Layer.PRIVACY: FunctionId.PRIVACY,
     Layer.SHADING: FunctionId.SHADING,
     Layer.SCHEDULE: FunctionId.SCHEDULE,
 }
-"""The function a stub comfort layer declares; fire and protection declare none."""
+"""The function each stub layer declares."""
 
 
 def registered(layer: Layer, evaluate: LayerFunction) -> LayerRegistration:

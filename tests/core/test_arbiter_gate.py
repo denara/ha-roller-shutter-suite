@@ -1055,6 +1055,7 @@ STAGGERING = GateRuleRegistration(
     GateRule.STAGGERING,
     frozenset({WishClass.PROTECTION, WishClass.COMFORT}),
     _staggered,
+    None,
 )
 
 
@@ -1089,9 +1090,9 @@ def test_the_registry_refuses_what_would_break_the_gate() -> None:
     with pytest.raises(ValueError, match="'staggering' is registered twice"):
         build_arbiter((), gate_rules=[STAGGERING, STAGGERING])
     with pytest.raises(ValueError, match="names the wish classes"):
-        GateRuleRegistration(GateRule.STAGGERING, frozenset(), _staggered)
+        GateRuleRegistration(GateRule.STAGGERING, frozenset(), _staggered, None)
     with pytest.raises(TypeError, match="member of 'GateRule'"):
-        GateRuleRegistration(bad, ALL_CLASSES, _staggered)
+        GateRuleRegistration(bad, ALL_CLASSES, _staggered, None)
     with pytest.raises(ValueError, match="without the gate rule 'maintenance_lock'"):
         Arbiter(gate_rules=without_lock)
     with pytest.raises(ValueError, match="without the gate rule 'dry_run'"):
@@ -1102,9 +1103,9 @@ def test_a_gate_rule_answers_in_its_own_name_and_never_sends() -> None:
     """A rule either holds back or returns nothing."""
     classes = frozenset({WishClass.COMFORT})
     sends = GateRuleRegistration(
-        GateRule.STAGGERING, classes, lambda _gate: GateOutcome.send()
+        GateRule.STAGGERING, classes, lambda _gate: GateOutcome.send(), None
     )
-    impostor = GateRuleRegistration(GateRule.COMMAND_BACKOFF, classes, _staggered)
+    impostor = GateRuleRegistration(GateRule.COMMAND_BACKOFF, classes, _staggered, None)
 
     for registration in (sends, impostor):
         arbiter = build_arbiter(STUB_LAYERS, gate_rules=[registration])

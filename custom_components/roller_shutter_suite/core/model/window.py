@@ -11,7 +11,7 @@ from ._validation import (
     require_type,
     require_unique,
 )
-from .functions import FunctionClass, FunctionId
+from .functions import FaultBehavior, FunctionId
 from .values import Position
 
 MIN_TOLERANCE: Final = 1
@@ -268,9 +268,9 @@ class WindowConfig:
       evaluated again.
     - ``disabled_functions``: the comfort functions that are paused for this
       window because a stored setting in their inheritance chain is faulty,
-      as members of ``FunctionId``. The arbiter does not ask a comfort layer
-      whose function is listed. Only comfort functions can be listed; a
-      protection function in the set is refused.
+      as members of ``FunctionId``. The arbiter does not ask a layer whose
+      function is listed. Only functions with the fault behavior "pause" can
+      be listed, the ones that create wishes; any other member is refused.
     """
 
     window_id: str
@@ -317,10 +317,10 @@ class WindowConfig:
         )
         for function in self.disabled_functions:
             require_type(function, FunctionId, "a disabled function")
-            if function.function_class is not FunctionClass.COMFORT:
+            if function.fault_behavior is not FaultBehavior.PAUSE:
                 raise ValueError(
-                    f"the function {function.value!r} protects something and is "
-                    "never disabled; only comfort functions can be"
+                    f"the function {function.value!r} falls back on a fault and is "
+                    "never disabled; only a function that creates wishes can be"
                 )
         require_type(self.reevaluate_after, timedelta, "the re-evaluation bound")
         if self.reevaluate_after <= timedelta(0):

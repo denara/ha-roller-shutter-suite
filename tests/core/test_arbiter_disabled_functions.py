@@ -18,7 +18,7 @@ from custom_components.roller_shutter_suite.core.engine import build_arbiter
 from custom_components.roller_shutter_suite.core.model import (
     FULLY_CLOSED,
     FULLY_OPEN,
-    FunctionClass,
+    FaultBehavior,
     FunctionId,
     GateOutcome,
     Layer,
@@ -124,8 +124,9 @@ def test_lower_comfort_layers_still_act() -> None:
 COMFORT_FUNCTIONS = frozenset(
     function
     for function in FunctionId
-    if function.function_class is FunctionClass.COMFORT
+    if function.fault_behavior is FaultBehavior.PAUSE
 )
+"""The functions that create wishes; only they can be disabled."""
 
 
 @pytest.mark.parametrize(
@@ -148,36 +149,36 @@ def test_fire_and_protection_act_with_every_comfort_function_disabled(
 
 @pytest.mark.parametrize(
     "function",
-    [f for f in FunctionId if f.function_class is FunctionClass.PROTECTION],
+    [f for f in FunctionId if f.fault_behavior is FaultBehavior.FALL_BACK],
 )
-def test_a_protection_function_in_the_set_is_refused(function: FunctionId) -> None:
-    """Such a set cannot even be constructed: protection never fails."""
+def test_a_function_that_falls_back_is_refused_in_the_set(function: FunctionId) -> None:
+    """Such a set cannot even be constructed; ventilation is among them."""
     with pytest.raises(ValueError, match="never disabled"):
         window(disabled_functions={function})
     with pytest.raises(ValueError, match="never disabled"):
         window(disabled_functions={FunctionId.SHADING, function})
+    assert FunctionId.VENTILATION.fault_behavior is FaultBehavior.FALL_BACK
 
 
-def test_a_fire_or_protection_layer_ignores_the_function_its_registration_declares() -> (
-    None
-):
-    """Even a registration that names a disabled comfort function keeps answering."""
+def test_a_fire_or_protection_layer_cannot_declare_a_function_that_is_paused() -> None:
+    """So no set of disabled functions can ever reach them."""
 
     def alarm(_config: WindowConfig, _world: WorldSnapshot) -> Wish:
         return Wish.target(Layer.FIRE, ReasonCode.FIRE_ALARM, FULLY_OPEN)
 
-    def hail(_config: WindowConfig, _world: WorldSnapshot) -> Wish:
-        return Wish.target(Layer.PROTECTION, ReasonCode.PROTECTION_EVENT, FULLY_OPEN)
+    for layer in (Layer.FIRE, Layer.PROTECTION):
+        with pytest.raises(ValueError, match="is never paused"):
+            LayerRegistration(layer, alarm, FunctionId.SHADING)
+    declared = LayerRegistration(Layer.FIRE, alarm, FunctionId.FIRE)
+    undeclared = LayerRegistration(Layer.FIRE, alarm)
+    config = window(disabled_functions=COMFORT_FUNCTIONS)
 
-    config = window(disabled_functions={FunctionId.SHADING})
-
-    for layer, evaluate in ((Layer.FIRE, alarm), (Layer.PROTECTION, hail)):
-        registration = LayerRegistration(layer, evaluate, FunctionId.SHADING)
+    for registration in (declared, undeclared):
         decision = build_arbiter([registration]).recompute(config, snapshot())
 
-        assert registration.can_be_disabled is False
+        assert registration.can_be_paused is False
         assert decision.winning_wish is not None
-        assert decision.winning_wish.layer is layer
+        assert decision.winning_wish.layer is Layer.FIRE
 
 
 def test_the_return_to_the_manual_position_is_not_disabled_either() -> None:
@@ -201,13 +202,18 @@ def test_the_registry_refuses_a_comfort_layer_without_a_comfort_function() -> No
             LayerRegistration(layer, schedule_layer)
     with pytest.raises(ValueError, match="comfort layer 'schedule' declares"):
         LayerRegistration(Layer.SCHEDULE, schedule_layer)
-    with pytest.raises(ValueError, match="declares the comfort function"):
+    with pytest.raises(ValueError, match="one that is paused on a fault"):
         LayerRegistration(Layer.SCHEDULE, schedule_layer, FunctionId.FROST)
     with pytest.raises(TypeError, match="member of 'FunctionId'"):
         LayerRegistration(Layer.SCHEDULE, schedule_layer, bad)
     assert LayerRegistration(Layer.FIRE, schedule_layer).function is None
     assert LayerRegistration(Layer.PROTECTION, schedule_layer).function is None
-    assert set(FUNCTION_OF.values()) <= COMFORT_FUNCTIONS
+    comfort_stubs = {
+        function
+        for layer, function in FUNCTION_OF.items()
+        if layer not in (Layer.FIRE, Layer.PROTECTION)
+    }
+    assert comfort_stubs <= COMFORT_FUNCTIONS
 
 
 def test_the_disabled_functions_of_a_window_are_a_frozen_set_of_function_ids() -> None:

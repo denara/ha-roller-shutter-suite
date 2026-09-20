@@ -107,22 +107,24 @@ def test_the_registry_keeps_the_bypass_exact_in_both_directions() -> None:
         bypassed = registration.reasons <= FIRE_BYPASS
         assert (WishClass.FIRE in registration.applies_to) is not bypassed
     with pytest.raises(ValueError, match="part of the fire bypass"):
-        GateRuleRegistration(GateRule.PAUSE, ALL_CLASSES, lambda _gate: None)
+        GateRuleRegistration(GateRule.PAUSE, ALL_CLASSES, lambda _gate: None, None)
     with pytest.raises(ValueError, match="is never skipped"):
         GateRuleRegistration(
             GateRule.DRY_RUN,
             frozenset({WishClass.PROTECTION, WishClass.COMFORT}),
             lambda _gate: None,
+            None,
         )
     with pytest.raises(ValueError, match="register the parts separately"):
         GateRuleRegistration(
-            GateRule.MOVEMENT_IN_FLIGHT, ALL_CLASSES, lambda _gate: None
+            GateRule.MOVEMENT_IN_FLIGHT, ALL_CLASSES, lambda _gate: None, None
         )
     with pytest.raises(ValueError, match="gives only its own reasons"):
         GateRuleRegistration(
             GateRule.PAUSE,
             frozenset({WishClass.COMFORT}),
             lambda _gate: None,
+            None,
             reasons=frozenset({ReasonCode.MIN_CHANGE}),
         )
 

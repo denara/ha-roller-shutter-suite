@@ -1,33 +1,38 @@
 """The functions of the integration: one closed list of identifiers.
 
 A function is what a user switches on and configures: the schedule, shading,
-frost protection. The settings registry, the layer and constraint
+frost protection. The settings registry, the layer, constraint and gate rule
 registrations of the arbiter and the disabled functions of a window all name
 functions by the members of ``FunctionId``; there are no free strings.
 
-Every function has a class. A comfort function can be disabled for a window
-when one of its stored settings is faulty; a protection function never is.
+Every function has a fault behavior: what happens to it for a window when one
+of its stored settings is faulty. What decides is the direction of the effect.
+A function that **creates wishes** is paused: no wish, less movement, the
+cautious side. A function that **restricts movement** (a constraint, a gate
+rule) falls back to the value of the next level and keeps working: pausing a
+restriction would mean more movement, a shutter closing completely in front of
+a tilted window because of a data fault. The two behaviors are named by what
+they do, so they cannot be confused with the wish classes of the arbiter.
 
 The member list is provisional, the shape is not: a block that builds a new
-function adds its member, with its class, in its own pull request.
+function adds its member, with its fault behavior, in its own pull request.
 """
 
 from enum import StrEnum, unique
 
 
 @unique
-class FunctionClass(StrEnum):
-    """Whether a function protects something or serves comfort."""
+class FaultBehavior(StrEnum):
+    """What happens to a function when one of its stored settings is faulty."""
 
-    PROTECTION = "protection"
-    COMFORT = "comfort"
+    FALL_BACK = "fall_back"
+    PAUSE = "pause"
 
 
 @unique
 class FunctionId(StrEnum):
     """The closed list of function identifiers."""
 
-    # Comfort
     SCHEDULE = "schedule"
     SLEEP = "sleep"
     REQUEST = "request"
@@ -35,8 +40,6 @@ class FunctionId(StrEnum):
     SHADING = "shading"
     SOLAR_HEATING = "solar_heating"
     VENTILATION = "ventilation"
-
-    # Protection
     FIRE = "fire"
     PROTECTION_EVENTS = "protection_events"
     LOCKOUT = "lockout"
@@ -46,14 +49,14 @@ class FunctionId(StrEnum):
     MANUAL_OVERRIDE = "manual_override"
 
     @property
-    def function_class(self) -> FunctionClass:
-        """Return the class of the function."""
-        if self in _COMFORT_FUNCTIONS:
-            return FunctionClass.COMFORT
-        return FunctionClass.PROTECTION
+    def fault_behavior(self) -> FaultBehavior:
+        """Return what happens to the function when a stored setting is faulty."""
+        if self in _PAUSED_ON_A_FAULT:
+            return FaultBehavior.PAUSE
+        return FaultBehavior.FALL_BACK
 
 
-_COMFORT_FUNCTIONS = frozenset(
+_PAUSED_ON_A_FAULT = frozenset(
     {
         FunctionId.SCHEDULE,
         FunctionId.SLEEP,
@@ -61,6 +64,6 @@ _COMFORT_FUNCTIONS = frozenset(
         FunctionId.PRIVACY,
         FunctionId.SHADING,
         FunctionId.SOLAR_HEATING,
-        FunctionId.VENTILATION,
     }
 )
+"""The functions that create wishes; every other function falls back."""
