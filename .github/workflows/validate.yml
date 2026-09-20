@@ -64,10 +64,3 @@ jobs:
           category: integration
           # Commenting on the pull request would need write permission.
           comment: "false"
-          # Exceptions, each for a reason outside the code. Remove an entry
-          # as soon as its reason is gone:
-          # - description: the repository on GitHub has no description yet.
-          #   Remove when the project owner has set one.
-          # - topics: the repository on GitHub has no topics yet. Remove when
-          #   the project owner has set them.
-          ignore: description topics
