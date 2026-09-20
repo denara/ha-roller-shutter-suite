@@ -42,23 +42,25 @@ from custom_components.roller_shutter_suite.core.model import (
     GateRule,
     WishClass,
 )
+from custom_components.roller_shutter_suite.core.settings import functions_with_settings
 from tests.core.arbiter_kit import STUB_LAYERS
 
+NOT_BUILT_YET: frozenset[FunctionId] = frozenset(
+    {
+        # The schedule layer and the shading layer come with their blocks.
+        FunctionId.SCHEDULE,
+        FunctionId.SHADING,
+        # `reevaluate_after` bounds a wait for the reports of members; the gate
+        # rule of command verification (the backoff) comes with its block.
+        FunctionId.COMMAND_VERIFICATION,
+    }
+)
+"""Functions with settings whose layer, constraint or gate rule is still to come.
 
-def functions_with_settings() -> frozenset[FunctionId]:
-    """Return the functions that have at least one setting in the settings registry.
-
-    THE ONE PLACE TO CONNECT. The settings registry (``core/settings``) exposes
-    a pure function that returns this set. It is not on the main branch yet;
-    once it is, this function returns its result and nothing else changes.
-    Until then no function has a setting here.
-    """
-    return frozenset()
-
-
-NOT_BUILT_YET: frozenset[FunctionId] = frozenset()
-"""Functions with settings whose layer, constraint or gate rule is still to come."""
-
+The functions with settings come from ``functions_with_settings()`` of the
+settings registry (``core/settings``), which is the one place this test is
+connected to.
+"""
 BELONGS_TO_THE_WISH = frozenset({Constraint.DIRECTION})
 """Constraints that state no function: they belong to the function of the wish.
 
@@ -178,8 +180,12 @@ def test_no_function_of_a_constraint_or_a_gate_rule_can_be_paused() -> None:
 
 
 def test_every_function_with_settings_has_a_listener() -> None:
-    """For the arbiter of the integration."""
+    """For the arbiter of the integration and the settings that are registered."""
     check_listeners(build_arbiter(), functions_with_settings(), NOT_BUILT_YET)
+    assert functions_with_settings() >= {
+        FunctionId.FROST,
+        FunctionId.MOTOR_PROTECTION,
+    }
 
 
 # --- The checks themselves, shown with stubs ----------------------------------------
