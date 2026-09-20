@@ -202,6 +202,7 @@ def test_a_would_be_send_is_remembered_as_a_simulated_command() -> None:
         direction=TravelDirection.DOWN,
         time=NOW,
         wish_class=WishClass.COMFORT,
+        reason=ReasonCode.SCHEDULE_NIGHT,
     )
     assert state.simulated.last_comfort_movement == NOW
     assert replace(state, simulated=None) == world.state
@@ -243,6 +244,7 @@ def test_the_real_motor_protection_clock_and_the_real_commands_are_never_touched
                     TravelDirection.DOWN,
                     NOW - timedelta(seconds=5),
                     WishClass.COMFORT,
+                    ReasonCode.SCHEDULE_NIGHT,
                 ),
             ),
         ),
@@ -366,6 +368,7 @@ def test_in_dry_run_a_take_over_happens_on_the_simulated_commands_only() -> None
                     TravelDirection.DOWN,
                     NOW,
                     WishClass.COMFORT,
+                    ReasonCode.SCHEDULE_NIGHT,
                 ),
             ),
         ),
@@ -383,8 +386,18 @@ def test_in_dry_run_a_take_over_happens_on_the_simulated_commands_only() -> None
     assert _gate(decision) == GateOutcome.suppress(
         GateRule.MOVEMENT_IN_FLIGHT, ReasonCode.MOVEMENT_TAKEN_OVER, dry_run=True
     )
-    assert simulated_state(after).commands[0].command.wish_class is WishClass.PROTECTION
-    assert simulated_state(after).commands[0].command.time == NOW
+    taken = simulated_state(after).commands[0].command
+    before = simulated_state(state).commands[0].command
+    assert (before.wish_class, before.reason) == (
+        WishClass.COMFORT,
+        ReasonCode.SCHEDULE_NIGHT,
+    )
+    assert (taken.wish_class, taken.reason) == (
+        WishClass.PROTECTION,
+        ReasonCode.PROTECTION_EVENT,
+    )
+    assert taken.time == NOW
+    # Only the simulated commands: the real command, its reason and the owner stay.
     assert after.members == real.members
     assert after.owner is PositionOwner.USER
     # The simulated command is the storm's own now: the record is stable again.

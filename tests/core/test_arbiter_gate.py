@@ -80,6 +80,13 @@ def _gate(decision: Decision) -> GateOutcome:
     return decision.gate
 
 
+_REASON_OF = {
+    WishClass.FIRE: ReasonCode.FIRE_ALARM,
+    WishClass.PROTECTION: ReasonCode.PROTECTION_EVENT,
+    WishClass.COMFORT: ReasonCode.SCHEDULE_NIGHT,
+}
+
+
 def _commanded(
     target: int,
     seconds_ago: float,
@@ -96,6 +103,7 @@ def _commanded(
             direction=direction,
             time=NOW - timedelta(seconds=seconds_ago),
             wish_class=wish_class,
+            reason=_REASON_OF[wish_class],
         ),
     )
 
@@ -642,11 +650,14 @@ def test_a_wish_of_a_higher_class_takes_over_a_movement_with_the_same_target() -
     )
     command = after.members[0].last_own_command
     assert command is not None
+    # Class, reason and owner change; everything else about the command stays.
     assert command.wish_class is WishClass.PROTECTION
-    assert replace(command, wish_class=WishClass.COMFORT) == (
-        state.members[0].last_own_command
-    )
+    assert command.reason is ReasonCode.PROTECTION_EVENT
     assert after.owner is PositionOwner.ENGINE
+    assert state.owner is PositionOwner.UNKNOWN
+    assert replace(
+        command, wish_class=WishClass.COMFORT, reason=ReasonCode.SCHEDULE_NIGHT
+    ) == (state.members[0].last_own_command)
     assert replace(after, members=state.members, owner=state.owner) == state
     # From now on it is a protection movement: the same wish is a duplicate.
     again = engine().recompute(replace(world, state=after))
@@ -656,7 +667,16 @@ def test_a_wish_of_a_higher_class_takes_over_a_movement_with_the_same_target() -
 
 def test_a_wish_of_the_same_or_a_lower_class_does_not_take_over() -> None:
     """The evening closing meets a protection closing that is under way."""
-    state = WindowState(members=(_commanded(0, 5, wish_class=WishClass.PROTECTION),))
+    state = WindowState(
+        members=(
+            _commanded(
+                0,
+                5,
+                wish_class=WishClass.PROTECTION,
+            ),
+        ),
+        owner=PositionOwner.USER,
+    )
     world = snapshot(sources=night(), position=100, state=state)
 
     decision = engine().recompute(world)
@@ -664,6 +684,11 @@ def test_a_wish_of_the_same_or_a_lower_class_does_not_take_over() -> None:
     assert _gate(decision).reason is ReasonCode.DUPLICATE_COMMAND
     assert engine().state_after(world, decision) is state
     assert apply_take_over(world, decision) is state
+    # The same class changes nothing either: a second storm wish, same target.
+    stormy = replace(world, sources=storm())
+    same_class = engine().recompute(stormy)
+    assert _gate(same_class).reason is ReasonCode.DUPLICATE_COMMAND
+    assert engine().state_after(stormy, same_class) is state
 
 
 def test_a_take_over_raises_only_the_commands_of_a_lower_class() -> None:
@@ -694,7 +719,27 @@ def test_a_take_over_raises_only_the_commands_of_a_lower_class() -> None:
         for member in after.members
         if member.last_own_command is not None
     ] == [WishClass.FIRE, WishClass.FIRE]
+    assert [
+        member.last_own_command.reason
+        for member in after.members
+        if member.last_own_command is not None
+    ] == [ReasonCode.FIRE_ALARM, ReasonCode.FIRE_ALARM]
     assert after.members[1] == state.members[1]
+
+
+def test_a_take_over_leaves_the_motor_protection_clock_as_it_is() -> None:
+    """The movement was sent as comfort; the take-over sends nothing."""
+    sent_at = NOW - timedelta(seconds=5)
+    state = WindowState(members=(_commanded(0, 5),), last_comfort_movement=sent_at)
+    world = snapshot(sources=storm(), position=100, state=state)
+
+    decision = engine().recompute(world)
+    after = engine().state_after(world, decision)
+
+    assert _gate(decision).reason is ReasonCode.MOVEMENT_TAKEN_OVER
+    assert after.last_comfort_movement == sent_at
+    assert after.manual_override is None
+    assert after.person_at_window is None
 
 
 def test_a_command_to_a_member_the_window_no_longer_has_is_ignored() -> None:

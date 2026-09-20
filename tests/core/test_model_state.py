@@ -34,6 +34,11 @@ from custom_components.roller_shutter_suite.core.model import (
     WindowState,
     WishClass,
 )
+from custom_components.roller_shutter_suite.core.reasons import (
+    ReasonCategory,
+    ReasonCode,
+    codes_of,
+)
 
 NOW = datetime(2026, 3, 1, 12, 0, tzinfo=UTC)
 LOCAL = datetime(2026, 3, 1, 7, 15, 30, 250000, tzinfo=timezone(timedelta(hours=1)))
@@ -44,6 +49,13 @@ LEFT = "cover.example_left"
 RIGHT = "cover.example_right"
 
 
+_REASON_OF = {
+    WishClass.FIRE: ReasonCode.FIRE_ALARM,
+    WishClass.PROTECTION: ReasonCode.PROTECTION_EVENT,
+    WishClass.COMFORT: ReasonCode.SCHEDULE_NIGHT,
+}
+
+
 def _command(target: Any, time: Any, wish_class: Any, **more: Any) -> OwnCommand:
     arguments: dict[str, Any] = {
         "command_id": "command-1",
@@ -51,6 +63,9 @@ def _command(target: Any, time: Any, wish_class: Any, **more: Any) -> OwnCommand
         "direction": TravelDirection.DOWN,
         "time": time,
         "wish_class": wish_class,
+        "reason": _REASON_OF[wish_class]
+        if isinstance(wish_class, WishClass)
+        else ReasonCode.SCHEDULE_NIGHT,
     }
     return OwnCommand(**(arguments | more))
 
@@ -381,6 +396,10 @@ def _changed(path: tuple[str | int, ...], value: object) -> Any:
         (("protection_events", 0, "status"), "blind", "ProtectionEventStatus"),
         (("members", 0, "position_reference"), "lost", "PositionReference"),
         (("members", 0, "last_own_command", "wish_class"), "fun", "WishClass"),
+        (("members", 0, "last_own_command", "reason"), "because", "ReasonCode"),
+        (("members", 0, "last_own_command", "reason"), None, "expected a string"),
+        (("members", 0, "last_own_command", "reason"), "sent", "reason of a command"),
+        (("simulated", "commands", 0, "command", "reason"), "paused", "reason of a"),
         (("members", 0, "last_observation", "state"), "flying", "MovementState"),
     ],
 )
@@ -437,6 +456,16 @@ def test_missing_key_is_rejected() -> None:
     del data["fire_unacknowledged"]
 
     with pytest.raises(ValueError, match="'fire_unacknowledged' is missing"):
+        WindowState.from_data(data)
+
+
+def test_the_reason_of_a_stored_command_is_required() -> None:
+    """Nothing is released yet, so there is no older layout to read."""
+    data: Any = _full_state().to_data()
+    assert data["members"][0]["last_own_command"]["reason"] == "schedule_night"
+    del data["members"][0]["last_own_command"]["reason"]
+
+    with pytest.raises(ValueError, match="'reason' is missing"):
         WindowState.from_data(data)
 
 
@@ -713,9 +742,11 @@ def test_own_command_carries_what_the_tracker_remembers() -> None:
         direction=TravelDirection.UP,
         time=LOCAL,
         wish_class=WishClass.FIRE,
+        reason=ReasonCode.FIRE_ALARM,
     )
 
     assert command.context_id is None
+    assert command.reason is ReasonCode.FIRE_ALARM
     assert command.direction is TravelDirection.UP
     assert command.time == LOCAL
     assert command.time.utcoffset() == timedelta(0)
@@ -726,6 +757,29 @@ def test_own_command_carries_what_the_tracker_remembers() -> None:
         _command(Position(0), NOW, WishClass.COMFORT, direction="down")
     with pytest.raises(TypeError, match="context"):
         _command(Position(0), NOW, WishClass.COMFORT, context_id=bad)
+
+
+def test_the_reason_of_an_own_command_is_the_reason_of_a_wish() -> None:
+    """Only a code of the group "winning or contributing layers", never free text."""
+    bad: Any = "because"
+    for reason in codes_of(ReasonCategory.LAYER):
+        assert _command(Position(0), NOW, WishClass.COMFORT, reason=reason).reason is (
+            reason
+        )
+    for reason in ReasonCode:
+        if reason.category is not ReasonCategory.LAYER:
+            with pytest.raises(ValueError, match="reason of a command"):
+                _command(Position(0), NOW, WishClass.COMFORT, reason=reason)
+    with pytest.raises(TypeError, match="reason of a command"):
+        _command(Position(0), NOW, WishClass.COMFORT, reason=bad)
+    with pytest.raises(TypeError, match="reason"):
+        OwnCommand(  # type: ignore[call-arg]
+            command_id="command-7",
+            target=Position(100),
+            direction=TravelDirection.UP,
+            time=NOW,
+            wish_class=WishClass.FIRE,
+        )
 
 
 def test_parts_of_the_state_check_their_types() -> None:

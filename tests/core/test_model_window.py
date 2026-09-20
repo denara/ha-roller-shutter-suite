@@ -37,6 +37,7 @@ from custom_components.roller_shutter_suite.core.model import (
     WishClass,
     WorldSnapshot,
 )
+from custom_components.roller_shutter_suite.core.reasons import ReasonCode
 
 NOW = datetime(2026, 3, 1, 12, 0, tzinfo=UTC)
 NAIVE = datetime(2026, 3, 1, 12, 0)  # noqa: DTZ001 - the rejected case
@@ -570,6 +571,7 @@ def _commanded(member: str, target: int) -> MemberState:
         direction=TravelDirection.DOWN,
         time=NOW,
         wish_class=WishClass.COMFORT,
+        reason=ReasonCode.SCHEDULE_NIGHT,
     )
     return MemberState(member, last_own_command=command)
 

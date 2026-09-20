@@ -110,6 +110,7 @@ def remember_would_be_send(snapshot: WorldSnapshot, decision: Decision) -> Windo
                 direction=_direction(position, reported.get(member_id)),
                 time=snapshot.time,
                 wish_class=wish_class,
+                reason=decision.winning_wish.reason,
             ),
         )
     clock = (

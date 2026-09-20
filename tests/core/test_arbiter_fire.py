@@ -146,6 +146,13 @@ def test_fire_is_exempt_from_every_constraint_including_frost() -> None:
 # --- Property: fire is sent or taken over unless lock or dry-run is active ----------
 
 
+_REASON_OF = {
+    WishClass.FIRE: ReasonCode.FIRE_ALARM,
+    WishClass.PROTECTION: ReasonCode.PROTECTION_EVENT,
+    WishClass.COMFORT: ReasonCode.SCHEDULE_DAY,
+}
+
+
 def _command(target: int, wish_class: WishClass, seconds_ago: float = 3) -> OwnCommand:
     return OwnCommand(
         "command-1",
@@ -153,6 +160,7 @@ def _command(target: int, wish_class: WishClass, seconds_ago: float = 3) -> OwnC
         TravelDirection.UP,
         NOW - timedelta(seconds=seconds_ago),
         wish_class,
+        _REASON_OF[wish_class],
     )
 
 

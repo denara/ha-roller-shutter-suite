@@ -429,7 +429,7 @@ Locks: a maintenance lock or a pause that lasts longer than seven days is **repo
 
 Persisted per window, versioned, all timestamps timezone-aware (naive ones are rejected at the boundary):
 
-- owner of the position; per member the last own command (identifier, target, direction, time, wish class, context ID) and the last observation. The identifier is what lets a result be matched to its command. The last commanded target per member is what the statement "all members at their commanded targets" of section 9 is judged against (the window's position does not depend on it), and what lets a reload during a movement continue the same expectation instead of seeing a manual movement or sending the command again;
+- owner of the position; per member the last own command (identifier, target, direction, time, wish class, reason, context ID) and the last observation. The identifier is what lets a result be matched to its command. The last commanded target per member is what the statement "all members at their commanded targets" of section 9 is judged against (the window's position does not depend on it), and what lets a reload during a movement continue the same expectation instead of seeing a manual movement or sending the command again;
 - per member the **command backoff as facts**: the number of attempts of the current command and the time of the last attempt. The next retry time is not stored; it is computed from these two facts with the current settings. A reload right after a failed attempt therefore cannot trigger an immediate second command;
 - manual override dam: armed at, end rule with its absolute end if it has one, remembered position;
 - person-at-the-window dam: ends at;
