@@ -30,6 +30,7 @@ from custom_components.roller_shutter_suite.core.engine import (
 )
 from custom_components.roller_shutter_suite.core.model import (
     FULLY_CLOSED,
+    FunctionId,
     Layer,
     SourceValue,
     WindowConfig,
@@ -50,20 +51,34 @@ from tests.core.arbiter_kit import (
 
 type Provocation = Callable[[], tuple[WindowConfig, WorldSnapshot]]
 
-PROVOCATIONS: dict[Layer, Provocation] = {}
-"""Per registered layer: a situation in which it wants a position for comfort."""
+type Part = FunctionId | Layer
+"""A registration: by its function, or by its layer if it declares none."""
+
+PROVOCATIONS: dict[Part, Provocation] = {}
+"""Per registration: a situation in which it wants a position for comfort.
+
+A layer that is registered in parts (one per function) needs one entry per
+part, keyed by the function.
+"""
 
 
-def check_triggers(arbiter: Arbiter, provocations: Mapping[Layer, Provocation]) -> None:
+def _part(registration: LayerRegistration) -> Part:
+    return (
+        registration.layer if registration.function is None else registration.function
+    )
+
+
+def check_triggers(arbiter: Arbiter, provocations: Mapping[Part, Provocation]) -> None:
     """Fail for a layer without an entry, without a comfort target, or without a trigger."""
     for registration in arbiter.layers:
         layer = registration.layer
         if layer.wish_class is WishClass.FIRE:
             continue  # fire has no comfort wish
-        provoke = provocations.get(layer)
+        part = _part(registration)
+        provoke = provocations.get(part)
         if provoke is None:
             raise AssertionError(
-                f"the layer {layer.value!r} is registered, but PROVOCATIONS in "
+                f"the layer part {part.value!r} is registered, but PROVOCATIONS in "
                 "tests/core/test_layer_triggers.py has no entry for it. Add a "
                 "function that returns a window configuration and a snapshot in "
                 "which the layer wants a position as a comfort wish."
@@ -71,13 +86,13 @@ def check_triggers(arbiter: Arbiter, provocations: Mapping[Layer, Provocation]) 
         wish = registration.evaluate(*provoke())
         if wish.kind is not WishKind.TARGET or wish.wish_class is not WishClass.COMFORT:
             raise AssertionError(
-                f"the entry of PROVOCATIONS for the layer {layer.value!r} does not "
+                f"the entry of PROVOCATIONS for {part.value!r} does not "
                 "make it want a position as a comfort wish; it answered "
                 f"{wish.kind.value!r} with {wish.reason.value!r}"
             )
         if wish.triggered_at is None:
             raise AssertionError(
-                f"the layer {layer.value!r} wants a position but does not state the "
+                f"the layer part {part.value!r} wants a position but does not state the "
                 "trigger of its wish. Set it with wish.triggered(at); see "
                 "'How to add a layer' in docs/dev/arbiter.md."
             )
@@ -91,7 +106,7 @@ def test_every_registered_comfort_layer_states_the_trigger_of_its_wish() -> None
         sorted(FEATURE_LAYERS, key=lambda entry: list(Layer).index(entry.layer))
     )
     check_triggers(arbiter, PROVOCATIONS)
-    registered = {registration.layer for registration in arbiter.layers}
+    registered = {_part(registration) for registration in arbiter.layers}
     assert set(PROVOCATIONS) <= registered, "an entry for a layer that is gone"
 
 
@@ -102,11 +117,11 @@ def _world(**sources: SourceValue[bool] | SourceValue[int]) -> Provocation:
     return lambda: (window(), snapshot(sources=day(**sources)))
 
 
-STUB_PROVOCATIONS: dict[Layer, Provocation] = {
-    Layer.PROTECTION: _world(return_to=SourceValue.of(40)),
-    Layer.SLEEP: _world(sleep=SourceValue.of(True)),
-    Layer.SHADING: _world(shading_position=SourceValue.of(40)),
-    Layer.SCHEDULE: lambda: (window(), snapshot(sources=night())),
+STUB_PROVOCATIONS: dict[Part, Provocation] = {
+    FunctionId.PROTECTION_EVENTS: _world(return_to=SourceValue.of(40)),
+    FunctionId.SLEEP: _world(sleep=SourceValue.of(True)),
+    FunctionId.SHADING: _world(shading_position=SourceValue.of(40)),
+    FunctionId.SCHEDULE: lambda: (window(), snapshot(sources=night())),
 }
 
 
@@ -134,10 +149,10 @@ def test_a_layer_that_forgets_its_trigger_fails_the_check() -> None:
 
 def test_a_registered_layer_without_an_entry_fails_the_check() -> None:
     """A new layer is never skipped: no entry, no pass."""
-    entries: dict[Layer, Provocation] = {
-        layer: provoke
-        for layer, provoke in STUB_PROVOCATIONS.items()
-        if layer is not Layer.SHADING
+    entries: dict[Part, Provocation] = {
+        part: provoke
+        for part, provoke in STUB_PROVOCATIONS.items()
+        if part is not FunctionId.SHADING
     }
 
     with pytest.raises(AssertionError, match=r"'shading' is registered, but PROVOC"):
@@ -146,10 +161,14 @@ def test_a_registered_layer_without_an_entry_fails_the_check() -> None:
 
 def test_an_entry_that_provokes_no_comfort_target_fails_the_check() -> None:
     """Otherwise an entry could make the check pass without asking anything."""
-    calm = STUB_PROVOCATIONS | {Layer.SLEEP: _world(sleep=SourceValue.of(False))}
-    stormy = STUB_PROVOCATIONS | {Layer.PROTECTION: _world(storm=SourceValue.of(True))}
+    calm = STUB_PROVOCATIONS | {FunctionId.SLEEP: _world(sleep=SourceValue.of(False))}
+    stormy = STUB_PROVOCATIONS | {
+        FunctionId.PROTECTION_EVENTS: _world(storm=SourceValue.of(True))
+    }
 
     with pytest.raises(AssertionError, match=r"'sleep' does not make it want"):
         check_triggers(build_arbiter(STUB_LAYERS), calm)
-    with pytest.raises(AssertionError, match=r"'protection' does not make it want"):
+    with pytest.raises(
+        AssertionError, match=r"'protection_events' does not make it want"
+    ):
         check_triggers(build_arbiter(STUB_LAYERS), stormy)

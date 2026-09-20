@@ -31,6 +31,7 @@ from ._validation import (
     require_type,
     require_unique,
 )
+from .functions import FaultBehavior, FunctionId
 from .values import Position
 
 
@@ -622,6 +623,11 @@ class Decision:
       the position ``None`` was pinned by a constraint.
     - ``gate``: the outcome of the gate; ``None`` if nothing reached the gate,
       because there is no target or a constraint pinned every member.
+    - ``paused_functions``: the functions whose registered layer was not asked
+      in this recompute because the function is disabled for the window by a
+      faulty stored setting. A layer of which no part had an opinion says so
+      in ``other_layers`` too (``function_disabled_by_fault``); this list also
+      names a paused function when another part of its layer won.
 
     The member positions of the wish, the targets of every constraint result
     and ``targets`` name the same members in the same order.
@@ -632,9 +638,22 @@ class Decision:
     constraints: tuple[ConstraintResult, ...] = ()
     targets: tuple[MemberTarget, ...] = ()
     gate: GateOutcome | None = None
+    paused_functions: tuple[FunctionId, ...] = ()
 
     def __post_init__(self) -> None:
         """Reject records whose parts contradict each other."""
+        object.__setattr__(self, "paused_functions", tuple(self.paused_functions))
+        for function in self.paused_functions:
+            require_type(function, FunctionId, "a paused function of a decision")
+            if function.fault_behavior is not FaultBehavior.PAUSE:
+                raise ValueError(
+                    f"the function {function.value!r} falls back on a fault; it "
+                    "is never paused"
+                )
+        require_unique(
+            (function.value for function in self.paused_functions),
+            "the paused functions of a decision",
+        )
         object.__setattr__(self, "other_layers", tuple(self.other_layers))
         object.__setattr__(self, "constraints", tuple(self.constraints))
         object.__setattr__(self, "targets", tuple(self.targets))

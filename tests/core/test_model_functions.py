@@ -30,8 +30,15 @@ def test_the_fault_behaviors() -> None:
     ]
 
 
-def test_the_functions_with_their_names_values_and_order() -> None:
-    """Two blocks define this list identically; this pins names, values and order."""
+def test_the_order_of_the_functions_is_pinned_because_the_arbiter_depends_on_it() -> (
+    None
+):
+    """THE ORDER IS PINNED: the arbiter asks the parts of a layer in this order.
+
+    Reordering members or inserting one changes which part of a layer wins, so
+    it has to fail here first instead of silently changing behavior. The list
+    also pins names and values, which two blocks define identically.
+    """
     assert [(f.name, f.value) for f in FunctionId] == [
         (name, value) for name, value, _ in MEMBERS
     ]

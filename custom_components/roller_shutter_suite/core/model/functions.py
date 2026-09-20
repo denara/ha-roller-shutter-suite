@@ -33,6 +33,11 @@ class FaultBehavior(StrEnum):
 class FunctionId(StrEnum):
     """The closed list of function identifiers."""
 
+    # THE ORDER OF THE MEMBERS HAS MEANING. A layer of the arbiter can consist
+    # of several parts, one per function, and the arbiter asks them in the
+    # order in which the members are defined here; the first part with an
+    # opinion wins. Reordering members, or inserting one between two parts of
+    # the same layer, changes behavior. A test pins the order.
     SCHEDULE = "schedule"
     SLEEP = "sleep"
     REQUEST = "request"

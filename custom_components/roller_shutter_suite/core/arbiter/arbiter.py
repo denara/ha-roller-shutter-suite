@@ -14,6 +14,7 @@ from enum import StrEnum
 from custom_components.roller_shutter_suite.core.model import (
     ConstraintResult,
     Decision,
+    FunctionId,
     GateKind,
     GateOutcome,
     GateRule,
@@ -72,6 +73,44 @@ def _in_order[R](
     return tuple(sorted(items, key=lambda item: keys[id(item)]))
 
 
+def _layers_in_order(
+    registrations: Iterable[LayerRegistration],
+) -> tuple[LayerRegistration, ...]:
+    """Sort the layers, and the parts of a layer by their function.
+
+    A comfort layer can be registered in several parts, one per function
+    (shading and solar heating are one layer). The parts are sorted in the
+    order of ``FunctionId``, never in the order of registration. The same
+    function twice is refused, and so is a second registration of the fire
+    layer or the protection layer.
+    """
+    items = tuple(registrations)
+    seen: set[tuple[Layer, FunctionId | None]] = set()
+    for item in items:
+        if item.layer.wish_class is not WishClass.COMFORT and any(
+            layer is item.layer for layer, _ in seen
+        ):
+            raise ValueError(f"the layer {item.layer.value!r} is registered twice")
+        if (item.layer, item.function) in seen:
+            function = "" if item.function is None else item.function.value
+            raise ValueError(
+                f"the layer {item.layer.value!r} is registered twice for the "
+                f"function {function!r}; the parts of a layer have different "
+                "functions"
+            )
+        seen.add((item.layer, item.function))
+    functions = list(FunctionId)
+    return tuple(
+        sorted(
+            items,
+            key=lambda item: (
+                list(Layer).index(item.layer),
+                -1 if item.function is None else functions.index(item.function),
+            ),
+        )
+    )
+
+
 @dataclass(frozen=True, slots=True)
 class Arbiter:
     """The registries and the evaluation. Immutable; it keeps nothing."""
@@ -82,9 +121,7 @@ class Arbiter:
 
     def __post_init__(self) -> None:
         """Put every registry in the specified order and refuse duplicates."""
-        object.__setattr__(
-            self, "layers", _in_order(self.layers, lambda r: r.layer, "layer")
-        )
+        object.__setattr__(self, "layers", _layers_in_order(self.layers))
         object.__setattr__(
             self,
             "constraints",
@@ -110,33 +147,50 @@ class Arbiter:
 
     # --- Layers -------------------------------------------------------------
 
-    def _wishes(self, config: WindowConfig, snapshot: WorldSnapshot) -> list[Wish]:
-        """Ask every layer, in order. A layer that is not registered steps aside."""
-        registered = {registration.layer: registration for registration in self.layers}
+    def _wishes(
+        self, config: WindowConfig, snapshot: WorldSnapshot
+    ) -> tuple[list[Wish], tuple[FunctionId, ...]]:
+        """Ask every layer, in order; return its wish and the functions not asked.
+
+        A layer that is not registered steps aside. A layer can have several
+        parts, one registration per function; they are asked in the order of
+        ``FunctionId``, and the first part with an opinion is the layer's wish.
+        Every part that is not disabled is asked, as every layer is.
+        A part whose function is disabled for the window is not asked at all:
+        comfort becomes cautious, a faulty stored setting never moves a window,
+        and its code does not even run. If no part has an opinion, the layer
+        says so with ``function_disabled_by_fault`` if a part was skipped,
+        otherwise with the reason of the first part that was asked.
+        """
+        disabled = disabled_functions(config)
         wishes: list[Wish] = []
+        paused: list[FunctionId] = []
         for layer in Layer:
-            registration = registered.get(layer)
-            if registration is None:
-                wishes.append(Wish.no_opinion(layer, ReasonCode.NOT_CONFIGURED))
-                continue
-            if (
-                registration.can_be_paused
-                and registration.function in disabled_functions(config)
-            ):
-                # Comfort becomes cautious: a faulty stored setting never moves a
-                # window. The layer is not asked, and the record says why.
-                wishes.append(
-                    Wish.no_opinion(layer, ReasonCode.FUNCTION_DISABLED_BY_FAULT)
-                )
-                continue
-            wish = registration.evaluate(config, snapshot)
-            if wish.layer is not layer:
-                raise ValueError(
-                    f"the layer {layer.value!r} answered with a wish of the layer "
-                    f"{wish.layer.value!r}"
-                )
-            wishes.append(wish)
-        return wishes
+            parts = [entry for entry in self.layers if entry.layer is layer]
+            answer = Wish.no_opinion(layer, ReasonCode.NOT_CONFIGURED)
+            asked: list[Wish] = []
+            skipped = False
+            for part in parts:
+                if part.function is not None and part.function in disabled:
+                    paused.append(part.function)
+                    skipped = True
+                    continue
+                wish = part.evaluate(config, snapshot)
+                if wish.layer is not layer:
+                    raise ValueError(
+                        f"the layer {layer.value!r} answered with a wish of the "
+                        f"layer {wish.layer.value!r}"
+                    )
+                asked.append(wish)
+            opinions = [w for w in asked if w.kind is not WishKind.NO_OPINION]
+            if opinions:
+                answer = opinions[0]
+            elif skipped:
+                answer = Wish.no_opinion(layer, ReasonCode.FUNCTION_DISABLED_BY_FAULT)
+            elif asked:
+                answer = asked[0]
+            wishes.append(answer)
+        return wishes, tuple(paused)
 
     # --- Constraints --------------------------------------------------------
 
@@ -261,7 +315,7 @@ class Arbiter:
                 "the snapshot observes other members than the window is configured "
                 "with, or in another order"
             )
-        wishes = self._wishes(config, snapshot)
+        wishes, paused = self._wishes(config, snapshot)
         winner = next(
             (wish for wish in wishes if wish.kind is not WishKind.NO_OPINION), None
         )
@@ -271,7 +325,9 @@ class Arbiter:
             if wish is not winner
         )
         if winner is None or winner.kind is not WishKind.TARGET:
-            return Decision(winning_wish=winner, other_layers=others)
+            return Decision(
+                winning_wish=winner, other_layers=others, paused_functions=paused
+            )
         targets = _initial_targets(winner, member_ids)
         restores = self._violated_by_position(config, snapshot, winner, targets)
         results, targets = self._constrain(config, snapshot, winner, targets)
@@ -286,6 +342,7 @@ class Arbiter:
                 if to_send
                 else None
             ),
+            paused_functions=paused,
         )
 
 

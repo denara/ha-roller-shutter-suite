@@ -12,7 +12,7 @@ different files. Their dependencies run one way:
 ``_validation`` ← ``_data`` ← ``values`` ← ``decision`` ← ``observation`` ←
 ``state`` ← ``snapshot``. ``window`` depends on ``_validation`` and ``values``,
 ``controls`` on ``_validation`` only; ``snapshot`` also uses ``controls``.
-``functions`` depends on nothing; ``window`` uses it.
+``functions`` depends on nothing; ``window`` and ``decision`` use it.
 
 Conventions that hold for the whole package:
 

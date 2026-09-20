@@ -15,6 +15,7 @@ from custom_components.roller_shutter_suite.core.model import (
     ConstraintResult,
     Decision,
     Direction,
+    FunctionId,
     GateKind,
     GateOutcome,
     GateRule,
@@ -202,6 +203,34 @@ def test_a_wish_for_a_target_can_state_the_time_of_its_trigger() -> None:
         wish.triggered("yesterday")  # type: ignore[arg-type]
     with pytest.raises(ValueError, match="carries no position"):
         Wish.leave_alone(Layer.FIRE, ReasonCode.FIRE_UNACKNOWLEDGED).triggered(LATER)
+
+
+def test_a_decision_names_the_functions_that_were_paused() -> None:
+    """Only functions that can be paused, each once, never free text."""
+    wish = Wish.target(Layer.SCHEDULE, ReasonCode.SCHEDULE_NIGHT, FULLY_CLOSED)
+    bad: Any = "shading"
+
+    def decide(*functions: FunctionId) -> Decision:
+        return Decision(
+            winning_wish=wish,
+            targets=_targets(0),
+            gate=GateOutcome.send(),
+            paused_functions=functions,
+        )
+
+    assert Decision(winning_wish=None).paused_functions == ()
+    assert decide(FunctionId.SHADING, FunctionId.PRIVACY).paused_functions == (
+        FunctionId.SHADING,
+        FunctionId.PRIVACY,
+    )
+    assert decide(FunctionId.SHADING) == decide(FunctionId.SHADING)
+    assert decide(FunctionId.SHADING) != decide()
+    with pytest.raises(ValueError, match="falls back on a fault"):
+        decide(FunctionId.FROST)
+    with pytest.raises(ValueError, match="occurs twice"):
+        decide(FunctionId.SHADING, FunctionId.SHADING)
+    with pytest.raises(TypeError, match="paused function"):
+        decide(bad)
 
 
 def test_wish_types_are_checked() -> None:
