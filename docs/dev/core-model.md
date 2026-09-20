@@ -76,12 +76,13 @@ A window has one or more members: the covers that are always moved together. Eve
 | Type | Meaning |
 |---|---|
 | `CoveringType` | What hangs in front of the glass. Only `roller_shutter` exists; the field is there so venetian blinds can be added later. |
-| `CapabilityProfile` | What a member can do and report: open/close, set position, stop, reports a position, position source, transit states, position updates during travel, report delay, travel time up and down, and the tolerance for comparing a reported position with a target (the stated one, else 2 for a calculated and 3 for a measured position; at least 1). A cover without position feedback is a valid profile. |
+| `CapabilityProfile` | What a member can do and report: open/close, set position, stop, reports a position, position source, transit states, position updates during travel, report delay, travel time up and down, and the tolerance for comparing a reported position with a target (the stated one, else 2 for a calculated and 3 for a measured position; at least 1). A cover without position feedback is a valid profile. `capabilities_known` is false while the member could not be asked what it can do (its entity is not available): the four capability flags then hold the last known state, the member is operated with it, and `capability_state(name)` answers `unknown` for every flag instead of `present` or `missing`. The flags come from one report of the member, so they are known or unknown together. |
 | `PositionSource` | `measured` by the drive, or `calculated` from run time (the default). |
 | `TransitReporting` | Whether a member reports "opening" and "closing": `yes`, `no`, or `unknown` until observed. |
 | `PositionUpdates` | `live` during travel, or at the `end_only`. |
 | `MemberConfig` | One member: its identifier and its capability profile. |
-| `WindowCapabilities` | What all members of a window can do: the lowest common denominator. |
+| `WindowCapabilities` | What all members of a window can do: the lowest common denominator of the flags. It is what the window is operated with and does not say whether the flags are confirmed. |
+| `CapabilityState`, `WindowCapabilityStates` | The same four capabilities in three states, `present`, `missing` or `unknown`, from `WindowConfig.capability_states`. `missing` if any member definitely lacks the capability; otherwise `unknown` if the capabilities of any member are not known; otherwise `present`. "Missing" takes precedence, as "no" does in the at-targets view. Unknown is never treated as missing: nothing is concluded from a member that could not be asked. |
 | `WindowConfig` | A window after inheritance has been resolved: identifier, covering type, members, and three places for later features (the condition input of the morning opening, the tiers of the temperature condition, the profile key of the schedule). The blocks that build a feature add its settings here. |
 | `TemperatureTier` | One tier of the temperature condition of shading: threshold and hysteresis. A window has none or one. |
 | `ScheduleProfile` | The key under which the schedule looks up its targets. It has one value, `default`. |

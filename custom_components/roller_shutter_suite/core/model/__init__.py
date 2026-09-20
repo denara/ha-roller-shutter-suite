@@ -87,6 +87,7 @@ from .window import (
     DEFAULT_TOLERANCE_MEASURED,
     MIN_TOLERANCE,
     CapabilityProfile,
+    CapabilityState,
     CoveringType,
     MemberConfig,
     PositionSource,
@@ -95,6 +96,7 @@ from .window import (
     TemperatureTier,
     TransitReporting,
     WindowCapabilities,
+    WindowCapabilityStates,
     WindowConfig,
 )
 
@@ -109,6 +111,7 @@ __all__ = [
     "WINDOW_STATE_SCHEMA_VERSION",
     "AnySourceValue",
     "CapabilityProfile",
+    "CapabilityState",
     "Constraint",
     "ConstraintResult",
     "CoveringType",
@@ -157,6 +160,7 @@ __all__ = [
     "TransitReporting",
     "TravelDirection",
     "WindowCapabilities",
+    "WindowCapabilityStates",
     "WindowConfig",
     "WindowObservation",
     "WindowState",

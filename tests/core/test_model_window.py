@@ -11,6 +11,7 @@ from custom_components.roller_shutter_suite.core.model import (
     DEFAULT_TOLERANCE_MEASURED,
     MIN_TOLERANCE,
     CapabilityProfile,
+    CapabilityState,
     CoveringType,
     MemberConfig,
     MemberObservation,
@@ -30,6 +31,7 @@ from custom_components.roller_shutter_suite.core.model import (
     TransitReporting,
     TravelDirection,
     WindowCapabilities,
+    WindowCapabilityStates,
     WindowConfig,
     WindowObservation,
     WindowState,
@@ -272,6 +274,79 @@ def test_window_capabilities_validate_their_flags() -> None:
         flags[position] = bad
         with pytest.raises(TypeError, match="the capability"):
             WindowCapabilities(*flags)
+
+
+def test_capabilities_of_a_member_are_known_unless_stated_otherwise() -> None:
+    """A known profile answers present or missing, flag by flag."""
+    profile = _profile(supports_stop=False)
+
+    assert profile.capabilities_known is True
+    assert profile.capability_state("supports_stop") is CapabilityState.MISSING
+    assert profile.capability_state("reports_position") is CapabilityState.PRESENT
+
+
+def test_unknown_capabilities_say_nothing_definite() -> None:
+    """The flags hold the last known state, but every state is "unknown"."""
+    profile = _profile(supports_stop=False, capabilities_known=False)
+
+    assert profile.supports_stop is False
+    assert profile.supports_set_position is True
+    assert profile.capability_state("supports_stop") is CapabilityState.UNKNOWN
+    assert profile.capability_state("supports_set_position") is CapabilityState.UNKNOWN
+
+
+def test_capability_state_is_asked_for_a_capability_flag_only() -> None:
+    """Another field of the profile is not a capability."""
+    with pytest.raises(ValueError, match="is not a capability"):
+        _profile().capability_state("capabilities_known")
+    with pytest.raises(TypeError, match="the capability 'capabilities_known'"):
+        _profile(capabilities_known=1)
+
+
+UNKNOWN_PROFILE = {"capabilities_known": False}
+CANNOT_STOP = {"supports_stop": False}
+
+
+@pytest.mark.parametrize(
+    ("profiles", "expected"),
+    [
+        ([{}], CapabilityState.PRESENT),
+        ([{}, {}], CapabilityState.PRESENT),
+        ([CANNOT_STOP], CapabilityState.MISSING),
+        ([UNKNOWN_PROFILE], CapabilityState.UNKNOWN),
+        ([{}, UNKNOWN_PROFILE], CapabilityState.UNKNOWN),
+        ([{}, CANNOT_STOP], CapabilityState.MISSING),
+        ([UNKNOWN_PROFILE, CANNOT_STOP], CapabilityState.MISSING),
+        ([CANNOT_STOP, UNKNOWN_PROFILE, {}], CapabilityState.MISSING),
+        ([CANNOT_STOP | UNKNOWN_PROFILE, {}], CapabilityState.UNKNOWN),
+    ],
+)
+def test_capability_states_of_a_window_missing_beats_unknown_beats_present(
+    profiles: list[dict[str, Any]], expected: CapabilityState
+) -> None:
+    """One member that definitely cannot stop settles it; a last known "no" does not."""
+    window = _window(
+        members=[
+            MemberConfig(f"cover.example_{number}", _profile(**changes))
+            for number, changes in enumerate(profiles)
+        ]
+    )
+
+    states = window.capability_states
+
+    assert states.supports_stop is expected
+    others = {states.supports_open_close, states.supports_set_position}
+    assert CapabilityState.MISSING not in others
+
+
+def test_window_capability_states_validate_their_states() -> None:
+    """An object that exists is valid: a boolean is not a state."""
+    bad: Any = True
+    for position in range(4):
+        states: list[Any] = [CapabilityState.PRESENT] * 4
+        states[position] = bad
+        with pytest.raises(TypeError, match="the capability"):
+            WindowCapabilityStates(*states)
 
 
 @pytest.mark.parametrize(

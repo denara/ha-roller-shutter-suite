@@ -53,6 +53,27 @@ class PositionUpdates(StrEnum):
     END_ONLY = "end_only"
 
 
+@unique
+class CapabilityState(StrEnum):
+    """Whether the members of a window have a capability.
+
+    ``UNKNOWN`` is not ``MISSING``: nobody could be asked, so nothing may be
+    concluded from it.
+    """
+
+    PRESENT = "present"
+    MISSING = "missing"
+    UNKNOWN = "unknown"
+
+
+_CAPABILITY_FLAGS: Final = (
+    "supports_open_close",
+    "supports_set_position",
+    "supports_stop",
+    "reports_position",
+)
+
+
 @dataclass(frozen=True, slots=True)
 class CapabilityProfile:
     """What a member can do and report.
@@ -66,6 +87,13 @@ class CapabilityProfile:
     that applies: the stated one, else 2 for a calculated position (the report
     equals the command, so a deviation means an intervention) and 3 for a
     measured one. The minimum is 1.
+
+    ``capabilities_known`` is ``False`` while the member could not be asked
+    what it can do, for example because its entity is not available. All four
+    capability flags come from the same report of the member, so they are
+    known or unknown together. They then hold the last known state, and the
+    member is operated with it; but a flag that is off says nothing definite,
+    see :meth:`capability_state`.
     """
 
     supports_open_close: bool
@@ -79,15 +107,11 @@ class CapabilityProfile:
     position_updates: PositionUpdates = PositionUpdates.END_ONLY
     report_delay: timedelta = timedelta(0)
     stated_tolerance: int | None = None
+    capabilities_known: bool = True
 
     def __post_init__(self) -> None:
         """Validate types and durations."""
-        for name in (
-            "supports_open_close",
-            "supports_set_position",
-            "supports_stop",
-            "reports_position",
-        ):
+        for name in (*_CAPABILITY_FLAGS, "capabilities_known"):
             require_type(getattr(self, name), bool, f"the capability {name!r}")
         require_type(self.position_source, PositionSource, "the position source")
         require_type(
@@ -119,10 +143,28 @@ class CapabilityProfile:
             return DEFAULT_TOLERANCE_MEASURED
         return DEFAULT_TOLERANCE_CALCULATED
 
+    def capability_state(self, name: str) -> CapabilityState:
+        """Return the state of one capability flag, given by its field name.
+
+        While the capabilities are not known, every flag is ``UNKNOWN``,
+        whatever the last known state says.
+        """
+        if name not in _CAPABILITY_FLAGS:
+            raise ValueError(f"{name!r} is not a capability")
+        if not self.capabilities_known:
+            return CapabilityState.UNKNOWN
+        if getattr(self, name):
+            return CapabilityState.PRESENT
+        return CapabilityState.MISSING
+
 
 @dataclass(frozen=True, slots=True)
 class WindowCapabilities:
-    """The capabilities of a window: the lowest common denominator of its members."""
+    """The capabilities of a window: the lowest common denominator of its members.
+
+    These are the flags the window is operated with. They do not say whether
+    they are confirmed; :class:`WindowCapabilityStates` does.
+    """
 
     supports_open_close: bool
     supports_set_position: bool
@@ -131,13 +173,31 @@ class WindowCapabilities:
 
     def __post_init__(self) -> None:
         """Validate the flags."""
-        for name in (
-            "supports_open_close",
-            "supports_set_position",
-            "supports_stop",
-            "reports_position",
-        ):
+        for name in _CAPABILITY_FLAGS:
             require_type(getattr(self, name), bool, f"the capability {name!r}")
+
+
+@dataclass(frozen=True, slots=True)
+class WindowCapabilityStates:
+    """The capabilities of a window in three states, over all its members.
+
+    ``MISSING`` if any member definitely lacks the capability; otherwise
+    ``UNKNOWN`` if the capabilities of any member are not known; otherwise
+    ``PRESENT``. "Missing" takes precedence, because a single member that
+    cannot do something settles the question for the window.
+    """
+
+    supports_open_close: CapabilityState
+    supports_set_position: CapabilityState
+    supports_stop: CapabilityState
+    reports_position: CapabilityState
+
+    def __post_init__(self) -> None:
+        """Validate the states."""
+        for name in _CAPABILITY_FLAGS:
+            require_type(
+                getattr(self, name), CapabilityState, f"the capability {name!r}"
+            )
 
 
 @unique
@@ -242,4 +302,24 @@ class WindowConfig:
             supports_set_position=all(p.supports_set_position for p in profiles),
             supports_stop=all(p.supports_stop for p in profiles),
             reports_position=all(p.reports_position for p in profiles),
+        )
+
+    @property
+    def capability_states(self) -> WindowCapabilityStates:
+        """Return the capabilities in three states; "missing" takes precedence."""
+
+        def over_members(name: str) -> CapabilityState:
+            states = {
+                member.capabilities.capability_state(name) for member in self.members
+            }
+            for state in (CapabilityState.MISSING, CapabilityState.UNKNOWN):
+                if state in states:
+                    return state
+            return CapabilityState.PRESENT
+
+        return WindowCapabilityStates(
+            supports_open_close=over_members("supports_open_close"),
+            supports_set_position=over_members("supports_set_position"),
+            supports_stop=over_members("supports_stop"),
+            reports_position=over_members("reports_position"),
         )
