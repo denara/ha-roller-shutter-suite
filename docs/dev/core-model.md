@@ -16,6 +16,7 @@ The vocabulary and the rules come from the [domain design specification](../arch
 |---|---|
 | `values` | position, source value, sun position |
 | `window` | capability profile, member and window configuration, settings of motor protection and frost protection |
+| `functions` | the closed list of function identifiers, each with its class |
 | `controls` | pause, maintenance lock and operating mode on three levels, dry-run |
 | `decision` | wish, constraint result, gate outcome, decision |
 | `observation` | observations, the window-level view, own commands |
@@ -84,7 +85,8 @@ A window has one or more members: the covers that are always moved together. Eve
 | `PositionUpdates` | `live` during travel, or at the `end_only`. |
 | `MemberConfig` | One member: its identifier and its capability profile. |
 | `WindowCapabilities` | What all members of a window can do: the lowest common denominator. |
-| `WindowConfig` | A window after inheritance has been resolved: identifier, covering type, members, and three places for later features (the condition input of the morning opening, the tiers of the temperature condition, the profile key of the schedule). The blocks that build a feature add its settings here; so far `motor_protection`, `frost`, `reevaluate_after`, the upper bound of a deferral whose end is not known (default 5 minutes), and `disabled_functions`, the comfort functions that are paused for the window because a stored setting of theirs is faulty (a frozen set of identifiers, empty by default; the arbiter does not ask their layers). |
+| `WindowConfig` | A window after inheritance has been resolved: identifier, covering type, members, and three places for later features (the condition input of the morning opening, the tiers of the temperature condition, the profile key of the schedule). The blocks that build a feature add its settings here; so far `motor_protection`, `frost`, `reevaluate_after`, the upper bound of a deferral whose end is not known (default 5 minutes), and `disabled_functions`, the comfort functions that are paused for the window because a stored setting of theirs is faulty (a frozen set of `FunctionId`, empty by default; a protection function in it is refused; the arbiter does not ask the layers of a listed function). |
+| `FunctionId`, `FunctionClass` | The closed list of the functions of the integration (`schedule`, `shading`, `frost` …) and the class of each: `comfort` or `protection`. The settings registry, the disabled functions of a window and the registrations of the arbiter all use it; there are no free strings. The member list is provisional: a block that builds a function adds its member with its class. |
 | `MotorProtectionSettings` | The minimum change in percent (default 5) and the minimum interval between two own comfort movements (default 10 minutes); zero switches a part off. |
 | `FrostSettings` | Frost protection of a window: the key of the temperature source (none means not configured), threshold (default 0) and hysteresis (default 1), the frost position (default 90), whether protection movements are limited too (default no), and `hold_closed`, the option "do not raise a closed window at all" (default off). |
 | `TemperatureTier` | One tier of the temperature condition of shading: threshold and hysteresis. A window has none or one. |

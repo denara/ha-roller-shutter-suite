@@ -124,11 +124,11 @@ def sleep_layer(config: WindowConfig, snapshot: WorldSnapshot) -> Wish:
     return Wish.target(Layer.SLEEP, ReasonCode.SLEEP_MODE, night_position)
 
 
-SLEEP_LAYER = LayerRegistration(Layer.SLEEP, sleep_layer, function="sleep")
+SLEEP_LAYER = LayerRegistration(Layer.SLEEP, sleep_layer, function=FunctionId.SLEEP)
 ```
 
 - The layer answers for its own place in `Layer`; an answer in another layer's name is refused. The wish class follows from the layer.
-- **Declare the function** the layer belongs to: a stable identifier such as `schedule`, `shading`, `privacy`, `sleep` or `request`. A comfort layer without one is refused. The resolved window configuration can list functions that are disabled for the window because a stored setting in their inheritance chain is faulty (`WindowConfig.disabled_functions`, read through `disabled_functions(config)` in `arbiter/layers.py`). Comfort becomes cautious then: the arbiter does not ask the layer at all, the layer counts as "no opinion" with the reason `function_disabled_by_fault`, lower layers act as usual, and the decision record and a dry-run show why nothing happens. The fire layer and the protection layer are never disabled, whatever the set contains; that includes the return to the manual position, which comes from the protection layer.
+- **Declare the function** the layer belongs to: a member of the closed enumeration `FunctionId` of the core model (`FunctionId.SCHEDULE`, `FunctionId.SHADING` …), never a free string. A comfort layer without a comfort function is refused. The settings registry and the disabled functions of a window use the same enumeration; see "Functions: the cross-check" below. The resolved window configuration can list functions that are disabled for the window because a stored setting in their inheritance chain is faulty (`WindowConfig.disabled_functions`, read through `disabled_functions(config)` in `arbiter/layers.py`). Comfort becomes cautious then: the arbiter does not ask the layer at all, the layer counts as "no opinion" with the reason `function_disabled_by_fault`, lower layers act as usual, and the decision record and a dry-run show why nothing happens. The fire layer and the protection layer are never disabled, whatever function their registration declares; that includes the return to the manual position, which comes from the protection layer. A protection function cannot even be put into the set: the window configuration refuses it.
 - Always return a wish with a reason code: a target, "leave alone", or "no opinion" with the reason why the layer steps aside.
 - **A missing input never becomes a position.** Decide per input whether its absence means "no opinion" (comfort steps aside) or "leave alone" (safety holds the window); `wish_for_missing_input` builds either answer.
 - **A comfort wish for a target states its trigger:** `wish.triggered(at)`, with the moment from which the layer wants what it wants now, taken from a fact the layer already has (the boundary of the schedule, the "active since" of the episode, the time of the request or of the switch). It stays the same while the layer only tracks. Without it the wish is never fresh, and its record reads `trigger_time_missing` whenever the minimum interval holds it back. The test `tests/core/test_layer_triggers.py` fails for a registered comfort layer that forgets it.
@@ -145,10 +145,12 @@ LOCKOUT = ConstraintRegistration(
     constraint=Constraint.LOCKOUT_PROTECTION,
     applies_to=frozenset({WishClass.PROTECTION, WishClass.COMFORT}),
     apply=_apply,
+    function=FunctionId.LOCKOUT,
 )
 ```
 
 - Its place is its member of `Constraint`; `CONSTRAINT_REASONS` of the model says which reason codes it can report.
+- State the function it belongs to, a member of `FunctionId`; the argument has no default. Frost protection states `FunctionId.FROST`. `None` is for a constraint that has no function of its own because it belongs to whatever function the limited wish comes from; the direction of a wish is the one such constraint, and the cross-check test lists it by name.
 - Name the wish classes it applies to. Fire cannot be named. A constraint that applies to a class only under a setting names the class and checks the setting itself, as `frost` does for protection.
 - Return the target of **every** member, in order. Limit a target, or pin a member with `None`; never give a pinned member a target again, and never invent a target.
 - Compare with `ConstraintInput.current_positions`. A member that reports no position cannot be judged; say in the module what that means for the constraint.
@@ -181,6 +183,17 @@ STAGGERING = GateRuleRegistration(
 - Hand it to `build_arbiter(gate_rules=[...])`.
 
 A new dam is a `Dam(...)` and its `registration()`.
+
+## Functions: the cross-check
+
+The functions of the integration have one definition, the closed enumeration `FunctionId` in `core/model/functions.py`, each with its class (`FunctionClass.COMFORT` or `FunctionClass.PROTECTION`). Three places use it and nothing else: the settings registry (every setting belongs to a function), `WindowConfig.disabled_functions` (comfort functions only; the resolver of the settings fills it when a stored setting is faulty), and the registrations of the arbiter.
+
+`tests/core/test_function_cross_check.py` keeps the two sides together:
+
+- **(a)** Every comfort layer and every constraint registered in the arbiter that `build_arbiter()` returns declares a member of `FunctionId` (asserted at runtime too, for registrations built from data).
+- **(b)** Every comfort function that has at least one setting has at least one registered layer or constraint with that function. Otherwise the resolver would switch something off that the arbiter keeps running under another name, or nothing would listen at all.
+
+Feature layers arrive block by block, so a comfort function can have settings before its layer exists. Such a function stands in `NOT_BUILT_YET` in that test. The list can only shrink: the test fails for an entry whose layer or constraint exists by now, for an entry that has no settings, and for a function with settings that has neither a listener nor an entry. When you build the layer of a function, remove its entry in the same pull request. `functions_with_settings()` in the test is the one place that connects to the settings registry.
 
 ## Reason codes
 

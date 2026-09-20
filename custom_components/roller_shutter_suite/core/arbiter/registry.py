@@ -15,6 +15,8 @@ from custom_components.roller_shutter_suite.core.model import (
     GATE_RULE_REASONS,
     Constraint,
     ConstraintResult,
+    FunctionClass,
+    FunctionId,
     GateOutcome,
     GateRule,
     Layer,
@@ -64,30 +66,31 @@ The persisted window state is part of the snapshot (``snapshot.state``).
 class LayerRegistration:
     """One layer, the function that answers for it, and the function it belongs to.
 
-    ``function`` is the stable identifier of the function of the integration
-    the layer belongs to (``schedule``, ``shading``, ``privacy``, ``sleep``,
-    ``request`` ...). A comfort layer has to declare it: a window can have a
-    function disabled because a stored setting of it is faulty, and the
-    arbiter then does not ask the layer. The fire layer and the protection
-    layer are never disabled; what they declare is ignored.
+    ``function`` is the function of the integration the layer belongs to, a
+    member of ``FunctionId``. A comfort layer has to declare a comfort
+    function: a window can have such a function disabled because a stored
+    setting of it is faulty, and the arbiter then does not ask the layer. The
+    fire layer and the protection layer are never disabled; what they declare
+    is ignored.
     """
 
     layer: Layer
     evaluate: LayerFunction
-    function: str | None = None
+    function: FunctionId | None = None
 
     def __post_init__(self) -> None:
         """Validate the place of the registration and the declared function."""
         if not isinstance(self.layer, Layer):
             raise TypeError("a layer is registered for a member of 'Layer'")
-        if self.function is not None and (
-            not isinstance(self.function, str) or not self.function
+        if self.function is not None and not isinstance(self.function, FunctionId):
+            raise TypeError("the function of a layer is a member of 'FunctionId'")
+        if self.can_be_disabled and (
+            self.function is None
+            or self.function.function_class is not FunctionClass.COMFORT
         ):
-            raise ValueError("the function of a layer is a non-empty identifier")
-        if self.can_be_disabled and self.function is None:
             raise ValueError(
-                f"the comfort layer {self.layer.value!r} declares the function it "
-                "belongs to"
+                f"the comfort layer {self.layer.value!r} declares the comfort "
+                "function it belongs to"
             )
 
     @property
@@ -129,17 +132,26 @@ class ConstraintRegistration:
     side right now. A movement that restores such a constraint is exempt from
     the minimum change of motor protection, however small it is. A constraint
     about movements leaves it out.
+
+    ``function`` is the function of the integration the constraint belongs to,
+    a member of ``FunctionId``. It has no default, so it is stated on purpose.
+    ``None`` is for a constraint that belongs to no function of its own but to
+    whatever function the limited wish comes from; the direction of a wish is
+    the one such constraint.
     """
 
     constraint: Constraint
     applies_to: frozenset[WishClass]
     apply: ConstraintFunction
+    function: FunctionId | None
     violated_by_position: ViolationFunction | None = None
 
     def __post_init__(self) -> None:
         """Refuse a constraint on fire: fire is subject to no constraint at all."""
         if not isinstance(self.constraint, Constraint):
             raise TypeError("a constraint is registered for a member of 'Constraint'")
+        if self.function is not None and not isinstance(self.function, FunctionId):
+            raise TypeError("the function of a constraint is a member of 'FunctionId'")
         object.__setattr__(self, "applies_to", frozenset(self.applies_to))
         if not self.applies_to:
             raise ValueError("a constraint names the wish classes it applies to")

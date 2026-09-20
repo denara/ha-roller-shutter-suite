@@ -19,6 +19,7 @@ ORDER = [
     "_validation",
     "_data",
     "values",
+    "functions",
     "window",
     "controls",
     "decision",

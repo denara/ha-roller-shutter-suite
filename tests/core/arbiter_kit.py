@@ -36,6 +36,7 @@ from custom_components.roller_shutter_suite.core.model import (
     ControlLevel,
     Controls,
     Direction,
+    FunctionId,
     Layer,
     MemberConfig,
     MemberObservation,
@@ -244,11 +245,11 @@ def schedule_layer(_config: WindowConfig, world: WorldSnapshot) -> Wish:
 
 
 FUNCTION_OF = {
-    Layer.SLEEP: "sleep",
-    Layer.EXTERNAL_REQUEST: "request",
-    Layer.PRIVACY: "privacy",
-    Layer.SHADING: "shading",
-    Layer.SCHEDULE: "schedule",
+    Layer.SLEEP: FunctionId.SLEEP,
+    Layer.EXTERNAL_REQUEST: FunctionId.REQUEST,
+    Layer.PRIVACY: FunctionId.PRIVACY,
+    Layer.SHADING: FunctionId.SHADING,
+    Layer.SCHEDULE: FunctionId.SCHEDULE,
 }
 """The function a stub comfort layer declares; fire and protection declare none."""
 

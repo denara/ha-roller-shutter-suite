@@ -34,6 +34,7 @@ from custom_components.roller_shutter_suite.core.model import (
     FULLY_CLOSED,
     Constraint,
     ConstraintResult,
+    FunctionId,
     HeldInput,
     MemberTarget,
     WindowConfig,
@@ -165,5 +166,6 @@ FROST_CONSTRAINT: Final = ConstraintRegistration(
     constraint=Constraint.FROST_PROTECTION,
     applies_to=frozenset({WishClass.PROTECTION, WishClass.COMFORT}),
     apply=_apply,
+    function=FunctionId.FROST,
 )
 """Comfort always; protection only if the window is configured that way."""

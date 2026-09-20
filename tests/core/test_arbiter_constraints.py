@@ -31,6 +31,7 @@ from custom_components.roller_shutter_suite.core.model import (
     Decision,
     Direction,
     FrostSettings,
+    FunctionId,
     GateKind,
     HeldInput,
     Layer,
@@ -103,15 +104,43 @@ def test_every_constraint_names_the_classes_it_applies_to() -> None:
         assert WishClass.FIRE not in registration.applies_to
     with pytest.raises(ValueError, match="fire is subject to no constraint"):
         ConstraintRegistration(
-            Constraint.LOCKOUT_PROTECTION, frozenset(WishClass), lambda _input: None
+            Constraint.LOCKOUT_PROTECTION,
+            frozenset(WishClass),
+            lambda _input: None,
+            FunctionId.LOCKOUT,
         )
     with pytest.raises(ValueError, match="names the wish classes"):
         ConstraintRegistration(
-            Constraint.LOCKOUT_PROTECTION, frozenset(), lambda _input: None
+            Constraint.LOCKOUT_PROTECTION,
+            frozenset(),
+            lambda _input: None,
+            FunctionId.LOCKOUT,
         )
     bad: Any = "lockout"
     with pytest.raises(TypeError, match="member of 'Constraint'"):
-        ConstraintRegistration(bad, frozenset({WishClass.COMFORT}), lambda _input: None)
+        ConstraintRegistration(
+            bad, frozenset({WishClass.COMFORT}), lambda _input: None, FunctionId.LOCKOUT
+        )
+    with pytest.raises(TypeError, match="member of 'FunctionId'"):
+        ConstraintRegistration(
+            Constraint.LOCKOUT_PROTECTION,
+            frozenset({WishClass.COMFORT}),
+            lambda _input: None,
+            bad,
+        )
+
+
+def test_every_constraint_states_the_function_it_belongs_to() -> None:
+    """Frost is its own function; the direction belongs to the wish's function."""
+    assert FROST_CONSTRAINT.function is FunctionId.FROST
+    assert DIRECTION_CONSTRAINT.function is None
+    arguments: Any = (
+        Constraint.LOCKOUT_PROTECTION,
+        frozenset({WishClass.COMFORT}),
+        lambda _input: None,
+    )
+    with pytest.raises(TypeError, match="function"):
+        ConstraintRegistration(*arguments)
 
 
 def _floor(position: int, classes: frozenset[WishClass]) -> ConstraintRegistration:
@@ -133,7 +162,9 @@ def _floor(position: int, classes: frozenset[WishClass]) -> ConstraintRegistrati
             Constraint.VENTILATION_FLOOR, ReasonCode.VENTILATION_FLOOR, targets
         )
 
-    return ConstraintRegistration(Constraint.VENTILATION_FLOOR, classes, apply)
+    return ConstraintRegistration(
+        Constraint.VENTILATION_FLOOR, classes, apply, FunctionId.VENTILATION
+    )
 
 
 def test_adding_a_constraint_is_a_registration() -> None:
@@ -192,15 +223,16 @@ def test_a_target_pinned_for_every_member_never_reaches_the_gate() -> None:
 def test_a_constraint_that_breaks_the_interface_is_refused() -> None:
     """It answers in its own name, names the same members, and invents no target."""
 
-    def registered(result: ConstraintResult) -> ConstraintRegistration:
+    def answering(result: ConstraintResult) -> ConstraintRegistration:
         return ConstraintRegistration(
             Constraint.VENTILATION_FLOOR,
             frozenset({WishClass.COMFORT}),
             lambda _input: result,
+            FunctionId.VENTILATION,
         )
 
     def recompute(result: ConstraintResult, position: int = 30) -> None:
-        arbiter = build_arbiter([_RAISE_TO_60], constraints=[registered(result)])
+        arbiter = build_arbiter([_RAISE_TO_60], constraints=[answering(result)])
         arbiter.recompute(window(), snapshot(position=position))
 
     with pytest.raises(ValueError, match="answered as 'rain_while_ventilating'"):

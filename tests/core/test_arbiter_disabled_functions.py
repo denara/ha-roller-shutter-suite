@@ -18,6 +18,8 @@ from custom_components.roller_shutter_suite.core.engine import build_arbiter
 from custom_components.roller_shutter_suite.core.model import (
     FULLY_CLOSED,
     FULLY_OPEN,
+    FunctionClass,
+    FunctionId,
     GateOutcome,
     Layer,
     LayerReason,
@@ -53,7 +55,7 @@ SHADED = day(shading_position=SourceValue.of(40))
 
 def test_a_disabled_comfort_function_yields_no_wish_and_says_why() -> None:
     """Shading is disabled: the schedule below it decides, and the record shows it."""
-    config = window(disabled_functions={"shading"})
+    config = window(disabled_functions={FunctionId.SHADING})
 
     decision = engine(config).recompute(snapshot(sources=SHADED, position=0))
 
@@ -70,10 +72,12 @@ def test_the_layer_of_a_disabled_function_is_not_even_asked() -> None:
     def explodes(_config: WindowConfig, _world: WorldSnapshot) -> Wish:
         raise AssertionError("the layer of a disabled function was evaluated")
 
-    arbiter = build_arbiter([LayerRegistration(Layer.SCHEDULE, explodes, "schedule")])
+    arbiter = build_arbiter(
+        [LayerRegistration(Layer.SCHEDULE, explodes, FunctionId.SCHEDULE)]
+    )
 
     decision = arbiter.recompute(
-        window(disabled_functions={"schedule"}), snapshot(sources=night())
+        window(disabled_functions={FunctionId.SCHEDULE}), snapshot(sources=night())
     )
 
     assert decision.winning_wish is None
@@ -87,7 +91,7 @@ def test_with_every_comfort_function_disabled_nothing_moves_and_dry_run_shows_wh
     None
 ):
     """No winner, no target, no gate outcome; each comfort layer names the fault."""
-    config = window(disabled_functions=set(FUNCTION_OF.values()))
+    config = window(disabled_functions=COMFORT_FUNCTIONS)
     sources = night(sleep=SourceValue.of(True), shading_position=SourceValue.of(40))
 
     for controls in (ARMED, DRY_RUN):
@@ -106,7 +110,7 @@ def test_with_every_comfort_function_disabled_nothing_moves_and_dry_run_shows_wh
 
 def test_lower_comfort_layers_still_act() -> None:
     """Sleep mode is disabled; shading below it wins as if sleep were not there."""
-    config = window(disabled_functions={"sleep"})
+    config = window(disabled_functions={FunctionId.SLEEP})
     sources = day(sleep=SourceValue.of(True), shading_position=SourceValue.of(40))
 
     decision = engine(config).recompute(snapshot(sources=sources, position=100))
@@ -117,16 +121,22 @@ def test_lower_comfort_layers_still_act() -> None:
     assert decision.gate == GateOutcome.send()
 
 
+COMFORT_FUNCTIONS = frozenset(
+    function
+    for function in FunctionId
+    if function.function_class is FunctionClass.COMFORT
+)
+
+
 @pytest.mark.parametrize(
     ("sources", "layer", "target"),
     [(fire(), Layer.FIRE, FULLY_OPEN), (storm(), Layer.PROTECTION, FULLY_CLOSED)],
 )
-def test_fire_and_protection_are_never_disabled(
+def test_fire_and_protection_act_with_every_comfort_function_disabled(
     sources: dict[str, Any], layer: Layer, target: Position
 ) -> None:
-    """Also when somebody puts their names into the set, and with all comfort off."""
-    everything = {"fire", "protection", *FUNCTION_OF.values()}
-    config = window(disabled_functions=everything)
+    """Whatever is wrong with the stored comfort settings."""
+    config = window(disabled_functions=COMFORT_FUNCTIONS)
 
     decision = engine(config).recompute(snapshot(sources=sources))
 
@@ -136,8 +146,22 @@ def test_fire_and_protection_are_never_disabled(
     assert decision.gate == GateOutcome.send()
 
 
-def test_a_function_that_fire_or_protection_declares_is_ignored() -> None:
-    """Even a registration that names a disabled function keeps answering."""
+@pytest.mark.parametrize(
+    "function",
+    [f for f in FunctionId if f.function_class is FunctionClass.PROTECTION],
+)
+def test_a_protection_function_in_the_set_is_refused(function: FunctionId) -> None:
+    """Such a set cannot even be constructed: protection never fails."""
+    with pytest.raises(ValueError, match="never disabled"):
+        window(disabled_functions={function})
+    with pytest.raises(ValueError, match="never disabled"):
+        window(disabled_functions={FunctionId.SHADING, function})
+
+
+def test_a_fire_or_protection_layer_ignores_the_function_its_registration_declares() -> (
+    None
+):
+    """Even a registration that names a disabled comfort function keeps answering."""
 
     def alarm(_config: WindowConfig, _world: WorldSnapshot) -> Wish:
         return Wish.target(Layer.FIRE, ReasonCode.FIRE_ALARM, FULLY_OPEN)
@@ -145,13 +169,10 @@ def test_a_function_that_fire_or_protection_declares_is_ignored() -> None:
     def hail(_config: WindowConfig, _world: WorldSnapshot) -> Wish:
         return Wish.target(Layer.PROTECTION, ReasonCode.PROTECTION_EVENT, FULLY_OPEN)
 
-    config = window(disabled_functions={"fire", "protection"})
+    config = window(disabled_functions={FunctionId.SHADING})
 
-    for layer, evaluate, function in (
-        (Layer.FIRE, alarm, "fire"),
-        (Layer.PROTECTION, hail, "protection"),
-    ):
-        registration = LayerRegistration(layer, evaluate, function)
+    for layer, evaluate in ((Layer.FIRE, alarm), (Layer.PROTECTION, hail)):
+        registration = LayerRegistration(layer, evaluate, FunctionId.SHADING)
         decision = build_arbiter([registration]).recompute(config, snapshot())
 
         assert registration.can_be_disabled is False
@@ -161,7 +182,7 @@ def test_a_function_that_fire_or_protection_declares_is_ignored() -> None:
 
 def test_the_return_to_the_manual_position_is_not_disabled_either() -> None:
     """It is a comfort wish, but it comes from the protection layer."""
-    config = window(disabled_functions=set(FUNCTION_OF.values()))
+    config = window(disabled_functions=COMFORT_FUNCTIONS)
 
     decision = engine(config).recompute(
         snapshot(sources=day(return_to=SourceValue.of(40)), position=0)
@@ -172,33 +193,36 @@ def test_the_return_to_the_manual_position_is_not_disabled_either() -> None:
     assert decision.target == Position(40)
 
 
-def test_the_registry_refuses_a_comfort_layer_without_a_function() -> None:
-    """Every comfort layer declares the function it belongs to."""
-    bad: Any = 7
+def test_the_registry_refuses_a_comfort_layer_without_a_comfort_function() -> None:
+    """Every comfort layer declares the function it belongs to, from the closed list."""
+    bad: Any = "schedule"
     for layer in (Layer.SLEEP, Layer.EXTERNAL_REQUEST, Layer.PRIVACY, Layer.SHADING):
         with pytest.raises(ValueError, match=f"comfort layer '{layer.value}' declares"):
             LayerRegistration(layer, schedule_layer)
     with pytest.raises(ValueError, match="comfort layer 'schedule' declares"):
         LayerRegistration(Layer.SCHEDULE, schedule_layer)
-    with pytest.raises(ValueError, match="non-empty identifier"):
-        LayerRegistration(Layer.SCHEDULE, schedule_layer, "")
-    with pytest.raises(ValueError, match="non-empty identifier"):
+    with pytest.raises(ValueError, match="declares the comfort function"):
+        LayerRegistration(Layer.SCHEDULE, schedule_layer, FunctionId.FROST)
+    with pytest.raises(TypeError, match="member of 'FunctionId'"):
         LayerRegistration(Layer.SCHEDULE, schedule_layer, bad)
     assert LayerRegistration(Layer.FIRE, schedule_layer).function is None
     assert LayerRegistration(Layer.PROTECTION, schedule_layer).function is None
+    assert set(FUNCTION_OF.values()) <= COMFORT_FUNCTIONS
 
 
-def test_the_disabled_functions_of_a_window_are_a_frozen_set_of_identifiers() -> None:
-    """Empty by default; the arbiter reads them in one place."""
-    bad: Any = 7
+def test_the_disabled_functions_of_a_window_are_a_frozen_set_of_function_ids() -> None:
+    """Empty by default; no free strings; the arbiter reads them in one place."""
+    bad: Any = "shading"
 
     assert window().disabled_functions == frozenset()
     assert disabled_functions(window()) == frozenset()
-    config = window(disabled_functions=["shading", "shading", "privacy"])
-    assert disabled_functions(config) == frozenset({"shading", "privacy"})
+    config = window(
+        disabled_functions=[FunctionId.SHADING, FunctionId.SHADING, FunctionId.PRIVACY]
+    )
+    assert disabled_functions(config) == {FunctionId.SHADING, FunctionId.PRIVACY}
     assert isinstance(config.disabled_functions, frozenset)
-    assert hash(config) == hash(window(disabled_functions={"privacy", "shading"}))
-    with pytest.raises(ValueError, match="must not be empty"):
-        window(disabled_functions={""})
+    assert hash(config) == hash(
+        window(disabled_functions={FunctionId.PRIVACY, FunctionId.SHADING})
+    )
     with pytest.raises(TypeError, match="disabled function"):
         window(disabled_functions={bad})

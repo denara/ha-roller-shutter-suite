@@ -11,6 +11,7 @@ from ._validation import (
     require_type,
     require_unique,
 )
+from .functions import FunctionClass, FunctionId
 from .values import Position
 
 MIN_TOLERANCE: Final = 1
@@ -267,9 +268,9 @@ class WindowConfig:
       evaluated again.
     - ``disabled_functions``: the comfort functions that are paused for this
       window because a stored setting in their inheritance chain is faulty,
-      as stable identifiers (``schedule``, ``shading`` ...). The arbiter does
-      not ask a comfort layer whose function is listed. Fire and protection
-      cannot be disabled this way.
+      as members of ``FunctionId``. The arbiter does not ask a comfort layer
+      whose function is listed. Only comfort functions can be listed; a
+      protection function in the set is refused.
     """
 
     window_id: str
@@ -281,7 +282,7 @@ class WindowConfig:
     motor_protection: MotorProtectionSettings = MotorProtectionSettings()
     frost: FrostSettings = FrostSettings()
     reevaluate_after: timedelta = _DEFAULT_REEVALUATE_AFTER
-    disabled_functions: frozenset[str] = frozenset()
+    disabled_functions: frozenset[FunctionId] = frozenset()
 
     def __post_init__(self) -> None:
         """Validate identity, members and the doors kept open."""
@@ -315,7 +316,12 @@ class WindowConfig:
             self, "disabled_functions", frozenset(self.disabled_functions)
         )
         for function in self.disabled_functions:
-            require_identifier(function, "a disabled function")
+            require_type(function, FunctionId, "a disabled function")
+            if function.function_class is not FunctionClass.COMFORT:
+                raise ValueError(
+                    f"the function {function.value!r} protects something and is "
+                    "never disabled; only comfort functions can be"
+                )
         require_type(self.reevaluate_after, timedelta, "the re-evaluation bound")
         if self.reevaluate_after <= timedelta(0):
             raise ValueError("the re-evaluation bound must be longer than zero")

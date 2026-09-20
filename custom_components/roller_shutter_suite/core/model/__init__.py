@@ -12,6 +12,7 @@ different files. Their dependencies run one way:
 ``_validation`` ← ``_data`` ← ``values`` ← ``decision`` ← ``observation`` ←
 ``state`` ← ``snapshot``. ``window`` depends on ``_validation`` and ``values``,
 ``controls`` on ``_validation`` only; ``snapshot`` also uses ``controls``.
+``functions`` depends on nothing; ``window`` uses it.
 
 Conventions that hold for the whole package:
 
@@ -43,6 +44,7 @@ from .decision import (
     WishClass,
     WishKind,
 )
+from .functions import FunctionClass, FunctionId
 from .observation import (
     MemberCommand,
     MemberObservation,
@@ -123,6 +125,8 @@ __all__ = [
     "Direction",
     "ExternalRequest",
     "FrostSettings",
+    "FunctionClass",
+    "FunctionId",
     "GateKind",
     "GateOutcome",
     "GateRule",

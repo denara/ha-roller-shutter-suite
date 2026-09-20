@@ -11,6 +11,7 @@ position. Each layer states, per input, what the absence of that input means:
 
 from custom_components.roller_shutter_suite.core.model import (
     AnySourceValue,
+    FunctionId,
     Layer,
     SourceState,
     WindowConfig,
@@ -19,7 +20,7 @@ from custom_components.roller_shutter_suite.core.model import (
 from custom_components.roller_shutter_suite.core.reasons import ReasonCode
 
 
-def disabled_functions(config: WindowConfig) -> frozenset[str]:
+def disabled_functions(config: WindowConfig) -> frozenset[FunctionId]:
     """Return the comfort functions that are disabled for the window.
 
     The one place where the arbiter reads them from the configuration.

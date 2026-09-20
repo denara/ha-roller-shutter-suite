@@ -55,5 +55,11 @@ DIRECTION_CONSTRAINT: Final = ConstraintRegistration(
     constraint=Constraint.DIRECTION,
     applies_to=frozenset({WishClass.PROTECTION, WishClass.COMFORT}),
     apply=_apply,
+    function=None,
 )
-"""Applies to the wish that carries a direction; fire is subject to no constraint."""
+"""Applies to the wish that carries a direction; fire is subject to no constraint.
+
+The direction is a property of the wish, so the constraint belongs to no
+function of its own: it belongs to the function of the layer the wish comes
+from, and its registration states ``None``.
+"""

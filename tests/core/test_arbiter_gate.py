@@ -31,6 +31,7 @@ from custom_components.roller_shutter_suite.core.model import (
     ControlLevel,
     Controls,
     Decision,
+    FunctionId,
     GateKind,
     GateOutcome,
     GateRule,
@@ -845,6 +846,7 @@ def _floor_of_30(*, knows_violation: bool) -> ConstraintRegistration:
         Constraint.VENTILATION_FLOOR,
         frozenset({WishClass.COMFORT}),
         apply,
+        FunctionId.VENTILATION,
         violated_by_position=violated if knows_violation else None,
     )
 
