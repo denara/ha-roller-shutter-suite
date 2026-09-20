@@ -6,6 +6,7 @@ from datetime import datetime
 from types import MappingProxyType
 
 from ._validation import require_aware, require_identifier, require_type
+from .controls import Controls
 from .observation import MembersAtTargets, WindowObservation
 from .state import WindowState
 from .values import AnySourceValue, Position, SourceValue, SunPosition
@@ -25,6 +26,11 @@ class WorldSnapshot:
     ``sources`` maps the key of a source to its value. The mapping is copied
     and cannot be changed afterwards. A snapshot is compared by value, but it
     is not hashable, because it contains a mapping.
+
+    `controls` is what a person has set for the window at this moment: pause,
+    maintenance lock and operating mode on their three levels, and dry-run.
+    They change while the integration runs, so they are part of the snapshot
+    and not of the window configuration.
     """
 
     time: datetime
@@ -32,6 +38,7 @@ class WorldSnapshot:
     sources: Mapping[str, AnySourceValue]
     observation: WindowObservation
     state: WindowState
+    controls: Controls
 
     def __post_init__(self) -> None:
         """Reject a naive time and copy the sources."""
@@ -39,6 +46,7 @@ class WorldSnapshot:
         require_type(self.sun, SunPosition, "the sun position of a snapshot")
         require_type(self.observation, WindowObservation, "the observed window")
         require_type(self.state, WindowState, "the persisted window state")
+        require_type(self.controls, Controls, "the controls of a snapshot")
         sources = dict(self.sources)
         for key, value in sources.items():
             require_identifier(key, "the key of a source")

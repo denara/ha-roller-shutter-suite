@@ -230,13 +230,13 @@ A closed enumeration in the core. Adding a code requires an English and a German
 
 **Winning or contributing layers:** `fire_alarm`, `fire_unacknowledged`, `protection_event`, `protection_return_manual`, `sleep_mode`, `external_request`, `privacy_lights_on`, `shading_geometric`, `shading_fixed`, `solar_heating`, `schedule_day`, `schedule_night`.
 
-**Why a layer did not act:** `not_configured`, `inactive`, `input_unavailable`, `input_unknown`, `input_held_last_known`, `waiting_for_delay`, `outside_episode`, `episode_locked`, `watchdog_released`, `capability_missing`, `day_type_fallback`.
+**Why a layer did not act:** `not_configured`, `inactive`, `input_unavailable`, `input_unknown`, `input_held_last_known`, `waiting_for_delay`, `outside_episode`, `episode_locked`, `watchdog_released`, `capability_missing`, `day_type_fallback`, `function_disabled_by_fault`.
 
-**Constraints:** `only_raise`, `only_lower`, `sleep_exception_no_open`, `lockout_door_open`, `lockout_void_tamper`, `lockout_contact_unavailable`, `ventilation_floor`, `rain_ventilation_floor`, `frost_limit`, `frost_hold`, `no_intermediate_position`.
+**Constraints:** `only_raise`, `only_lower`, `sleep_exception_no_open`, `lockout_door_open`, `lockout_void_tamper`, `lockout_contact_unavailable`, `ventilation_floor`, `rain_ventilation_floor`, `frost_limit`, `frost_limit_source_blind`, `frost_hold`, `no_intermediate_position`.
 
-**Gate:** `sent`, `maintenance_lock`, `dry_run`, `cover_unavailable`, `target_reached`, `mode_off`, `mode_protection_only`, `paused`, `person_at_window`, `manual_override`, `movement_in_flight`, `duplicate_command`, `min_change`, `min_interval`, `command_backoff`, `staggered`.
+**Gate:** `sent`, `maintenance_lock`, `dry_run`, `cover_unavailable`, `target_reached`, `mode_off`, `mode_protection_only`, `paused`, `person_at_window`, `manual_override`, `movement_in_flight`, `duplicate_command`, `movement_taken_over`, `min_change`, `min_interval`, `trigger_time_missing`, `command_backoff`, `staggered`.
 
-**Tracker and life cycle (events only):** `manual_detected`, `manual_detected_member`, `external_movement_observed` (dry-run), `moved_during_downtime`, `person_at_window_started`, `person_at_window_ended`, `override_started`, `override_ended`, `protection_started`, `protection_ended`, `protection_source_blind`, `lockout_contact_blind`, `fire_acknowledged`, `frost_protection_waived`, `frost_waiver_ended`, `frost_released_by_sun`, `position_may_be_inaccurate`, `command_failed`, `actuator_no_reaction`, `movement_not_finished`, `member_unavailable`, `button_refused_maintenance_lock`.
+**Tracker and life cycle (events only):** `manual_detected`, `manual_detected_member`, `external_movement_observed` (dry-run), `moved_during_downtime`, `person_at_window_started`, `person_at_window_ended`, `override_started`, `override_ended`, `protection_started`, `protection_ended`, `protection_source_blind`, `lockout_contact_blind`, `fire_acknowledged`, `frost_protection_waived`, `frost_waiver_ended`, `frost_released_by_sun`, `frost_source_blind`, `position_may_be_inaccurate`, `command_failed`, `actuator_no_reaction`, `movement_not_finished`, `member_unavailable`, `button_refused_maintenance_lock`.
 
 No code claims that a curtain has arrived ([section 8.4](#84-calculated-positions-and-drift)).
 
@@ -431,7 +431,7 @@ Locks: a maintenance lock or a pause that lasts longer than seven days is **repo
 
 Persisted per window, versioned, all timestamps timezone-aware (naive ones are rejected at the boundary):
 
-- owner of the position; per member the last own command (identifier, target, direction, time, wish class, context ID) and the last observation. The identifier is what lets a result be matched to its command. The last commanded target per member is what the statement "all members at their commanded targets" of section 9 is judged against (the window's position does not depend on it), and what lets a reload during a movement continue the same expectation instead of seeing a manual movement or sending the command again;
+- owner of the position; per member the last own command (identifier, target, direction, time, wish class, reason, context ID) and the last observation. The identifier is what lets a result be matched to its command. The last commanded target per member is what the statement "all members at their commanded targets" of section 9 is judged against (the window's position does not depend on it), and what lets a reload during a movement continue the same expectation instead of seeing a manual movement or sending the command again;
 - per member the **command backoff as facts**: the number of attempts of the current command and the time of the last attempt. The next retry time is not stored; it is computed from these two facts with the current settings. A reload right after a failed attempt therefore cannot trigger an immediate second command;
 - manual override dam: armed at, end rule with its absolute end if it has one, remembered position;
 - person-at-the-window dam: ends at;

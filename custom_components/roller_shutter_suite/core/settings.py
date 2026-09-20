@@ -52,13 +52,22 @@ from .model import (
     FunctionId,
     JsonValue,
     MemberConfig,
+    Position,
     ScheduleProfile,
     SettingsCombinationError,
     TemperatureTier,
     WindowCapabilityStates,
     WindowConfig,
 )
-from .model._data import as_enum, as_int, as_object, as_str, read, tuple_of
+from .model._data import (
+    as_bool,
+    as_enum,
+    as_int,
+    as_object,
+    as_str,
+    read,
+    tuple_of,
+)
 from .model._validation import require_identifier, require_type, require_unique
 
 
@@ -1124,6 +1133,11 @@ def _as_number(value: JsonValue) -> float:
     return number
 
 
+def _as_position(value: JsonValue) -> Position:
+    """Return a position: a whole number from 0 to 100."""
+    return Position(as_int(value))
+
+
 def _as_temperature_tier(value: JsonValue) -> TemperatureTier:
     """Return one tier of the temperature condition of shading."""
     data = as_object(value, "threshold", "hysteresis")
@@ -1163,6 +1177,73 @@ WINDOW_SETTINGS: Final = SettingsRegistry(
             function=FunctionId.SCHEDULE,
             default=ScheduleProfile.DEFAULT,
             parse=as_enum(ScheduleProfile),
+        ),
+        SettingDefinition[str | None](
+            key="frost_source",
+            kind=SettingKind.OPTIONAL_REFERENCE,
+            function=FunctionId.FROST,
+            default=None,
+            parse=as_str,
+        ),
+        SettingDefinition(
+            key="frost_threshold",
+            kind=SettingKind.NUMBER,
+            function=FunctionId.FROST,
+            default=0.0,
+            parse=_as_number,
+        ),
+        SettingDefinition(
+            key="frost_hysteresis",
+            kind=SettingKind.NUMBER,
+            function=FunctionId.FROST,
+            default=1.0,
+            parse=_as_number,
+        ),
+        SettingDefinition(
+            key="frost_position",
+            kind=SettingKind.NUMBER,
+            function=FunctionId.FROST,
+            default=Position(90),
+            parse=_as_position,
+        ),
+        SettingDefinition(
+            key="frost_applies_to_protection",
+            kind=SettingKind.BOOLEAN,
+            function=FunctionId.FROST,
+            default=False,
+            parse=as_bool,
+        ),
+        SettingDefinition(
+            key="frost_hold_closed",
+            kind=SettingKind.BOOLEAN,
+            function=FunctionId.FROST,
+            default=False,
+            parse=as_bool,
+        ),
+        SettingDefinition(
+            key="motor_min_change",
+            kind=SettingKind.NUMBER,
+            function=FunctionId.MOTOR_PROTECTION,
+            default=5,
+            parse=as_int,
+        ),
+        SettingDefinition(
+            key="motor_min_interval",
+            kind=SettingKind.DURATION,
+            function=FunctionId.MOTOR_PROTECTION,
+            default=timedelta(minutes=10),
+            parse=as_duration,
+        ),
+        # The upper bound of a deferral that waits for a report of a member (a
+        # member becomes available, the members come to rest). Waiting for the
+        # reports of members is what command verification is about, and like
+        # everything that restricts movement it falls back on a fault.
+        SettingDefinition(
+            key="reevaluate_after",
+            kind=SettingKind.DURATION,
+            function=FunctionId.COMMAND_VERIFICATION,
+            default=timedelta(minutes=5),
+            parse=as_duration,
         ),
     )
 )

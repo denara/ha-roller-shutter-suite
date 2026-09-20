@@ -21,6 +21,7 @@ ORDER = [
     "values",
     "functions",
     "window",
+    "controls",
     "decision",
     "observation",
     "state",

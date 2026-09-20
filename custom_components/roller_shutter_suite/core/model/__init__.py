@@ -10,8 +10,10 @@ Position``. The modules exist so that blocks that work in parallel edit
 different files. Their dependencies run one way:
 
 ``_validation`` ← ``_data`` ← ``values`` ← ``decision`` ← ``observation`` ←
-``state`` ← ``snapshot``; ``functions`` depends on nothing, and ``window``
-depends on ``_validation`` and ``functions`` only.
+``state`` ← ``snapshot``. ``functions`` depends on nothing; ``window`` depends
+on ``_validation``, ``functions`` and ``values``, ``controls`` on
+``_validation`` only; ``decision`` also uses ``functions``, and ``snapshot``
+also uses ``controls``.
 
 Conventions that hold for the whole package:
 
@@ -25,6 +27,7 @@ Conventions that hold for the whole package:
 """
 
 from ._data import JsonObject, JsonValue
+from .controls import ControlLevel, Controls, OperatingMode
 from .decision import (
     CONSTRAINT_REASONS,
     GATE_RULE_REASONS,
@@ -91,7 +94,9 @@ from .window import (
     CapabilityProfile,
     CapabilityState,
     CoveringType,
+    FrostSettings,
     MemberConfig,
+    MotorProtectionSettings,
     PositionSource,
     PositionUpdates,
     ScheduleProfile,
@@ -117,12 +122,15 @@ __all__ = [
     "CapabilityState",
     "Constraint",
     "ConstraintResult",
+    "ControlLevel",
+    "Controls",
     "CoveringType",
     "DayType",
     "Decision",
     "Direction",
     "ExternalRequest",
     "FaultBehavior",
+    "FrostSettings",
     "FunctionId",
     "GateKind",
     "GateOutcome",
@@ -141,8 +149,10 @@ __all__ = [
     "MemberTarget",
     "MembersAtTargets",
     "MissingSourceValueError",
+    "MotorProtectionSettings",
     "MovementState",
     "Observation",
+    "OperatingMode",
     "OverrideEndRule",
     "OwnCommand",
     "PersonAtWindowDam",

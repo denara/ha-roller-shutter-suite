@@ -13,11 +13,15 @@ from ._validation import (
     require_unique,
 )
 from .functions import FaultBehavior, FunctionId
+from .values import Position
 
 MIN_TOLERANCE: Final = 1
 DEFAULT_TOLERANCE_CALCULATED: Final = 2
 DEFAULT_TOLERANCE_MEASURED: Final = 3
 _MAX_TOLERANCE: Final = 100
+_DEFAULT_FROST_POSITION: Final = Position(90)
+_DEFAULT_REEVALUATE_AFTER: Final = timedelta(minutes=5)
+_DEFAULT_MIN_INTERVAL: Final = timedelta(minutes=10)
 
 
 @unique
@@ -267,6 +271,71 @@ class SettingsCombinationError(ValueError):
 
 
 @dataclass(frozen=True, slots=True)
+class MotorProtectionSettings:
+    """Motor protection: it applies to comfort movements only.
+
+    A view over the fields ``motor_min_change`` and ``motor_min_interval`` of
+    ``WindowConfig``, which are inherited one by one; it holds their rules.
+
+    ``min_change`` is the smallest change of position, in percent, that is
+    worth a movement; ``min_interval`` the shortest time between two own
+    comfort movements. Zero switches a part off.
+    """
+
+    min_change: int = 5
+    min_interval: timedelta = _DEFAULT_MIN_INTERVAL
+
+    def __post_init__(self) -> None:
+        """Validate the ranges."""
+        if isinstance(self.min_change, bool) or not isinstance(self.min_change, int):
+            raise TypeError("the minimum change must be an integer")
+        if not 0 <= self.min_change <= _MAX_TOLERANCE:
+            raise ValueError("the minimum change must be within 0 and 100")
+        require_type(self.min_interval, timedelta, "the minimum interval")
+        if self.min_interval < timedelta(0):
+            raise ValueError("the minimum interval must not be negative")
+
+
+@dataclass(frozen=True, slots=True)
+class FrostSettings:
+    """Frost protection of one window.
+
+    A view over the ``frost_*`` fields of ``WindowConfig``, which are
+    inherited one by one; it holds their value rules.
+
+    - ``source``: key of the temperature source; ``None`` means that frost
+      protection is not configured.
+    - Frost is active below ``threshold``; it ends at ``threshold`` plus
+      ``hysteresis``.
+    - ``position``: how far own movements open while frost is active.
+    - ``applies_to_protection``: whether protection movements are limited too;
+      comfort movements always are, fire never is.
+    - ``hold_closed``: the option "do not raise a closed window at all".
+    """
+
+    source: str | None = None
+    threshold: float = 0.0
+    hysteresis: float = 1.0
+    position: Position = _DEFAULT_FROST_POSITION
+    applies_to_protection: bool = False
+    hold_closed: bool = False
+
+    def __post_init__(self) -> None:
+        """Validate the types and the numbers."""
+        if self.source is not None:
+            require_identifier(self.source, "the frost source")
+        require_finite(self.threshold, "the frost threshold")
+        require_finite(self.hysteresis, "the frost hysteresis")
+        if self.hysteresis < 0:
+            raise ValueError("the frost hysteresis must not be negative")
+        require_type(self.position, Position, "the frost position")
+        require_type(
+            self.applies_to_protection, bool, "the flag 'applies to protection'"
+        )
+        require_type(self.hold_closed, bool, "the flag 'hold closed'")
+
+
+@dataclass(frozen=True, slots=True)
 class MemberConfig:
     """One cover of a window as the core sees it."""
 
@@ -297,6 +366,16 @@ class WindowConfig:
       accepted at present.
     - ``schedule_profile``: the key under which the schedule's targets are
       looked up; it has one value.
+    - ``frost_source``, ``frost_threshold``, ``frost_hysteresis``,
+      ``frost_position``, ``frost_applies_to_protection``,
+      ``frost_hold_closed``: the settings of frost protection, one field per
+      setting so that each can be inherited on its own; :attr:`frost` is the
+      view over them. Without a source, frost protection is not configured.
+    - ``motor_min_change`` and ``motor_min_interval``: the settings of motor
+      protection; :attr:`motor_protection` is the view over them.
+    - ``reevaluate_after``: the upper bound of a deferral whose end is not
+      known: that long after the recompute, at the latest, the window is
+      evaluated again.
     - ``disabled_functions``: the functions that are paused for this window
       because a stored setting of theirs is faulty (the inheritance resolver
       fills it; it is never stored). The arbiter skips the layers of such a
@@ -311,6 +390,15 @@ class WindowConfig:
     morning_condition_source: str | None = None
     shading_temperature_tiers: tuple[TemperatureTier, ...] = ()
     schedule_profile: ScheduleProfile = ScheduleProfile.DEFAULT
+    frost_source: str | None = None
+    frost_threshold: float = 0.0
+    frost_hysteresis: float = 1.0
+    frost_position: Position = _DEFAULT_FROST_POSITION
+    frost_applies_to_protection: bool = False
+    frost_hold_closed: bool = False
+    motor_min_change: int = 5
+    motor_min_interval: timedelta = _DEFAULT_MIN_INTERVAL
+    reevaluate_after: timedelta = _DEFAULT_REEVALUATE_AFTER
     disabled_functions: frozenset[FunctionId] = frozenset()
 
     def __post_init__(self) -> None:
@@ -337,6 +425,11 @@ class WindowConfig:
         if len(self.shading_temperature_tiers) > 1:
             raise ValueError("more than one temperature tier is not supported yet")
         require_type(self.schedule_profile, ScheduleProfile, "the schedule profile")
+        # The views validate the single values of frost and motor protection.
+        _ = (self.frost, self.motor_protection)
+        require_type(self.reevaluate_after, timedelta, "the re-evaluation bound")
+        if self.reevaluate_after <= timedelta(0):
+            raise ValueError("the re-evaluation bound must be longer than zero")
         given: object = self.disabled_functions
         if isinstance(given, str):
             raise TypeError("the disabled functions must be a set of identifiers")
@@ -350,6 +443,25 @@ class WindowConfig:
                     f"the function {function.value!r} falls back on a fault; it "
                     "can never be switched off"
                 )
+
+    @property
+    def frost(self) -> FrostSettings:
+        """Return the settings of frost protection as one value."""
+        return FrostSettings(
+            source=self.frost_source,
+            threshold=self.frost_threshold,
+            hysteresis=self.frost_hysteresis,
+            position=self.frost_position,
+            applies_to_protection=self.frost_applies_to_protection,
+            hold_closed=self.frost_hold_closed,
+        )
+
+    @property
+    def motor_protection(self) -> MotorProtectionSettings:
+        """Return the settings of motor protection as one value."""
+        return MotorProtectionSettings(
+            min_change=self.motor_min_change, min_interval=self.motor_min_interval
+        )
 
     @property
     def capabilities(self) -> WindowCapabilities:
