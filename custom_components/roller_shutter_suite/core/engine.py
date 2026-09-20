@@ -30,18 +30,29 @@ BUILT_IN_CONSTRAINTS = (DIRECTION_CONSTRAINT, FROST_CONSTRAINT)
 """The constraints that belong to no single feature block."""
 
 
+FEATURE_LAYERS: tuple[LayerRegistration, ...] = ()
+"""The layers of the feature blocks; a block that builds a layer adds it here.
+
+``tests/core/test_layer_triggers.py`` asks every comfort layer in this list for
+a wish and fails if the wish does not state its trigger.
+"""
+
+
 def build_arbiter(
-    layers: Iterable[LayerRegistration],
+    layers: Iterable[LayerRegistration] | None = None,
     constraints: Iterable[ConstraintRegistration] = (),
     gate_rules: Iterable[GateRuleRegistration] = (),
 ) -> Arbiter:
     """Return an arbiter with the built-in constraints and gate rules plus these.
 
+    Without ``layers`` the arbiter has the layers of the feature blocks
+    (``FEATURE_LAYERS``); tests hand in their own.
+
     The order of the arguments does not matter; the arbiter puts everything
     in the specified order.
     """
     return Arbiter(
-        layers=tuple(layers),
+        layers=FEATURE_LAYERS if layers is None else tuple(layers),
         constraints=(*BUILT_IN_CONSTRAINTS, *constraints),
         gate_rules=(*BUILT_IN_GATE_RULES, *gate_rules),
     )

@@ -440,7 +440,11 @@ GATE_RULE_REASONS: Final = MappingProxyType(
             }
         ),
         GateRule.MOTOR_PROTECTION: frozenset(
-            {ReasonCode.MIN_CHANGE, ReasonCode.MIN_INTERVAL}
+            {
+                ReasonCode.MIN_CHANGE,
+                ReasonCode.MIN_INTERVAL,
+                ReasonCode.TRIGGER_TIME_MISSING,
+            }
         ),
         GateRule.COMMAND_BACKOFF: frozenset({ReasonCode.COMMAND_BACKOFF}),
         GateRule.STAGGERING: frozenset({ReasonCode.STAGGERED}),

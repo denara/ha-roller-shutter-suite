@@ -42,6 +42,7 @@ FIRE_BYPASS: Final[frozenset[ReasonCode]] = frozenset(
         ReasonCode.MOVEMENT_IN_FLIGHT,
         ReasonCode.MIN_CHANGE,
         ReasonCode.MIN_INTERVAL,
+        ReasonCode.TRIGGER_TIME_MISSING,
         ReasonCode.COMMAND_BACKOFF,
         ReasonCode.STAGGERED,
     }

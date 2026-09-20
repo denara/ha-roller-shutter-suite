@@ -15,17 +15,40 @@ from datetime import datetime, timedelta
 
 import pytest
 
+from custom_components.roller_shutter_suite.core.arbiter import LayerRegistration
+from custom_components.roller_shutter_suite.core.engine import build_arbiter
 from custom_components.roller_shutter_suite.core.model import (
+    FULLY_CLOSED,
     AnySourceValue,
+    Controls,
     Decision,
     GateKind,
     GateOutcome,
     GateRule,
+    Layer,
+    MemberCommand,
+    OwnCommand,
+    Position,
+    SimulatedState,
     SourceValue,
+    TravelDirection,
     WindowState,
+    Wish,
+    WishClass,
 )
 from custom_components.roller_shutter_suite.core.reasons import ReasonCode
-from tests.core.arbiter_kit import DRY_RUN, NOW, day, engine, night, since, snapshot
+from tests.core.arbiter_kit import (
+    ARMED,
+    DRY_RUN,
+    LEFT,
+    NOW,
+    day,
+    engine,
+    night,
+    since,
+    snapshot,
+    window,
+)
 
 MORNING = NOW - timedelta(hours=2)
 INTERVAL = timedelta(minutes=10)
@@ -189,11 +212,73 @@ def test_shading_toggling_every_three_minutes_yields_one_return_per_minimum_inte
     ]
 
 
-def test_a_wish_without_a_trigger_is_never_fresh() -> None:
-    """What a layer does not state is not assumed in its favour."""
+FORGETFUL = build_arbiter(
+    [
+        LayerRegistration(
+            Layer.SCHEDULE,
+            lambda _config, _world: Wish.target(
+                Layer.SCHEDULE, ReasonCode.SCHEDULE_NIGHT, FULLY_CLOSED
+            ),
+        )
+    ]
+)
+"""A schedule layer that forgot to state the trigger of its wish."""
+
+
+@pytest.mark.parametrize("controls", [ARMED, DRY_RUN], ids=["armed", "dry-run"])
+def test_a_wish_without_a_trigger_is_never_fresh_and_the_record_says_so(
+    controls: Controls,
+) -> None:
+    """What a layer does not state is not assumed in its favour, and it shows."""
+    moved_at = _minutes(-1)
+    state = WindowState(
+        last_comfort_movement=moved_at,
+        simulated=SimulatedState(
+            commands=(
+                MemberCommand(
+                    LEFT,
+                    OwnCommand(
+                        "command-1",
+                        Position(40),
+                        TravelDirection.DOWN,
+                        moved_at,
+                        WishClass.COMFORT,
+                        ReasonCode.SHADING_GEOMETRIC,
+                    ),
+                ),
+            ),
+            last_comfort_movement=moved_at,
+        ),
+    )
+    world = snapshot(position=100, state=state, controls=controls)
+
+    gate = FORGETFUL.recompute(window(), world).gate
+
+    assert gate == GateOutcome.defer(
+        GateRule.MOTOR_PROTECTION,
+        ReasonCode.TRIGGER_TIME_MISSING,
+        until=_minutes(9),
+        dry_run=controls.dry_run,
+    )
+
+
+def test_the_note_about_a_missing_trigger_appears_only_where_it_matters() -> None:
+    """Outside the minimum interval the wish is sent like any other."""
+    rested = WindowState(last_comfort_movement=_minutes(-10))
+
+    assert FORGETFUL.recompute(window(), snapshot(position=100)).gate == (
+        GateOutcome.send()
+    )
+    assert FORGETFUL.recompute(window(), snapshot(position=100, state=rested)).gate == (
+        GateOutcome.send()
+    )
+
+
+def test_a_trigger_that_is_older_than_the_last_movement_reads_min_interval() -> None:
+    """The ordinary case is told apart from the forgotten trigger."""
     house = _House(position=100, moved_at=_minutes(-1))
 
-    decision = house.recompute(_minutes(0), night())
+    decision = house.recompute(_minutes(0), night(part_of_day_since=since(MORNING)))
 
     assert decision.gate == _held_until(_minutes(9))
 

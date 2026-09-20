@@ -11,10 +11,11 @@ plain sources of the snapshot, so a test states a situation as data:
 | shading | ``shading_position`` (int) | the position, ``shading_geometric``. Missing: steps aside. |
 | schedule | ``part_of_day`` (str) | ``day``: open, raise only. ``night``: close, lower only. Missing: steps aside. |
 
-The sleep, shading and schedule stubs state the trigger of their wish if the
-world has the source ``sleep_since``, ``shading_since`` or ``part_of_day_since``
-(see ``since``): the moment the switch was flipped, the episode began, or the
-boundary of the schedule fired.
+Every comfort wish of a stub states its trigger, as a real layer has to: the
+source ``sleep_since``, ``shading_since``, ``part_of_day_since`` or
+``return_since`` (see ``since``), the moment the switch was flipped, the episode
+began, the boundary of the schedule fired or the waiting time after the event
+had passed. Without that source the trigger is ``LONG_AGO``.
 """
 
 from collections.abc import Mapping
@@ -52,6 +53,8 @@ from custom_components.roller_shutter_suite.core.reasons import ReasonCode
 
 LOCAL = timezone(timedelta(hours=1))
 NOW = datetime(2026, 1, 15, 7, 30, tzinfo=LOCAL)
+LONG_AGO = NOW - timedelta(hours=12)
+"""The trigger of a stub wish whose world does not say when it was triggered."""
 
 LEFT = "cover.example_left"
 RIGHT = "cover.example_right"
@@ -141,10 +144,13 @@ def since(moment: datetime) -> SourceValue[str]:
 
 
 def _triggered(wish: Wish, world: WorldSnapshot, key: str) -> Wish:
-    """Give the wish the trigger time of the source ``key``, if the world has one."""
+    """Give the wish its trigger: the source ``key``, else ``LONG_AGO``.
+
+    Every comfort wish states its trigger, as a real layer has to.
+    """
     moment = world.sources.get(key)
     if moment is None or not moment.has_value:
-        return wish
+        return wish.triggered(LONG_AGO)
     return wish.triggered(datetime.fromisoformat(str(moment.value)))
 
 
@@ -174,11 +180,12 @@ def protection_layer(_config: WindowConfig, world: WorldSnapshot) -> Wish:
         return Wish.target(Layer.PROTECTION, ReasonCode.PROTECTION_EVENT, FULLY_CLOSED)
     return_to = world.sources.get("return_to")
     if return_to is not None and return_to.has_value:
-        return Wish.target(
+        wish = Wish.target(
             Layer.PROTECTION,
             ReasonCode.PROTECTION_RETURN_MANUAL,
             Position(int(return_to.value)),
         )
+        return _triggered(wish, world, "return_since")
     return Wish.no_opinion(Layer.PROTECTION, ReasonCode.INACTIVE)
 
 

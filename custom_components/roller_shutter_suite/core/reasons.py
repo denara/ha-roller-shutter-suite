@@ -96,6 +96,7 @@ class ReasonCode(StrEnum):
     MOVEMENT_TAKEN_OVER = "movement_taken_over"
     MIN_CHANGE = "min_change"
     MIN_INTERVAL = "min_interval"
+    TRIGGER_TIME_MISSING = "trigger_time_missing"
     COMMAND_BACKOFF = "command_backoff"
     STAGGERED = "staggered"
 
@@ -189,6 +190,7 @@ _GROUPS: Final = MappingProxyType(
             ReasonCode.MOVEMENT_TAKEN_OVER,
             ReasonCode.MIN_CHANGE,
             ReasonCode.MIN_INTERVAL,
+            ReasonCode.TRIGGER_TIME_MISSING,
             ReasonCode.COMMAND_BACKOFF,
             ReasonCode.STAGGERED,
         ),

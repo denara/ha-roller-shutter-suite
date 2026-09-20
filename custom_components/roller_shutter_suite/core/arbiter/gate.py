@@ -367,9 +367,15 @@ def _motor_protection(gate: GateInput) -> GateOutcome | None:
     if gate.last_comfort_movement is not None and not _is_fresh(gate):
         end = gate.last_comfort_movement + settings.min_interval
         if gate.snapshot.time < end:
-            return GateOutcome.defer(
-                GateRule.MOTOR_PROTECTION, ReasonCode.MIN_INTERVAL, until=end
+            # A wish that states no trigger cannot be judged. It is held like
+            # one that is not fresh, and the record says why, so that a layer
+            # that forgot its trigger shows up, also in dry-run.
+            reason = (
+                ReasonCode.TRIGGER_TIME_MISSING
+                if gate.wish.triggered_at is None
+                else ReasonCode.MIN_INTERVAL
             )
+            return GateOutcome.defer(GateRule.MOTOR_PROTECTION, reason, until=end)
     return None
 
 
