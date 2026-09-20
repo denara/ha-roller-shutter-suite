@@ -94,7 +94,10 @@ def _target_reached(gate: GateInput) -> GateOutcome | None:
     }
     reported = gate.current_positions
     real_commands = gate.snapshot.state.commanded_targets
-    for member in _addressed_members(gate):
+    addressed = _addressed_members(gate)
+    if not addressed:
+        return None  # nobody to judge: nothing is known to be reached
+    for member in addressed:
         target = targets[member.member_id]
         position = reported[member.member_id]
         if has_no_position_feedback(member.capabilities):

@@ -270,6 +270,24 @@ def test_unavailable_members_are_not_judged_and_every_available_one_has_to_be_th
     assert reason(left=0, right=50) is ReasonCode.SENT
 
 
+def test_a_window_without_an_available_member_is_never_reported_as_reached() -> None:
+    """Also if the rule that waits for a member were not registered."""
+    without_rule_2 = Arbiter(
+        layers=STUB_LAYERS,
+        gate_rules=tuple(
+            entry
+            for entry in BUILT_IN_GATE_RULES
+            if entry.rule is not GateRule.NO_MEMBER_CAN_EXECUTE
+        ),
+    )
+
+    decision = without_rule_2.recompute(
+        window(), snapshot(sources=storm(), observation=observed(left="unavailable"))
+    )
+
+    assert _gate(decision).reason is not ReasonCode.TARGET_REACHED
+
+
 def test_target_reached_stands_before_mode_and_pause_and_after_the_lock() -> None:
     """A paused window that is where it should be says so."""
     paused = on_level("window", paused=True, mode=OperatingMode.OFF)
