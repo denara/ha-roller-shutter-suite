@@ -15,7 +15,7 @@ Status values: `planned` (file exists, dependencies open) · `ready` (can start)
 | [D00](tasks/D00-domain-design-spec.md) | Domain design specification (`docs/architecture.md`) | — | done |
 | [T01](tasks/T01-repository-scaffolding.md) | Repository scaffolding | — | done |
 | [T02](tasks/T02-test-setup.md) | Test setup | T01 | done |
-| [T03](tasks/T03-continuous-integration.md) | Continuous integration | T01, T02 | ready |
+| [T03](tasks/T03-continuous-integration.md) | Continuous integration | T01, T02 | done |
 | [S1](tasks/S1-spike-cover-behavior.md) | Spike: cover behavior and movement attribution | history data from the owner | done for the design (findings in `docs/architecture.md`; the public taxonomy document is still to be written) |
 | [S2](tasks/S2-spike-subentries-inheritance-ux.md) | Spike: subentries, sections and inheritance in the UI | T02 | done |
 | [S3](tasks/S3-spike-button-events.md) | Spike: button event semantics | T02 | planned |
@@ -26,21 +26,32 @@ Plain Python under `custom_components/roller_shutter_suite/core/`, tested withou
 
 | ID | Block | Features | Depends on | Status |
 |---|---|---|---|---|
-| [C01](tasks/C01-core-model-and-ports.md) | Core model and ports | E5, N2, N3; doors for C15, A7 | D00, T01, T02 | ready |
-| [C02](tasks/C02-inheritance-resolver.md) | Inheritance resolver | E12, N4 | C01 | planned |
-| [C03](tasks/C03-arbiter.md) | Arbiter: layers, constraints, gate | E5, E4, E9, E10, E11, A6, A12 | C01 | planned |
-| [C04](tasks/C04-schedule-and-day-types.md) | Schedule and day types | A1–A6, E13 (offset) | C01 | planned |
+| [C01](tasks/C01-core-model-and-ports.md) | Core model and ports | E5, N2, N3; doors for C15, A7 | D00, T01, T02 | done |
+| [C02](tasks/C02-inheritance-resolver.md) | Inheritance resolver | E12, N4 | C01 | in review (pull request 23) |
+| [C03](tasks/C03-arbiter.md) | Arbiter: layers, constraints, gate | E5, E4, E9, E10, E11, A6, A12 | C01 | in progress (merges after C02) |
+| [C04](tasks/C04-schedule-and-day-types.md) | Schedule and day types | A1–A6, E13 (offset) | C01 | in progress (merges after C03) |
 | [C05](tasks/C05-time-lapse-simulation.md) | Time-lapse simulation harness | N6 | C03, C04 | planned |
 
 ## Phase 2 — Home Assistant layer up to M1
 
 | ID | Block | Features | Depends on | Status |
 |---|---|---|---|---|
-| [H01](tasks/H01-config-entry-and-subentries.md) | Config entry, group and window subentries | E12, F4, F7 (part), N2, N3, N4 (part), N5 (part) | S2, C02, T03 | planned |
+| [H01](tasks/H01-config-entry-and-subentries.md) | Config entry, group and window subentries | E12, F4, F7 (part), N2, N3, N4 (part), N5 (part) | S2, C02, T03 | planned (ready once C02 is merged) |
 | [H02](tasks/H02-runtime-and-source-adapters.md) | Runtime and source adapters | guardrails 4 and 8, G3, G5 | C03, C04, H01 | planned |
 | [H03](tasks/H03-cover-actuator-adapter.md) | Cover actuator adapter | E11, E13, E10 (settings), N2 | H01, H02 | planned |
 | [H04](tasks/H04-status-entities-events-diagnostics.md) | Status entities, reason events, logbook, diagnostics | E7, E8 | H02 | planned |
 | [M1](tasks/M1-walking-skeleton.md) | **Milestone: walking skeleton** — one window, dry-run, schedule only, status entities | — | all of the above except S1, S3 | planned |
+
+## Maintenance
+
+Work outside the block plan. Done items are listed so the history of the tooling stays readable.
+
+| ID | Item | Status |
+|---|---|---|
+| X01 | Make the guards fail closed: a guard that cannot check fails, the instance data guard really checks in a WSL worktree, judges symbolic links, entries that cannot be examined and the path text of every entry (pull request 19) | done |
+| X02 | Guard refinements, to be started before R01 or as soon as a block trips over a false positive (a plausible own name is never renamed to get around a guard). First item: the fixed names of the high-resolution brand images (the icon and logo files whose name carries the scale factor `@2x` before the extension) are taken for an e-mail address, by the path text check and by the content check alike. Further: other false positives on names, entries of the deprecated-names list that Home Assistant logs anyway are matched narrowly and only silent ones broadly, the Python patch version is pinned, smaller notes from the reviews of T03 and X01 | planned |
+
+Transitional rule in `tasks/README.md` ("run the instance data guard on native Windows before every push"): to be removed once C02, C03 and C04 are merged.
 
 ## After M1 — listed only
 
