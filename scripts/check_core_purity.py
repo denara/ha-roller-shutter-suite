@@ -14,20 +14,38 @@ trigger or hide a finding. Calls of ``importlib.import_module`` and
 ``__import__`` with a literal module name are checked as well; a module name
 that is computed at runtime cannot be seen by a static check.
 
+**The guard fails closed.** "Could not check" means here, and ends with exit
+status 2: the core package does not exist where it is expected, it contains no
+Python file, or one of its files cannot be read or parsed. Exit status 1 means
+forbidden imports; 0 means that the modules were really parsed, and the last
+line says how many.
+
+Anything unforeseen inside the script ends with status 2 as well, with the type
+of the error only, never its text or a traceback, which may name a local path.
+
 Run it from anywhere: ``python scripts/check_core_purity.py``. It needs only
 the standard library.
 """
 
 import ast
+import os
 import sys
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
+# ``__file__`` is absolute; nothing at module level touches the file system.
+REPOSITORY_ROOT = Path(__file__).parents[1]
 INTEGRATION_PACKAGE = "custom_components.roller_shutter_suite"
 CORE_PACKAGE = f"{INTEGRATION_PACKAGE}.core"
 FORBIDDEN_PACKAGE = "homeassistant"
 _DYNAMIC_IMPORT_FUNCTIONS = {"import_module", "__import__"}
+EXIT_FINDINGS = 1
+EXIT_CANNOT_CHECK = 2
+
+
+class CannotCheckError(RuntimeError):
+    """The guard could not do its job. That is a failure, never a pass."""
 
 
 @dataclass(frozen=True)
@@ -105,7 +123,14 @@ def check_source(source: str, package: str, path: str) -> list[Finding]:
     needed to resolve relative imports.
     """
     findings: list[Finding] = []
-    for node in ast.walk(ast.parse(source, filename=path)):
+    try:
+        tree = ast.parse(source, filename=path)
+    except (SyntaxError, ValueError) as error:
+        raise CannotCheckError(
+            f"{path} cannot be parsed as Python ({type(error).__name__}); fix the "
+            "file, its imports cannot be judged like this"
+        ) from error
+    for node in ast.walk(tree):
         modules: list[str] = []
         if isinstance(node, ast.Import):
             modules = [alias.name for alias in node.names]
@@ -120,32 +145,107 @@ def check_source(source: str, package: str, path: str) -> list[Finding]:
     return findings
 
 
+def _exists(path: Path, shown: str) -> bool:
+    """Tell whether a path exists; an error other than "not there" is not a "no".
+
+    ``Path.exists`` and its relatives answer ``False`` for every error of the
+    operating system, so a file that cannot be examined would look absent.
+    """
+    try:
+        path.lstat()
+    except FileNotFoundError, NotADirectoryError:
+        return False
+    except OSError as error:
+        raise CannotCheckError(
+            f"{shown} cannot be examined ({type(error).__name__})"
+        ) from error
+    return True
+
+
+def _walk(folder: Path, shown: str, wanted: Callable[[str], bool]) -> list[Path]:
+    """Return the wanted files below ``folder``, sorted; empty if it is not there.
+
+    ``Path.rglob`` passes over a folder it cannot read without a word, and the
+    files in it would simply not be checked. Here such a folder is a failure.
+    """
+    if not _exists(folder, shown):
+        return []
+
+    def refuse(error: OSError) -> None:
+        raise CannotCheckError(
+            f"a folder under {shown}/ cannot be listed ({type(error).__name__})"
+        ) from error
+
+    found: list[Path] = []
+    for directory, _folders, names in os.walk(folder, onerror=refuse):
+        found += [Path(directory) / name for name in names if wanted(name)]
+    return sorted(found)
+
+
+def _is_python(name: str) -> bool:
+    return name.endswith(".py")
+
+
+def core_files(root: Path) -> list[Path]:
+    """Return the Python files of the core package; there has to be one."""
+    core_dir = root.joinpath(*CORE_PACKAGE.split("."))
+    files = _walk(core_dir, "/".join(CORE_PACKAGE.split(".")), _is_python)
+    if not files:
+        raise CannotCheckError(
+            f"no Python file found under {'/'.join(CORE_PACKAGE.split('.'))}/. If "
+            "the core has moved, change CORE_PACKAGE in this script"
+        )
+    return files
+
+
 def check_tree(root: Path) -> list[Finding]:
     """Check every Python file of the core package below ``root``."""
-    core_dir = root.joinpath(*CORE_PACKAGE.split("."))
     findings: list[Finding] = []
-    for file in sorted(core_dir.rglob("*.py")):
+    for file in core_files(root):
         relative = file.relative_to(root)
         package_parts = relative.parent.parts
-        findings += check_source(
-            file.read_text(encoding="utf-8"),
-            ".".join(package_parts),
-            relative.as_posix(),
-        )
+        try:
+            source = file.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as error:
+            raise CannotCheckError(
+                f"{relative.as_posix()} cannot be read ({type(error).__name__})"
+            ) from error
+        findings += check_source(source, ".".join(package_parts), relative.as_posix())
     return findings
 
 
-def main() -> int:
+def main(root: Path = REPOSITORY_ROOT) -> int:
     """Run the guard on this repository."""
-    findings = check_tree(REPOSITORY_ROOT)
+    try:
+        checked = len(core_files(root))
+        findings = check_tree(root)
+    except CannotCheckError as error:
+        sys.stdout.write(f"core purity: CANNOT CHECK, so this is a failure: {error}\n")
+        return EXIT_CANNOT_CHECK
     for finding in findings:
         sys.stdout.write(f"{finding}\n")
     if findings:
         sys.stdout.write(f"core purity: {len(findings)} forbidden import(s)\n")
-        return 1
-    sys.stdout.write("core purity: ok\n")
+        return EXIT_FINDINGS
+    sys.stdout.write(f"core purity: ok (checked {checked} module(s) of the core)\n")
     return 0
 
 
+def run(entry: Callable[[], int]) -> int:
+    """Run ``entry``; an error nobody foresaw is a failure too, never a pass.
+
+    Only the type of the error is printed. Its text and a traceback may name
+    local paths, and the output of this script may be pasted in public.
+    """
+    try:
+        return entry()
+    except Exception as error:  # noqa: BLE001 - the net for every unforeseen error
+        sys.stdout.write(
+            "core purity: CANNOT CHECK, so this is a failure: internal error in "
+            f"check_core_purity.py ({type(error).__name__})\n"
+        )
+        return EXIT_CANNOT_CHECK
+
+
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(run(main))
