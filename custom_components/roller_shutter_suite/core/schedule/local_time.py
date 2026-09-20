@@ -5,17 +5,19 @@ datetimes that share a zone object are compared by their wall-clock reading in
 Python, which is wrong in the repeated hour of a clock change; in UTC the
 comparison is always the comparison of two instants.
 
-**The rule for a local time on the day of a clock change.** A local time is
-read with the UTC offset that is valid *before* the change:
+**The rule for a local time on the day of a clock change.** It concerns only
+the times inside the skipped or the repeated hour:
 
+- A time that does not exist (clocks set forward) moves forward by the length
+  of the gap: with a change from 02:00 to 03:00, "02:30" happens at 03:30.
 - A time that exists twice (clocks set back) means its **first** occurrence.
-- A time that does not exist (clocks set forward) happens as long after the
-  change as it lies inside the skipped hour: with a change from 02:00 to
-  03:00, "02:30" happens at 03:30.
+- Every other time is simply that local time: 07:00 is 07:00 on the clock of
+  that day, on both days of a change.
 
-Both cases are the same statement: such a time happens as much elapsed time
-after local midnight as on any other day. The rule applies to fixed times, to
-"not before" and "not after", and to local midnight itself.
+This is what Python yields for a wall-clock time with ``fold=0``, which reads
+a time inside the gap or the repeated hour with the UTC offset valid before
+the change. The rule applies to fixed times, to "not before" and "not after",
+and to local midnight itself.
 """
 
 from datetime import UTC, date, datetime, time, timedelta, tzinfo

@@ -214,7 +214,7 @@ def _evaluate(  # noqa: PLR0913 - every part of a situation can be varied
     [
         (MONDAY, time(6, 30), datetime(2026, 9, 21, 4, 30, tzinfo=UTC)),
         (date(2026, 1, 15), time(6, 30), datetime(2026, 1, 15, 5, 30, tzinfo=UTC)),
-        # 02:30 does not exist: it happens at 03:30, 2.5 hours after midnight.
+        # 02:30 does not exist: it moves forward by the gap and happens at 03:30.
         (CLOCKS_FORWARD, time(2, 30), datetime(2026, 3, 29, 1, 30, tzinfo=UTC)),
         (CLOCKS_FORWARD, time(3, 30), datetime(2026, 3, 29, 1, 30, tzinfo=UTC)),
         (CLOCKS_FORWARD, time(1, 59), datetime(2026, 3, 29, 0, 59, tzinfo=UTC)),
@@ -237,11 +237,41 @@ def _evaluate(  # noqa: PLR0913 - every part of a situation can be varied
 def test_a_local_time_is_one_defined_instant(
     day: date, local: time, expected_utc: datetime
 ) -> None:
-    """A local time is read with the offset that is valid before the change."""
+    """A skipped time moves by the gap, a repeated one means its first pass."""
     instant = local_instant(day, local, ZONE)
 
     assert instant == expected_utc
     assert instant.utcoffset() == timedelta(0)
+
+
+@pytest.mark.parametrize(
+    ("day", "seven_in_utc"),
+    [
+        (CLOCKS_FORWARD, datetime(2026, 3, 29, 5, 0, tzinfo=UTC)),
+        (CLOCKS_BACK, datetime(2026, 10, 25, 6, 0, tzinfo=UTC)),
+    ],
+    ids=["clocks forward", "clocks back"],
+)
+def test_a_trigger_at_seven_runs_at_seven_on_the_day_of_a_clock_change(
+    day: date, seven_in_utc: datetime
+) -> None:
+    """The rule touches only times inside the gap or the repeated hour.
+
+    07:00 is 07:00 on the clock of that day, although that is six or eight
+    elapsed hours after local midnight.
+    """
+    at_seven = DayTriggers(_fixed(7, 0), _fixed(20, 0))
+    settings = _settings(workday=at_seven, weekend=at_seven)
+
+    before = _evaluate(_local(day, 6, 59, 59), settings)
+    at = _evaluate(_local(day, 7, 0), settings)
+
+    assert local_instant(day, time(7, 0), ZONE) == seven_in_utc
+    assert before.part_of_day is PartOfDay.NIGHT
+    assert at.part_of_day is PartOfDay.DAY
+    assert at.morning_trigger == seven_in_utc
+    assert at.morning_trigger.astimezone(ZONE).time() == time(7, 0)
+    assert seven_in_utc - local_instant(day, time(0, 0), ZONE) != timedelta(hours=7)
 
 
 def test_the_schedule_refuses_a_time_without_a_zone() -> None:
@@ -801,16 +831,24 @@ def test_each_day_type(
     sources: dict[str, AnySourceValue],
     expected: DayType,
 ) -> None:
-    """Holiday first, then the workday source, then the day of the week."""
-    result = _evaluate(_local(day, 3), settings, sources=sources)
+    """Holiday first, then the workday source, then the day of the week.
 
-    assert result.day_type is expected
-    assert result.day_type_latched is True
-    assert result.day_type_reason is None
-    assert result.state.latched_day_types == (LatchedDayType(day, expected),)
-    assert result.morning_trigger == local_instant(
+    At night the day type is a preview; at noon it is fixed for the date.
+    """
+    preview = _evaluate(_local(day, 3), settings, sources=sources)
+    fixed = _evaluate(_local(day, 12), settings, sources=sources, state=preview.state)
+
+    assert preview.day_type is expected
+    assert preview.day_type_latched is False
+    assert preview.day_type_reason is None
+    assert preview.state.latched_day_types == ()
+    assert preview.morning_trigger == local_instant(
         day, settings.triggers_for(expected).morning.fixed_time, ZONE
     )
+    assert fixed.day_type is expected
+    assert fixed.day_type_latched is True
+    assert fixed.day_type_reason is None
+    assert fixed.state.latched_day_types == (LatchedDayType(day, expected),)
 
 
 @pytest.mark.parametrize(
@@ -849,10 +887,57 @@ def test_an_input_without_a_value_leads_to_the_fallback_with_its_reason(
     assert result.part_of_day is PartOfDay.NIGHT
 
 
-def test_the_day_type_is_latched_at_the_first_evaluation_with_values() -> None:
-    """A source that changes in the middle of the day moves nothing after the fact."""
+def test_the_source_changes_30_seconds_after_midnight() -> None:
+    """An evaluation at 00:00:10 still sees yesterday's value; it fixes nothing.
+
+    Sunday has ended. The workday sensor still says "off" at 00:00:10 and
+    switches at 00:00:30. The morning trigger computed afterwards and the
+    latched day type are Monday's.
+    """
+    settings = _settings(workday_source="workday")
+    the_day_before = MONDAY - timedelta(days=1)
+    sunday = _evaluate(
+        _local(the_day_before, 23, 59), settings, sources={"workday": OFF}
+    )
+    too_early = _evaluate(
+        _local(MONDAY, 0, 0, 10), settings, sources={"workday": OFF}, state=sunday.state
+    )
+    switched = _evaluate(
+        _local(MONDAY, 0, 1), settings, sources={"workday": ON}, state=too_early.state
+    )
     morning = _evaluate(
+        _local(MONDAY, 6, 30), settings, sources={"workday": ON}, state=switched.state
+    )
+
+    assert too_early.day_type is DayType.WEEKEND
+    assert too_early.day_type_latched is False
+    assert too_early.morning_trigger == _local(MONDAY, 8, 30)
+    assert _latched_dates(too_early) == [the_day_before]
+    assert switched.day_type is DayType.WORKDAY
+    assert switched.day_type_latched is False
+    assert switched.morning_trigger == _local(MONDAY, 6, 30)
+    assert switched.next_action == PlannedAction(
+        _local(MONDAY, 6, 30), OPEN, ReasonCode.SCHEDULE_DAY
+    )
+    assert morning.part_of_day is PartOfDay.DAY
+    assert morning.day_type_latched is True
+    assert morning.state.latched_day_types == (LatchedDayType(MONDAY, DayType.WORKDAY),)
+
+
+def _latched_dates(result: ScheduleResult) -> list[date]:
+    return [latch.day for latch in result.state.latched_day_types]
+
+
+def test_the_day_type_latches_at_the_morning_trigger_and_then_stays() -> None:
+    """A source that changes in the middle of the day moves nothing after the fact."""
+    night = _evaluate(
         _local(MONDAY, 0, 1), WITH_SOURCES, sources={"workday": ON, "holiday": OFF}
+    )
+    morning = _evaluate(
+        _local(MONDAY, 6, 30),
+        WITH_SOURCES,
+        sources={"workday": ON, "holiday": OFF},
+        state=night.state,
     )
     noon = _evaluate(
         _local(MONDAY, 12),
@@ -861,7 +946,9 @@ def test_the_day_type_is_latched_at_the_first_evaluation_with_values() -> None:
         state=morning.state,
     )
 
-    assert morning.day_type is DayType.WORKDAY
+    assert night.day_type_latched is False
+    assert night.state.latched_day_types == ()
+    assert morning.day_type_latched is True
     assert noon.day_type is DayType.WORKDAY
     assert noon.day_type_latched is True
     assert noon.morning_trigger == _local(MONDAY, 6, 30)
@@ -869,18 +956,19 @@ def test_the_day_type_is_latched_at_the_first_evaluation_with_values() -> None:
     assert noon.state == morning.state
 
 
-def test_the_latch_is_set_late_while_the_morning_trigger_has_not_passed() -> None:
-    """06:00 on a public holiday: the input has come back in time."""
+def test_an_input_that_comes_back_before_the_morning_trigger_is_used() -> None:
+    """06:00 on a public holiday: the preview corrects itself, 09:00 fixes it."""
     missing = dict(MISSING)
+    holiday: dict[str, AnySourceValue] = {"workday": OFF, "holiday": ON}
     night = _evaluate(_local(MONDAY, 0, 1), WITH_SOURCES, sources=missing)
     back = _evaluate(
-        _local(MONDAY, 6),
-        WITH_SOURCES,
-        sources={"workday": OFF, "holiday": ON},
-        state=night.state,
+        _local(MONDAY, 6), WITH_SOURCES, sources=holiday, state=night.state
     )
-    later = _evaluate(
-        _local(MONDAY, 7), WITH_SOURCES, sources=missing, state=back.state
+    still_night = _evaluate(
+        _local(MONDAY, 7), WITH_SOURCES, sources=holiday, state=back.state
+    )
+    morning = _evaluate(
+        _local(MONDAY, 9), WITH_SOURCES, sources=holiday, state=still_night.state
     )
 
     assert night.day_type is DayType.WORKDAY
@@ -890,10 +978,11 @@ def test_the_latch_is_set_late_while_the_morning_trigger_has_not_passed() -> Non
     )
     assert back.day_type is DayType.HOLIDAY
     assert back.day_type_reason is None
-    assert back.state.latched_day_types == (LatchedDayType(MONDAY, DayType.HOLIDAY),)
-    assert later.day_type is DayType.HOLIDAY
-    assert later.part_of_day is PartOfDay.NIGHT
-    assert later.morning_trigger == _local(MONDAY, 9, 0)
+    assert back.day_type_latched is False
+    assert still_night.part_of_day is PartOfDay.NIGHT
+    assert still_night.morning_trigger == _local(MONDAY, 9, 0)
+    assert morning.part_of_day is PartOfDay.DAY
+    assert morning.state.latched_day_types == (LatchedDayType(MONDAY, DayType.HOLIDAY),)
 
 
 def test_after_the_morning_trigger_the_fallback_stays_for_the_date() -> None:
@@ -920,7 +1009,7 @@ def test_after_the_morning_trigger_the_fallback_stays_for_the_date() -> None:
 
 
 def test_a_start_in_the_middle_of_the_day_latches_from_the_inputs() -> None:
-    """The first evaluation of the date at which the inputs have a value."""
+    """No latch for the date and the morning trigger has passed: it is set at once."""
     result = _evaluate(
         _local(MONDAY, 12), WITH_SOURCES, sources={"workday": OFF, "holiday": ON}
     )
@@ -949,6 +1038,118 @@ def test_latches_are_kept_for_today_and_tomorrow_only() -> None:
     assert result.next_action == PlannedAction(
         _local(tuesday, 9, 0), OPEN, ReasonCode.SCHEDULE_DAY
     )
+
+
+def test_yesterdays_latch_is_kept_until_todays_is_set() -> None:
+    """The night that is still running began with yesterday's evening trigger."""
+    state = WindowState(latched_day_types=(LatchedDayType(SUNDAY, DayType.HOLIDAY),))
+    monday = SUNDAY + timedelta(days=1)
+
+    night = _evaluate(_local(monday, 3), state=state)
+    morning = _evaluate(_local(monday, 6, 30), state=night.state)
+
+    assert night.state == state
+    assert night.part_of_day_since == _local(SUNDAY, 21, 30)
+    assert morning.state.latched_day_types == (LatchedDayType(monday, DayType.WORKDAY),)
+    assert morning.part_of_day_since == _local(monday, 6, 30)
+
+
+# --- Since when the part of the day has been running ---------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("at", "since"),
+    [
+        (_local(MONDAY, 6, 30), _local(MONDAY, 6, 30)),
+        (_local(MONDAY, 13), _local(MONDAY, 6, 30)),
+        (_local(MONDAY, 20), _local(MONDAY, 20)),
+        (_local(MONDAY, 23, 30), _local(MONDAY, 20)),
+        (_local(MONDAY, 5), _local(MONDAY - timedelta(days=1), 21)),
+        (_local(SATURDAY, 8), _local(FRIDAY, 20)),
+    ],
+    ids=[
+        "at the morning trigger",
+        "by day",
+        "at the evening trigger",
+        "late",
+        "before the morning, after a weekend evening",
+        "before a weekend morning, after a workday evening",
+    ],
+)
+def test_the_part_of_the_day_began_at_its_boundary(
+    at: datetime, since: datetime
+) -> None:
+    """The boundary's instant, whenever the evaluation takes place; never later than it."""
+    result = _evaluate(at)
+
+    assert result.part_of_day_since == since
+    assert result.part_of_day_since <= result.evaluated_at == at
+
+
+def test_a_moved_boundary_reports_the_instant_at_which_it_really_was() -> None:
+    """Clamp and random offset move the morning; a late first evaluation changes nothing."""
+    settings = _settings(
+        workday=DayTriggers(_sun_event((time(5, 50), time(9, 0))), _fixed(20, 0)),
+        random_offset=RANGE,
+    )
+    shortly_after = _evaluate(_local(MONDAY, 7), settings)
+    much_later = _evaluate(_local(MONDAY, 15), settings)
+
+    assert shortly_after.part_of_day_since == shortly_after.morning_trigger
+    assert much_later.part_of_day_since == shortly_after.part_of_day_since
+    assert _local(MONDAY, 5, 50) <= shortly_after.part_of_day_since
+    assert shortly_after.part_of_day_since <= _local(MONDAY, 6, 15)
+
+
+def test_a_night_begun_by_the_brightness_keeps_its_instant_until_the_morning() -> None:
+    """17:10 yesterday is when this night began; after the morning it is dropped."""
+    tuesday = MONDAY + timedelta(days=1)
+    state = WindowState(
+        latched_day_types=(LatchedDayType(MONDAY, DayType.WORKDAY),),
+        evening_brightness_at=_local(MONDAY, 17, 10),
+    )
+
+    night = _evaluate(_local(tuesday, 2), BRIGHTNESS, sources=_lux(0), state=state)
+    morning = _evaluate(
+        _local(tuesday, 6, 30), BRIGHTNESS, sources=_lux(0), state=night.state
+    )
+
+    assert night.part_of_day_since == _local(MONDAY, 17, 10)
+    assert night.evening_by_brightness is False
+    assert night.evening_trigger == _local(tuesday, 18)
+    assert night.state.evening_brightness_at == _local(MONDAY, 17, 10)
+    assert night.recheck_at == _local(tuesday, 16)
+    assert morning.state.evening_brightness_at is None
+
+
+def test_a_result_cannot_be_built_with_a_recheck_that_is_not_in_the_future() -> None:
+    """At or before the time of the snapshot is a bug, so it cannot be constructed."""
+    result = _evaluate(_local(MONDAY, 17), BRIGHTNESS, sources=_lux(20))
+
+    assert result.recheck_at is not None
+    assert result.recheck_at > result.evaluated_at
+    with pytest.raises(ValueError, match="strictly after"):
+        replace(result, recheck_at=result.evaluated_at)
+    with pytest.raises(ValueError, match="strictly after"):
+        replace(result, recheck_at=result.evaluated_at - timedelta(seconds=1))
+    with pytest.raises(ValueError, match="begun in the future"):
+        replace(result, part_of_day_since=result.evaluated_at + timedelta(seconds=1))
+
+
+def test_a_recheck_is_strictly_in_the_future_or_none_at_every_minute() -> None:
+    """A dark day, evaluated every minute: never a wake-up at or before now."""
+    state = WindowState()
+    rechecks = set()
+    for minute in range(24 * 60):
+        at = (_local(MONDAY, 0).astimezone(UTC) + timedelta(minutes=minute)).astimezone(
+            ZONE
+        )
+        result = _evaluate(at, BRIGHTNESS, sources=_lux(20), state=state)
+        state = result.state
+        rechecks.add(result.recheck_at)
+        assert result.recheck_at is None or result.recheck_at > result.evaluated_at
+
+    assert rechecks == {None, _local(MONDAY, 16)}
 
 
 # --- Daylight saving time and the change of day ------------------------------------------------

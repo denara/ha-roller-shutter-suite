@@ -627,7 +627,8 @@ class WindowState:
     ``brightness_below_since`` is the time since which the outdoor brightness
     has been seen below its threshold without interruption, and
     ``evening_brightness_at`` is the instant at which it began the evening; it
-    counts for the local date it lies on. Without the second one, the evening
+    counts for the local date it lies on and is kept until the morning trigger
+    of the next date, as the start of that night. Without it, the evening
     would end again when the brightness rises or its source drops out.
     """
 

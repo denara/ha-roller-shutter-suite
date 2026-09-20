@@ -74,30 +74,42 @@ class PlannedAction:
 class ScheduleResult:
     """What the schedule says for one world snapshot.
 
+    - ``evaluated_at``: the time of the snapshot as an instant in UTC.
     - ``wish``: the wish of the schedule layer.
     - ``part_of_day``, ``morning_trigger``, ``evening_trigger``: the part of
       the day and today's two triggers as instants in UTC. The evening trigger
       is the effective one; ``evening_by_brightness`` says whether the
       brightness began the evening before the time did.
+    - ``part_of_day_since``: the instant at which the current part of the day
+      really began, never later than ``evaluated_at``: the boundary as it was
+      moved by an offset, a clamp, the random offset, the day type or the
+      brightness, not the first evaluation that noticed it. Before today's
+      morning trigger it is yesterday's evening; that one is exact as long as
+      yesterday's latch and brightness instant are still in the persisted
+      state, otherwise it is computed with the day of the week.
     - ``day_type``: today's day type. ``day_type_latched`` says whether it is
-      fixed for the date; ``day_type_reason`` is ``day_type_fallback`` while
-      the day of the week stands in for an input without a value.
+      fixed for the date; until then it is a preview that may correct itself
+      with every evaluation. ``day_type_reason`` is ``day_type_fallback``
+      while the day of the week stands in for an input without a value.
     - ``summer``: the season the evening position was chosen by, ``None``
       without a seasonal setup. ``season_reason`` says when it is not a fresh
       value: ``input_held_last_known``, or why the source counts for nothing.
     - ``brightness_reason``: why the brightness source gives no value now.
     - ``next_action``: the next planned action, or ``None`` if none lies within
       the next days.
-    - ``recheck_at``: an instant at which the snapshot has to be evaluated
+    - ``recheck_at``: an instant at which the window has to be evaluated
       again although no planned action is due: the brightness will have been
-      low for long enough then.
+      low for long enough then. It lies strictly after ``evaluated_at``, or it
+      is ``None``; a result that says otherwise cannot be constructed.
     - ``state``: the persisted window state with what the schedule has to
       remember. The caller persists it; it equals the state of the snapshot
       if nothing changed.
     """
 
+    evaluated_at: datetime
     wish: Wish
     part_of_day: PartOfDay
+    part_of_day_since: datetime
     morning_trigger: datetime
     evening_trigger: datetime
     evening_by_brightness: bool
@@ -110,6 +122,15 @@ class ScheduleResult:
     next_action: PlannedAction | None
     recheck_at: datetime | None
     state: WindowState
+
+    def __post_init__(self) -> None:
+        """Refuse a wake-up time that is not strictly in the future."""
+        if self.recheck_at is not None and self.recheck_at <= self.evaluated_at:
+            raise ValueError(
+                "the time of a recheck lies strictly after the time of the snapshot"
+            )
+        if self.part_of_day_since > self.evaluated_at:
+            raise ValueError("a part of the day cannot have begun in the future")
 
 
 def morning_condition_fulfilled(window: WindowConfig, snapshot: WorldSnapshot) -> bool:
@@ -181,39 +202,49 @@ def _latch_of(state: WindowState, day: date) -> LatchedDayType | None:
     return None
 
 
-def _day_type_today(context: _Context) -> tuple[LatchedDayType | None, DayType]:
-    """Return today's latch, if it is or becomes set, and today's day type.
+def _day_type_today(context: _Context) -> tuple[LatchedDayType | None, DayType, bool]:
+    """Return today's latch if it is or becomes set, the day type, "fallback".
 
-    Section 6.3: the day type is fixed at the first evaluation of the date at
-    which the inputs have a value. Until then the day of the week stands in;
-    once the morning trigger of that stand-in has passed, the stand-in itself
-    is fixed, marked as a fallback, so an input that comes back later cannot
+    The day type latches at the first boundary between parts of the day of
+    the date, which is the morning trigger, and not before: a workday sensor
+    is updated at midnight or shortly after it, and an evaluation before that
+    update must not write yesterday's value down for the whole day. Until the
+    morning trigger the day type is a preview that follows the inputs, or the
+    day of the week while they have no value, and may correct itself with
+    every evaluation. The first evaluation at or after the morning trigger of
+    the preview fixes it; if the day of the week stood in at that moment, the
+    latch is marked as a fallback, and an input that comes back later cannot
     move the morning trigger after the fact.
     """
     today = context.today
     latch = _latch_of(context.snapshot.state, today)
     if latch is not None:
-        return latch, latch.day_type
+        return latch, latch.day_type, latch.fallback
     from_inputs = day_type_from_inputs(
         context.settings, context.snapshot.sources, today
     )
-    if from_inputs is not None:
-        return LatchedDayType(today, from_inputs), from_inputs
-    stand_in = day_type_by_weekday(today)
-    if context.now >= _plan(context, today, stand_in).morning:
-        return LatchedDayType(today, stand_in, fallback=True), stand_in
-    return None, stand_in
+    fallback = from_inputs is None
+    preview = day_type_by_weekday(today) if from_inputs is None else from_inputs
+    if context.now >= _plan(context, today, preview).morning:
+        return LatchedDayType(today, preview, fallback=fallback), preview, fallback
+    return None, preview, fallback
 
 
 def _kept_latches(
     context: _Context, latch: LatchedDayType | None
 ) -> tuple[LatchedDayType, ...]:
-    """Return the latches to persist: today's, and tomorrow's if there is one."""
+    """Return the latches to persist.
+
+    Today's and tomorrow's if there is one. Until today's is set, yesterday's
+    is kept in its place: the night that is still running began with
+    yesterday's evening trigger.
+    """
     tomorrow = context.today + timedelta(days=1)
+    keep_instead = context.today - timedelta(days=1) if latch is None else None
     kept = [
         entry
         for entry in context.snapshot.state.latched_day_types
-        if entry.day == tomorrow
+        if entry.day in (keep_instead, tomorrow)
     ]
     if latch is not None:
         kept.insert(0, latch)
@@ -262,12 +293,18 @@ def _season(context: _Context) -> _Season:
 
 @dataclass(frozen=True, slots=True)
 class _Brightness:
-    """The brightness trigger after this evaluation."""
+    """The brightness trigger after this evaluation.
+
+    ``evening_at`` is today's evening begun by the brightness. ``last_night``
+    is yesterday's, kept until today's morning trigger, because the night
+    that is still running began with it.
+    """
 
     below_since: datetime | None = None
     evening_at: datetime | None = None
     reason: ReasonCode | None = None
     recheck_at: datetime | None = None
+    last_night: datetime | None = None
 
 
 def _brightness(context: _Context, plan: _DayPlan, day_type: DayType) -> _Brightness:
@@ -287,11 +324,14 @@ def _brightness(context: _Context, plan: _DayPlan, day_type: DayType) -> _Bright
         return _Brightness()
     state = context.snapshot.state
     evening_at = state.evening_brightness_at
-    if evening_at is not None and not (
-        local_date(evening_at, context.zone) == context.today
-        and evening_at < plan.evening
-    ):
-        evening_at = None
+    last_night = None
+    if evening_at is not None:
+        lies_on = local_date(evening_at, context.zone)
+        yesterday = context.today - timedelta(days=1)
+        if lies_on == yesterday and context.now < plan.morning:
+            last_night = evening_at
+        if lies_on != context.today or evening_at >= plan.evening:
+            evening_at = None
     level, reason = read_number(context.snapshot.sources, settings.brightness_source)
     below_since = state.brightness_below_since
     if level is None or level >= threshold:
@@ -310,7 +350,7 @@ def _brightness(context: _Context, plan: _DayPlan, day_type: DayType) -> _Bright
                 evening_at = due
             else:
                 recheck_at = due
-    return _Brightness(below_since, evening_at, reason, recheck_at)
+    return _Brightness(below_since, evening_at, reason, recheck_at, last_night)
 
 
 def _next_action(
@@ -324,7 +364,7 @@ def _next_action(
 
     Today counts with its effective triggers. A later date counts with its
     latched day type if it has one, otherwise with the day of the week: that
-    is a forecast, and it becomes final when the date begins.
+    is a forecast; it is final when that date's day type latches.
 
     A date whose two triggers coincide has no part ``day`` and therefore no
     action; that takes a random offset that swaps two triggers set seconds
@@ -353,6 +393,29 @@ def _next_action(
     return None
 
 
+def _night_since(
+    context: _Context, plan: _DayPlan, brightness: _Brightness
+) -> datetime:
+    """Return the instant at which the night that is running now began.
+
+    After today's evening trigger that is the effective evening trigger. Before
+    today's morning trigger the night began yesterday: with the evening the
+    brightness began, if its instant is still kept, otherwise with the
+    time-based evening trigger of yesterday's day type, latched or by the day
+    of the week.
+    """
+    if plan.morning < plan.evening <= context.now:
+        return plan.evening
+    yesterday = context.today - timedelta(days=1)
+    latch = _latch_of(context.snapshot.state, yesterday)
+    day_type = day_type_by_weekday(yesterday) if latch is None else latch.day_type
+    last_night = _plan(context, yesterday, day_type)
+    evening = last_night.evening
+    if brightness.last_night is not None:
+        evening = min(evening, brightness.last_night)
+    return max(evening, last_night.morning)
+
+
 def evaluate_schedule(
     settings: ScheduleSettings,
     window: WindowConfig,
@@ -379,7 +442,7 @@ def evaluate_schedule(
     )
     targets = settings.targets_for(window.schedule_profile)
 
-    latch, day_type = _day_type_today(context)
+    latch, day_type, fallback = _day_type_today(context)
     plan = _plan(context, context.today, day_type)
     brightness = _brightness(context, plan, day_type)
     if brightness.evening_at is not None:
@@ -408,12 +471,15 @@ def evaluate_schedule(
         latched_day_types=_kept_latches(context, latch),
         held_season=season.held,
         brightness_below_since=brightness.below_since,
-        evening_brightness_at=brightness.evening_at,
+        evening_brightness_at=brightness.evening_at or brightness.last_night,
     )
-    fallback = latch is None or latch.fallback
     return ScheduleResult(
+        evaluated_at=context.now,
         wish=wish,
         part_of_day=PartOfDay.DAY if is_day else PartOfDay.NIGHT,
+        part_of_day_since=(
+            plan.morning if is_day else _night_since(context, plan, brightness)
+        ),
         morning_trigger=plan.morning,
         evening_trigger=plan.evening,
         evening_by_brightness=brightness.evening_at is not None,
