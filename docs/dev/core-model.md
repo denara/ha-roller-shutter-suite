@@ -1,14 +1,15 @@
 # The core model
 
-The domain core decides where a shutter goes. Its blocks are written by different people and agents, and they fit together because they exchange the same data types. This page lists those types. They live in three places under `custom_components/roller_shutter_suite/core/`:
+The domain core decides where a shutter goes. Its blocks are written by different people and agents, and they fit together because they exchange the same data types. This page lists those types. They live in these places under `custom_components/roller_shutter_suite/core/`:
 
 | Module | Content |
 |---|---|
 | `model` | the data types; a package, see below |
 | `reasons` | the closed list of reason codes |
 | `ports` | what the core needs from outside: clock, sun, actuator, storage |
+| `settings` | partial settings, the "inherit" marker and the resolver global → group → window; see [Inheritance](#inheritance) |
 
-The vocabulary and the rules come from the [domain design specification](../architecture.md). This page only says how the vocabulary looks in code. There is no behavior in these modules: no arbiter, no schedule, no tracking, no geometry.
+The vocabulary and the rules come from the [domain design specification](../architecture.md). This page only says how the vocabulary looks in code. There is no behavior in `model`, `reasons` and `ports`: no arbiter, no schedule, no tracking, no geometry. `settings` holds one piece of logic: the resolver that produces the `WindowConfig`.
 
 `model` is a package, so that blocks that work in parallel edit different files. Always import from the package: `from custom_components.roller_shutter_suite.core.model import Position`. Its modules depend on each other in one direction only, and a test enforces it:
 
@@ -162,3 +163,68 @@ The resulting `Decision`:
 The status of the window can now say in one line what happened and why: it went to 30 instead of 0, because of the schedule, limited by the tilted window. When the window is closed later, the floor disappears, the next recompute yields 0, and the shutters close fully. Nothing had to be remembered for that.
 
 Had the window been in dry-run, steps 1 and 2 would be the same. The gate outcome would be `suppress` with the reason `dry_run`, and `would_send` would list left 30 and right 30: the record of what the integration would have done.
+
+## Inheritance
+
+Configuration is stored on three levels: the house (global), a group, a window. Each level stores only what it sets itself. The module `settings` turns that into the complete `WindowConfig` of one window and records, for every value, where it came from. The configuration forms store; the arbiter wants a complete configuration; this module is the function in between. It raises nothing because of what a user stored: every problem is part of the result, so one broken window or group never stops the others.
+
+### The types
+
+| Type | Meaning |
+|---|---|
+| `INHERIT` (type `Inherit`) | The one marker for "this level does not set the value". It is never `None`: for a setting whose type allows `None`, a set `None` is a set value that beats the levels below it. |
+| `PartialSettings` | What one level sets itself: a read-only mapping from key to value; every other key is `INHERIT`. `get(key)` returns the value or the marker, `with_value` and `with_inherit` return changed copies. `faults` lists stored values that could not be read (`SettingFault`: key and English detail). Compared by value; not hashable, because it holds a mapping. |
+| `SettingDefinition` | Everything the resolver knows about one setting, in one place: `key`, built-in `default`, `parse` (reads the value from stored data), `inheritable`, `requires`. |
+| `CapabilityRequirement` | A setting needs a capability of the window (`Capability`, the four fields of `WindowCapabilities`), and the value the configuration carries when the capability is missing. |
+| `SettingsRegistry` | The settings that exist. The resolver is generic over it. `WINDOW_SETTINGS` is the registry of the settings of `WindowConfig`. |
+| `GroupLevel` | The group a window refers to: its identifier and its partial settings, or `None` as settings when the group no longer exists. A window without a group passes no `GroupLevel`. |
+| `Level` | Where a value came from: `built_in`, `global`, `group`, `window`. |
+| `ResolvedValue` | One resolved setting: `value` (what the levels yield), `level` and, for the group level, `group_id`; `unavailable` (`MissingCapability`: the capability and the members that lack it) when the window cannot use the setting; `effective`, the value the configuration carries. |
+| `SettingError` | A validation error: key, level (with `group_id`), a `SettingProblem` code, an English detail for logs, and for a missing capability the same `MissingCapability` a masked value carries. The Home Assistant layer translates the code; the detail is never shown to a user. |
+| `GroupFallback` | The group reference of a window leads nowhere: the group's identifier, the reason (`group_missing` or `group_data_faulty`) and, for faulty data, the faults. |
+| `ResolvedSettings` | The result for one window: one `ResolvedValue` per setting of the registry, the errors, the group fallback. `valid` is true without errors; a group fallback is not an error. |
+| `WindowResolution` | `ResolvedSettings` plus the `WindowConfig`, which is `None` when there are errors. |
+
+### From stored data to partial settings
+
+`settings_from_stored(data, registry)` is the only place that knows how "inherit" is stored. The rules follow the [configuration flow findings](config-flow-findings.md):
+
+| Stored | Meaning |
+|---|---|
+| the key is absent | inherit |
+| `""` | inherit: a form can deliver an emptied text field that way |
+| `0`, `false`, `[]` | a set value |
+| `null` | a fault. `null` is never written, so it is not a second way to say "inherit". |
+| a value that `parse` refuses | a fault with the message of the refusal |
+| a key the registry does not know | left alone: the stored data of a window also holds its covers and its group reference |
+
+### The resolver
+
+`resolve_settings(registry, capabilities=…, members=…, global_settings=…, group=…, window_settings=…)` resolves every setting of a registry. `resolve_window(window_id=…, members=…, …)` does it for `WINDOW_SETTINGS`, takes the capabilities from the model (`WindowConfig.capabilities`, the lowest common denominator of the members) and builds the `WindowConfig`.
+
+1. **Order.** The window's value beats the group's, which beats the house's, which beats the built-in default. The first level that sets a value wins, whatever the value is: `0`, `False` and an empty tuple are values. A window without a group inherits from the house directly.
+2. **Provenance.** Every resolved value names its level, and the group if that is the level, so the user interface and the diagnostics can say "inherited from group …".
+3. **Settings that cannot be inherited** have `inheritable=False` in their definition, and nowhere else. They are read from the window alone; a group or the house that sets one gets the error `not_inheritable`. Of today's settings that is the covering type. The identifier and the members of a window are no settings at all: the caller hands them in (`WINDOW_IDENTITY_FIELDS`).
+4. **A group reference that leads nowhere.** If the group no longer exists (`GroupLevel(group_id, None)`), or a stored value of the group could not be read, the group is left out as a whole and the window inherits from the house. The result carries a `GroupFallback`; the window still gets its configuration. The Home Assistant layer raises the repair issue.
+5. **Capability mask.** A group has no covers, so it can set an option that the covers of one of its windows cannot execute. A setting whose `requires` names a capability the window lacks is **not available**: `unavailable` names the capability and the limiting members, the provenance stays, and `effective` is the definition's `value_when_missing`, so the arbiter never acts on the option. This holds for a value from the group, from the house and for the built-in default. If the window sets such an option **itself**, that is the error `capability_missing` with the same explanation.
+6. **Validation.** Errors name the key and the level that set the offending value: `unreadable` (a fault of the house or the window), `not_inheritable`, `unknown_setting` (partial settings built in code with a key the registry does not know), `capability_missing`, and `invalid`. For `invalid` the model stays the single place for value rules: `resolve_window` hands every resolved value to `WindowConfig` on its own and turns a refusal into an error of that key, with the level the value came from. A window whose members or identifier the model refuses gets an error of the key `members` or `window_id`. With errors there is no `WindowConfig`.
+
+### Adding a setting
+
+A setting is described once, as an entry of `WINDOW_SETTINGS` whose key is the name of its field of `WindowConfig`:
+
+```python
+WINDOW_SETTINGS = SettingsRegistry(
+    (
+        ...,  # the entries that exist
+        SettingDefinition(
+            key="hold_to_move",
+            default=False,
+            parse=as_bool,
+            requires=CapabilityRequirement(Capability.SUPPORTS_STOP, False),
+        ),
+    )
+)
+```
+
+The block that builds a feature adds the field to `WindowConfig`, where the setting and its value rules live, and this one entry. Nothing else in `settings` changes: reading stored data, the order of the levels, provenance, the mask, validation and the construction of the `WindowConfig` follow from the entry. A test compares the registry with the fields of `WindowConfig` and fails when a field has no entry, an entry has no field, or the two state different defaults.
