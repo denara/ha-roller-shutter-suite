@@ -5,17 +5,29 @@ that must be found is put together from pieces at runtime, so that the file
 contains no line that looks like instance data. All values are made up.
 """
 
+import re
+import shutil
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
 
 from scripts.check_instance_data import (
+    EXIT_CANNOT_CHECK,
+    EXIT_FINDINGS,
     PATTERNS,
-    GitUnavailableError,
+    CannotCheckError,
+    check_checkout,
     check_text,
     check_tree,
-    tracked_files,
+    list_files,
+    listing_commands,
+    main,
 )
+
+# The repository has far more files; a run that read a handful read the wrong tree.
+MINIMUM_FILES_OF_THIS_REPOSITORY = 50
 
 AT = "@"
 SUSPICIOUS = {
@@ -115,28 +127,163 @@ def test_finding_does_not_repeat_the_matched_text() -> None:
     assert str(finding).startswith("example.txt:1: ")
 
 
-def test_tree_skips_binary_and_generated_files(tmp_path: Path) -> None:
-    """Only text written by hand is checked."""
+def test_tree_accounts_for_every_listed_file(tmp_path: Path) -> None:
+    """Only text written by hand is checked, and the rest is counted by reason."""
     address = ".".join(["192", "168", "1", "1"])
     (tmp_path / "notes.md").write_text(address, encoding="utf-8")
     (tmp_path / "uv.lock").write_text(address, encoding="utf-8")
-    (tmp_path / "icon.png").write_bytes(b"\x89PNG\xff\xfe" + address.encode())
+    (tmp_path / "icon.png").write_bytes(b"\x89PNG\x00\xff\xfe" + address.encode())
 
-    findings = check_tree(tmp_path, ["notes.md", "uv.lock", "icon.png", "gone.md"])
+    report = check_tree(tmp_path, ["notes.md", "uv.lock", "icon.png", "gone.md"])
 
-    assert [finding.path for finding in findings] == ["notes.md"]
+    assert [finding.path for finding in report.findings] == ["notes.md"]
+    assert report.checked == ["notes.md"]
+    assert report.generated == ["uv.lock"]
+    assert report.binary == ["icon.png"]
+    assert report.absent == ["gone.md"]
+    assert report.summary().startswith("checked 1 file(s); skipped: 1 binary, ")
 
 
-def test_this_repository_passes() -> None:
-    """No tracked file of this repository looks like instance data.
+def test_text_in_another_encoding_cannot_be_judged(tmp_path: Path) -> None:
+    """A text file that is not UTF-8 is not waved through as binary."""
+    (tmp_path / "legacy.txt").write_bytes("caf\xe9 and more".encode("latin-1"))
 
-    Where git does not work for the checkout (inside WSL, when git lives on
-    the Windows side), the test is skipped. CI runs the script itself.
+    with pytest.raises(CannotCheckError, match=r"legacy\.txt is neither"):
+        check_tree(tmp_path, ["legacy.txt"])
+
+
+def _git(root: Path, *arguments: str) -> None:
+    git = shutil.which("git")
+    assert git is not None, "these tests need git, like the guard itself"
+    subprocess.run(  # noqa: S603 - fixed arguments, program from PATH
+        [git, *arguments], cwd=root, check=True, capture_output=True
+    )
+
+
+@pytest.fixture
+def checkout(tmp_path: Path) -> Path:
+    """Return a small repository: tracked, new, and ignored files."""
+    _git(tmp_path, "init", "--quiet")
+    (tmp_path / ".gitignore").write_text("private/\n*.secret\n", encoding="utf-8")
+    (tmp_path / "tracked.md").write_text("tracked\n", encoding="utf-8")
+    _git(tmp_path, "add", ".gitignore", "tracked.md")
+    (tmp_path / "new.md").write_text("about to be committed\n", encoding="utf-8")
+    (tmp_path / "private").mkdir()
+    (tmp_path / "private" / "notes.md").write_text("ignored\n", encoding="utf-8")
+    (tmp_path / "token.secret").write_text("ignored\n", encoding="utf-8")
+    return tmp_path
+
+
+def test_list_has_tracked_and_new_files_but_no_ignored_ones(checkout: Path) -> None:
+    """A new file counts before it is committed; an ignored folder is not read."""
+    assert sorted(list_files(checkout)) == [".gitignore", "new.md", "tracked.md"]
+
+
+def test_new_file_with_instance_data_is_found(checkout: Path) -> None:
+    """The file that is about to be committed is the one that matters most."""
+    address = ".".join(["10", "1", "2", "3"])
+    (checkout / "new.md").write_text(address, encoding="utf-8")
+    (checkout / "private" / "notes.md").write_text(address, encoding="utf-8")
+
+    report = check_checkout(checkout, own_path="tracked.md")
+
+    assert [finding.path for finding in report.findings] == ["new.md"]
+    assert report.checked == [".gitignore", "new.md", "tracked.md"]
+
+
+def test_list_of_something_else_is_refused(checkout: Path) -> None:
+    """A list without the guard itself does not describe this repository."""
+    with pytest.raises(CannotCheckError, match="is not among them"):
+        check_checkout(checkout)
+
+
+def test_no_git_at_all_cannot_list(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Without any git on PATH there is no list, and no guessing either."""
+    monkeypatch.setattr("scripts.check_instance_data.shutil.which", lambda _name: None)
+
+    assert listing_commands(tmp_path) == []
+    with pytest.raises(CannotCheckError, match="git cannot list the files"):
+        list_files(tmp_path)
+
+
+def test_failing_git_ends_with_a_failure_and_a_clear_message(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A guard that could not check exits with its own non-zero status."""
+    failing = [sys.executable, "-c", "import sys; sys.exit('fatal: ' + sys.argv[0])"]
+    monkeypatch.setattr(
+        "scripts.check_instance_data.listing_commands", lambda _root: [failing]
+    )
+
+    status = main()
+
+    output = capsys.readouterr().out
+    assert status == EXIT_CANNOT_CHECK
+    assert status not in (0, EXIT_FINDINGS)
+    assert "CANNOT CHECK" in output
+    assert "git cannot list the files of this checkout (1 way(s) tried)" in output
+    assert "fatal" not in output, "what git printed may name local paths"
+    assert "instance data: ok" not in output
+
+
+def test_worktree_of_another_system_is_resolved(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A ``.git`` file with a path of another system is translated, not skipped."""
+    foreign = "Q" + ":/" + "elsewhere/.git/worktrees/example"
+    git_dir = tmp_path / "translated"
+    git_dir.mkdir()
+    root = tmp_path / "worktree"
+    root.mkdir()
+    (root / ".git").write_text(f"gitdir: {foreign}\n", encoding="utf-8")
+    asked: list[list[str]] = []
+
+    def answer(command: list[str], _root: Path) -> list[str]:
+        asked.append(command)
+        return [f"{git_dir}\n"]
+
+    monkeypatch.setattr(
+        "scripts.check_instance_data.shutil.which", lambda name: f"/bin/{name}"
+    )
+    monkeypatch.setattr("scripts.check_instance_data._answer", answer)
+
+    commands = listing_commands(root)
+
+    assert asked == [["/bin/wslpath", "-u", foreign]]
+    assert [command[0] for command in commands] == [
+        "/bin/git",
+        "/bin/git",
+        "/bin/git.exe",
+    ]
+    assert f"--git-dir={git_dir}" in commands[1]
+    assert f"--work-tree={root.as_posix()}" in commands[1]
+    assert all("ls-files" in command for command in commands)
+
+
+def test_ordinary_checkout_needs_no_translation(
+    checkout: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """With a ``.git`` folder, or a ``.git`` file git can follow, git is asked once."""
+    monkeypatch.setattr(
+        "scripts.check_instance_data.shutil.which",
+        lambda name: "/bin/git" if name == "git" else None,
+    )
+
+    assert [command[0] for command in listing_commands(checkout)] == ["/bin/git"]
+
+
+def test_this_repository_passes(capsys: pytest.CaptureFixture[str]) -> None:
+    """No file of this checkout looks like instance data, and files were read.
+
+    This test is never skipped. Where git cannot list the checkout the guard
+    does not work, and then this test has to fail like the guard does.
     """
-    root = Path(__file__).parents[2]
-    try:
-        paths = tracked_files(root)
-    except GitUnavailableError as error:
-        pytest.skip(str(error))
+    status = main()
 
-    assert check_tree(root, paths) == []
+    lines = capsys.readouterr().out.splitlines()
+    assert status == 0, lines
+    summary = re.fullmatch(r"instance data: ok; checked (\d+) file\(s\); .*", lines[-1])
+    assert summary is not None
+    assert int(summary[1]) >= MINIMUM_FILES_OF_THIS_REPOSITORY
