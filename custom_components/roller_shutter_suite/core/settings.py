@@ -36,6 +36,7 @@ because of a data fault. **Everything is reported.**
 """
 
 import dataclasses
+import math
 import re
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
@@ -52,6 +53,7 @@ from .model import (
     JsonValue,
     MemberConfig,
     ScheduleProfile,
+    SettingsCombinationError,
     TemperatureTier,
     WindowCapabilityStates,
     WindowConfig,
@@ -257,6 +259,12 @@ class SettingProblem(StrEnum):
     """The level sets a key that the registry does not know."""
     LEVEL_UNREADABLE = "level_unreadable"
     """The settings of the level are unreadable as a whole."""
+    COMBINATION = "combination"
+    """A rule that spans several settings refuses the combination of the
+    effective values; each of them may be fine on its own."""
+    RULE_WITHOUT_KEYS = "rule_without_keys"
+    """Not a fault of stored data: the whole was refused without naming the
+    keys concerned, so nothing can be attributed."""
 
 
 SETTINGS_KEY: Final = "settings"
@@ -346,6 +354,23 @@ _UNKNOWN_FAULT: Final = "the registry has no setting with this key"
 _NOT_INHERITABLE_FAULT: Final = "only a window can set this; it cannot be inherited"
 _LEVEL_FAULT: Final = "the settings of this level are not a mapping of keys to values"
 
+_REFUSALS: Final = (
+    TypeError,
+    ValueError,
+    ArithmeticError,
+    LookupError,
+    AttributeError,
+    RecursionError,
+)
+"""What a reader or the value rules may raise for a value somebody stored.
+
+A refusal is meant to be a ``ValueError`` or a ``TypeError``. The others are
+what Python raises by itself for hostile data: a number too large for a float
+(``OverflowError``), data nested too deeply, a lookup in something that is not
+what it seemed. None of them may escape, because one stored value would then
+stop the set-up of every window.
+"""
+
 
 def settings_from_stored(data: object, registry: SettingsRegistry) -> PartialSettings:
     """Turn the stored settings of one level into partial settings.
@@ -404,8 +429,8 @@ def settings_from_stored(data: object, registry: SettingsRegistry) -> PartialSet
         else:
             try:
                 values[key] = definition.parse(raw)
-            except ValueError as err:
-                faults[key] = SettingFault(key, str(err))
+            except _REFUSALS as err:
+                faults[key] = SettingFault(key, str(err) or type(err).__name__)
     return PartialSettings(values=values, faults=tuple(faults.values()))
 
 
@@ -586,11 +611,11 @@ class SettingRules:
     """The value rules of the structure the settings are resolved for.
 
     The resolver knows no value rule itself. ``check_value(key, value)`` raises
-    a ``TypeError`` or ``ValueError`` for a value the structure refuses;
-    ``build(effective, disabled_functions)`` builds the structure from the
-    effective values of all settings and raises likewise, which is where a
-    rule that spans two settings speaks up. For a window both are
-    ``WindowConfig``.
+    a ``TypeError`` or ``ValueError`` for a value the structure refuses on its
+    own. ``build(effective, disabled_functions)`` builds the structure from
+    the effective values of all settings; a rule that spans several settings
+    speaks up there and raises a ``SettingsCombinationError`` that names the
+    keys it concerns. For a window both are ``WindowConfig``.
     """
 
     check_value: Callable[[str, object], None]
@@ -652,8 +677,13 @@ def _read_level(
         if rules is not None:
             try:
                 rules.check_value(key, value)
-            except (TypeError, ValueError) as err:
-                faults.append(SettingFault(key, str(err), SettingProblem.INVALID))
+            except SettingsCombinationError:
+                # The value is fine on its own; a combination is judged with
+                # the effective values of the window, when the whole is built.
+                pass
+            except _REFUSALS as err:
+                detail = str(err) or type(err).__name__
+                faults.append(SettingFault(key, detail, SettingProblem.INVALID))
                 continue
         sound[key] = value
     return _LevelInput(level, sound, tuple(faults), group_id)
@@ -676,6 +706,7 @@ def _resolve_one(
     levels: tuple[_LevelInput, ...],
     capabilities: WindowCapabilityStates,
     members: tuple[MemberConfig, ...],
+    forced_default: bool,
 ) -> tuple[ResolvedValue[Any], tuple[Level, ...]]:
     """Walk the levels from the window outwards; the first that sets the key decides.
 
@@ -684,6 +715,12 @@ def _resolve_one(
     levels whose fault was reached that way: for this window the faulty value
     would have been the effective one. A fault further out than a sound value
     is never reached.
+
+    ``forced_default`` says that the key takes part in a refused combination
+    and belongs to a function that pauses: the walk then ends at the first
+    sound value without taking it, and the built-in default stands in. The
+    function is paused, so nobody acts on the value; taking a value from
+    further out would combine values the user never chose together.
     """
     value: Any = definition.default
     found: Level = Level.BUILT_IN
@@ -693,11 +730,12 @@ def _resolve_one(
         if level.is_faulty(definition.key):
             reached.append(level.level)
         elif definition.key in level.values:
-            value, found, found_group = (
-                level.values[definition.key],
-                level.level,
-                level.group_id,
-            )
+            if not forced_default:
+                value, found, found_group = (
+                    level.values[definition.key],
+                    level.level,
+                    level.group_id,
+                )
             break
     effective = value
     state: CapabilityState | None = None
@@ -737,7 +775,12 @@ def _report(
                 disabled = registry.pausable_functions
             elif definition is None:
                 action = FaultAction.IGNORED
-            elif level.level not in reached[fault.key]:
+            elif (
+                fault.problem is SettingProblem.NOT_INHERITABLE
+                or level.level not in reached[fault.key]
+            ):
+                # A key that cannot be inherited could never have been the
+                # effective value of any window from up there.
                 action = FaultAction.NO_EFFECT
             elif (
                 definition.function is not None
@@ -766,51 +809,121 @@ def _resolve_levels(
     levels: tuple[_LevelInput, ...],
     capabilities: WindowCapabilityStates,
     members: tuple[MemberConfig, ...],
+    forced: frozenset[str] = frozenset(),
 ) -> tuple[dict[str, ResolvedValue[Any]], tuple[ReportedFault, ...]]:
     """Resolve every setting of the registry over the given levels."""
     values: dict[str, ResolvedValue[Any]] = {}
     reached: dict[str, tuple[Level, ...]] = {}
     for definition in registry.definitions:
         values[definition.key], reached[definition.key] = _resolve_one(
-            definition, levels, capabilities, members
+            definition, levels, capabilities, members, definition.key in forced
         )
     return values, _report(registry, levels, reached)
 
 
-def _blame(  # noqa: PLR0913 - the state of one resolution
-    registry: SettingsRegistry,
-    levels: tuple[_LevelInput, ...],
-    *,
-    capabilities: WindowCapabilityStates,
-    members: tuple[MemberConfig, ...],
-    rules: SettingRules,
-    disabled: frozenset[FunctionId],
-) -> tuple[_LevelInput | None, str]:
-    """Return the level and the key a refusal of the whole is attributed to.
+def _pauses(definition: SettingDefinition[Any]) -> bool:
+    """Return whether a fault in the setting pauses its function."""
+    return (
+        definition.function is not None
+        and definition.fault_behavior is FaultBehavior.PAUSE
+    )
 
-    A rule that spans several settings cannot say which of them is wrong. The
-    levels are therefore added one by one, from the built-in defaults over
-    the house and the group to the window: the level whose values make the
-    whole fail first is the one that spoke last, and it is held responsible.
-    Of its values, the last in the order of the registry is named. ``None``
-    as level means that the built-in defaults alone are refused.
+
+@dataclass(slots=True)
+class _Refusals:
+    """What one resolution has done about refusals of the whole so far."""
+
+    forced: set[str] = field(default_factory=set)
+    reports: list[ReportedFault] = field(default_factory=list)
+    unattributed: int = 0
+
+
+def _refused_combination(
+    registry: SettingsRegistry,
+    levels: list[_LevelInput],
+    values: Mapping[str, ResolvedValue[Any]],
+    error: Exception,
+    state: _Refusals,
+) -> bool:
+    """Make the keys a refused combination concerns faulty; say whether any were.
+
+    The refusal names its keys (``SettingsCombinationError``). Only those keys
+    are touched, each by the fault behavior of its function, and only where a
+    level supplies the effective value; a built-in default is nobody's fault.
+
+    - Keys of a function that **pauses**: the level that supplies the value
+      gets a fault of the kind ``combination``, the function is paused by the
+      ordinary rule, and the built-in default stands in for the value.
+    - Keys of a function that **falls back**, only when no pausing key was
+      left to handle: the innermost level that supplies one of them is passed
+      by for the keys it supplies, and the build is tried again.
+
+    Sound values of other settings are never touched or reported.
     """
-    blamed: _LevelInput | None = levels[0]
-    values, _ = _resolve_levels(registry, levels, capabilities, members)
-    for count in range(len(levels)):
-        weakest = levels[len(levels) - count :]
-        partial, _ = _resolve_levels(registry, weakest, capabilities, members)
-        try:
-            rules.build(
-                {key: item.effective for key, item in partial.items()}, disabled
-            )
-        except TypeError, ValueError:
-            blamed = weakest[0] if weakest else None
-            values = partial
-            break
-    level = Level.BUILT_IN if blamed is None else blamed.level
-    named = [item.key for item in values.values() if item.level is level]
-    return blamed, named[-1]
+    if not isinstance(error, SettingsCombinationError):
+        return False
+    definitions = {definition.key: definition for definition in registry.definitions}
+    involved = [
+        values[key]
+        for key in error.keys
+        if key in values
+        and values[key].level is not Level.BUILT_IN
+        and key not in state.forced
+    ]
+    pausing = [item for item in involved if _pauses(definitions[item.key])]
+    if pausing:
+        blamed = pausing
+        state.forced.update(item.key for item in pausing)
+    else:
+        order = (Level.GLOBAL, Level.GROUP, Level.WINDOW)
+        innermost = max(
+            (item.level for item in involved), key=order.index, default=None
+        )
+        blamed = [item for item in involved if item.level is innermost]
+    for item in blamed:
+        index = next(i for i, level in enumerate(levels) if level.level is item.level)
+        levels[index] = levels[index].blamed(
+            SettingFault(item.key, str(error), SettingProblem.COMBINATION)
+        )
+    return bool(blamed)
+
+
+def _refused_without_keys(
+    registry: SettingsRegistry, error: Exception, state: _Refusals
+) -> bool:
+    """Handle a refusal that cannot be attributed; say whether anything is left to try.
+
+    A rule that does not name its keys is a programming error, not a fault of
+    stored data. Protection has to keep running all the same, so the window
+    is not given up at once: first every function that pauses is paused and
+    its settings take their defaults; if the whole is still refused, the
+    settings of the functions that fall back take their defaults as well;
+    only if even the built-in defaults are refused is the configuration
+    withheld.
+    """
+    detail = str(error) or type(error).__name__
+    state.unattributed += 1
+    if state.unattributed == 1:
+        state.forced.update(
+            definition.key for definition in registry.definitions if _pauses(definition)
+        )
+        action, disabled = FaultAction.FUNCTIONS_DISABLED, registry.pausable_functions
+    elif state.unattributed == 2:  # noqa: PLR2004 - the second of three steps
+        state.forced.update(registry.keys)
+        action, disabled = FaultAction.FELL_BACK, ()
+    else:
+        action, disabled = FaultAction.CONFIGURATION_WITHHELD, ()
+    state.reports.append(
+        ReportedFault(
+            SETTINGS_KEY,
+            Level.BUILT_IN,
+            SettingProblem.RULE_WITHOUT_KEYS,
+            detail,
+            action,
+            disabled,
+        )
+    )
+    return action is not FaultAction.CONFIGURATION_WITHHELD
 
 
 def _resolve(  # noqa: PLR0913 - the three levels and the window are the input
@@ -834,35 +947,27 @@ def _resolve(  # noqa: PLR0913 - the three levels and the window are the input
         )
     levels.append(_read_level(registry, Level.GLOBAL, global_settings, None, rules))
 
+    state = _Refusals()
     while True:
-        values, faults = _resolve_levels(registry, tuple(levels), capabilities, members)
-        resolved = ResolvedSettings(values, faults, group_missing)
+        values, faults = _resolve_levels(
+            registry, tuple(levels), capabilities, members, frozenset(state.forced)
+        )
+        resolved = ResolvedSettings(values, (*faults, *state.reports), group_missing)
         if rules is None:
             return resolved, None
         try:
             return resolved, rules.build(
                 resolved.effective(), resolved.disabled_functions
             )
-        except (TypeError, ValueError) as err:
-            blamed, key = _blame(
-                registry,
-                tuple(levels),
-                capabilities=capabilities,
-                members=members,
-                rules=rules,
-                disabled=resolved.disabled_functions,
-            )
-            fault = SettingFault(key, str(err), SettingProblem.INVALID)
-        if blamed is None:
-            withheld = ReportedFault(
-                key,
-                Level.BUILT_IN,
-                fault.problem,
-                fault.detail,
-                FaultAction.CONFIGURATION_WITHHELD,
-            )
-            return dataclasses.replace(resolved, faults=(*faults, withheld)), None
-        levels[levels.index(blamed)] = blamed.blamed(fault)
+        except _REFUSALS as err:
+            if _refused_combination(registry, levels, values, err, state):
+                continue
+            if _refused_without_keys(registry, err, state):
+                continue
+        return (
+            ResolvedSettings(values, (*faults, *state.reports), group_missing),
+            None,
+        )
 
 
 def resolve_settings(  # noqa: PLR0913 - the three levels and the window are the input
@@ -919,11 +1024,18 @@ def resolve_settings(  # noqa: PLR0913 - the three levels and the window are the
       the level lies, and the functions that fall back take the values of the
       other levels.
 
-    A refusal of the whole is attributed to the level whose values make the
-    whole fail first when the levels are added from the house to the window,
-    and to the last of its values in the order of the registry; that value
-    is then a fault of that key on that level like any other, and the window
-    is resolved again.
+    **A rule that spans several settings** refuses the whole with a
+    ``SettingsCombinationError`` that names the keys it concerns. Only those
+    keys become faulty (``combination``), on the levels that supply their
+    effective values, and each is judged by the fault behavior of its
+    function: a function that pauses is paused and its key takes the
+    built-in default; for functions that fall back the innermost level that
+    supplies one of the keys is passed by, and the build is tried again. A
+    sound value of a setting the rule does not concern is never touched,
+    reported or blamed. A refusal that names no keys cannot be attributed
+    (``rule_without_keys``): every function that pauses is paused, then the
+    settings that fall back take their defaults, and only if the defaults
+    are refused too is the configuration withheld.
 
     Everything is reported in ``faults``. The function does not raise for
     anything a user could have stored.
@@ -945,6 +1057,13 @@ _TIME: Final = re.compile(r"([01][0-9]|2[0-3]):([0-5][0-9])(?::([0-5][0-9]))?")
 _DAY_OF_YEAR: Final = re.compile(r"([0-9]{2})-([0-9]{2})")
 _YEAR_WITHOUT_LEAP_DAY: Final = 2001
 
+MAX_DURATION_SECONDS: Final = 366 * 24 * 60 * 60
+"""The longest duration a setting can store: 366 days, in seconds.
+
+Generous on purpose: no setting of a shutter needs more than a year. The bound
+keeps a number that somebody stored from being too large for a duration.
+"""
+
 
 def as_time(value: JsonValue) -> time:
     """Read a setting of the kind ``time``: a local time of day.
@@ -960,10 +1079,12 @@ def as_time(value: JsonValue) -> time:
 
 
 def as_duration(value: JsonValue) -> timedelta:
-    """Read a setting of the kind ``duration``: whole seconds, zero or more."""
+    """Read a setting of the kind ``duration``: whole seconds, 0 to 366 days."""
     seconds = as_int(value)
-    if seconds < 0:
-        raise ValueError("expected a number of seconds that is not negative")
+    if not 0 <= seconds <= MAX_DURATION_SECONDS:
+        raise ValueError(
+            f"expected a number of seconds from 0 to {MAX_DURATION_SECONDS} (366 days)"
+        )
     return timedelta(seconds=seconds)
 
 
@@ -987,10 +1108,20 @@ def as_day_of_year(value: JsonValue) -> tuple[int, int]:
 
 
 def _as_number(value: JsonValue) -> float:
-    """Return the number; a boolean is not a number."""
+    """Return the finite number; a boolean is not a number.
+
+    JSON carries whole numbers of any size and, from some writers, infinity
+    and "not a number"; none of them is a temperature.
+    """
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise ValueError("expected a number")  # noqa: TRY004
-    return float(value)
+    try:
+        number = float(value)
+    except OverflowError:
+        number = math.inf
+    if not math.isfinite(number):
+        raise ValueError("expected a finite number")
+    return number
 
 
 def _as_temperature_tier(value: JsonValue) -> TemperatureTier:
@@ -1103,7 +1234,7 @@ def resolve_window(
     """
     try:
         identity = WindowConfig(window_id=window_id, members=tuple(members))
-    except (TypeError, ValueError) as err:
+    except _REFUSALS as err:
         key = (
             "window_id"
             if not isinstance(window_id, str) or not window_id

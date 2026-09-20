@@ -1,5 +1,6 @@
 """Window configuration as the core sees it: members and their capabilities."""
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import timedelta
 from enum import StrEnum, unique
@@ -241,6 +242,28 @@ class TemperatureTier:
             raise ValueError(
                 "the hysteresis of a temperature tier must not be negative"
             )
+
+
+class SettingsCombinationError(ValueError):
+    """A rule that spans several settings refuses their combination.
+
+    Each of the values may be fine on its own. **Contract for every block that
+    adds such a rule to** :class:`WindowConfig`: raise this error, and name in
+    ``keys`` exactly the fields the rule concerns. The inheritance resolver
+    then treats those keys, and no others, as faulty, each by the fault
+    behavior of its function. A rule that raises anything else for a
+    combination cannot be attributed, and the resolver has to pause every
+    pausable function of the window instead.
+    """
+
+    def __init__(self, message: str, keys: Iterable[str]) -> None:
+        """Keep the message and the keys the rule concerns."""
+        super().__init__(message)
+        self.keys: tuple[str, ...] = tuple(keys)
+        if not self.keys:
+            raise ValueError("a rule over several settings names the keys it concerns")
+        for key in self.keys:
+            require_identifier(key, "a key of a rule over several settings")
 
 
 @dataclass(frozen=True, slots=True)
