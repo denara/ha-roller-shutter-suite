@@ -20,12 +20,16 @@ Python file, or one of its files cannot be read or parsed. Exit status 1 means
 forbidden imports; 0 means that the modules were really parsed, and the last
 line says how many.
 
+Anything unforeseen inside the script ends with status 2 as well, with the type
+of the error only, never its text or a traceback, which may name a local path.
+
 Run it from anywhere: ``python scripts/check_core_purity.py``. It needs only
 the standard library.
 """
 
 import ast
 import sys
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -184,5 +188,21 @@ def main(root: Path = REPOSITORY_ROOT) -> int:
     return 0
 
 
+def run(entry: Callable[[], int]) -> int:
+    """Run ``entry``; an error nobody foresaw is a failure too, never a pass.
+
+    Only the type of the error is printed. Its text and a traceback may name
+    local paths, and the output of this script may be pasted in public.
+    """
+    try:
+        return entry()
+    except Exception as error:  # noqa: BLE001 - the net for every unforeseen error
+        sys.stdout.write(
+            "core purity: CANNOT CHECK, so this is a failure: internal error in "
+            f"check_core_purity.py ({type(error).__name__})\n"
+        )
+        return EXIT_CANNOT_CHECK
+
+
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(run(main))

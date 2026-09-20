@@ -24,6 +24,9 @@ or holds no Python file; a Python file cannot be read or parsed. Exit status 1
 means references to deprecated names; 0 means that the files were really
 parsed, and the last line says how many files and how many names.
 
+Anything unforeseen inside the script ends with status 2 as well, with the type
+of the error only, never its text or a traceback, which may name a local path.
+
 Run it from anywhere: ``python scripts/check_deprecated_names.py``. It needs
 only the standard library.
 """
@@ -31,6 +34,7 @@ only the standard library.
 import ast
 import sys
 import tomllib
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -292,5 +296,21 @@ def main(root: Path = REPOSITORY_ROOT, list_file: Path = LIST_FILE) -> int:
     return 0
 
 
+def run(entry: Callable[[], int]) -> int:
+    """Run ``entry``; an error nobody foresaw is a failure too, never a pass.
+
+    Only the type of the error is printed. Its text and a traceback may name
+    local paths, and the output of this script may be pasted in public.
+    """
+    try:
+        return entry()
+    except Exception as error:  # noqa: BLE001 - the net for every unforeseen error
+        sys.stdout.write(
+            "deprecated names: CANNOT CHECK, so this is a failure: internal error in "
+            f"check_deprecated_names.py ({type(error).__name__})\n"
+        )
+        return EXIT_CANNOT_CHECK
+
+
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(run(main))

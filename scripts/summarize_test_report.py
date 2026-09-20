@@ -21,7 +21,8 @@ like "nothing to report". "Could not summarize" means here, and ends with exit
 status 2: no report is named on the command line; the report is missing (pytest
 did not get as far as writing it), unreadable or not XML; or it contains not a
 single test. In each case the summary says so as well, so the page of the run
-is never empty. It needs only the standard library.
+is never empty. Anything unforeseen inside the script ends with status 2 as
+well, with the type of the error only, never its text. It needs only the standard library.
 """
 
 import re
@@ -29,6 +30,7 @@ import sys
 
 # The report is written by pytest in the same job, so it is trusted input.
 import xml.etree.ElementTree as ET
+from collections.abc import Callable
 from pathlib import Path
 
 MAX_LINES_PER_FAILURE = 12
@@ -114,5 +116,21 @@ def main(arguments: list[str]) -> int:
     return 0
 
 
+def run(entry: Callable[[], int]) -> int:
+    """Run ``entry``; an error nobody foresaw is a failure too, never a pass.
+
+    Only the type of the error is printed. Its text and a traceback may name
+    local paths, and the output of this script may be pasted in public.
+    """
+    try:
+        return entry()
+    except Exception as error:  # noqa: BLE001 - the net for every unforeseen error
+        sys.stdout.write(
+            "test summary: NO SUMMARY IS POSSIBLE: internal error in "
+            f"summarize_test_report.py ({type(error).__name__})\n"
+        )
+        return EXIT_CANNOT_SUMMARIZE
+
+
 if __name__ == "__main__":
-    sys.exit(main(sys.argv))
+    sys.exit(run(lambda: main(sys.argv)))

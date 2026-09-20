@@ -76,8 +76,11 @@ def test_missing_or_broken_file_cannot_be_checked(
     assert main(tmp_path) == EXIT_CANNOT_CHECK
     (tmp_path / PROJECT_FILE).write_text("= =", encoding="utf-8")
     assert main(tmp_path) == EXIT_CANNOT_CHECK
+    (tmp_path / PROJECT_FILE).write_text("project = 1", encoding="utf-8")
+    (tmp_path / MANIFEST_FILE).write_text("{}", encoding="utf-8")
+    assert main(tmp_path) == EXIT_CANNOT_CHECK
 
-    assert capsys.readouterr().out.count("CANNOT CHECK") == 5  # noqa: PLR2004 - cases above
+    assert capsys.readouterr().out.count("CANNOT CHECK") == 6  # noqa: PLR2004 - cases above
 
 
 def test_different_versions_end_with_the_status_of_a_finding(tmp_path: Path) -> None:

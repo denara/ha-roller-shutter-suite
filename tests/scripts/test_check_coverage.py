@@ -178,8 +178,11 @@ def test_report_that_is_missing_or_unusable_cannot_be_checked(
         ),
         encoding="utf-8",
     )
+    no_meta = tmp_path / "no_meta.json"
+    no_meta.write_text(json.dumps({"meta": [], **_report(covered)}), encoding="utf-8")
     cases = [
         ["check_coverage.py"],
+        ["check_coverage.py", str(no_meta)],
         ["check_coverage.py", str(tmp_path / "none.json")],
         ["check_coverage.py", str(not_json)],
         ["check_coverage.py", str(incomplete)],

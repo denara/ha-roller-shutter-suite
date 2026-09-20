@@ -6,6 +6,7 @@ import pytest
 
 from scripts.check_foreign_warnings import (
     EXIT_CANNOT_CHECK,
+    EXIT_FINDINGS,
     CannotCheckError,
     EntryError,
     load_entries,
@@ -177,3 +178,16 @@ def test_pass_says_how_much_was_compared(
 
     assert main(tmp_path) == 0
     assert "0 entries, each compared with 7 module names" in capsys.readouterr().out
+
+
+def test_list_that_is_not_toml_cannot_be_checked_but_a_bad_entry_is_a_finding(
+    tmp_path: Path,
+) -> None:
+    """The same statuses as in the other guards: 2 for unreadable, 1 for content."""
+    _tree(tmp_path, with_list=True)
+    list_file = tmp_path / "tests" / "foreign_warnings.toml"
+
+    list_file.write_text("= =", encoding="utf-8")
+    assert main(tmp_path) == EXIT_CANNOT_CHECK
+    list_file.write_text("[[warning]]\nmodule = 'x'\n", encoding="utf-8")
+    assert main(tmp_path) == EXIT_FINDINGS

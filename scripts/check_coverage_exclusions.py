@@ -29,6 +29,9 @@ tokens; a competing configuration file exists but cannot be read. Exit status 1
 means an unjustified pragma or a changed configuration; every run says how many
 files were searched.
 
+Anything unforeseen inside the script ends with status 2 as well, with the type
+of the error only, never its text or a traceback, which may name a local path.
+
 Run it from anywhere: ``python scripts/check_coverage_exclusions.py``. It needs
 only the standard library.
 """
@@ -38,6 +41,7 @@ import re
 import sys
 import tokenize
 import tomllib
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -82,6 +86,19 @@ def _read(file: Path, relative: str) -> str:
         raise CannotCheckError(
             f"{relative} cannot be read ({type(error).__name__})"
         ) from error
+
+
+def _table(content: dict[str, Any], *keys: str) -> dict[str, Any]:
+    """Return the nested table ``keys`` name, empty if absent; refuse a non-table."""
+    table = content
+    for key in keys:
+        table = table.get(key, {})
+        if not isinstance(table, dict):
+            raise CannotCheckError(
+                f"'{key}' in {PROJECT_FILE} is not a table, so the file cannot be read "
+                "the way this script expects"
+            )
+    return table
 
 
 @dataclass(frozen=True)
@@ -147,10 +164,9 @@ def configuration_problems(pyproject: str) -> list[str]:
         content = tomllib.loads(pyproject)
     except tomllib.TOMLDecodeError as error:
         raise CannotCheckError(f"{PROJECT_FILE} is not valid TOML: {error}") from error
-    coverage = content.get("tool", {}).get("coverage", {})
     problems: list[str] = []
     for (section, key), expected in EXPECTED.items():
-        actual = coverage.get(section, {}).get(key, _ABSENT)
+        actual = _table(content, "tool", "coverage", section).get(key, _ABSENT)
         if actual != expected:
             wanted = "absent" if expected is _ABSENT else repr(expected)
             problems.append(
@@ -206,5 +222,21 @@ def main(root: Path = REPOSITORY_ROOT) -> int:
     return 0
 
 
+def run(entry: Callable[[], int]) -> int:
+    """Run ``entry``; an error nobody foresaw is a failure too, never a pass.
+
+    Only the type of the error is printed. Its text and a traceback may name
+    local paths, and the output of this script may be pasted in public.
+    """
+    try:
+        return entry()
+    except Exception as error:  # noqa: BLE001 - the net for every unforeseen error
+        sys.stdout.write(
+            "coverage exclusions: CANNOT CHECK, so this is a failure: internal error in "
+            f"check_coverage_exclusions.py ({type(error).__name__})\n"
+        )
+        return EXIT_CANNOT_CHECK
+
+
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(run(main))

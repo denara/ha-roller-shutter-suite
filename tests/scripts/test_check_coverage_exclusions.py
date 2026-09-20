@@ -176,3 +176,12 @@ def test_configuration_that_is_not_toml_cannot_be_checked() -> None:
     """A broken ``pyproject.toml`` is not "no deviation"."""
     with pytest.raises(CannotCheckError, match="not valid TOML"):
         configuration_problems("= =")
+
+
+@pytest.mark.parametrize(
+    "text", ["tool = 1", "[tool]\ncoverage = 'x'", "[tool.coverage]\nrun = 1"]
+)
+def test_configuration_that_is_not_made_of_tables_cannot_be_checked(text: str) -> None:
+    """A value where a table belongs ends as "could not check", not as a traceback."""
+    with pytest.raises(CannotCheckError, match="is not a table"):
+        configuration_problems(text)

@@ -40,6 +40,9 @@ workflow folder holds no workflow; a scanned folder holds no Python file; a
 Python file cannot be read or parsed. Exit status 1 means findings; 0 means
 that the files were really read, and the last line says how many of each kind.
 
+Anything unforeseen inside the script ends with status 2 as well, with the type
+of the error only, never its text or a traceback, which may name a local path.
+
 Run it from anywhere: ``python scripts/check_log_guard.py``. It needs only the
 standard library.
 """
@@ -49,8 +52,10 @@ import configparser
 import shlex
 import sys
 import tomllib
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 SCANNED_FOLDERS = ("custom_components", "tests")
@@ -101,6 +106,19 @@ EXIT_CANNOT_CHECK = 2
 
 class CannotCheckError(RuntimeError):
     """The guard could not do its job. That is a failure, never a pass."""
+
+
+def _table(content: dict[str, Any], *keys: str) -> dict[str, Any]:
+    """Return the nested table ``keys`` name, empty if absent; refuse a non-table."""
+    table = content
+    for key in keys:
+        table = table.get(key, {})
+        if not isinstance(table, dict):
+            raise CannotCheckError(
+                f"'{key}' in {PROJECT_FILE} is not a table, so the file cannot be read "
+                "the way this script expects"
+            )
+    return table
 
 
 @dataclass(frozen=True)
@@ -284,7 +302,7 @@ def check_pyproject(text: str, path: str) -> list[Finding]:
         content = tomllib.loads(text)
     except tomllib.TOMLDecodeError as error:
         raise CannotCheckError(f"{path} is not valid TOML: {error}") from error
-    options = content.get("tool", {}).get("pytest", {}).get("ini_options", {})
+    options = _table(content, "tool", "pytest", "ini_options")
     addopts = options.get("addopts", [])
     if isinstance(addopts, str):
         addopts = shlex.split(addopts)
@@ -403,5 +421,21 @@ def main(root: Path = REPOSITORY_ROOT) -> int:
     return 0
 
 
+def run(entry: Callable[[], int]) -> int:
+    """Run ``entry``; an error nobody foresaw is a failure too, never a pass.
+
+    Only the type of the error is printed. Its text and a traceback may name
+    local paths, and the output of this script may be pasted in public.
+    """
+    try:
+        return entry()
+    except Exception as error:  # noqa: BLE001 - the net for every unforeseen error
+        sys.stdout.write(
+            "log guard: CANNOT CHECK, so this is a failure: internal error in "
+            f"check_log_guard.py ({type(error).__name__})\n"
+        )
+        return EXIT_CANNOT_CHECK
+
+
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(run(main))

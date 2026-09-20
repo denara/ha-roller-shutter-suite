@@ -301,6 +301,8 @@ def test_incomplete_tree_cannot_be_checked(
     ("name", "content"),
     [
         ("pyproject.toml", "= ="),
+        ("pyproject.toml", "tool = 1"),
+        ("pyproject.toml", "[tool]\npytest = 'x'"),
         ("tests/ha/pytest.ini", "no section\n"),
         ("tests/ha/test_broken.py", "def broken(:\n"),
     ],

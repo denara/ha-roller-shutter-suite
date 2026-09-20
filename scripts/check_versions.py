@@ -11,6 +11,9 @@ TOML and as a JSON object). A file that states no version, and versions that
 differ, end with exit status 1. With 0 the last line names the version that
 both files state.
 
+Anything unforeseen inside the script ends with status 2 as well, with the type
+of the error only, never its text or a traceback, which may name a local path.
+
 Run it from anywhere: ``python scripts/check_versions.py``. It needs only the
 standard library.
 """
@@ -18,7 +21,9 @@ standard library.
 import json
 import sys
 import tomllib
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 PROJECT_FILE = "pyproject.toml"
@@ -41,6 +46,19 @@ def _read(root: Path, name: str) -> str:
         ) from error
 
 
+def _table(content: dict[str, Any], *keys: str) -> dict[str, Any]:
+    """Return the nested table ``keys`` name, empty if absent; refuse a non-table."""
+    table = content
+    for key in keys:
+        table = table.get(key, {})
+        if not isinstance(table, dict):
+            raise CannotCheckError(
+                f"'{key}' in {PROJECT_FILE} is not a table, so the file cannot be read "
+                "the way this script expects"
+            )
+    return table
+
+
 def read_versions(root: Path) -> dict[str, str | None]:
     """Return the version each file states, or ``None`` where it is missing."""
     try:
@@ -54,7 +72,7 @@ def read_versions(root: Path) -> dict[str, str | None]:
     if not isinstance(manifest, dict):
         raise CannotCheckError(f"{MANIFEST_FILE} is not a JSON object")
     return {
-        PROJECT_FILE: project.get("project", {}).get("version"),
+        PROJECT_FILE: _table(project, "project").get("version"),
         MANIFEST_FILE: manifest.get("version"),
     }
 
@@ -86,5 +104,21 @@ def main(root: Path = REPOSITORY_ROOT) -> int:
     return 0
 
 
+def run(entry: Callable[[], int]) -> int:
+    """Run ``entry``; an error nobody foresaw is a failure too, never a pass.
+
+    Only the type of the error is printed. Its text and a traceback may name
+    local paths, and the output of this script may be pasted in public.
+    """
+    try:
+        return entry()
+    except Exception as error:  # noqa: BLE001 - the net for every unforeseen error
+        sys.stdout.write(
+            "versions: CANNOT CHECK, so this is a failure: internal error in "
+            f"check_versions.py ({type(error).__name__})\n"
+        )
+        return EXIT_CANNOT_CHECK
+
+
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(run(main))

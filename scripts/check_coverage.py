@@ -34,12 +34,15 @@ was written without branch measurement (branches would then count as fully
 covered); the report contains no file of the integration; the integration has
 no Python file where it is expected; a module of the integration cannot be
 read or parsed. Exit status 1 means a value below a threshold; every run
-prints how many files each group contains.
+prints how many files each group contains. Anything unforeseen inside the
+script ends with status 2 as well, with the type of the error only, never its
+text or a traceback, which may name a local path.
 """
 
 import ast
 import json
 import sys
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 
@@ -167,7 +170,12 @@ def load_report(path: Path) -> Report:
     files = report.get("files") if isinstance(report, dict) else None
     if not isinstance(files, dict):
         raise CannotCheckError("the file is not a JSON report of coverage.py")
-    if report.get("meta", {}).get("branch_coverage") is not True:
+    meta = report.get("meta")
+    if not isinstance(meta, dict):
+        raise CannotCheckError(
+            "the report has no 'meta' object, so it is not a report of coverage.py"
+        )
+    if meta.get("branch_coverage") is not True:
         raise CannotCheckError(
             "the report was written without branch measurement, so branches "
             "cannot be judged. The coverage configuration needs 'branch = true'"
@@ -244,5 +252,21 @@ def main(arguments: list[str], root: Path = REPOSITORY_ROOT) -> int:
     return EXIT_FINDINGS if found else 0
 
 
+def run(entry: Callable[[], int]) -> int:
+    """Run ``entry``; an error nobody foresaw is a failure too, never a pass.
+
+    Only the type of the error is printed. Its text and a traceback may name
+    local paths, and the output of this script may be pasted in public.
+    """
+    try:
+        return entry()
+    except Exception as error:  # noqa: BLE001 - the net for every unforeseen error
+        sys.stdout.write(
+            "coverage: CANNOT CHECK, so this is a failure: internal error in "
+            f"check_coverage.py ({type(error).__name__})\n"
+        )
+        return EXIT_CANNOT_CHECK
+
+
 if __name__ == "__main__":
-    sys.exit(main(sys.argv))
+    sys.exit(run(lambda: main(sys.argv)))

@@ -18,12 +18,17 @@ Every entry needs exactly four fields:
 - ``upstream``: an ``https`` link to the upstream issue or change.
 
 **The guard fails closed.** "Could not check" means here, and ends with exit
-status 2: the list file is missing or unreadable (an empty list is a file
-without entries, not a missing file), or one of the folders of this repository
+status 2: the list file is missing, unreadable or not valid TOML (an empty
+list is a file without entries, not a missing file), or one of the folders of this repository
 holds no Python file, so that "must not match this repository" would compare
-with nothing. An invalid file or entry ends with exit status 1. With 0 the last
+with nothing. A file that is TOML but holds an invalid entry, or anything but
+``[[warning]]`` tables, ends with exit status 1: that is a finding about its
+content. With 0 the last
 line says how many entries were checked against how many module names; zero
 entries is the normal state.
+
+Anything unforeseen inside the script ends with status 2 as well, with the type
+of the error only, never its text or a traceback, which may name a local path.
 
 Run it from anywhere: ``python scripts/check_foreign_warnings.py``. It needs
 only the standard library.
@@ -32,6 +37,7 @@ only the standard library.
 import re
 import sys
 import tomllib
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -147,7 +153,7 @@ def parse_entries(text: str, own_modules: list[str]) -> list[ForeignWarning]:
     try:
         content = tomllib.loads(text)
     except tomllib.TOMLDecodeError as error:
-        raise EntryError(f"not valid TOML: {error}") from error
+        raise CannotCheckError(f"not valid TOML: {error}") from error
     if set(content) - {"warning"}:
         raise EntryError("only [[warning]] tables are allowed")
     raw_entries = content.get("warning", [])
@@ -196,5 +202,21 @@ def main(root: Path = REPOSITORY_ROOT) -> int:
     return 0
 
 
+def run(entry: Callable[[], int]) -> int:
+    """Run ``entry``; an error nobody foresaw is a failure too, never a pass.
+
+    Only the type of the error is printed. Its text and a traceback may name
+    local paths, and the output of this script may be pasted in public.
+    """
+    try:
+        return entry()
+    except Exception as error:  # noqa: BLE001 - the net for every unforeseen error
+        sys.stdout.write(
+            "foreign warnings: CANNOT CHECK, so this is a failure: internal error in "
+            f"check_foreign_warnings.py ({type(error).__name__})\n"
+        )
+        return EXIT_CANNOT_CHECK
+
+
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(run(main))
