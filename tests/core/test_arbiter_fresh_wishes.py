@@ -13,6 +13,8 @@ import itertools
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 
+import pytest
+
 from custom_components.roller_shutter_suite.core.model import (
     AnySourceValue,
     Decision,
@@ -205,6 +207,34 @@ def test_a_trigger_at_the_moment_of_the_last_movement_is_not_fresh() -> None:
     tracking = house.recompute(_minutes(1), _shading(50, began=fired))
 
     assert tracking.gate == _held_until(_minutes(10))
+
+
+@pytest.mark.parametrize(
+    ("moved_seconds_after_the_boundary", "fresh"),
+    [(0, False), (4, False), (-1, True), (-3600, True)],
+)
+def test_a_restart_after_a_boundary_whose_movement_already_happened_does_not_move_again(
+    moved_seconds_after_the_boundary: int, fresh: bool
+) -> None:
+    """The schedule reports the instant of the boundary, not of its first evaluation.
+
+    Fresh means strictly after the last own comfort movement; equal instants
+    are not fresh. The window was moved by hand to 60 in the meantime, so the
+    evening wish is not simply "reached".
+    """
+    boundary = _minutes(-2)
+    house = _House(
+        position=60,
+        moved_at=boundary + timedelta(seconds=moved_seconds_after_the_boundary),
+    )
+
+    decision = house.recompute(_minutes(0), night(part_of_day_since=since(boundary)))
+
+    assert decision.gate is not None
+    if fresh:
+        assert decision.gate == GateOutcome.send()
+    else:
+        assert decision.gate.reason is ReasonCode.MIN_INTERVAL
 
 
 def test_in_dry_run_freshness_is_judged_by_the_simulated_clock() -> None:
