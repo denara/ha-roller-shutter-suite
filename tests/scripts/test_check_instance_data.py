@@ -145,7 +145,9 @@ def test_tree_accounts_for_every_listed_file(tmp_path: Path) -> None:
     assert report.absent == ["gone.md"]
     assert report.links == []
     assert report.nested == []
+    assert report.name_findings == []
     assert report.summary() == (
+        "judged 4 path text(s) (names of files and folders); "
         "checked 1 file(s), 0 of them symbolic link(s) judged by their target "
         "text; skipped: 1 binary, 1 generated, 0 folder(s) of nested checkouts, "
         "1 deleted but still listed by git"
@@ -348,6 +350,126 @@ def test_unforeseen_error_is_a_failure_without_its_text(
     assert run(lambda: 0) == 0
 
 
+# Made-up names that look private; put together at runtime like every example here.
+PRIVATE_ADDRESS = ".".join(["192", "168", "9", "9"])
+PRIVATE_ENTITY = "cover." + "shutter_" + "0012345678"
+
+
+def _run_on(
+    root: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> tuple[int, str]:
+    """Run ``main`` on a small repository, as the command line would."""
+    monkeypatch.setattr("scripts.check_instance_data.REPOSITORY_ROOT", root)
+    # The small repository does not contain the guard; its own file stands in.
+    monkeypatch.setattr(
+        "scripts.check_instance_data.check_checkout",
+        lambda root: check_checkout(root, own_path="tracked.md"),
+    )
+    status = main()
+    return status, capsys.readouterr().out
+
+
+def test_harmless_names_pass_and_are_counted(
+    checkout: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The pass line says that path texts were judged, and how many."""
+    allowed = checkout / ("homeassistant" + ".local") / "address-192.0.2.7.md"
+    allowed.parent.mkdir()
+    allowed.write_text("documentation values in a name\n", encoding="utf-8")
+
+    status, output = _run_on(checkout, monkeypatch, capsys)
+
+    assert status == 0, output
+    assert (
+        "judged 4 path text(s) (names of files and folders); checked 4 file(s)"
+        in output
+    )
+
+
+@pytest.mark.parametrize("private", [PRIVATE_ADDRESS, PRIVATE_ENTITY])
+def test_new_file_with_a_private_looking_name_is_found_without_naming_it(
+    checkout: Path,
+    private: str,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The name is the private text here, so the output calls the entry by position."""
+    name = f"notes-{private}.md"
+    (checkout / name).write_text(PRIVATE_ADDRESS, encoding="utf-8")
+
+    status, output = _run_on(checkout, monkeypatch, capsys)
+
+    assert status == EXIT_FINDINGS
+    assert private not in output
+    assert name not in output
+    assert PRIVATE_ADDRESS not in output
+    position = list_files(checkout).index(name) + 1
+    assert f"entry {position} of the list of git: its name looks like: " in output
+    assert f"line {position} of the output of 'git ls-files" in output
+    # The finding in the content of that file does not give the name away either.
+    assert f"entry {position} of the list of git:1: looks like: private IPv4" in output
+    assert "1 suspicious line(s) and 1 suspicious name(s)" in output
+
+
+def test_private_looking_folder_name_is_found_for_a_harmless_file(
+    checkout: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The whole relative path is judged, so the names of folders count."""
+    folder = checkout / f"host-{PRIVATE_ADDRESS}"
+    folder.mkdir()
+    (folder / "readme.md").write_text("harmless\n", encoding="utf-8")
+
+    status, output = _run_on(checkout, monkeypatch, capsys)
+
+    assert status == EXIT_FINDINGS
+    assert PRIVATE_ADDRESS not in output
+    assert "readme.md" not in output
+    assert "0 suspicious line(s) and 1 suspicious name(s)" in output
+
+
+def test_name_is_judged_where_the_content_is_skipped(tmp_path: Path) -> None:
+    """Binary, nested and deleted entries have a published name too.
+
+    The generated lock file is skipped by its exact name in the root only; the
+    same name inside a private-looking folder is judged like any other entry.
+    """
+    binary = f"icon-{PRIVATE_ADDRESS}.png"
+    (tmp_path / binary).write_bytes(b"\x89PNG\x00\xff\xfe")
+    nested = f"module-{PRIVATE_ADDRESS}"
+    (tmp_path / nested).mkdir()
+    deleted = f"gone-{PRIVATE_ADDRESS}.md"
+    generated = f"{PRIVATE_ENTITY}/uv.lock"
+    (tmp_path / "harmless.md").write_text("harmless\n", encoding="utf-8")
+    real_link = _link(tmp_path / f"link-{PRIVATE_ADDRESS}", "harmless.md")
+    listed = [binary, f"{nested}/", deleted, generated, "harmless.md"]
+    listed.append(f"link-{PRIVATE_ADDRESS}")
+
+    report = check_tree(tmp_path, listed)
+
+    assert [finding.entry for finding in report.name_findings] == [4, 3, 1, 6, 2]
+    assert report.names_judged == len(listed)
+    assert report.binary == [binary]
+    assert report.nested == [nested]
+    assert report.absent == [generated, deleted]
+    assert len(report.links) == (1 if real_link else 0)
+    assert report.findings == []
+    assert all(PRIVATE_ADDRESS not in str(f) for f in report.name_findings)
+    assert all(PRIVATE_ENTITY not in str(f) for f in report.name_findings)
+
+
+def test_ignored_file_with_a_private_looking_name_is_not_listed(
+    checkout: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """What git ignores is never published, whatever it is called."""
+    (checkout / "private" / f"{PRIVATE_ADDRESS}.md").write_text("x\n", "utf-8")
+    (checkout / f"{PRIVATE_ADDRESS}.secret").write_text("x\n", encoding="utf-8")
+
+    status, output = _run_on(checkout, monkeypatch, capsys)
+
+    assert status == 0, output
+    assert "judged 3 path text(s)" in output
+
+
 def test_no_git_at_all_cannot_list(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -435,6 +557,10 @@ def test_this_repository_passes(capsys: pytest.CaptureFixture[str]) -> None:
 
     lines = capsys.readouterr().out.splitlines()
     assert status == 0, lines
-    summary = re.fullmatch(r"instance data: ok; checked (\d+) file\(s\), .*", lines[-1])
+    summary = re.fullmatch(
+        r"instance data: ok; judged (\d+) path text\(s\) .*; checked (\d+) file\(s\), .*",
+        lines[-1],
+    )
     assert summary is not None
-    assert int(summary[1]) >= MINIMUM_FILES_OF_THIS_REPOSITORY
+    assert int(summary[2]) >= MINIMUM_FILES_OF_THIS_REPOSITORY
+    assert int(summary[1]) >= int(summary[2]), "skipped entries have a name too"

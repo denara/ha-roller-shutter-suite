@@ -16,6 +16,17 @@ The check is a net with holes. It cannot know that a harmless looking room
 name is real. It complements the rule in ``tasks/README.md``, it does not
 replace reading what you publish.
 
+**Names are judged too.** Git publishes the name of a file or folder exactly
+like its content, so the whole relative path of every listed entry is judged
+with the same patterns and the same allowed documentation values (once as it
+is and once without file extensions, so that an address in front of ``.md`` is
+seen), also for
+entries whose content is skipped (binary, generated, nested checkouts, deleted
+files). Here the name itself is the private text, so such an entry is never
+named in the output, neither in the finding about its name nor in a finding
+about its content: it is called by its position in the list of git, and the
+message says how to see that list locally.
+
 **The guard fails closed.** A guard that could not check never looks like a
 pass. "Could not check" means here, and ends with exit status 2:
 
@@ -47,7 +58,8 @@ exactly one of these groups, and the last line of a run counts each group:
   deleted and whose deletion is not committed yet; there is nothing to publish.
 
 Exit status 1 means findings, 0 means that the files were really read; the
-last line then says how many were checked and how many were skipped and why.
+last line then says how many path texts were judged, how many files were
+checked and how many were skipped and why.
 
 **How the files are listed.** Only git knows faithfully what is ignored, so
 the list always comes from ``git ls-files --cached --others
@@ -90,9 +102,12 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 OWN_PATH = "scripts/check_instance_data.py"
 EXIT_FINDINGS = 1
 EXIT_CANNOT_CHECK = 2
+LIST_COMMAND_IN_WORDS = "git ls-files --cached --others --exclude-standard"
 _LIST_ARGUMENTS = ("ls-files", "-z", "--cached", "--others", "--exclude-standard")
 _GIT_TIMEOUT_SECONDS = 120
 _GITDIR_PREFIX = "gitdir:"
+# One or more extensions at the end of a part of a path: ``.md``, ``.tar.gz``.
+_EXTENSION = re.compile(r"(?:\.[A-Za-z][A-Za-z0-9]*)+(?=/|$)")
 # Not handed to git: they could make it list another repository.
 _GIT_VARIABLE_PREFIX = "GIT_"
 
@@ -210,14 +225,55 @@ def _is_allowed(kind: str, matched: str) -> bool:
     ].endswith(_ALLOWED_MAIL_DOMAINS)
 
 
+def _kinds(line: str) -> list[str]:
+    """Return the kinds of pattern that one line of text looks like."""
+    return [
+        kind
+        for kind, pattern in PATTERNS
+        if any(not _is_allowed(kind, m.group()) for m in pattern.finditer(line))
+    ]
+
+
 def check_text(text: str, path: str) -> list[Finding]:
     """Check the content of one file."""
-    findings: list[Finding] = []
-    for number, line in enumerate(text.splitlines(), start=1):
-        for kind, pattern in PATTERNS:
-            if any(not _is_allowed(kind, m.group()) for m in pattern.finditer(line)):
-                findings.append(Finding(path, number, kind))
-    return findings
+    return [
+        Finding(path, number, kind)
+        for number, line in enumerate(text.splitlines(), start=1)
+        for kind in _kinds(line)
+    ]
+
+
+@dataclass(frozen=True)
+class NameFinding:
+    """A listed entry whose name looks private. The name is deliberately not kept."""
+
+    entry: int
+    kind: str
+
+    def __str__(self) -> str:
+        """Render without the name: position in the list of git, and the kind."""
+        return (
+            f"{entry_label(self.entry)}: its name looks like: {self.kind}. The name "
+            f"is not printed here; it is line {self.entry} of the output of "
+            f"'{LIST_COMMAND_IN_WORDS}'"
+        )
+
+
+def entry_label(entry: int) -> str:
+    """Return the neutral label of an entry whose name must not be printed."""
+    return f"entry {entry} of the list of git"
+
+
+def check_name(listed: str, entry: int) -> list[NameFinding]:
+    """Judge the path text of one entry, exactly as git reports it.
+
+    The patterns end an address or a host name where a dot follows, which is
+    right for prose and wrong for ``<address>.md``. The path is therefore
+    judged a second time with the file extensions taken off every part of it.
+    """
+    without_extensions = _EXTENSION.sub(" ", listed)
+    kinds = [*_kinds(listed), *_kinds(without_extensions)]
+    return [NameFinding(entry, kind) for kind in dict.fromkeys(kinds)]
 
 
 class CannotCheckError(RuntimeError):
@@ -229,6 +285,9 @@ class Report:
     """What a run looked at, and what it found."""
 
     findings: list[Finding] = field(default_factory=list)
+    name_findings: list[NameFinding] = field(default_factory=list)
+    # Every entry of the list, whatever became of its content.
+    names_judged: int = 0
     checked: list[str] = field(default_factory=list)
     # Symbolic links, judged by the text of their target; part of ``checked``.
     links: list[str] = field(default_factory=list)
@@ -242,6 +301,7 @@ class Report:
     def summary(self) -> str:
         """Say how much was checked and what was skipped, and why."""
         return (
+            f"judged {self.names_judged} path text(s) (names of files and folders); "
             f"checked {len(self.checked)} file(s), {len(self.links)} of them "
             f"symbolic link(s) judged by their target text; skipped: "
             f"{len(self.binary)} binary, {len(self.generated)} generated, "
@@ -390,15 +450,21 @@ def _link_text(file: Path, relative: str) -> str:
 def check_tree(root: Path, paths: list[str]) -> Report:
     """Check the given files below ``root`` and account for every one of them."""
     report = Report()
-    for listed in sorted(paths):
+    # The position counts from 1 in the order of git, so that it can be looked up.
+    for entry, listed in sorted(enumerate(paths, start=1), key=lambda item: item[1]):
         # Git marks an untracked nested checkout with a slash at the end.
         relative = listed.rstrip("/")
         file = root / relative
+        named = check_name(listed, entry)
+        report.name_findings += named
+        report.names_judged += 1
+        # What is printed about this entry: never a name that looks private.
+        shown = entry_label(entry) if named else relative
         if file.is_symlink():
             # First of all: a link is never followed, whatever it points to.
             report.links.append(relative)
             report.checked.append(relative)
-            report.findings += check_text(_link_text(file, relative), relative)
+            report.findings += check_text(_link_text(file, shown), shown)
         elif relative in SKIPPED_FILES:
             report.generated.append(relative)
         elif file.is_dir():
@@ -407,14 +473,14 @@ def check_tree(root: Path, paths: list[str]) -> Report:
             report.absent.append(relative)
         elif not file.is_file():
             raise CannotCheckError(
-                f"{relative} is neither a file, a link nor a folder, so it cannot "
+                f"{shown} is neither a file, a link nor a folder, so it cannot "
                 "be judged; remove it or have git ignore it"
             )
-        elif (text := _read_text(file, relative)) is None:
+        elif (text := _read_text(file, shown)) is None:
             report.binary.append(relative)
         else:
             report.checked.append(relative)
-            report.findings += check_text(text, relative)
+            report.findings += check_text(text, shown)
     return report
 
 
@@ -442,12 +508,12 @@ def main() -> int:
             f"instance data: CANNOT CHECK, so this is a failure: {error}\n"
         )
         return EXIT_CANNOT_CHECK
-    for finding in report.findings:
+    for finding in (*report.name_findings, *report.findings):
         sys.stdout.write(f"{finding}\n")
-    if report.findings:
+    if report.findings or report.name_findings:
         sys.stdout.write(
-            f"instance data: {len(report.findings)} suspicious line(s); "
-            f"{report.summary()}\n"
+            f"instance data: {len(report.findings)} suspicious line(s) and "
+            f"{len(report.name_findings)} suspicious name(s); {report.summary()}\n"
         )
         return EXIT_FINDINGS
     sys.stdout.write(f"instance data: ok; {report.summary()}\n")
