@@ -5,6 +5,15 @@ clock: the same window configuration and the same world snapshot always yield
 the same decision. It knows no feature. Layers, constraints and gate rules are
 registered; their order is the order of the model's enumerations, which is the
 order of the design specification.
+
+**The safety net.** No exception that a registered function raises leaves
+``recompute``, and none loosens a restriction or stops a fire or a protection
+decision. A layer that raises has no opinion; a constraint that raises
+applies its cautious result; a gate rule that raises holds the wish back (one
+exception, decided by the project owner: a failed dry-run rule sends a
+pending fire wish). Each case is a reason code in the decision and a fact in
+``Decision.faults``; the core does not log. Only ``Exception`` is caught,
+never ``BaseException``.
 """
 
 from collections.abc import Callable, Iterable, Sequence
@@ -14,6 +23,7 @@ from enum import StrEnum
 from custom_components.roller_shutter_suite.core.model import (
     ConstraintResult,
     Decision,
+    EvaluationFault,
     FunctionId,
     GateKind,
     GateOutcome,
@@ -34,6 +44,7 @@ from .dry_run import is_standing, simulated_state
 from .fire_bypass import skips
 from .layers import disabled_functions
 from .registry import (
+    ConstraintFunction,
     ConstraintInput,
     ConstraintRegistration,
     GateInput,
@@ -148,7 +159,10 @@ class Arbiter:
     # --- Layers -------------------------------------------------------------
 
     def _answers(
-        self, config: WindowConfig, snapshot: WorldSnapshot
+        self,
+        config: WindowConfig,
+        snapshot: WorldSnapshot,
+        faults: list[EvaluationFault],
     ) -> list[tuple[Wish, FunctionId | None]]:
         """Ask every layer, in order; return each answer with the function that spoke.
 
@@ -159,8 +173,17 @@ class Arbiter:
         for the window: comfort becomes cautious, a faulty stored setting
         never moves a window, and its code does not even run. Such a part
         answers "no opinion" with ``function_disabled_by_fault``.
+
+        **A layer or a part that raises has no opinion** (``layer_failed``),
+        and every other layer is still asked: whatever a comfort layer
+        raises, the fire layer and the protection layer are evaluated. An
+        answer that is no answer of this layer (another layer's wish, targets
+        for other members) counts as raised. An exception in the fire layer
+        or the protection layer itself cannot be replaced by a cautious
+        value; it is reported, and the layers below still run.
         """
         disabled = disabled_functions(config)
+        member_ids = tuple(member.member_id for member in config.members)
         answers: list[tuple[Wish, FunctionId | None]] = []
         for layer in Layer:
             parts = [entry for entry in self.layers if entry.layer is layer]
@@ -172,12 +195,12 @@ class Arbiter:
                 if part.function is not None and part.function in disabled:
                     wish = Wish.no_opinion(layer, ReasonCode.FUNCTION_DISABLED_BY_FAULT)
                 else:
-                    wish = part.evaluate(config, snapshot)
-                if wish.layer is not layer:
-                    raise ValueError(
-                        f"the layer {layer.value!r} answered with a wish of the "
-                        f"layer {wish.layer.value!r}"
-                    )
+                    try:
+                        wish = part.evaluate(config, snapshot)
+                        _require_answer_of(layer, wish, member_ids)
+                    except Exception as error:  # noqa: BLE001 - the safety net: a layer that raises has no opinion
+                        faults.append(EvaluationFault.of(layer, part.function, error))
+                        wish = Wish.no_opinion(layer, ReasonCode.LAYER_FAILED)
                 answers.append((wish, part.function))
         return answers
 
@@ -189,25 +212,35 @@ class Arbiter:
         snapshot: WorldSnapshot,
         wish: Wish,
         targets: tuple[MemberTarget, ...],
+        faults: list[EvaluationFault],
     ) -> tuple[tuple[ConstraintResult, ...], tuple[MemberTarget, ...]]:
-        """Apply the constraints in order. Fire is subject to none."""
+        """Apply the constraints in order. Fire is subject to none.
+
+        **A constraint that raises applies its cautious result**
+        (``constraint_failed``): the most restrictive result it could have
+        produced for this wish, if its registration states one (``cautious``),
+        and otherwise, or if that raises too, every member is pinned and the
+        wish is not executed. A result that is no result of this constraint
+        counts as raised. The later constraints still apply.
+        """
         results: list[ConstraintResult] = []
         if wish.wish_class is WishClass.FIRE:
             return (), targets
         for registration in self.constraints:
             if wish.wish_class not in registration.applies_to:
                 continue
-            result = registration.apply(
-                ConstraintInput(config, snapshot, wish, targets)
-            )
+            constraint_input = ConstraintInput(config, snapshot, wish, targets)
+            try:
+                result = _result_of(registration.apply, registration, constraint_input)
+            except Exception as error:  # noqa: BLE001 - the safety net: a constraint that raises keeps restricting
+                faults.append(
+                    EvaluationFault.of(
+                        registration.constraint, registration.function, error
+                    )
+                )
+                result = _cautious_result(registration, constraint_input, faults)
             if result is None:
                 continue
-            if result.constraint is not registration.constraint:
-                raise ValueError(
-                    f"the constraint {registration.constraint.value!r} answered as "
-                    f"{result.constraint.value!r}"
-                )
-            _require_same_members(targets, result.targets)
             results.append(result)
             targets = result.targets
         return tuple(results), targets
@@ -218,30 +251,63 @@ class Arbiter:
         snapshot: WorldSnapshot,
         wish: Wish,
         targets: tuple[MemberTarget, ...],
+        faults: list[EvaluationFault],
     ) -> bool:
-        """Say whether the window stands where a constraint on the wish forbids it."""
+        """Say whether the window stands where a constraint on the wish forbids it.
+
+        The answer "yes" exempts the movement from the minimum change of
+        motor protection, so a check that raises answers "no": no exemption
+        is granted because of an exception.
+        """
         if wish.wish_class is WishClass.FIRE:
             return False
         constraint_input = ConstraintInput(config, snapshot, wish, targets)
-        return any(
-            registration.violated_by_position is not None
-            and wish.wish_class in registration.applies_to
-            and registration.violated_by_position(constraint_input)
-            for registration in self.constraints
-        )
+        violated = False
+        for registration in self.constraints:
+            if (
+                registration.violated_by_position is None
+                or wish.wish_class not in registration.applies_to
+            ):
+                continue
+            try:
+                violated = violated or bool(
+                    registration.violated_by_position(constraint_input)
+                )
+            except Exception as error:  # noqa: BLE001 - the safety net: no exemption because of an exception
+                faults.append(
+                    EvaluationFault.of(
+                        registration.constraint, registration.function, error
+                    )
+                )
+        return violated
 
     # --- Gate ---------------------------------------------------------------
 
-    def _gate(
+    def _gate(  # noqa: PLR0913 - what reached the gate, and the list of faults
         self,
         config: WindowConfig,
         snapshot: WorldSnapshot,
         wish: Wish,
         to_send: tuple[MemberTarget, ...],
+        faults: list[EvaluationFault],
         *,
         restores: bool = False,
     ) -> GateOutcome:
-        """Evaluate the gate rules in order; the first rule that applies decides."""
+        """Evaluate the gate rules in order; the first rule that applies decides.
+
+        **A rule that raises holds the wish back** (``gate_rule_failed``), for
+        every wish class it was asked for: the restriction applies. It is a
+        deferral with the upper bound of every deferral whose end nobody
+        knows, so the window is evaluated again. An outcome that is no
+        outcome of this rule counts as raised. A fire wish is never asked
+        the rules of the fire bypass, so whatever they raise cannot stop it.
+        The two rules the bypass does not skip differ, as decided by the
+        project owner: a failed maintenance lock holds back every wish, fire
+        included, because it protects a person working at the shutter; a
+        failed dry-run rule holds back every wish except fire, because an
+        escape route that stays closed in a fire is the greater evil than a
+        test window that opens on a fire alarm. See ``_failed_rule_lets_pass``.
+        """
         controls = effective_controls(snapshot.controls)
         state = snapshot.state
         own_commands = {
@@ -278,18 +344,21 @@ class Arbiter:
                 continue
             if wish.wish_class not in registration.applies_to:
                 continue
-            outcome = registration.evaluate(gate_input)
+            try:
+                outcome = _outcome_of(registration, gate_input)
+            except Exception as error:  # noqa: BLE001 - the safety net: a gate rule that raises holds the wish back
+                faults.append(
+                    EvaluationFault.of(registration.rule, registration.function, error)
+                )
+                if _failed_rule_lets_pass(registration.rule, wish.wish_class):
+                    continue
+                outcome = GateOutcome.defer(
+                    registration.rule,
+                    ReasonCode.GATE_RULE_FAILED,
+                    reevaluate_no_later_than=snapshot.time + config.reevaluate_after,
+                )
             if outcome is None:
                 continue
-            if (
-                outcome.kind is GateKind.SEND
-                or outcome.rule is not registration.rule
-                or outcome.reason not in registration.reasons
-            ):
-                raise ValueError(
-                    f"the gate rule {registration.rule.value!r} holds back in its "
-                    "own name or returns nothing"
-                )
             return replace(outcome, dry_run=True) if controls.dry_run else outcome
         return GateOutcome.send()
 
@@ -304,7 +373,8 @@ class Arbiter:
                 "the snapshot observes other members than the window is configured "
                 "with, or in another order"
             )
-        answers = self._answers(config, snapshot)
+        faults: list[EvaluationFault] = []
+        answers = self._answers(config, snapshot, faults)
         won = next(
             (
                 index
@@ -324,36 +394,141 @@ class Arbiter:
                 winning_wish=winner,
                 other_layers=others,
                 winning_function=winning_function,
+                faults=tuple(faults),
             )
         targets = _initial_targets(winner, member_ids)
-        restores = self._violated_by_position(config, snapshot, winner, targets)
-        results, targets = self._constrain(config, snapshot, winner, targets)
+        restores = self._violated_by_position(config, snapshot, winner, targets, faults)
+        results, targets = self._constrain(config, snapshot, winner, targets, faults)
         to_send = tuple(target for target in targets if target.position is not None)
+        gate = (
+            self._gate(config, snapshot, winner, to_send, faults, restores=restores)
+            if to_send
+            else None
+        )
         return Decision(
             winning_wish=winner,
             other_layers=others,
             constraints=results,
             targets=targets,
-            gate=(
-                self._gate(config, snapshot, winner, to_send, restores=restores)
-                if to_send
-                else None
-            ),
+            gate=gate,
             winning_function=winning_function,
+            faults=tuple(faults),
+        )
+
+
+def _require_answer_of(layer: Layer, wish: Wish, member_ids: Sequence[str]) -> None:
+    """Require that a layer answered for itself and for the members of the window."""
+    if not isinstance(wish, Wish):
+        raise TypeError(f"the layer {layer.value!r} answers with a wish")
+    if wish.layer is not layer:
+        raise ValueError(
+            f"the layer {layer.value!r} answered with a wish of the "
+            f"layer {wish.layer.value!r}"
+        )
+    if wish.reason is ReasonCode.LAYER_FAILED:
+        raise ValueError("only the arbiter says that a layer failed")
+    if wish.member_positions and tuple(
+        target.member_id for target in wish.member_positions
+    ) != tuple(member_ids):
+        raise ValueError(
+            "a wish per member names the members of the window, in their order"
         )
 
 
 def _initial_targets(wish: Wish, member_ids: Sequence[str]) -> tuple[MemberTarget, ...]:
     """Return the target of every member as the winning wish states it."""
     if wish.member_positions:
-        if tuple(target.member_id for target in wish.member_positions) != tuple(
-            member_ids
-        ):
-            raise ValueError(
-                "a wish per member names the members of the window, in their order"
-            )
         return wish.member_positions
     return tuple(MemberTarget(member_id, wish.position) for member_id in member_ids)
+
+
+def _result_of(
+    function: ConstraintFunction,
+    registration: ConstraintRegistration,
+    constraint_input: ConstraintInput,
+) -> ConstraintResult | None:
+    """Apply a function of a constraint and require a result of that constraint."""
+    result = function(constraint_input)
+    if result is None:
+        return None
+    if not isinstance(result, ConstraintResult):
+        raise TypeError("a constraint answers with a constraint result or nothing")
+    if result.constraint is not registration.constraint:
+        raise ValueError(
+            f"the constraint {registration.constraint.value!r} answered as "
+            f"{result.constraint.value!r}"
+        )
+    if result.reason is ReasonCode.CONSTRAINT_FAILED:
+        raise ValueError("only the arbiter says that a constraint failed")
+    _require_same_members(constraint_input.targets, result.targets)
+    return result
+
+
+def _cautious_result(
+    registration: ConstraintRegistration,
+    constraint_input: ConstraintInput,
+    faults: list[EvaluationFault],
+) -> ConstraintResult:
+    """Return what applies instead of the result of a constraint that raised.
+
+    The most restrictive result the constraint could have produced for this
+    wish, if its registration states one. Without one, or if that raises as
+    well, every member is pinned: the wish is not executed. The reason is
+    ``constraint_failed`` either way, so the record shows the failure also
+    where the cautious result changes nothing.
+    """
+    targets = tuple(
+        MemberTarget(target.member_id, None) for target in constraint_input.targets
+    )
+    if registration.cautious is not None:
+        try:
+            limited = _result_of(registration.cautious, registration, constraint_input)
+        except Exception as error:  # noqa: BLE001 - the safety net: without a cautious result nothing moves
+            faults.append(
+                EvaluationFault.of(
+                    registration.constraint, registration.function, error
+                )
+            )
+        else:
+            targets = constraint_input.targets if limited is None else limited.targets
+    return ConstraintResult(
+        registration.constraint, ReasonCode.CONSTRAINT_FAILED, targets
+    )
+
+
+def _outcome_of(
+    registration: GateRuleRegistration, gate_input: GateInput
+) -> GateOutcome | None:
+    """Evaluate a gate rule and require an outcome of that rule."""
+    outcome = registration.evaluate(gate_input)
+    if outcome is None:
+        return None
+    if (
+        not isinstance(outcome, GateOutcome)
+        or outcome.kind is GateKind.SEND
+        or outcome.rule is not registration.rule
+        or outcome.reason not in registration.reasons
+    ):
+        raise ValueError(
+            f"the gate rule {registration.rule.value!r} holds back in its "
+            "own name or returns nothing"
+        )
+    return outcome
+
+
+def _failed_rule_lets_pass(rule: GateRule, wish_class: WishClass) -> bool:
+    """Say whether a wish passes a gate rule that raised. One case: fire at dry-run.
+
+    Decided by the project owner (section 13a of the design specification).
+    Every rule that raises holds the wish back, for every class it was asked
+    for. That includes the rules the fire bypass does not skip: the
+    maintenance lock, "no member can execute", "target reached" and the part
+    of "movement in flight" about a command that is still pending. The one
+    exception is the dry-run rule with a fire wish pending: the command is
+    sent, because an escape route that stays closed in a fire is the greater
+    evil than a test window that opens on a fire alarm.
+    """
+    return rule is GateRule.DRY_RUN and wish_class is WishClass.FIRE
 
 
 def _require_same_members(

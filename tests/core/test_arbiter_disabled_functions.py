@@ -89,8 +89,11 @@ def test_the_layer_of_a_disabled_function_is_not_even_asked() -> None:
         decision.other_layers
     )
     assert decision.winning_function is None
-    with pytest.raises(AssertionError, match="was evaluated"):
-        arbiter.recompute(window(), snapshot(sources=night()))
+    assert decision.faults == ()
+    # The stub does raise when it is called: the decision of a window whose
+    # schedule is not disabled carries the exception.
+    (fault,) = arbiter.recompute(window(), snapshot(sources=night())).faults
+    assert "was evaluated" in str(fault.exception)
 
 
 def test_with_every_comfort_function_disabled_nothing_moves_and_dry_run_shows_why() -> (

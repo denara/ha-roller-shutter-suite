@@ -165,6 +165,16 @@ class ConstraintRegistration:
     whatever function the limited wish comes from; the direction of a wish is
     the one such constraint. A constraint is never skipped because a function
     is disabled, and it cannot declare a function that can be.
+
+    ``cautious`` is what applies when ``apply`` raises an exception: the most
+    restrictive result the constraint could have produced for this wish,
+    computed without whatever can fail (frost protection limits as if frost
+    were certain, without reading its source). It returns the target of
+    every member like ``apply``, or ``None`` if even the most restrictive
+    case limits nothing (frost and a wish that closes). A constraint that
+    cannot state such a result leaves it out; the arbiter then pins every
+    member, so the wish is not executed. A programming error never loosens a
+    restriction.
     """
 
     constraint: Constraint
@@ -172,6 +182,7 @@ class ConstraintRegistration:
     apply: ConstraintFunction
     function: FunctionId | None
     violated_by_position: ViolationFunction | None = None
+    cautious: ConstraintFunction | None = None
 
     def __post_init__(self) -> None:
         """Refuse a constraint on fire: fire is subject to no constraint at all."""

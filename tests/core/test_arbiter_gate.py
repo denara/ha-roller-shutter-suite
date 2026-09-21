@@ -1100,7 +1100,11 @@ def test_the_registry_refuses_what_would_break_the_gate() -> None:
 
 
 def test_a_gate_rule_answers_in_its_own_name_and_never_sends() -> None:
-    """A rule either holds back or returns nothing."""
+    """A rule either holds back or returns nothing.
+
+    Anything else is a programming error and counts like an exception of the
+    rule: it holds the wish back, and the decision carries the fault.
+    """
     classes = frozenset({WishClass.COMFORT})
     sends = GateRuleRegistration(
         GateRule.STAGGERING, classes, lambda _gate: GateOutcome.send(), None
@@ -1109,5 +1113,12 @@ def test_a_gate_rule_answers_in_its_own_name_and_never_sends() -> None:
 
     for registration in (sends, impostor):
         arbiter = build_arbiter(STUB_LAYERS, gate_rules=[registration])
-        with pytest.raises(ValueError, match="holds back in its own name"):
-            arbiter.recompute(window(), snapshot(sources=night()))
+        decision = arbiter.recompute(window(), snapshot(sources=night()))
+
+        assert decision.gate is not None
+        assert decision.gate.kind is GateKind.DEFER
+        assert decision.gate.reason is ReasonCode.GATE_RULE_FAILED
+        assert decision.gate.rule is registration.rule
+        (fault,) = decision.faults
+        assert fault.place is registration.rule
+        assert "holds back in its own name" in str(fault.exception)

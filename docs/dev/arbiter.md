@@ -156,6 +156,7 @@ LOCKOUT = ConstraintRegistration(
 - Return the target of **every** member, in order. Limit a target, or pin a member with `None`; never give a pinned member a target again, and never invent a target.
 - Compare with `ConstraintInput.current_positions`. A member that reports no position cannot be judged; say in the module what that means for the constraint.
 - A constraint that says where a window may **stand** (a floor, a ceiling) can be violated by the position the window has right now: somebody tilts the window while the shutter stands just below the ventilation floor. Such a constraint also registers `violated_by_position`, a function that answers whether a member stands on the wrong side at this moment. The movement that restores it is then exempt from the minimum change of motor protection. A constraint that says which **movements** are allowed leaves it out.
+- **Say what applies if the constraint raises:** register `cautious`, a second function that returns the most restrictive result the constraint could have produced for this wish, computed without whatever can fail. Without it the arbiter pins every member when the constraint raises, and the wish is not executed. See [The safety net](#the-safety-net-exceptions).
 - Put it in its own module under `constraints/` and hand it to `build_arbiter(constraints=[...])`.
 
 The two constraints of this block. Neither can be violated by a position, because both are about movements: the direction is judged relative to where the member stands, and frost protection forbids opening further, not standing open. A shutter that is fully open when frost begins stays where it is.
@@ -203,6 +204,41 @@ So only layers can be paused, and only those of `PAUSE` functions; `disabled_fun
 - **Somebody listens to every function that has settings.** A `PAUSE` function with settings has a registered layer; a `FALL_BACK` function with settings has a layer, a constraint or a gate rule. Otherwise the resolver would pause something that nothing stops doing, or settings would configure nothing.
 
 Feature blocks arrive one by one, so a function can have settings before its block exists. Such a function stands in `NOT_BUILT_YET` in that test. The list can only shrink: the test fails for an entry that has a listener by now, for an entry without settings, and for a function with settings that has neither a listener nor an entry. When you build the layer, the constraint or the gate rule of a function, remove its entry in the same pull request. `functions_with_settings()` in the test is the one place that connects to the settings registry.
+
+## The safety net: exceptions
+
+A programming error must not be able to do what a data fault may not. **No exception that a layer, a part of a layer, a constraint or a gate rule raises leaves `recompute`**, none loosens a restriction, and none stops a fire or a protection decision. The arbiter catches `Exception` around every registered function, never `BaseException`: a request to stop the program is no programming error of a layer. Each case ends in a defined way, shows up in the decision with a reason code, and is a fact in `Decision.faults`. The core does not log; the Home Assistant layer logs the fault and may raise a repair issue.
+
+| What raised | What applies | In the decision |
+|---|---|---|
+| a comfort layer, or one part of it | that layer or part has **no opinion**; every other layer and part is still asked | `LayerReason` with `layer_failed` and the function of the part |
+| the fire layer or the protection layer | it cannot be replaced by a cautious value: it has no opinion, the other layers still run, and the decision says that the layer failed | `LayerReason` with `layer_failed` |
+| a constraint | its **cautious result**, see below; the later constraints still apply | a `ConstraintResult` with `constraint_failed`, also when the cautious result changes nothing |
+| the check whether the current position violates a constraint (`violated_by_position`) | "not violated": the answer "violated" would exempt the movement from the minimum change of motor protection, and no exemption is granted because of an exception | only the entry in `faults` |
+| a gate rule | **the rule holds the wish back**, for every wish class it was asked for. It is a deferral with `reevaluate_no_later_than`, the upper bound of every deferral whose end nobody knows (`WindowConfig.reevaluate_after`), so the window is evaluated again | `GateOutcome` with `gate_rule_failed` and the rule |
+
+An answer that is no answer counts as raised: a layer that answers in another layer's name, with targets for other members or with no wish at all; a constraint that answers as another constraint, invents a target, or names other members; a gate rule that answers `send` or in another rule's name. The three reason codes belong to the arbiter; a registered function that returns one of them has failed.
+
+**What "cautious" means for a constraint** is stated in one place, its registration: `ConstraintRegistration.cautious`, a second function with the signature of `apply`. It returns the **most restrictive result the constraint could have produced for this wish**, computed without whatever can fail, or `None` if even the most restrictive case limits nothing.
+
+- Frost protection states one (`cautious=` of `FROST_CONSTRAINT`): it limits as if nothing were known about frost, without asking the source or the held state, so an opening stops at the frost position. What a person decided still counts, because it is not what failed: a window without a frost source has no frost protection to keep, a protection wish is limited only with `applies_to_protection`, a waiver lifts the limit, and closing is never limited.
+- A constraint that cannot state such a result leaves `cautious` out. The arbiter then **pins every member**: the wish is not executed, for the comfort and the protection class alike (fire is subject to no constraint). The same happens when `cautious` raises as well; both exceptions are reported. The direction constraint has no `cautious`: without knowing the direction, nothing can be said about which movement is allowed.
+- A later block that adds a constraint decides this with the constraint: a floor or a ceiling whose position is a setting can usually state it (the floor applies as if the window were open); a constraint that depends on a contact states what the blind-source rule of that contact says.
+
+**Fire and protection are never stopped by this.** The fire layer and the protection layers are asked even if every comfort layer raised. A fire wish is subject to no constraint and is never asked the rules of the fire bypass, so whatever those raise cannot reach it. For the rules the bypass does **not** skip, the project owner decided per rule (section 13a of the specification), and `_failed_rule_lets_pass` in `arbiter/arbiter.py` is the one place that holds it:
+
+| Rule that raised | Fire wish | Protection wish | Comfort wish |
+|---|---|---|---|
+| 1 maintenance lock | held back: the lock protects a person working at the shutter | held back | held back |
+| 12 dry-run | **sent**: an escape route that stays closed in a fire is the greater evil than a test window that opens on a fire alarm | held back | held back |
+| 2 no member can execute, 3 target reached, the part of 8 about a command that is still pending | held back, as under the maintenance lock | held back | held back |
+
+A failed dry-run rule records no would-be command, because nobody knows what it would have recorded; `GateOutcome.dry_run` still says whether the window is in dry-run. A fire wish that is sent although the dry-run rule failed is the outcome `send`; `Engine.state_after` leaves the state as it is. A protection wish is "still decided" in this sense: its layer is always asked and the decision names it as the winner with its target, so the event can be fired; a constraint or a gate rule that applies to protection and raises holds it back like a restriction that applies.
+
+**Determinism is kept.** The same snapshot gives an equal decision, also with faults: an `EvaluationFault` compares by stage, place, function and the name of the exception class, and the exception object itself takes no part in the comparison.
+
+`tests/core/test_arbiter_safety_net.py` has a stub that raises for every kind: a comfort layer, a part of a layer, a constraint with and without a cautious result, a gate rule that the fire bypass skips, each rule that it does not skip, the fire layer and the protection layer. The first real case was the reader of the frost source, which raised a `TypeError` for a source that delivers text. It no longer does: text that is not a number, a switch position or a number that is not finite is "no value", the source is silent, and the blind path applies (`frost_limit_source_blind`); text that spells a finite number is that temperature. `held_frost_after` uses the same reader and leaves the held state as it is for such a source. The tests with the stubs stay, so the safety net remains tested.
+
 ## Reason codes
 
 Every wish, constraint result and gate outcome carries a code from the closed list in `core/reasons.py`, and the model refuses a code from the wrong group. A new code needs an entry in the specification, in the enumeration and in both translations.
