@@ -1,49 +1,71 @@
 # The schedule
 
-The schedule is the lowest layer of the arbiter: it always has an opinion, so a window never lacks a target. It lives in `custom_components/roller_shutter_suite/core/schedule/` and implements section 6 of the [domain design specification](../architecture.md). This page says how, and it records the points where the specification left a choice. The data types it builds on are described in [the core model](core-model.md). For users, the same rules are explained in [the daily routine](../features/daily-routine.md).
+The schedule is the lowest layer of the arbiter: while it is switched on it always has an opinion, so a window never lacks a target. It lives in `custom_components/roller_shutter_suite/core/schedule/` and implements section 6 of the [domain design specification](../architecture.md). This page says how, and it records the points where the specification left a choice. The data types it builds on are described in [the core model](core-model.md), the arbiter it plugs into in [the arbiter](arbiter.md). For users, the same rules are explained in [the daily routine](../features/daily-routine.md).
 
-| Module of `schedule` | Content |
+| Module | Content |
 |---|---|
-| `settings` | the resolved settings: triggers per day type, targets per profile key, sources, season, brightness, random offset |
-| `local_time` | local wall-clock times as instants, including the two days of a clock change |
-| `triggers` | the instant of one trigger on one date: kind, random offset, clamps |
-| `day_types` | the day type from the inputs, and reading an on/off or a numeric source without guessing |
-| `layer` | `evaluate_schedule`: the wish, the part of the day, the day type with its latch, the next planned action |
+| `core/model/schedule.py` | the settings of the schedule as values: `Trigger`, `DayTriggers`, `ScheduleTargets`, `ScheduleSettings`, and the two rules over several settings |
+| `core/model/almanac.py` | `SunAlmanac`: the answers of the sun port that a recompute may look at |
+| `core/schedule/local_time.py` | local wall-clock times as instants, including the two days of a clock change |
+| `core/schedule/sun.py` | where sun times come from: the sun port or the almanac; `build_sun_almanac` |
+| `core/schedule/triggers.py` | the instant of one trigger on one date: kind, random offset, clamps |
+| `core/schedule/day_types.py` | the day type from the inputs, and reading an on/off or a numeric source without guessing |
+| `core/schedule/layer.py` | `evaluate_schedule`, the layer `schedule_layer` with its registration `SCHEDULE_LAYER`, and `schedule_state_after` |
 
 Import from the package: `from custom_components.roller_shutter_suite.core.schedule import evaluate_schedule`.
+
+## The layer, and how it gets sun times without asking a port
+
+A layer of the arbiter is a function of the window configuration and the world snapshot, and a recompute asks no port. The schedule needs sun times for several dates and, for the random offset, the seed of the installation. Both reach it as data, the way the clock port reaches a recompute as `snapshot.time`:
+
+- `WorldSnapshot.almanac` is a `SunAlmanac`: per local date sunrise, sunset, the elevation of the sun at local noon, and the passage of every elevation that an elevation trigger of the window names. `build_sun_almanac(config, time, sun_port)` asks the port and writes the answers down. It covers yesterday (`ALMANAC_DAYS_BEFORE`: before today's morning trigger, the night began with yesterday's evening) to seven days ahead (`ALMANAC_DAYS_AHEAD`: the next planned action is searched on a week and a day).
+- `WorldSnapshot.installation_seed` is the seed from the storage port.
+
+**Obligation for the block that builds snapshots (H02):** call `build_sun_almanac` whenever a snapshot is built, and build it again when the local date or the settings of the schedule change.
+
+**Missing data is never guessed.** Without an almanac, with an almanac that lacks a needed date or passage, or without a seed while a random offset is configured, `schedule_layer` has no opinion, with the reason `input_unavailable`, and nothing is persisted. "The sun does not rise on this day" is an answer of the port and stands in the almanac; it is not missing data.
+
+```python
+SCHEDULE_LAYER = LayerRegistration(
+    Layer.SCHEDULE, schedule_layer, function=FunctionId.SCHEDULE
+)
+```
+
+`SCHEDULE_LAYER` is part of `FEATURE_LAYERS`, so `build_arbiter()` contains it.
+
+- The layer only reads. `schedule_state_after(config, snapshot)` returns the window state with what the schedule has to remember; the runtime persists it after a recompute.
+- With `schedule_enabled` off the layer has no opinion, with the reason `not_configured` (`SCHEDULE_NOT_CONFIGURED`).
+- If a faulty stored setting has paused the function `schedule` for the window (`WindowConfig.disabled_functions`), the arbiter does not call the layer at all and records `function_disabled_by_fault`. The layer does not look at that set. `schedule_state_after` leaves the state alone in both cases.
+- The day wish only raises and the night wish only lowers: the wish states its direction, and the direction constraint of the arbiter enforces it. The schedule reads no capability of the window.
+- **The trigger of the wish** (`Wish.triggered_at`) is `part_of_day_since`: the instant at which the current part of the day really began, as a clamp, an offset to the sun, the random offset, the day type or the brightness moved it, and never the first evaluation that noticed it. After a restart shortly after a boundary, a last own comfort movement at or after that boundary was its answer, so the wish is not fresh and the minimum interval of motor protection holds it; equal instants count as not fresh.
 
 ## One pure function
 
 ```python
-result = evaluate_schedule(settings, window, snapshot, sun, seed=seed)
+result = evaluate_schedule(
+    window, snapshot
+)  # as a recompute runs: almanac and seed of the snapshot
+result = evaluate_schedule(
+    window, snapshot, sun_port, seed=seed
+)  # as the simulation may run
 ```
 
-| Argument | Meaning |
-|---|---|
-| `settings` | `ScheduleSettings`, the resolved settings of this window |
-| `window` | `WindowConfig` of the model: the window identifier (for the random offset), the profile key of the schedule, the condition input of the morning opening |
-| `snapshot` | `WorldSnapshot`: the time, the source values, the persisted window state |
-| `sun` | the sun port |
-| `seed` | the installation's seed for random offsets, from the storage port |
-
-The function reads no clock, computes nothing astronomical and keeps nothing between two calls. The same arguments give the same `ScheduleResult`:
+The settings are `window.schedule`. Both ways give exactly the same result, because the almanac is filled with the port's answers; a test compares them across both clock changes and across midnight. The function raises `ScheduleInputMissingError` if a needed answer is missing. It reads no clock, computes nothing astronomical and keeps nothing between two calls. The same arguments give the same `ScheduleResult`:
 
 | Field | Meaning |
 |---|---|
-| `wish` | the wish of the schedule layer: by day the morning position with `raise_only` and `schedule_day`, by night the evening position with `lower_only` and `schedule_night` |
+| `wish` | the wish of the schedule layer: by day the morning position with `raise_only` and `schedule_day`, by night the evening position with `lower_only` and `schedule_night`; its trigger is `part_of_day_since` |
 | `evaluated_at` | the time of the snapshot as an instant in UTC |
 | `part_of_day` | `day` or `night` |
-| `part_of_day_since` | the instant at which the current part of the day really began: the boundary as an offset, a clamp, the random offset, the day type or the brightness moved it, never the first evaluation that noticed it. Before today's morning trigger it is yesterday's evening, which is why yesterday's latch and brightness instant are kept until the morning; without them it is computed with the day of the week |
+| `part_of_day_since` | the instant at which the current part of the day really began. Before today's morning trigger it is yesterday's evening, which is why yesterday's latch and brightness instant are kept until the morning; without them it is computed with the day of the week |
 | `morning_trigger`, `evening_trigger` | today's triggers as instants in UTC; the evening trigger is the effective one |
 | `evening_by_brightness` | whether the brightness began this evening before the time did |
 | `day_type`, `day_type_latched`, `day_type_reason` | today's day type, whether it is fixed for the date, and `day_type_fallback` while the day of the week stands in for an input without a value |
-| `summer`, `season_reason` | the season the evening position was chosen by (`None` without a seasonal setup), and `input_held_last_known`, `input_unavailable` or `input_unknown` when it is not a fresh value |
+| `summer`, `season_reason` | the season the evening position was chosen by (`None` without a season source and without dates), and `input_held_last_known`, `input_unavailable` or `input_unknown` when it is not a fresh value |
 | `brightness_reason` | why the brightness source gives no value at the moment |
 | `next_action` | the next planned action: instant in UTC, target, reason |
-| `recheck_at` | an instant at which the window has to be evaluated again although no planned action is due. It lies strictly after `evaluated_at`, or it is none; the result type refuses anything else. A minimum distance between such wake-ups is the business of the Home Assistant layer |
-| `state` | the persisted window state with what the schedule has to remember; the caller persists it |
-
-A window without schedule settings gets the constant `SCHEDULE_NOT_CONFIGURED`, a wish without an opinion and with the reason `not_configured`.
+| `recheck_at` | an instant at which the window has to be evaluated again although no planned action is due. It lies strictly after `evaluated_at`, or it is none; the result type refuses anything else. A minimum distance between such wake-ups is the business of the Home Assistant layer (block H02) |
+| `state` | the persisted window state with what the schedule has to remember |
 
 ## State-based, nothing is replayed
 
@@ -59,11 +81,13 @@ Per day type, morning and evening each have one `Trigger`:
 
 | Kind | Moment | Clamps |
 |---|---|---|
-| `fixed_time` | a local time | optional |
-| `sun_event` | sunrise (morning) or sunset (evening) plus an offset | both mandatory |
-| `elevation` | the sun passes an elevation, upwards (morning) or downwards (evening) | both mandatory |
+| `fixed_time` | a local time (`time`) | ignored |
+| `sun_event` | sunrise (morning) or sunset (evening) plus `offset_minutes`, a signed whole number of minutes within ±720 | apply |
+| `elevation` | the sun passes `elevation`, upwards (morning) or downwards (evening) | apply |
 
-The instant of a trigger is built in a fixed order: the moment of the kind, plus the random offset, then "not before" and "not after", and last the limits of the local date itself, so a trigger always lies on its own date.
+Every field of a trigger always has a value, because only an optional reference can be "none" in the settings registry. Which fields count depends on the kind; a field of another kind is checked on its own and otherwise ignored, so the kind can be switched without clearing what was entered before. Whether the clamps limit a trigger is said in one place, `Trigger.clamps_apply`: they limit the two kinds that depend on the sun, and a fixed time ignores them. "Not before" of the evening trigger bounds the brightness trigger for every kind.
+
+The instant of a trigger is built in a fixed order: the moment of the kind, plus the random offset, then "not before" and "not after" where they apply, and last the limits of the local date itself, so a trigger always lies on its own date.
 
 **A moment that never comes.** If the sun port has no sunrise, no sunset or no passage of the elevation on a date, the trigger falls on the clamp that lies in its direction. The elevation of the sun at local noon, asked of the sun port, tells the two cases apart:
 
@@ -72,9 +96,9 @@ The instant of a trigger is built in a fixed order: the moment of the kind, plus
 | below the elevation (deep winter, polar night) | "not after": the morning never comes by itself | "not before": the evening has begun already |
 | at or above it (polar day) | "not before": the morning has begun already | "not after": the evening never comes by itself |
 
-This is why both clamps are mandatory for the two kinds that depend on the sun: a date never lacks a trigger. Such a trigger gets no random offset, because it is on a clamp already.
+This is what the clamps of the two kinds that depend on the sun are for: a date never lacks a trigger. Such a trigger gets no random offset, because it is on a clamp already.
 
-`DayTriggers` refuses a pair whose latest morning (its "not after", or its fixed time) does not lie before the earliest evening. A random offset can still swap two fixed times that are set seconds apart; the evening is then taken at the morning, the date has no part `day`, and the next planned action is found on a later date.
+**Two rules span several settings.** For a kind that depends on the sun, "not before" must not lie after "not after". And per day type the latest morning (its "not after", or its fixed time) must lie before the earliest evening (its "not before", or its fixed time), so every date has a part `day` and a part `night`. `WindowConfig` raises both as `SettingsCombinationError` with exactly the flat keys they concern (for the second rule the two kinds and the two values in use), after every single value of the window has been checked; the built-in defaults satisfy both. A random offset can still swap two fixed times that are set seconds apart; the evening is then taken at the morning, the date has no part `day`, and the next planned action is found on a later date.
 
 ## Local time and clock changes
 
@@ -115,7 +139,7 @@ The schedule sets the latch of today only. It keeps a latch for tomorrow if anot
 
 With a brightness source, the evening also begins when the brightness has been below its threshold for the configured time. "For the configured time" is measured with the time of the snapshot, never with a clock: `WindowState.brightness_below_since` is the time of the first evaluation that saw the value below the threshold, and it is dropped by a value at or above the threshold.
 
-The trigger holds only inside the clamps: not before "not before" of the evening trigger, and only ahead of the time-based evening trigger, which never lies after "not after". That is why settings with a brightness source require "not before" on every evening trigger. If it has been dark since noon, the evening begins at "not before".
+The trigger holds only inside the clamps: not before "not before" of the evening trigger, and only ahead of the time-based evening trigger, which never lies after "not after". "Not before" counts here for every kind of evening trigger, also for a fixed time. If it has been dark since noon, the evening begins at "not before".
 
 The instant at which the brightness began the evening is persisted as `WindowState.evening_brightness_at` and counts for the local date it lies on. It is kept until the morning trigger of the next date, because until then it is the start of the night that is running. Without it the schedule would not be state-based: the headlights of a car or a source that drops out would bring the day back, and the day target would raise the shutter again.
 
@@ -125,7 +149,7 @@ While the delay is running, `recheck_at` names the instant at which it will be o
 
 ## Season
 
-The evening position is seasonal if the targets have a summer position. The season comes from the season source (on = summer); while that source has no value, from its last known value (`WindowState.held_season`, without a time limit, reported as `input_held_last_known`); if there is none, from the date range; and without a date range there is one evening position, with the reason why the source counts for nothing. The date range includes both days and may run across the turn of the year.
+The evening position is seasonal if a season source is set or `schedule_summer_by_date` is on; the summer position always has a value. The season comes from the season source (on = summer); while that source has no value, from its last known value (`WindowState.held_season`, without a time limit, reported as `input_held_last_known`); if there is none, from the date range if `schedule_summer_by_date` is on; and otherwise there is one evening position, with the reason why the source counts for nothing. The date range includes both days and may run across the turn of the year.
 
 The held value is renewed when the source reports another value than the held one, not at every evaluation. Nothing depends on its age, and a state that does not change needs no write.
 
@@ -144,28 +168,29 @@ The brightness is not part of the forecast. `evening_trigger` and `next_action` 
 - **Conditional morning opening.** `morning_condition_fulfilled(window, snapshot)` is where the condition of the morning opening will be read from `WindowConfig.morning_condition_source`. It returns true, whatever the source reports.
 - **Profiles.** The targets are looked up through the profile key of the window (`ScheduleSettings.targets_for(window.schedule_profile)`). The key has one value.
 
-## Settings and the settings registry
+## Settings
 
-`ScheduleSettings` is the definition of the schedule's settings until the settings registry adopts them. Every leaf is one scalar, so the registry can take them over with one entry per leaf:
+Every setting of the schedule is a flat field of `WindowConfig`, so that each is inherited on its own, and one entry of `WINDOW_SETTINGS` with the function `schedule`; `WindowConfig.schedule` is the read-only view over them, a `ScheduleSettings`. The value rules live in the model (`core/model/schedule.py`); the stored form is read by the shared readers of `core/settings`. The built-in defaults stand in one place, the block "The built-in defaults of the schedule" at the top of `core/model/window.py`; the registry reads them from the fields.
 
-| Leaf | Kind of value |
-|---|---|
-| `Trigger.kind` | enumeration |
-| `Trigger.at`, `not_before`, `not_after` | local time |
-| `Trigger.offset`, `brightness_delay`, `random_offset` | duration |
-| `Trigger.elevation`, `brightness_threshold` | number |
-| the three positions of `ScheduleTargets` | position (a whole number from 0 to 100) |
-| `workday_source`, `holiday_source`, `season_source`, `brightness_source` | optional reference to a source |
-| `summer_first_day`, `summer_last_day` | day of the year (month and day), optional, only together |
+The 36 trigger settings are generated, not written out: `schedule_<day type>_<edge>_<field>` for the day types `workday`, `weekend`, `holiday`, the edges `morning`, `evening`, and the fields of `Trigger`. `schedule_trigger_keys()` is that list, and the tests walk it the same way.
 
-A field that belongs to another trigger kind is type-checked and otherwise ignored, so a user can switch the kind without clearing what was entered before.
+| Key | Kind | Reader | Default |
+|---|---|---|---|
+| `schedule_enabled` | boolean | `as_bool` | on |
+| `schedule_<day type>_<edge>_kind` | enumeration | `as_enum(TriggerKind)` | morning `fixed_time`, evening `sun_event` |
+| `schedule_<day type>_<edge>_time` | time | `as_time` | morning 07:00 on workdays and 08:30 on weekends and holidays, evening 20:00 |
+| `schedule_<day type>_<edge>_offset_minutes` | number | whole number, may be negative | 0 |
+| `schedule_<day type>_<edge>_elevation` | number | finite number | 0 |
+| `schedule_<day type>_<edge>_not_before` | time | `as_time` | morning 06:00, evening 17:00 |
+| `schedule_<day type>_<edge>_not_after` | time | `as_time` | morning 09:00, evening 22:00 |
+| `schedule_morning_position`, `schedule_evening_position`, `schedule_evening_position_summer` | number | position, 0 to 100 | 100, 0, 0 |
+| `schedule_workday_source`, `schedule_holiday_source`, `schedule_season_source`, `schedule_brightness_source` | optional reference | `as_str` | none |
+| `schedule_summer_by_date` | boolean | `as_bool` | off |
+| `schedule_summer_first_day`, `schedule_summer_last_day` | day of the year | `as_day_of_year` | 05-01, 09-30 |
+| `schedule_brightness_threshold` | number | finite number | 50 |
+| `schedule_brightness_delay` | duration | `as_duration` | 10 minutes |
+| `schedule_random_offset` | duration | `as_duration`, at most 30 minutes | 0 |
 
-## Plugging into the arbiter
+`schedule_profile` and `morning_condition_source` existed before and belong to the schedule too.
 
-The arbiter defines how a layer is registered. The schedule does not define a second layer interface; the glue is one small adapter. It needs:
-
-1. the resolved `ScheduleSettings` of the window, or none;
-2. the `WindowConfig`, the `WorldSnapshot`, the sun port and the seed from the storage port;
-3. to return `SCHEDULE_NOT_CONFIGURED` without settings, otherwise `evaluate_schedule(...).wish`;
-4. to hand `result.state` on as the persisted window state of the recompute, and to have the window evaluated again at `result.next_action.at` and at `result.recheck_at`;
-5. to expose `part_of_day`, `day_type`, `day_type_reason`, `next_action` and the reasons to the status of the window.
+The function `schedule` pauses on a fault: a stored value that cannot be read, a value the window refuses, or a combination that one of the two rules refuses pauses the schedule for exactly the windows for which the faulty value would have been the effective one. A window with a sound own value for that key is not reached. Nothing falls back to a time or a position that the user did not choose.

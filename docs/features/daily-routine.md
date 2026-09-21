@@ -26,10 +26,11 @@ For each **day type** (workday, weekend, public holiday), separately for the mor
   - a **fixed time**, for example 06:30;
   - **sunrise** (morning) or **sunset** (evening), with an offset such as "20 minutes before" or "30 minutes after";
   - a **sun elevation**, for example "when the sun has sunk to 3 degrees below the horizon". An elevation follows the real brightness outside more closely than sunset plus a fixed number of minutes.
-- **"Not before" and "not after"**, the two limits for times that depend on the sun. See the next section.
+- **"Not before" and "not after"**, the two limits for times that depend on the sun. A fixed time is not limited by them. See the next section.
 
 For the window (or inherited from its group):
 
+- a **switch** for the daily routine as a whole. While it is off, the routine has no say for this window;
 - the **morning position** and the **evening position**;
 - optionally a separate **evening position for the summer**, for example 30 % so that air can get in, while the winter position is fully closed;
 - optionally an **outdoor brightness sensor** for the evening, with a threshold and a duration;
@@ -57,15 +58,15 @@ Example: "at sunrise, not before 06:30, not after 08:00".
 
 The same works in the evening: "at sunset, not before 17:30, not after 21:30" closes at 17:30 in December and at 21:30 in June, and at sunset in the months between.
 
-Both limits are required for sunrise, sunset and sun elevation. The reason is a case you may never meet: far in the north the sun does not rise at all on some winter days, and an elevation such as "20 degrees above the horizon" is not reached anywhere in central Europe in December. On such a day the trigger falls on the limit that fits the situation. If the sun stays too low, it is dark: the morning happens at "not after", the evening at "not before". If the sun never sinks low enough, it is bright: the morning happens at "not before", the evening at "not after".
+Both limits always have a value, and for sunrise, sunset and sun elevation they do one more job in a case you may never meet: far in the north the sun does not rise at all on some winter days, and an elevation such as "20 degrees above the horizon" is not reached anywhere in central Europe in December. On such a day the trigger falls on the limit that fits the situation. If the sun stays too low, it is dark: the morning happens at "not after", the evening at "not before". If the sun never sinks low enough, it is bright: the morning happens at "not before", the evening at "not after".
 
-The morning always has to come before the evening: the latest possible morning ("not after", or the fixed time) has to lie before the earliest possible evening ("not before", or the fixed time). Settings that violate this are refused.
+Two things have to fit together. "Not before" must not lie after "not after". And the morning always has to come before the evening: the latest possible morning ("not after", or the fixed time) has to lie before the earliest possible evening ("not before", or the fixed time). Settings that contradict each other in this way are not used; see [When a stored setting is faulty](#when-a-stored-setting-is-faulty).
 
 ## Closing earlier when it gets dark
 
 On a day with heavy clouds it gets dark well before the time the sun position suggests. With an outdoor brightness sensor you can let the evening begin earlier: **when the brightness has been below the threshold for the configured duration**, for example below 50 lx for 10 minutes. The duration keeps a short, dark shower from closing the house.
 
-- This only happens **inside the limits**: never before "not before" of the evening. A thunderstorm at noon closes nothing. For this reason every evening trigger needs a "not before" when you use a brightness sensor, also one with a fixed time.
+- This only happens **inside the limits**: never before "not before" of the evening. A thunderstorm at noon closes nothing. This limit also counts when the evening has a fixed time.
 - Once the brightness has begun the evening, it stays evening, even if it gets brighter again or a car's headlights hit the sensor.
 - **If the sensor fails**, nothing happens because of it: a sensor without a value is not treated as "dark", so it closes nothing by itself. It does not hold anything up either: the evening begins at its normal time.
 
@@ -92,10 +93,31 @@ With a random offset of, say, 15 minutes, each trigger is moved by a random amou
 If you set a separate evening position for the summer, the integration needs to know when it is summer:
 
 1. from a **season switch** of your choice (on = summer), for example a helper you flip twice a year or an automation of your own;
-2. otherwise from a **date range**, the first and the last day of summer;
+2. otherwise from a **date range**, if you switch "summer by date" on: the first and the last day of summer, 1 May to 30 September unless you change them. 29 February cannot be chosen, because it does not exist every year;
 3. without either there is just the one evening position.
 
 If the season switch is unavailable, the integration keeps using the last value it saw, for as long as it takes. Nothing but comfort depends on it.
+
+## What applies if you set nothing
+
+| Setting | Built-in value |
+|---|---|
+| The daily routine | switched on |
+| Morning | a fixed time: 07:00 on workdays, 08:30 on weekends and public holidays |
+| Evening | sunset, not before 17:00, not after 22:00 |
+| Limits of a morning that follows the sun | not before 06:00, not after 09:00 |
+| Offset to sunrise or sunset | none; up to 12 hours before or after can be set, in whole minutes |
+| Sun elevation | 0 degrees, the horizon |
+| Morning position, evening position, evening position for the summer | 100 %, 0 %, 0 % |
+| Workday sensor, holiday sensor, season switch, brightness sensor | none |
+| Brightness threshold and duration | 50, for 10 minutes |
+| Random offset | none |
+
+Every one of these settings can be set for the house, for a group or for a single window; the closest level that sets a value decides. None of them needs a particular capability of the cover.
+
+## When a stored setting is faulty
+
+A setting can be stored in a form the integration cannot read (after a failed migration or an edit by hand), or two settings can contradict each other: "not before" later than "not after", or a morning that would come after the evening. The integration then **pauses the daily routine for exactly the windows that would have used the faulty value**, reports the setting and the level it lies on, and moves nothing because of the routine until it is corrected. It does not fall back to another time or position on its own: a window must never open at a time you had deliberately moved. A window that sets a sound value of its own for that setting is not affected, and everything that protects (storm, frost, fire) keeps working for every window.
 
 ## What happens after a restart
 
