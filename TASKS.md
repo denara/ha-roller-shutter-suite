@@ -29,7 +29,7 @@ Plain Python under `custom_components/roller_shutter_suite/core/`, tested withou
 | [C01](tasks/C01-core-model-and-ports.md) | Core model and ports | E5, N2, N3; doors for C15, A7 | D00, T01, T02 | done |
 | [C02](tasks/C02-inheritance-resolver.md) | Inheritance resolver | E12, N4 | C01 | done |
 | [C03](tasks/C03-arbiter.md) | Arbiter: layers, constraints, gate | E5, E4, E9, E10, E11, A6, A12 | C01 | done |
-| [C04](tasks/C04-schedule-and-day-types.md) | Schedule and day types | A1–A6, E13 (offset) | C01 | in progress (pull request follows; C03 is merged) |
+| [C04](tasks/C04-schedule-and-day-types.md) | Schedule and day types | A1–A6, E13 (offset) | C01 | done |
 | [C03a](tasks/C03a-cautious-fault-values-and-safety-net.md) | Cautious fault values for functions that fall back; safety net of the arbiter for exceptions. **Binding before M1 and before any real installation** | E12, guardrails on protection | C02, C03, C04 | planned |
 | [C05](tasks/C05-time-lapse-simulation.md) | Time-lapse simulation harness | N6 | C03, C04 | planned |
 
@@ -54,7 +54,6 @@ Work outside the block plan. Done items are listed so the history of the tooling
 | X03 | A pre-push hook (`.githooks/pre-push`) that runs the instance data guard and refuses the push when it fails or cannot check; activated once per clone by a human with `core.hooksPath`, never by an agent | done |
 | X04 | The pre-push hook also judges what is actually pushed: the added lines and the path texts of every commit in the ranges git hands to the hook, not only the checkout. Reason: a private value that was committed by mistake and corrected in the next commit passes the hook and CI, but leaves with the branch history and stays retrievable through the pull request reference, even after a squash merge and the deletion of the branch. Fails closed like the rest (a range that cannot be read refuses the push). Also: the identity of every pushed commit (author, committer, tagger) must equal the address configured for the clone, links to a session of an assistant tool are flagged, and the hook makes the guard prove that it knows the mode | done |
 
-Transitional rule in `tasks/README.md` ("run the instance data guard on native Windows before every push"): to be removed once C02, C03 and C04 are merged.
 
 ## After M1 — listed only
 
