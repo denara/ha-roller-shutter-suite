@@ -20,6 +20,7 @@ ORDER = [
     "_data",
     "values",
     "functions",
+    "geometry",
     "schedule",
     "almanac",
     "window",

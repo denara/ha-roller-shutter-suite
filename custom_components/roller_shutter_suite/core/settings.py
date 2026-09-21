@@ -46,6 +46,8 @@ from types import MappingProxyType
 from typing import Any, Final
 
 from .model import (
+    GEOMETRY_FIELDS,
+    GEOMETRY_PREFIX,
     SCHEDULE_DAY_TYPES,
     SCHEDULE_EDGES,
     TRIGGER_FIELDS,
@@ -1235,6 +1237,60 @@ def _schedule_settings() -> tuple[SettingDefinition[Any], ...]:
     return (*triggers, *(_schedule_setting(*entry) for entry in others))
 
 
+_GEOMETRY_FIELD_KINDS: Final[
+    Mapping[str, tuple[SettingKind, Callable[[JsonValue], Any]]]
+] = MappingProxyType(
+    {
+        "use_measurements": (SettingKind.BOOLEAN, as_bool),
+        "fixed_position": (SettingKind.NUMBER, _as_position),
+        "orientation_known": (SettingKind.BOOLEAN, as_bool),
+        # Degrees; an azimuth runs clockwise from north.
+        "orientation": (SettingKind.NUMBER, _as_number),
+        "view_left": (SettingKind.NUMBER, _as_number),
+        "view_right": (SettingKind.NUMBER, _as_number),
+        "min_elevation": (SettingKind.NUMBER, _as_number),
+        "end_elevation": (SettingKind.NUMBER, _as_number),
+        # Metres.
+        "element_bottom": (SettingKind.NUMBER, _as_number),
+        "element_height": (SettingKind.NUMBER, _as_number),
+        "depth": (SettingKind.NUMBER, _as_number),
+        "pitch": (SettingKind.NUMBER, _as_number),
+        "amplification_cap": (SettingKind.NUMBER, _as_number),
+        "calibration_seat": (SettingKind.NUMBER, _as_position),
+        "calibration_glass_top": (SettingKind.NUMBER, _as_position),
+    }
+)
+"""Kind and reader of every window-level measurement of shading."""
+
+
+def shading_geometry_keys() -> tuple[str, ...]:
+    """Return the keys of the window-level measurements of shading.
+
+    They are the fields of ``WindowConfig.geometry`` with the prefix in
+    front; the registry entries are generated from this one list.
+    """
+    return tuple(f"{GEOMETRY_PREFIX}{name}" for name in GEOMETRY_FIELDS)
+
+
+def _shading_geometry_settings() -> tuple[SettingDefinition[Any], ...]:
+    """Return the measurements of shading; their defaults are those of the fields.
+
+    They belong to ``shading``, which pauses on a fault: a faulty measurement
+    never moves a shutter to a position somebody else's numbers gave.
+    """
+    defaults = {entry.name: entry.default for entry in dataclasses.fields(WindowConfig)}
+    return tuple(
+        SettingDefinition(
+            key=key,
+            kind=_GEOMETRY_FIELD_KINDS[name][0],
+            function=FunctionId.SHADING,
+            default=defaults[key],
+            parse=_GEOMETRY_FIELD_KINDS[name][1],
+        )
+        for key, name in zip(shading_geometry_keys(), GEOMETRY_FIELDS, strict=True)
+    )
+
+
 WINDOW_SETTINGS: Final = SettingsRegistry(
     (
         SettingDefinition(
@@ -1334,6 +1390,7 @@ WINDOW_SETTINGS: Final = SettingsRegistry(
             parse=as_duration,
         ),
         *_schedule_settings(),
+        *_shading_geometry_settings(),
     )
 )
 """The settings of ``WindowConfig``. A new setting is one more entry here.
