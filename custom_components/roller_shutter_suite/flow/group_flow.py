@@ -23,6 +23,8 @@ from .model import LevelContext
 from .steps import FeatureStepsMixin, install_feature_steps
 
 STEP_BASICS = "basics"
+ERROR_NAME_BLANK = "name_blank"
+ABORT_SUBENTRY_REMOVED = "subentry_removed"
 
 
 @install_feature_steps
@@ -51,24 +53,34 @@ class GroupSubentryFlow(FeatureStepsMixin, ConfigSubentryFlow):
         self, user_input: dict[str, Any] | None = None
     ) -> SubentryFlowResult:
         """Ask for the name, which is the title of the subentry."""
+        errors: dict[str, str] = {}
+        suggested = user_input
         if user_input is not None:
-            self._name = user_input[CONF_NAME]
-            result: SubentryFlowResult = await self._async_start_feature_steps(
-                self._level_context()
-            )
-            return result
-
-        suggested = (
-            {CONF_NAME: self._get_reconfigure_subentry().title}
-            if self.source == SOURCE_RECONFIGURE
-            else None
-        )
+            if self._own_subentry_is_gone():
+                return self.async_abort(reason=ABORT_SUBENTRY_REMOVED)
+            self._name = user_input[CONF_NAME].strip()
+            if self._name:
+                result: SubentryFlowResult = await self._async_start_feature_steps(
+                    self._level_context()
+                )
+                return result
+            errors[CONF_NAME] = ERROR_NAME_BLANK
+        elif self.source == SOURCE_RECONFIGURE:
+            suggested = {CONF_NAME: self._get_reconfigure_subentry().title}
         schema = probatio.Schema({probatio.Required(CONF_NAME): TextSelector()})
         return self.async_show_form(
             step_id=STEP_BASICS,
             data_schema=self.add_suggested_values_to_schema(
                 as_form_schema(schema), suggested
             ),
+            errors=errors,
+        )
+
+    def _own_subentry_is_gone(self) -> bool:
+        """Return whether the group that is changed was removed while the flow was open."""
+        return (
+            self.source == SOURCE_RECONFIGURE
+            and self._reconfigure_subentry_id not in self._get_entry().subentries
         )
 
     def _level_context(self) -> LevelContext:
@@ -88,6 +100,8 @@ class GroupSubentryFlow(FeatureStepsMixin, ConfigSubentryFlow):
 
     async def _async_finish(self) -> SubentryFlowResult:
         data = {CONF_SETTINGS: dict(self._context.own)}
+        if self._own_subentry_is_gone():
+            return self.async_abort(reason=ABORT_SUBENTRY_REMOVED)
         if self.source == SOURCE_RECONFIGURE:
             # The entry has an update listener that schedules the reload, so
             # the flow only updates; a reloading method would raise here.

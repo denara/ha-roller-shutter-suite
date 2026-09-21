@@ -410,16 +410,18 @@
           }
         }
       },
-      "abort": {
-        "reconfigure_successful": "The group was saved."
-      },
       "error": {
+        "name_blank": "Enter a name.",
         "invalid_value": "This value cannot be used.",
         "fraction_not_allowed": "Enter a whole number.",
         "invalid_day_of_year": "Enter the day as month and day with two digits each, for example 05-01.",
         "leap_day_not_allowed": "29 February does not exist in every year. Choose 28 February or 1 March.",
         "reference_missing": "Choose an entity, or choose \"None\" or \"Inherit\" above.",
         "invalid_combination": "These values do not fit together: {combination}. Each of them alone would be fine."
+      },
+      "abort": {
+        "reconfigure_successful": "The group was saved.",
+        "subentry_removed": "The group was removed while this form was open. Nothing was saved."
       }
     },
     "window": {
@@ -648,6 +650,8 @@
         }
       },
       "error": {
+        "name_blank": "Enter a name.",
+        "group_removed": "The group you chose no longer exists; it was removed while this form was open. Choose another group, or save without one and the window inherits from the house.",
         "no_covers": "The selection contains no cover.",
         "cover_in_use": "{cover} already belongs to the window \"{window}\". A cover can belong to one window only.",
         "invalid_value": "This value cannot be used.",
@@ -658,7 +662,8 @@
         "invalid_combination": "These values do not fit together: {combination}. Each of them alone would be fine."
       },
       "abort": {
-        "reconfigure_successful": "The window was saved."
+        "reconfigure_successful": "The window was saved.",
+        "subentry_removed": "The window was removed while this form was open. Nothing was saved."
       }
     }
   },

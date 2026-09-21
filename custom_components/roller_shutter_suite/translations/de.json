@@ -410,16 +410,18 @@
           }
         }
       },
-      "abort": {
-        "reconfigure_successful": "Die Gruppe wurde gespeichert."
-      },
       "error": {
+        "name_blank": "Gib einen Namen ein.",
         "invalid_value": "Dieser Wert kann nicht verwendet werden.",
         "fraction_not_allowed": "Gib eine ganze Zahl ein.",
         "invalid_day_of_year": "Gib den Tag als Monat und Tag mit je zwei Ziffern ein, zum Beispiel 05-01.",
         "leap_day_not_allowed": "Den 29. Februar gibt es nicht in jedem Jahr. Wähle den 28. Februar oder den 1. März.",
         "reference_missing": "Wähle eine Entität, oder wähle oben „Keine“ oder „Erben“.",
         "invalid_combination": "Diese Werte passen nicht zusammen: {combination}. Jeder für sich wäre in Ordnung."
+      },
+      "abort": {
+        "reconfigure_successful": "Die Gruppe wurde gespeichert.",
+        "subentry_removed": "Die Gruppe wurde entfernt, während dieses Formular geöffnet war. Es wurde nichts gespeichert."
       }
     },
     "window": {
@@ -648,6 +650,8 @@
         }
       },
       "error": {
+        "name_blank": "Gib einen Namen ein.",
+        "group_removed": "Die gewählte Gruppe gibt es nicht mehr; sie wurde entfernt, während dieses Formular geöffnet war. Wähle eine andere Gruppe, oder speichere ohne Gruppe, dann erbt das Fenster vom Haus.",
         "no_covers": "Die Auswahl enthält keinen Rollladen.",
         "cover_in_use": "{cover} gehört bereits zum Fenster „{window}“. Ein Rollladen kann nur zu einem Fenster gehören.",
         "invalid_value": "Dieser Wert kann nicht verwendet werden.",
@@ -658,7 +662,8 @@
         "invalid_combination": "Diese Werte passen nicht zusammen: {combination}. Jeder für sich wäre in Ordnung."
       },
       "abort": {
-        "reconfigure_successful": "Das Fenster wurde gespeichert."
+        "reconfigure_successful": "Das Fenster wurde gespeichert.",
+        "subentry_removed": "Das Fenster wurde entfernt, während dieses Formular geöffnet war. Es wurde nichts gespeichert."
       }
     }
   },

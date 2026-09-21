@@ -28,13 +28,16 @@ from custom_components.roller_shutter_suite.const import (
     SUBENTRY_GROUP,
     SUBENTRY_WINDOW,
 )
-from custom_components.roller_shutter_suite.core.settings import STORED_NONE
+from custom_components.roller_shutter_suite.core.settings import STORED_NONE, Level
 from custom_components.roller_shutter_suite.features.daily_routine import (
     DAILY_ROUTINE,
 )
+from custom_components.roller_shutter_suite.flow import inheritance
 from custom_components.roller_shutter_suite.flow.model import (
     Catalog,
     FeatureForm,
+    FieldForm,
+    LevelContext,
     StepForm,
 )
 from tests.ha.helpers import (
@@ -856,3 +859,83 @@ async def test_feature_without_a_switch_is_always_on(
     )
 
     assert result["step_id"] == GENERAL_PAGE
+
+
+async def test_combination_is_reported_on_the_page_it_concerns(
+    hass: HomeAssistant,
+) -> None:
+    """Stored values that clash do not block an earlier page; their own page reports them."""
+    set_cover(hass, COVER)
+    entry = await setup_entry(
+        hass,
+        subentries=[
+            subentry_data(
+                SUBENTRY_WINDOW,
+                "Kitchen",
+                {
+                    "covers": [COVER],
+                    CONF_SETTINGS: {"schedule_workday_morning_time": "21:00:00"},
+                },
+                "w1",
+            )
+        ],
+    )
+
+    # The general page has nothing to do with it and lets the user pass.
+    result = await _window_page(hass, entry, WORKDAY_PAGE, reconfigure="w1")
+    marker = marker_of(result, "schedule_workday_morning_time")
+    assert suggested_value(marker) == "21:00:00"
+
+    unchanged = day_inherit("workday", schedule_workday_morning_time="21:00:00")
+    result = await configure_subentry_flow(hass, result, unchanged)
+    assert result["step_id"] == WORKDAY_PAGE
+    assert result["errors"]["schedule_workday_morning_time"] == "invalid_combination"
+
+    result = await submit_steps(
+        hass, result, [day_inherit("workday"), *_rest_after(WORKDAY_PAGE)]
+    )
+    assert result["reason"] == "reconfigure_successful"
+    assert _own(entry, "w1") == {}
+
+
+def test_reference_without_domains_offers_every_entity() -> None:
+    """The entity domains are a convenience of the form; without them nothing is filtered."""
+    context = LevelContext(level=Level.GLOBAL, own={}, house_title="House")
+    catalog = Catalog(
+        registry=features.CATALOG.registry,
+        features=(
+            FeatureForm(
+                "daily_routine",
+                (StepForm("general", (FieldForm("schedule_season_source"),)),),
+            ),
+        ),
+        resolve=features.CATALOG.resolve,
+    )
+    page = catalog.features[0].steps[0]
+
+    schema = inheritance.build_schema(
+        catalog, page.fields, context, inheritance.inherited_settings(catalog, context)
+    ).schema
+
+    assert "domain" not in schema["schedule_season_source"].config
+    filtered = schema_of(
+        {
+            "data_schema": inheritance.build_schema(
+                features.CATALOG,
+                DAILY_ROUTINE.steps[0].fields,
+                context,
+                inheritance.inherited_settings(features.CATALOG, context),
+            )
+        }
+    )["schedule_season_source"]
+    assert "binary_sensor" in filtered.config["domain"]
+
+
+def test_value_without_a_form_value_is_refused_loudly() -> None:
+    """A kind that no control can carry raises instead of showing something wrong."""
+    definition = features.CATALOG.definitions["shading_temperature_tiers"]
+
+    with pytest.raises(TypeError, match="has no form value"):
+        inheritance.stored_form(
+            definition, FieldForm("shading_temperature_tiers"), definition.default
+        )

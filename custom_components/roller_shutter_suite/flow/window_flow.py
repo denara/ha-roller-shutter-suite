@@ -53,6 +53,9 @@ STEP_DEGRADED_ACCEPT = "degraded_accept"
 
 ERROR_NO_COVERS = "no_covers"
 ERROR_COVER_IN_USE = "cover_in_use"
+ERROR_NAME_BLANK = "name_blank"
+ERROR_GROUP_REMOVED = "group_removed"
+ABORT_SUBENTRY_REMOVED = "subentry_removed"
 
 
 def _without_position(members: tuple[MemberConfig, ...]) -> list[str]:
@@ -112,6 +115,33 @@ class WindowSubentryFlow(FeatureStepsMixin, ConfigSubentryFlow):
             if subentry.subentry_type == SUBENTRY_GROUP
         }
 
+    def _own_subentry_is_gone(self) -> bool:
+        """Return whether the window that is changed was removed while the flow was open."""
+        return (
+            self.source == SOURCE_RECONFIGURE
+            and self._reconfigure_subentry_id not in self._get_entry().subentries
+        )
+
+    def _group_is_gone(self) -> bool:
+        """Return whether the chosen group was removed while the flow was open."""
+        return self._group_id is not None and self._group_id not in self._groups()
+
+    def _show_group_removed(self) -> SubentryFlowResult:
+        """Go back to the first page, which no longer offers the group, and say why.
+
+        Home Assistant removes a subentry without asking, also while a flow is
+        open that refers to it. The flow goes on as the set-up does for a group
+        that is gone: the window inherits from the house unless the user
+        chooses another group, and no reference to the removed group is stored.
+        """
+        self._group_id = None
+        self._last_basics = {
+            key: value
+            for key, value in (self._last_basics or {}).items()
+            if key != CONF_GROUP_ID
+        }
+        return self._show_basics({"base": ERROR_GROUP_REMOVED})
+
     def _conflict(self) -> tuple[str, str] | None:
         return find_conflict(
             self._get_entry(), self._resolved.members, self._own_subentry_id()
@@ -123,17 +153,29 @@ class WindowSubentryFlow(FeatureStepsMixin, ConfigSubentryFlow):
         """Ask for name, covers and group; refuse covers of another window."""
         if user_input is None:
             return self._show_basics()
+        if self._own_subentry_is_gone():
+            return self.async_abort(reason=ABORT_SUBENTRY_REMOVED)
+        if (refusal := self._refuse_basics(user_input)) is not None:
+            return refusal
+        if self._resolved.groups:
+            return await self.async_step_members()
+        return await self.async_step_degraded()
+
+    def _refuse_basics(self, user_input: dict[str, Any]) -> SubentryFlowResult | None:
+        """Take the input of the first page; return the page again if it is refused."""
         self._last_basics = user_input
+        self._name = user_input[CONF_NAME].strip()
+        if not self._name:
+            return self._show_basics({CONF_NAME: ERROR_NAME_BLANK})
         self._resolved = resolve_covers(self.hass, user_input[CONF_COVERS])
         if not self._resolved.members:
             return self._show_basics({CONF_COVERS: ERROR_NO_COVERS})
         if (conflict := self._conflict()) is not None:
             return self._show_cover_in_use(conflict)
-        self._name = user_input[CONF_NAME]
         self._group_id = user_input.get(CONF_GROUP_ID)
-        if self._resolved.groups:
-            return await self.async_step_members()
-        return await self.async_step_degraded()
+        if self._group_is_gone():
+            return self._show_group_removed()
+        return None
 
     def _show_cover_in_use(self, conflict: tuple[str, str]) -> SubentryFlowResult:
         return self._show_basics(
@@ -245,8 +287,9 @@ class WindowSubentryFlow(FeatureStepsMixin, ConfigSubentryFlow):
             else {}
         )
         group: GroupParent | None = None
-        if self._group_id is not None:
-            subentry = entry.subentries[self._group_id]
+        # The first page has just checked that the group still exists.
+        subentry = entry.subentries.get(self._group_id or "")
+        if subentry is not None:
             group = GroupParent(
                 group_id=subentry.subentry_id,
                 title=subentry.title,
@@ -262,10 +305,15 @@ class WindowSubentryFlow(FeatureStepsMixin, ConfigSubentryFlow):
         )
 
     async def _async_finish(self) -> SubentryFlowResult:
-        # Two flows that were open at the same time could both have passed the
-        # check of the first step, so it runs again right before saving.
+        # The flow was open for a while. What it took from the first page is
+        # checked again right before saving: the window itself and its group
+        # may have been removed, and another flow may have taken a cover.
+        if self._own_subentry_is_gone():
+            return self.async_abort(reason=ABORT_SUBENTRY_REMOVED)
         if (conflict := self._conflict()) is not None:
             return self._show_cover_in_use(conflict)
+        if self._group_is_gone():
+            return self._show_group_removed()
         data: dict[str, Any] = {
             CONF_COVERS: list(self._resolved.members),
             CONF_SETTINGS: dict(self._context.own),

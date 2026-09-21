@@ -597,15 +597,17 @@ def read_step_input(
             result.errors[_error_field(by_key[fault.key])] = _fault_error(
                 catalog, fault, result.own
             )
-    if combination:
+    on_this_page = [key for key in combination if key in by_key]
+    if on_this_page:
         # Each value alone is fine, together the core refuses them. The error
         # stands at every field of this page that is concerned and can show
-        # one. The keys of all settings concerned are named, also those of
-        # another level, because a field inside the section, of another page
-        # or of another level cannot show an error of its own.
-        for key in combination:
-            if key in by_key:
-                result.errors[_error_field(by_key[key])] = ERROR_COMBINATION
+        # one, and on the form. The keys of all settings concerned are named,
+        # also those of another level, because a field inside the section or
+        # of another level cannot show an error of its own. A combination that
+        # concerns no field of this page is left to the page it belongs to, so
+        # the user can get there.
+        for key in on_this_page:
+            result.errors[_error_field(by_key[key])] = ERROR_COMBINATION
         result.errors.setdefault("base", ERROR_COMBINATION)
         result.placeholders[PLACEHOLDER_COMBINATION] = ", ".join(sorted(involved))
     return result

@@ -162,6 +162,7 @@ Open the menu of the window or group and choose **Delete**.
 
 - **Removing a window** removes its device and everything that belongs to it. The other windows are not affected in what they do; the integration reloads once.
 - **Removing a group** that windows still refer to is possible, and Home Assistant does not ask the integration first. Nothing breaks: such a window **inherits from the house** from then on, and a repair issue names it ("The group of window ... no longer exists"). To repair it, open the window, choose another group or leave the field empty, and save. The issue disappears.
+- If you remove a group or a window **while one of its forms is still open** somewhere, that form does not fail: a window form that had chosen the group goes back to its first page and tells you that the group no longer exists, and a form of the removed group or window itself closes and saves nothing.
 
 **Worked example.** You remove the group "Bedrooms", which opened at 10:00 on weekends. The windows that were in it now follow the house again, so they open at the time of the house. Home Assistant shows one repair issue per window until you have saved each of them.
 

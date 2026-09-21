@@ -29,7 +29,11 @@ from custom_components.roller_shutter_suite.core.settings import (
     schedule_trigger_keys,
 )
 from custom_components.roller_shutter_suite.features import CATALOG
-from custom_components.roller_shutter_suite.flow import inheritance, window_flow
+from custom_components.roller_shutter_suite.flow import (
+    group_flow,
+    inheritance,
+    window_flow,
+)
 from custom_components.roller_shutter_suite.flow.model import (
     Catalog,
     GroupParent,
@@ -169,6 +173,12 @@ def test_every_error_abort_and_menu_entry_is_translated(path: str) -> None:
     window = _flow(strings, Level.WINDOW)
     assert window["error"][window_flow.ERROR_NO_COVERS]
     assert window["error"][window_flow.ERROR_COVER_IN_USE]
+    assert window["error"][window_flow.ERROR_NAME_BLANK]
+    assert window["error"][window_flow.ERROR_GROUP_REMOVED]
+    group = _flow(strings, Level.GROUP)
+    assert group["error"][group_flow.ERROR_NAME_BLANK]
+    assert group["abort"][group_flow.ABORT_SUBENTRY_REMOVED]
+    assert window["abort"][window_flow.ABORT_SUBENTRY_REMOVED]
     for step, options in (
         (window_flow.STEP_MEMBERS, (window_flow.STEP_MEMBERS_ACCEPT,)),
         (window_flow.STEP_DEGRADED, (window_flow.STEP_DEGRADED_ACCEPT,)),

@@ -120,6 +120,17 @@ Home Assistant loads one file per language, the strings of a step live under the
 
 Which fields a step has, their kind and their section come from the catalog, which the script imports without Home Assistant. The script fans a feature step out to the three levels, appends the inheritance hint of the field's kind on the levels that inherit, and generates one repair issue per level and problem code. **Never edit the three generated files by hand.** `tests/scripts/test_build_translations.py` fails when they are not current, when English and German differ in a key or a placeholder, or when a source ends up inside the shipped integration; `uv run python scripts/build_translations.py --check` does the first of these on the command line. `tests/ha/test_translations.py` asks the forms what they show and fails when a field, an error, a menu entry or an issue has no translation.
 
+## What a flow took from an earlier page may be gone
+
+Home Assistant removes a subentry without asking, also while a flow is open that refers to it. A flow therefore never looks a subentry up by an ID it took earlier without checking, on the first page and again right before saving:
+
+- **The group a window chose is gone:** the flow goes back to its first page, which no longer offers the group, with the translated error `group_removed`. It goes on as the set-up does for a group that is gone: the window inherits from the house unless another group is chosen, and no reference to the removed group is stored.
+- **The group or window that is being changed is gone:** the flow ends with the translated abort reason `subentry_removed` and saves nothing.
+- **A cover taken by another flow in the meantime:** the first page comes back with `cover_in_use`.
+- A cover that lost its entity in the meantime needs nothing: its capabilities are read as unknown.
+
+A name of nothing but blanks is refused (`name_blank`), because the name is the title of the subentry, which issues and messages show; blanks around a name are dropped.
+
 ## Reload
 
 An update listener schedules the reload; every flow ends with `async_create_entry` or `async_update_and_abort` and never reloads itself. A flow collects its input and saves once, in its last step. `tests/ha/test_reload.py` counts the set-ups: one per create, reconfigure, rename and remove, none for an unchanged form.

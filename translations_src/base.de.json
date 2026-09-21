@@ -66,8 +66,12 @@
           }
         }
       },
+      "error": {
+        "name_blank": "Gib einen Namen ein."
+      },
       "abort": {
-        "reconfigure_successful": "Die Gruppe wurde gespeichert."
+        "reconfigure_successful": "Die Gruppe wurde gespeichert.",
+        "subentry_removed": "Die Gruppe wurde entfernt, während dieses Formular geöffnet war. Es wurde nichts gespeichert."
       }
     },
     "window": {
@@ -108,11 +112,14 @@
         }
       },
       "error": {
+        "name_blank": "Gib einen Namen ein.",
+        "group_removed": "Die gewählte Gruppe gibt es nicht mehr; sie wurde entfernt, während dieses Formular geöffnet war. Wähle eine andere Gruppe, oder speichere ohne Gruppe, dann erbt das Fenster vom Haus.",
         "no_covers": "Die Auswahl enthält keinen Rollladen.",
         "cover_in_use": "{cover} gehört bereits zum Fenster „{window}“. Ein Rollladen kann nur zu einem Fenster gehören."
       },
       "abort": {
-        "reconfigure_successful": "Das Fenster wurde gespeichert."
+        "reconfigure_successful": "Das Fenster wurde gespeichert.",
+        "subentry_removed": "Das Fenster wurde entfernt, während dieses Formular geöffnet war. Es wurde nichts gespeichert."
       }
     }
   },

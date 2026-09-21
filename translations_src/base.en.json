@@ -66,8 +66,12 @@
           }
         }
       },
+      "error": {
+        "name_blank": "Enter a name."
+      },
       "abort": {
-        "reconfigure_successful": "The group was saved."
+        "reconfigure_successful": "The group was saved.",
+        "subentry_removed": "The group was removed while this form was open. Nothing was saved."
       }
     },
     "window": {
@@ -108,11 +112,14 @@
         }
       },
       "error": {
+        "name_blank": "Enter a name.",
+        "group_removed": "The group you chose no longer exists; it was removed while this form was open. Choose another group, or save without one and the window inherits from the house.",
         "no_covers": "The selection contains no cover.",
         "cover_in_use": "{cover} already belongs to the window \"{window}\". A cover can belong to one window only."
       },
       "abort": {
-        "reconfigure_successful": "The window was saved."
+        "reconfigure_successful": "The window was saved.",
+        "subentry_removed": "The window was removed while this form was open. Nothing was saved."
       }
     }
   },
