@@ -1,0 +1,137 @@
+{
+  "switch": {
+    "label": "Daily routine",
+    "description": "Opens the shutters in the morning and closes them in the evening. While it is switched off, the daily routine moves nothing; protection keeps running."
+  },
+  "steps": {
+    "general": {
+      "title": "Daily routine",
+      "description": "How far the shutters open and close, how workdays, weekends and public holidays are told apart, and what else can begin the evening. The times follow on the next pages, one page per kind of day."
+    },
+    "workday": {
+      "title": "Daily routine on workdays",
+      "description": "When the morning and the evening begin on a workday."
+    },
+    "weekend": {
+      "title": "Daily routine on weekends",
+      "description": "When the morning and the evening begin on a Saturday or Sunday, or on a day that the workday entity reports as free."
+    },
+    "holiday": {
+      "title": "Daily routine on public holidays",
+      "description": "When the morning and the evening begin on a day that the holiday entity reports as a public holiday."
+    }
+  },
+  "fields": {
+    "schedule_morning_position": {
+      "label": "Morning position",
+      "description": "Where the shutter goes in the morning. 100 % is fully open, 0 % fully closed. The morning only raises: a shutter that is already higher stays where it is."
+    },
+    "schedule_evening_position": {
+      "label": "Evening position",
+      "description": "Where the shutter goes in the evening. 100 % is fully open, 0 % fully closed. The evening only lowers: a shutter that is already lower stays where it is."
+    },
+    "schedule_evening_position_summer": {
+      "label": "Evening position in summer",
+      "description": "Replaces the evening position while it is summer, for example 30 % for privacy with some air. It counts only with a summer entity or with summer by date."
+    },
+    "schedule_workday_source": {
+      "label": "Workday entity",
+      "description": "An entity that is on on workdays, for example the workday sensor of Home Assistant. With \"None\", Monday to Friday are workdays.",
+      "entity_label": "Entity for workdays",
+      "entity_description": "Counts only with \"Own selection\" above."
+    },
+    "schedule_holiday_source": {
+      "label": "Holiday entity",
+      "description": "An entity that is on on public holidays; a calendar with an all-day event works too. With \"None\" there are no public holidays.",
+      "entity_label": "Entity for public holidays",
+      "entity_description": "Counts only with \"Own selection\" above."
+    },
+    "schedule_season_source": {
+      "label": "Summer entity",
+      "description": "An entity that is on while it is summer. While it has no value, its last known value counts.",
+      "entity_label": "Entity for summer",
+      "entity_description": "Counts only with \"Own selection\" above."
+    },
+    "schedule_summer_by_date": {
+      "label": "Summer by date",
+      "description": "Without a summer entity, summer lasts from the first to the last day given below."
+    },
+    "schedule_summer_first_day": {
+      "label": "First day of summer",
+      "description": "Month and day with two digits each, for example 05-01 for 1 May."
+    },
+    "schedule_summer_last_day": {
+      "label": "Last day of summer",
+      "description": "Month and day with two digits each, for example 09-30 for 30 September. The range may run across the turn of the year."
+    },
+    "schedule_brightness_source": {
+      "label": "Outdoor brightness entity",
+      "description": "An entity that reports the outdoor brightness in lux. When it has been darker than the threshold for the delay, the evening begins early, but never before \"not before\" of the evening. An entity without a value begins nothing and blocks nothing.",
+      "entity_label": "Entity for the outdoor brightness (lux)",
+      "entity_description": "Counts only with \"Own selection\" above."
+    },
+    "schedule_brightness_threshold_lux": {
+      "label": "Brightness threshold (lux)",
+      "description": "Below this outdoor brightness, in lux, it counts as dark."
+    },
+    "schedule_brightness_delay": {
+      "label": "Brightness delay",
+      "description": "For how many minutes it has to be dark before the evening begins."
+    },
+    "schedule_random_offset": {
+      "label": "Random offset",
+      "description": "Moves every trigger by up to this many minutes, earlier or later, differently for each window and day. 0 switches it off; 30 is the maximum."
+    }
+  },
+  "generated": [
+    {
+      "pattern": "schedule_{day_type}_{edge}_{field}",
+      "words": {
+        "day_type": {
+          "workday": "workday",
+          "weekend": "weekend",
+          "holiday": "public holiday"
+        },
+        "edge": {
+          "morning": "Morning",
+          "evening": "Evening"
+        }
+      },
+      "texts": {
+        "field": {
+          "kind": {
+            "label": "[edge]: trigger",
+            "description": "A fixed time; sunrise in the morning or sunset in the evening, with an offset; or the elevation of the sun. For the two that follow the sun, \"not before\" and \"not after\" under the expert values limit the time."
+          },
+          "time": {
+            "label": "[edge]: time",
+            "description": "Counts with the trigger \"Fixed time\"."
+          },
+          "offset_minutes": {
+            "label": "[edge]: offset to sunrise or sunset",
+            "description": "Counts with the trigger \"Sunrise or sunset\". Minutes; a negative number means earlier."
+          },
+          "elevation": {
+            "label": "[edge]: elevation of the sun",
+            "description": "Counts with the trigger \"Elevation of the sun\". Degrees above the horizon; a negative number means below it."
+          },
+          "not_before": {
+            "label": "[edge]: not before",
+            "description": "The earliest time for a trigger that follows the sun. On a day on which the sun gives no time, this time or \"not after\" stands in."
+          },
+          "not_after": {
+            "label": "[edge]: not after",
+            "description": "The latest time for a trigger that follows the sun."
+          }
+        }
+      }
+    }
+  ],
+  "options": {
+    "schedule_trigger_kind": {
+      "fixed_time": "Fixed time",
+      "sun_event": "Sunrise or sunset",
+      "elevation": "Elevation of the sun"
+    }
+  }
+}
