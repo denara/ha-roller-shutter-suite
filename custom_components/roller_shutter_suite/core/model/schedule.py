@@ -267,9 +267,11 @@ class ScheduleSettings:
       range from ``summer_first_day`` to ``summer_last_day`` (month and day,
       both inclusive; it may run across the turn of the year); else there is
       one evening position.
-    - ``brightness_source``: key of a numeric source. The evening also begins
-      when it has been below ``brightness_threshold`` for ``brightness_delay``,
-      but not before "not before" of the evening trigger, whatever its kind.
+    - ``brightness_source``: key of a numeric source that reports the outdoor
+      brightness **in lux**. The evening also begins when it has been below
+      ``brightness_threshold``, which is **in lux** too, for
+      ``brightness_delay``, but not before "not before" of the evening
+      trigger, whatever its kind.
     - ``random_offset``: the range of the random offset, 0 (off) to 30 minutes.
     """
 

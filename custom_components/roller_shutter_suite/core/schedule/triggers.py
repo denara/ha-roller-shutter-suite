@@ -1,21 +1,18 @@
 """The instant of a trigger on a local date: kind, random offset, clamps.
 
 Nothing here computes anything astronomical; sunrise, sunset, the passage of
-an elevation and the elevation at noon are answers of the sun port, asked
-directly or read from the almanac (module ``sun``).
+an elevation are answers of the sun port, asked directly or read from the
+almanac (module ``sun``).
 """
 
 import hashlib
 from datetime import date, datetime, time, timedelta, tzinfo
 from enum import StrEnum, unique
-from typing import Final
 
 from custom_components.roller_shutter_suite.core.model import Trigger, TriggerKind
 
 from .local_time import end_of_day, local_instant, start_of_day
 from .sun import SunSource
-
-_HORIZON: Final = 0.0
 
 
 @unique
@@ -43,13 +40,6 @@ def random_offset(
     return timedelta(seconds=number % (2 * span + 1) - span)
 
 
-def _threshold(trigger: Trigger) -> float:
-    """Return the elevation a trigger waits for; the horizon for a sun event."""
-    if trigger.kind is TriggerKind.ELEVATION:
-        return trigger.elevation
-    return _HORIZON
-
-
 def _moment_from_sun(
     trigger: Trigger, edge: Edge, day: date, sun: SunSource
 ) -> datetime | None:
@@ -60,21 +50,14 @@ def _moment_from_sun(
     return None if found is None else found + trigger.offset
 
 
-def _clamp_in_its_direction(
-    trigger: Trigger, edge: Edge, day: date, sun: SunSource
-) -> time:
+def _clamp_in_its_direction(trigger: Trigger, edge: Edge) -> time:
     """Return the clamp a trigger falls on when the sun gives no moment.
 
-    Either the sun stays below the elevation all day: the morning never comes
-    by itself (latest morning), and the evening has begun already (earliest
-    evening). Or it stays above: the morning has begun already (earliest
-    morning), and the evening never comes by itself (latest evening). The
-    elevation at local noon tells the two apart.
+    The sun does not rise, does not set, or never passes the elevation on
+    the date. The clamp decides: the morning falls on "not before", the
+    evening on "not after". That is an answer, not missing data.
     """
-    sun_is_up = sun.noon_elevation(day) >= _threshold(trigger)
-    if sun_is_up == (edge is Edge.MORNING):
-        return trigger.not_before
-    return trigger.not_after
+    return trigger.not_before if edge is Edge.MORNING else trigger.not_after
 
 
 def trigger_instant(  # noqa: PLR0913 - the inputs of one trigger, all of them needed
@@ -99,7 +82,7 @@ def trigger_instant(  # noqa: PLR0913 - the inputs of one trigger, all of them n
     else:
         moment = _moment_from_sun(trigger, edge, day, sun)
     if moment is None:
-        fallback = _clamp_in_its_direction(trigger, edge, day, sun)
+        fallback = _clamp_in_its_direction(trigger, edge)
         moment = local_instant(day, fallback, zone)
     else:
         moment += offset

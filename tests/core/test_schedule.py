@@ -34,11 +34,13 @@ from custom_components.roller_shutter_suite.core.ports import Sun
 from custom_components.roller_shutter_suite.core.reasons import ReasonCode
 from custom_components.roller_shutter_suite.core.schedule import (
     SCHEDULE_NOT_CONFIGURED,
+    AlmanacSun,
     Edge,
     PartOfDay,
     PlannedAction,
     PortSun,
     ScheduleResult,
+    build_sun_almanac,
     day_type_by_weekday,
     local_instant,
     morning_condition_fulfilled,
@@ -199,7 +201,7 @@ def test_each_kind_of_trigger(
     trigger: Trigger, edge: Edge, sun: Sun, expected: time
 ) -> None:
     """Fixed time, sunrise or sunset with an offset, and sun elevation."""
-    instant = trigger_instant(trigger, edge, MONDAY, zone=ZONE, sun=PortSun(sun, ZONE))
+    instant = trigger_instant(trigger, edge, MONDAY, zone=ZONE, sun=PortSun(sun))
 
     assert instant == datetime.combine(MONDAY, expected, tzinfo=ZONE)
 
@@ -257,70 +259,63 @@ def test_clamps_hold_on_both_sides(
     trigger: Trigger, edge: Edge, sun: Sun, expected: time
 ) -> None:
     """'Not before' and 'not after' clamp the triggers of the sun."""
-    instant = trigger_instant(trigger, edge, MONDAY, zone=ZONE, sun=PortSun(sun, ZONE))
+    instant = trigger_instant(trigger, edge, MONDAY, zone=ZONE, sun=PortSun(sun))
 
     assert instant == datetime.combine(MONDAY, expected, tzinfo=ZONE)
 
 
-@pytest.mark.parametrize(
-    ("trigger", "edge", "sun", "expected"),
-    [
-        # The sun stays below the elevation: no morning by itself, evening at once.
-        (
-            elevation_trigger(45, EARLY),
-            Edge.MORNING,
-            SUN,
-            time(9, 0),
-        ),
-        (
-            elevation_trigger(45, LATE),
-            Edge.EVENING,
-            SUN,
-            time(16, 0),
-        ),
-        # The sun stays above the elevation: morning at once, no evening by itself.
-        (
-            elevation_trigger(-3, EARLY),
-            Edge.MORNING,
-            POLAR_DAY,
-            time(5, 0),
-        ),
-        (
-            elevation_trigger(-3, LATE),
-            Edge.EVENING,
-            POLAR_DAY,
-            time(22, 0),
-        ),
-        (sun_event(EARLY), Edge.MORNING, POLAR_NIGHT, time(9, 0)),
-        (sun_event(LATE), Edge.EVENING, POLAR_NIGHT, time(16, 0)),
-        (sun_event(EARLY), Edge.MORNING, POLAR_DAY, time(5, 0)),
-        (sun_event(LATE), Edge.EVENING, POLAR_DAY, time(22, 0)),
-    ],
-    ids=[
-        "elevation too high, morning",
-        "elevation too high, evening",
-        "elevation too low, morning",
-        "elevation too low, evening",
-        "no sunrise in the polar night",
-        "no sunset in the polar night",
-        "no sunrise in the polar day",
-        "no sunset in the polar day",
-    ],
-)
+NO_EVENT = {
+    "sunrise and sunset, polar night": (sun_event(EARLY), sun_event(LATE), POLAR_NIGHT),
+    "sunrise and sunset, polar day": (sun_event(EARLY), sun_event(LATE), POLAR_DAY),
+    "elevation never reached, polar night": (
+        elevation_trigger(3, EARLY),
+        elevation_trigger(3, LATE),
+        POLAR_NIGHT,
+    ),
+    "elevation never left, polar day": (
+        elevation_trigger(-3, EARLY),
+        elevation_trigger(-3, LATE),
+        POLAR_DAY,
+    ),
+    "elevation too high in deep winter": (
+        elevation_trigger(45, EARLY),
+        elevation_trigger(45, LATE),
+        SUN,
+    ),
+}
+
+
+@pytest.mark.parametrize("through", ["the sun port", "the almanac"])
+@pytest.mark.parametrize("case", list(NO_EVENT))
 def test_a_moment_that_never_comes_falls_on_the_clamp_in_its_direction(
-    trigger: Trigger, edge: Edge, sun: Sun, expected: time
+    case: str, through: str
 ) -> None:
-    """The random offset does not move it off the clamp either."""
-    instant = trigger_instant(
-        trigger,
-        edge,
-        MONDAY,
-        zone=ZONE,
-        sun=PortSun(sun, ZONE),
-        offset=timedelta(minutes=17),
-    )
+    """The morning falls on "not before", the evening on "not after".
 
-    assert instant == datetime.combine(MONDAY, expected, tzinfo=ZONE)
+    The sun does not rise, does not set, or never passes the elevation on the
+    date: that is an answer, and the clamp decides. It is the same through the
+    sun port and through the almanac, which records "none on this date". The
+    random offset does not move the trigger off the clamp either.
+    """
+    morning, evening, port = NO_EVENT[case]
+    window = config(workday=DayTriggers(morning, evening))
+    source: PortSun | AlmanacSun = PortSun(port)
+    if through == "the almanac":
+        source = AlmanacSun(build_sun_almanac(window, local(MONDAY, 12), port))
+
+    instants = [
+        trigger_instant(
+            trigger,
+            edge,
+            MONDAY,
+            zone=ZONE,
+            sun=source,
+            offset=timedelta(minutes=17),
+        )
+        for trigger, edge in ((morning, Edge.MORNING), (evening, Edge.EVENING))
+    ]
+
+    assert instants == [local(MONDAY, 5, 0), local(MONDAY, 22, 0)]
 
 
 def test_a_trigger_stays_on_its_own_date() -> None:
@@ -330,7 +325,7 @@ def test_a_trigger_stays_on_its_own_date() -> None:
         Edge.EVENING,
         MONDAY,
         zone=ZONE,
-        sun=PortSun(SUN, ZONE),
+        sun=PortSun(SUN),
         offset=timedelta(minutes=25),
     )
     early = trigger_instant(
@@ -338,7 +333,7 @@ def test_a_trigger_stays_on_its_own_date() -> None:
         Edge.MORNING,
         MONDAY,
         zone=ZONE,
-        sun=PortSun(SUN, ZONE),
+        sun=PortSun(SUN),
         offset=timedelta(minutes=-25),
     )
 
@@ -362,7 +357,7 @@ def test_a_sun_port_that_answers_without_a_zone_is_refused() -> None:
             Edge.EVENING,
             MONDAY,
             zone=ZONE,
-            sun=PortSun(FakeSun(naive=True), ZONE),
+            sun=PortSun(FakeSun(naive=True)),
         )
 
 

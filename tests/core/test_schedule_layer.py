@@ -22,6 +22,7 @@ from custom_components.roller_shutter_suite.core.model import (
     DayTriggers,
     Decision,
     Direction,
+    ElevationPassage,
     FunctionId,
     GateKind,
     Layer,
@@ -37,6 +38,7 @@ from custom_components.roller_shutter_suite.core.model import (
     WishKind,
     WorldSnapshot,
 )
+from custom_components.roller_shutter_suite.core.ports import Sun
 from custom_components.roller_shutter_suite.core.reasons import ReasonCode
 from custom_components.roller_shutter_suite.core.schedule import (
     ALMANAC_DAYS_AHEAD,
@@ -63,6 +65,7 @@ from tests.core.schedule_kit import (
     SEED,
     SUN,
     ZONE,
+    FakeSun,
     config,
     elevation_trigger,
     evaluate,
@@ -78,6 +81,8 @@ BY_THE_SUN = config(
     weekend=DayTriggers(sun_event(EARLY, 90), elevation_trigger(-4, LATE)),
     random_offset=timedelta(minutes=15),
 )
+POLAR_NIGHT = FakeSun(sunrise_at=None, sunset_at=None, highest=-5.0)
+POLAR_DAY = FakeSun(sunrise_at=None, sunset_at=None, highest=50.0, lowest=5.0)
 
 
 def _at_position(world: WorldSnapshot, position: int) -> WorldSnapshot:
@@ -111,7 +116,6 @@ def test_the_almanac_runs_from_yesterday_to_seven_days_ahead() -> None:
     assert monday is not None
     assert monday.sunrise == local(MONDAY, 6)
     assert monday.sunset == local(MONDAY, 18)
-    assert monday.noon_elevation == SUN.position(local(MONDAY, 12)).elevation
     assert [(entry.elevation, entry.rising) for entry in monday.passages] == [
         (-6.0, False),
         (-4.0, False),
@@ -139,18 +143,32 @@ def test_the_almanac_is_a_value_that_survives_json() -> None:
             almanac.days[0],
             passages=(almanac.days[0].passages[0], almanac.days[0].passages[0]),
         )
-    with pytest.raises(ValueError, match="noon_elevation: expected a number"):
-        SunAlmanac.from_data(
-            {"days": [almanac.days[0].to_data() | {"noon_elevation": "high"}]}
+    with pytest.raises(ValueError, match="elevation: expected a number"):
+        ElevationPassage.from_data(
+            almanac.days[0].passages[0].to_data() | {"elevation": "high"}
         )
 
 
 @pytest.mark.parametrize(
-    "first",
-    [CLOCKS_FORWARD - timedelta(days=1), CLOCKS_BACK - timedelta(days=1), MONDAY],
-    ids=["across the clocks going forward", "across the clocks going back", "a week"],
+    ("first", "sun"),
+    [
+        (CLOCKS_FORWARD - timedelta(days=1), SUN),
+        (CLOCKS_BACK - timedelta(days=1), SUN),
+        (MONDAY, SUN),
+        (CLOCKS_FORWARD - timedelta(days=1), POLAR_NIGHT),
+        (MONDAY, POLAR_DAY),
+    ],
+    ids=[
+        "across the clocks going forward",
+        "across the clocks going back",
+        "three ordinary days",
+        "polar night: no sunrise, no passage",
+        "polar day: no sunset, no passage",
+    ],
 )
-def test_the_almanac_gives_exactly_the_schedule_of_the_sun_port(first: date) -> None:
+def test_the_almanac_gives_exactly_the_schedule_of_the_sun_port(
+    first: date, sun: Sun
+) -> None:
     """The runtime and the simulation must not diverge, at any half hour.
 
     Three days across each clock change, midnights included, with sunrise,
@@ -160,13 +178,74 @@ def test_the_almanac_gives_exactly_the_schedule_of_the_sun_port(first: date) -> 
     by_almanac = by_port = WindowState()
     for step in range(3 * 48 + 4):
         at = (start + timedelta(minutes=30 * step)).astimezone(ZONE)
-        from_port = evaluate(at, BY_THE_SUN, state=by_port)
+        from_port = evaluate(at, BY_THE_SUN, state=by_port, sun=sun)
         from_almanac = evaluate_schedule(
-            BY_THE_SUN, snapshot_with_almanac(at, BY_THE_SUN, state=by_almanac)
+            BY_THE_SUN,
+            snapshot_with_almanac(at, BY_THE_SUN, state=by_almanac, sun=sun),
         )
         by_port, by_almanac = from_port.state, from_almanac.state
 
         assert from_almanac == from_port, at
+
+
+# --- A day without a sun event is an answer, not missing data ---------------------------------
+
+
+def test_the_almanac_tells_no_event_on_this_date_from_not_in_the_almanac() -> None:
+    """Two states, both of which survive plain data: "none" is recorded, "unknown" is absent."""
+    almanac = build_sun_almanac(BY_THE_SUN, local(MONDAY, 12), POLAR_NIGHT)
+    restored = SunAlmanac.from_data(json.loads(json.dumps(almanac.to_data())))
+    monday = restored.day(MONDAY)
+
+    assert restored == almanac
+    assert monday is not None
+    assert monday.sunrise is None
+    assert monday.sunset is None
+    recorded = monday.passage(-4, rising=False)
+    assert recorded is not None
+    assert recorded.at is None
+    assert monday.passage(-4, rising=True) is None
+    assert restored.day(MONDAY + timedelta(days=30)) is None
+    source = AlmanacSun(restored)
+    assert source.sunrise(MONDAY) is None
+    assert source.elevation_reached(MONDAY, -4, rising=False) is None
+    with pytest.raises(ScheduleInputMissingError):
+        source.elevation_reached(MONDAY, -4, rising=True)
+
+
+@pytest.mark.parametrize(
+    "sun", [POLAR_NIGHT, POLAR_DAY], ids=["polar night", "polar day"]
+)
+@pytest.mark.parametrize(
+    "window",
+    [
+        config(workday=DayTriggers(sun_event(EARLY), sun_event(LATE))),
+        config(workday=DayTriggers(elevation_trigger(-3, EARLY), sun_event(LATE))),
+        config(workday=DayTriggers(sun_event(EARLY), elevation_trigger(3, LATE))),
+    ],
+    ids=["sunrise and sunset", "elevation in the morning", "elevation in the evening"],
+)
+def test_without_a_sun_event_the_layer_has_an_opinion_and_the_clamp_decides(
+    window: WindowConfig, sun: Sun
+) -> None:
+    """Never ``input_unavailable``: morning at "not before", evening at "not after"."""
+    day = schedule_layer(
+        window, snapshot_with_almanac(local(MONDAY, 12), window, sun=sun)
+    )
+    result = evaluate_schedule(
+        window, snapshot_with_almanac(local(MONDAY, 12), window, sun=sun)
+    )
+    by_port = evaluate(local(MONDAY, 12), window, sun=sun)
+
+    assert day.kind is WishKind.TARGET
+    assert day.reason is ReasonCode.SCHEDULE_DAY
+    assert result.morning_trigger == local(MONDAY, 5, 0)
+    assert result.evening_trigger == local(MONDAY, 22, 0)
+    assert result == by_port
+    night = schedule_layer(
+        window, snapshot_with_almanac(local(MONDAY, 22), window, sun=sun)
+    )
+    assert night.reason is ReasonCode.SCHEDULE_NIGHT
 
 
 # --- Missing data is never guessed -----------------------------------------------------------
@@ -235,7 +314,6 @@ def test_an_almanac_answers_only_what_stands_in_it() -> None:
     source = AlmanacSun(almanac)
 
     assert source.elevation_reached(MONDAY, -6, rising=False) == local(MONDAY, 18, 24)
-    assert source.noon_elevation(MONDAY) == SUN.position(local(MONDAY, 12)).elevation
     with pytest.raises(ScheduleInputMissingError, match="passes -6"):
         source.elevation_reached(MONDAY, -6, rising=True)
     with pytest.raises(ScheduleInputMissingError, match="no entry"):

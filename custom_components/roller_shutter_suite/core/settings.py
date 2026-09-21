@@ -1227,6 +1227,7 @@ def _schedule_settings() -> tuple[SettingDefinition[Any], ...]:
         ("schedule_summer_first_day", SettingKind.DAY_OF_YEAR, as_day_of_year),
         ("schedule_summer_last_day", SettingKind.DAY_OF_YEAR, as_day_of_year),
         ("schedule_brightness_source", reference, as_str),
+        # In lux: the unit the brightness source has to report in.
         ("schedule_brightness_threshold", number, _as_number),
         ("schedule_brightness_delay", duration, as_duration),
         ("schedule_random_offset", duration, as_duration),

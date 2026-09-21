@@ -18,7 +18,7 @@ Import from the package: `from custom_components.roller_shutter_suite.core.sched
 
 A layer of the arbiter is a function of the window configuration and the world snapshot, and a recompute asks no port. The schedule needs sun times for several dates and, for the random offset, the seed of the installation. Both reach it as data, the way the clock port reaches a recompute as `snapshot.time`:
 
-- `WorldSnapshot.almanac` is a `SunAlmanac`: per local date sunrise, sunset, the elevation of the sun at local noon, and the passage of every elevation that an elevation trigger of the window names. `build_sun_almanac(config, time, sun_port)` asks the port and writes the answers down. It covers yesterday (`ALMANAC_DAYS_BEFORE`: before today's morning trigger, the night began with yesterday's evening) to seven days ahead (`ALMANAC_DAYS_AHEAD`: the next planned action is searched on a week and a day).
+- `WorldSnapshot.almanac` is a `SunAlmanac`: per local date sunrise, sunset, and the passage of every elevation that an elevation trigger of the window names. `build_sun_almanac(config, time, sun_port)` asks the port and writes the answers down. It covers yesterday (`ALMANAC_DAYS_BEFORE`: before today's morning trigger, the night began with yesterday's evening) to seven days ahead (`ALMANAC_DAYS_AHEAD`: the next planned action is searched on a week and a day).
 - `WorldSnapshot.installation_seed` is the seed from the storage port.
 
 **Obligation for the block that builds snapshots (H02):** call `build_sun_almanac` whenever a snapshot is built, and build it again when the local date or the settings of the schedule change.
@@ -89,12 +89,7 @@ Every field of a trigger always has a value, because only an optional reference 
 
 The instant of a trigger is built in a fixed order: the moment of the kind, plus the random offset, then "not before" and "not after" where they apply, and last the limits of the local date itself, so a trigger always lies on its own date.
 
-**A moment that never comes.** If the sun port has no sunrise, no sunset or no passage of the elevation on a date, the trigger falls on the clamp that lies in its direction. The elevation of the sun at local noon, asked of the sun port, tells the two cases apart:
-
-| At noon the sun is | Morning trigger | Evening trigger |
-|---|---|---|
-| below the elevation (deep winter, polar night) | "not after": the morning never comes by itself | "not before": the evening has begun already |
-| at or above it (polar day) | "not before": the morning has begun already | "not after": the evening never comes by itself |
+**A moment that never comes.** If the sun does not rise, does not set, or never passes the elevation on a date, the clamp decides: **the morning trigger falls on "not before", the evening trigger on "not after".** That holds for the polar night and the polar day, for sunrise, sunset and an elevation alike, and also for an elevation that the sun simply does not reach on a winter day. It is an answer of the sun port, not missing data: the port returns no time, the almanac records "none on this date" (`SunDay.sunrise` is `None`, `ElevationPassage.at` is `None`), and the layer has an opinion. Missing data is something else: a date or a passage that is not in the almanac at all (`SunAlmanac.day(...)` or `SunDay.passage(...)` returns `None`), which makes the layer step aside with `input_unavailable`. Both states survive `to_data()` and `from_data()`.
 
 This is what the clamps of the two kinds that depend on the sun are for: a date never lacks a trigger. Such a trigger gets no random offset, because it is on a clamp already.
 
@@ -137,7 +132,7 @@ The schedule sets the latch of today only. It keeps a latch for tomorrow if anot
 
 ## The evening by brightness
 
-With a brightness source, the evening also begins when the brightness has been below its threshold for the configured time. "For the configured time" is measured with the time of the snapshot, never with a clock: `WindowState.brightness_below_since` is the time of the first evaluation that saw the value below the threshold, and it is dropped by a value at or above the threshold.
+With a brightness source, the evening also begins when the brightness has been below its threshold for the configured time. **The threshold (`schedule_brightness_threshold`) is in lux**, and the source has to report the outdoor brightness in lux; the key carries no unit, its documented meaning does. "For the configured time" is measured with the time of the snapshot, never with a clock: `WindowState.brightness_below_since` is the time of the first evaluation that saw the value below the threshold, and it is dropped by a value at or above the threshold.
 
 The trigger holds only inside the clamps: not before "not before" of the evening trigger, and only ahead of the time-based evening trigger, which never lies after "not after". "Not before" counts here for every kind of evening trigger, also for a fixed time. If it has been dark since noon, the evening begins at "not before".
 
@@ -187,7 +182,7 @@ The 36 trigger settings are generated, not written out: `schedule_<day type>_<ed
 | `schedule_workday_source`, `schedule_holiday_source`, `schedule_season_source`, `schedule_brightness_source` | optional reference | `as_str` | none |
 | `schedule_summer_by_date` | boolean | `as_bool` | off |
 | `schedule_summer_first_day`, `schedule_summer_last_day` | day of the year | `as_day_of_year` | 05-01, 09-30 |
-| `schedule_brightness_threshold` | number | finite number | 50 |
+| `schedule_brightness_threshold` | number, **in lux** | finite number | 50 lux |
 | `schedule_brightness_delay` | duration | `as_duration` | 10 minutes |
 | `schedule_random_offset` | duration | `as_duration`, at most 30 minutes | 0 |
 

@@ -49,7 +49,7 @@ _EVENING_POSITION: Final = FULLY_CLOSED
 _EVENING_POSITION_SUMMER: Final = FULLY_CLOSED
 _SUMMER_FIRST_DAY: Final = (5, 1)
 _SUMMER_LAST_DAY: Final = (9, 30)
-_BRIGHTNESS_THRESHOLD: Final = 50.0
+_BRIGHTNESS_THRESHOLD: Final = 50.0  # lux
 _BRIGHTNESS_DELAY: Final = timedelta(minutes=10)
 _RANDOM_OFFSET: Final = timedelta(0)
 # ---------------------------------------------------------------------------------------
@@ -404,6 +404,13 @@ class WindowConfig:
     - ``reevaluate_after``: the upper bound of a deferral whose end is not
       known: that long after the recompute, at the latest, the window is
       evaluated again.
+    - ``schedule_enabled`` and the other ``schedule_*`` fields: the settings of
+      the schedule, one field per setting; :attr:`schedule` is the view over
+      them and describes them. Per day type (workday, weekend, holiday) and
+      per edge (morning, evening) there are the six fields of a ``Trigger``.
+      ``schedule_brightness_threshold`` is **in lux**, the unit the
+      brightness source has to report in. The built-in defaults of all of
+      them stand in one block at the top of this module.
     - ``disabled_functions``: the functions that are paused for this window
       because a stored setting of theirs is faulty (the inheritance resolver
       fills it; it is never stored). The arbiter skips the layers of such a
