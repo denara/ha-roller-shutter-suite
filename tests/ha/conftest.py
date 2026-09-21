@@ -19,7 +19,9 @@ import pytest
 # this file before any test of this folder is set up, so the repository's
 # folder wins. An empty ``custom_components/__init__.py`` would not change the
 # outcome; ``test_harness.py`` guards the result.
+from custom_components.roller_shutter_suite import features
 from custom_components.roller_shutter_suite.const import DOMAIN
+from tests.ha.helpers import EXAMPLE_CATALOG
 
 # Home Assistant 2026.9 never raises a Python warning for deprecated usage; it
 # writes log records, which ``filterwarnings = error`` cannot see. The formats
@@ -105,6 +107,16 @@ class _ReportCollector(logging.Handler):
 @pytest.fixture(autouse=True)
 def auto_enable_custom_integrations(enable_custom_integrations: None) -> None:
     """Let Home Assistant load integrations from ``custom_components``."""
+
+
+@pytest.fixture
+def example_catalog(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Put the catalog of made-up settings of ``helpers.py`` into effect.
+
+    The flows and the set-up ask for the catalog each time they need it, so
+    this is all it takes; no flow class is touched.
+    """
+    monkeypatch.setattr(features, "CATALOG", EXAMPLE_CATALOG)
 
 
 _DEPRECATION_LOGGER = "homeassistant.helpers.deprecation"
