@@ -30,8 +30,8 @@ Plain Python under `custom_components/roller_shutter_suite/core/`, tested withou
 | [C02](tasks/C02-inheritance-resolver.md) | Inheritance resolver | E12, N4 | C01 | done |
 | [C03](tasks/C03-arbiter.md) | Arbiter: layers, constraints, gate | E5, E4, E9, E10, E11, A6, A12 | C01 | done |
 | [C04](tasks/C04-schedule-and-day-types.md) | Schedule and day types | A1–A6, E13 (offset) | C01 | done |
-| [C03a](tasks/C03a-cautious-fault-values-and-safety-net.md) | Cautious fault values for functions that fall back; safety net of the arbiter for exceptions. **Binding before M1 and before any real installation** | E12, guardrails on protection | C02, C03, C04 | planned |
-| [C05](tasks/C05-time-lapse-simulation.md) | Time-lapse simulation harness | N6 | C03, C04 | planned |
+| [C03a](tasks/C03a-cautious-fault-values-and-safety-net.md) | Cautious fault values for functions that fall back; safety net of the arbiter for exceptions. **Binding before M1 and before any real installation** | E12, guardrails on protection | C02, C03, C04 | in progress |
+| [C05](tasks/C05-time-lapse-simulation.md) | Time-lapse simulation harness | N6 | C03, C04 | ready |
 
 ## Phase 2 — Home Assistant layer up to M1
 
@@ -64,7 +64,7 @@ Files are written after D00, S1 and S2 are approved. IDs and cuts may still chan
 | C06 | Movement tracking, manual detection, override dam; tolerance by position source, report delay, position reference flag, self-measurement for the diagnostics; records real own commands: the time of the last comfort movement and the daily count of comfort movements with its threshold event (new reason code, added to section 5 of the architecture document together with the enumeration) | E1, E2, E3, E10 (count) | C03 |
 | C07 | Protection events, fire, person-at-window dam, watchdog; test cases for the four conditions of the return to the manual position (architecture, decision 14) | D1–D6, D8, D9, guardrail 3; door for C13 | C03 |
 | C08 | Window interaction and tamper | B1–B4, B9, F6 | C03 |
-| [C09](tasks/C09-sun-geometry-and-glass-calibration.md) (file written, block started before M1 because it depends on C01 and C02 only) | Sun geometry and glass calibration; one curtain edge per element, mapped per member through its vertical offset (architecture, decision 9) | C1, C2, C7 | C01 |
+| [C09](tasks/C09-sun-geometry-and-glass-calibration.md) (file written; started before M1 because it depends on C01 and C02 only; **in progress**) | Sun geometry and glass calibration; one curtain edge per element, mapped per member through its vertical offset (architecture, decision 9) | C1, C2, C7 | C01 |
 | C10 | Shading episodes, conditions, solar heating; frost release by sun | C3–C6, C8, C9, C12, C14, A12 (part); doors for C3b, C10, C11 | C03, C09 |
 | C11 | Sleep mode and privacy | A9, F2 | C03 |
 | C12 | Persistence model and restart reconciliation | E6, D5, N5 | C06, C07, C10 |
