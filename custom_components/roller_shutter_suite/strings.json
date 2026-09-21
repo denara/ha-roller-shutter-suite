@@ -2,9 +2,809 @@
   "config": {
     "step": {
       "user": {
-        "description": "Do you want to set up Roller Shutter Suite? There is nothing to configure yet.",
-        "title": "Set up Roller Shutter Suite"
+        "title": "Set up Roller Shutter Suite",
+        "description": "Do you want to set up Roller Shutter Suite? The next pages ask for the values of the house. Groups and windows inherit them unless they set their own."
+      },
+      "features": {
+        "title": "Features",
+        "description": "Choose what is switched on. Only the features that are switched on get a page of their own.",
+        "data": {
+          "schedule_enabled": "Daily routine"
+        },
+        "data_description": {
+          "schedule_enabled": "Opens the shutters in the morning and closes them in the evening. While it is switched off, the daily routine moves nothing; protection keeps running."
+        }
+      },
+      "feature_daily_routine_general": {
+        "title": "Daily routine",
+        "description": "How far the shutters open and close, how workdays, weekends and public holidays are told apart, and what else can begin the evening. The times follow on the next pages, one page per kind of day.",
+        "data": {
+          "schedule_morning_position": "Morning position",
+          "schedule_evening_position": "Evening position",
+          "schedule_workday_source_choice": "Workday entity",
+          "schedule_workday_source": "Entity for workdays",
+          "schedule_holiday_source_choice": "Holiday entity",
+          "schedule_holiday_source": "Entity for public holidays",
+          "schedule_season_source_choice": "Summer entity",
+          "schedule_season_source": "Entity for summer",
+          "schedule_summer_by_date": "Summer by date",
+          "schedule_summer_first_day": "First day of summer",
+          "schedule_summer_last_day": "Last day of summer",
+          "schedule_evening_position_summer": "Evening position in summer",
+          "schedule_brightness_source_choice": "Outdoor brightness entity",
+          "schedule_brightness_source": "Entity for the outdoor brightness (lux)",
+          "schedule_brightness_threshold_lux": "Brightness threshold (lux)"
+        },
+        "data_description": {
+          "schedule_morning_position": "Where the shutter goes in the morning. 100 % is fully open, 0 % fully closed. The morning only raises: a shutter that is already higher stays where it is.",
+          "schedule_evening_position": "Where the shutter goes in the evening. 100 % is fully open, 0 % fully closed. The evening only lowers: a shutter that is already lower stays where it is.",
+          "schedule_workday_source_choice": "An entity that is on on workdays, for example the workday sensor of Home Assistant. With \"None\", Monday to Friday are workdays.",
+          "schedule_workday_source": "Counts only with \"Own selection\" above.",
+          "schedule_holiday_source_choice": "An entity that is on on public holidays; a calendar with an all-day event works too. With \"None\" there are no public holidays.",
+          "schedule_holiday_source": "Counts only with \"Own selection\" above.",
+          "schedule_season_source_choice": "An entity that is on while it is summer. While it has no value, its last known value counts.",
+          "schedule_season_source": "Counts only with \"Own selection\" above.",
+          "schedule_summer_by_date": "Without a summer entity, summer lasts from the first to the last day given below.",
+          "schedule_summer_first_day": "Month and day with two digits each, for example 05-01 for 1 May.",
+          "schedule_summer_last_day": "Month and day with two digits each, for example 09-30 for 30 September. The range may run across the turn of the year.",
+          "schedule_evening_position_summer": "Replaces the evening position while it is summer, for example 30 % for privacy with some air. It counts only with a summer entity or with summer by date.",
+          "schedule_brightness_source_choice": "An entity that reports the outdoor brightness in lux. When it has been darker than the threshold for the delay, the evening begins early, but never before \"not before\" of the evening. An entity without a value begins nothing and blocks nothing.",
+          "schedule_brightness_source": "Counts only with \"Own selection\" above.",
+          "schedule_brightness_threshold_lux": "Below this outdoor brightness, in lux, it counts as dark."
+        },
+        "sections": {
+          "expert": {
+            "name": "Expert values",
+            "description": "Sensible defaults apply. Change them only if you know why.",
+            "data": {
+              "schedule_brightness_delay": "Brightness delay",
+              "schedule_random_offset": "Random offset"
+            },
+            "data_description": {
+              "schedule_brightness_delay": "For how many minutes it has to be dark before the evening begins.",
+              "schedule_random_offset": "Moves every trigger by up to this many minutes, earlier or later, differently for each window and day. 0 switches it off; 30 is the maximum."
+            }
+          }
+        }
+      },
+      "feature_daily_routine_workday": {
+        "title": "Daily routine on workdays",
+        "description": "When the morning and the evening begin on a workday.",
+        "data": {
+          "schedule_workday_morning_kind": "Morning: trigger",
+          "schedule_workday_morning_time": "Morning: time",
+          "schedule_workday_evening_kind": "Evening: trigger",
+          "schedule_workday_evening_time": "Evening: time"
+        },
+        "data_description": {
+          "schedule_workday_morning_kind": "A fixed time; sunrise in the morning or sunset in the evening, with an offset; or the elevation of the sun. For the two that follow the sun, \"not before\" and \"not after\" under the expert values limit the time.",
+          "schedule_workday_morning_time": "Counts with the trigger \"Fixed time\".",
+          "schedule_workday_evening_kind": "A fixed time; sunrise in the morning or sunset in the evening, with an offset; or the elevation of the sun. For the two that follow the sun, \"not before\" and \"not after\" under the expert values limit the time.",
+          "schedule_workday_evening_time": "Counts with the trigger \"Fixed time\"."
+        },
+        "sections": {
+          "expert": {
+            "name": "Expert values",
+            "description": "Sensible defaults apply. Change them only if you know why.",
+            "data": {
+              "schedule_workday_morning_offset_minutes": "Morning: offset to sunrise or sunset",
+              "schedule_workday_morning_elevation": "Morning: elevation of the sun",
+              "schedule_workday_morning_not_before": "Morning: not before",
+              "schedule_workday_morning_not_after": "Morning: not after",
+              "schedule_workday_evening_offset_minutes": "Evening: offset to sunrise or sunset",
+              "schedule_workday_evening_elevation": "Evening: elevation of the sun",
+              "schedule_workday_evening_not_before": "Evening: not before",
+              "schedule_workday_evening_not_after": "Evening: not after"
+            },
+            "data_description": {
+              "schedule_workday_morning_offset_minutes": "Counts with the trigger \"Sunrise or sunset\". Minutes; a negative number means earlier.",
+              "schedule_workday_morning_elevation": "Counts with the trigger \"Elevation of the sun\". Degrees above the horizon; a negative number means below it.",
+              "schedule_workday_morning_not_before": "The earliest time for a trigger that follows the sun. On a day on which the sun gives no time, this time or \"not after\" stands in.",
+              "schedule_workday_morning_not_after": "The latest time for a trigger that follows the sun.",
+              "schedule_workday_evening_offset_minutes": "Counts with the trigger \"Sunrise or sunset\". Minutes; a negative number means earlier.",
+              "schedule_workday_evening_elevation": "Counts with the trigger \"Elevation of the sun\". Degrees above the horizon; a negative number means below it.",
+              "schedule_workday_evening_not_before": "The earliest time for a trigger that follows the sun. On a day on which the sun gives no time, this time or \"not after\" stands in.",
+              "schedule_workday_evening_not_after": "The latest time for a trigger that follows the sun."
+            }
+          }
+        }
+      },
+      "feature_daily_routine_weekend": {
+        "title": "Daily routine on weekends",
+        "description": "When the morning and the evening begin on a Saturday or Sunday, or on a day that the workday entity reports as free.",
+        "data": {
+          "schedule_weekend_morning_kind": "Morning: trigger",
+          "schedule_weekend_morning_time": "Morning: time",
+          "schedule_weekend_evening_kind": "Evening: trigger",
+          "schedule_weekend_evening_time": "Evening: time"
+        },
+        "data_description": {
+          "schedule_weekend_morning_kind": "A fixed time; sunrise in the morning or sunset in the evening, with an offset; or the elevation of the sun. For the two that follow the sun, \"not before\" and \"not after\" under the expert values limit the time.",
+          "schedule_weekend_morning_time": "Counts with the trigger \"Fixed time\".",
+          "schedule_weekend_evening_kind": "A fixed time; sunrise in the morning or sunset in the evening, with an offset; or the elevation of the sun. For the two that follow the sun, \"not before\" and \"not after\" under the expert values limit the time.",
+          "schedule_weekend_evening_time": "Counts with the trigger \"Fixed time\"."
+        },
+        "sections": {
+          "expert": {
+            "name": "Expert values",
+            "description": "Sensible defaults apply. Change them only if you know why.",
+            "data": {
+              "schedule_weekend_morning_offset_minutes": "Morning: offset to sunrise or sunset",
+              "schedule_weekend_morning_elevation": "Morning: elevation of the sun",
+              "schedule_weekend_morning_not_before": "Morning: not before",
+              "schedule_weekend_morning_not_after": "Morning: not after",
+              "schedule_weekend_evening_offset_minutes": "Evening: offset to sunrise or sunset",
+              "schedule_weekend_evening_elevation": "Evening: elevation of the sun",
+              "schedule_weekend_evening_not_before": "Evening: not before",
+              "schedule_weekend_evening_not_after": "Evening: not after"
+            },
+            "data_description": {
+              "schedule_weekend_morning_offset_minutes": "Counts with the trigger \"Sunrise or sunset\". Minutes; a negative number means earlier.",
+              "schedule_weekend_morning_elevation": "Counts with the trigger \"Elevation of the sun\". Degrees above the horizon; a negative number means below it.",
+              "schedule_weekend_morning_not_before": "The earliest time for a trigger that follows the sun. On a day on which the sun gives no time, this time or \"not after\" stands in.",
+              "schedule_weekend_morning_not_after": "The latest time for a trigger that follows the sun.",
+              "schedule_weekend_evening_offset_minutes": "Counts with the trigger \"Sunrise or sunset\". Minutes; a negative number means earlier.",
+              "schedule_weekend_evening_elevation": "Counts with the trigger \"Elevation of the sun\". Degrees above the horizon; a negative number means below it.",
+              "schedule_weekend_evening_not_before": "The earliest time for a trigger that follows the sun. On a day on which the sun gives no time, this time or \"not after\" stands in.",
+              "schedule_weekend_evening_not_after": "The latest time for a trigger that follows the sun."
+            }
+          }
+        }
+      },
+      "feature_daily_routine_holiday": {
+        "title": "Daily routine on public holidays",
+        "description": "When the morning and the evening begin on a day that the holiday entity reports as a public holiday.",
+        "data": {
+          "schedule_holiday_morning_kind": "Morning: trigger",
+          "schedule_holiday_morning_time": "Morning: time",
+          "schedule_holiday_evening_kind": "Evening: trigger",
+          "schedule_holiday_evening_time": "Evening: time"
+        },
+        "data_description": {
+          "schedule_holiday_morning_kind": "A fixed time; sunrise in the morning or sunset in the evening, with an offset; or the elevation of the sun. For the two that follow the sun, \"not before\" and \"not after\" under the expert values limit the time.",
+          "schedule_holiday_morning_time": "Counts with the trigger \"Fixed time\".",
+          "schedule_holiday_evening_kind": "A fixed time; sunrise in the morning or sunset in the evening, with an offset; or the elevation of the sun. For the two that follow the sun, \"not before\" and \"not after\" under the expert values limit the time.",
+          "schedule_holiday_evening_time": "Counts with the trigger \"Fixed time\"."
+        },
+        "sections": {
+          "expert": {
+            "name": "Expert values",
+            "description": "Sensible defaults apply. Change them only if you know why.",
+            "data": {
+              "schedule_holiday_morning_offset_minutes": "Morning: offset to sunrise or sunset",
+              "schedule_holiday_morning_elevation": "Morning: elevation of the sun",
+              "schedule_holiday_morning_not_before": "Morning: not before",
+              "schedule_holiday_morning_not_after": "Morning: not after",
+              "schedule_holiday_evening_offset_minutes": "Evening: offset to sunrise or sunset",
+              "schedule_holiday_evening_elevation": "Evening: elevation of the sun",
+              "schedule_holiday_evening_not_before": "Evening: not before",
+              "schedule_holiday_evening_not_after": "Evening: not after"
+            },
+            "data_description": {
+              "schedule_holiday_morning_offset_minutes": "Counts with the trigger \"Sunrise or sunset\". Minutes; a negative number means earlier.",
+              "schedule_holiday_morning_elevation": "Counts with the trigger \"Elevation of the sun\". Degrees above the horizon; a negative number means below it.",
+              "schedule_holiday_morning_not_before": "The earliest time for a trigger that follows the sun. On a day on which the sun gives no time, this time or \"not after\" stands in.",
+              "schedule_holiday_morning_not_after": "The latest time for a trigger that follows the sun.",
+              "schedule_holiday_evening_offset_minutes": "Counts with the trigger \"Sunrise or sunset\". Minutes; a negative number means earlier.",
+              "schedule_holiday_evening_elevation": "Counts with the trigger \"Elevation of the sun\". Degrees above the horizon; a negative number means below it.",
+              "schedule_holiday_evening_not_before": "The earliest time for a trigger that follows the sun. On a day on which the sun gives no time, this time or \"not after\" stands in.",
+              "schedule_holiday_evening_not_after": "The latest time for a trigger that follows the sun."
+            }
+          }
+        }
       }
+    },
+    "abort": {
+      "reconfigure_successful": "The values of the house were saved."
+    },
+    "error": {
+      "invalid_value": "This value cannot be used.",
+      "fraction_not_allowed": "Enter a whole number.",
+      "invalid_day_of_year": "Enter the day as month and day with two digits each, for example 05-01.",
+      "leap_day_not_allowed": "29 February does not exist in every year. Choose 28 February or 1 March.",
+      "reference_missing": "Choose an entity, or choose \"None\" or \"Inherit\" above.",
+      "invalid_combination": "These values do not fit together: {combination}. Each of them alone would be fine."
+    }
+  },
+  "config_subentries": {
+    "group": {
+      "entry_type": "Group",
+      "initiate_flow": {
+        "user": "Add group",
+        "reconfigure": "Change group"
+      },
+      "step": {
+        "basics": {
+          "title": "Group",
+          "description": "A group holds values that several windows share, for example a façade or a floor.",
+          "data": {
+            "name": "Name"
+          }
+        },
+        "features": {
+          "title": "Features",
+          "description": "Choose what is decided here. \"Inherit\" follows the level above; the entry shows what that means at present. Only the features that are switched on get a page of their own.",
+          "data": {
+            "schedule_enabled": "Daily routine"
+          },
+          "data_description": {
+            "schedule_enabled": "Opens the shutters in the morning and closes them in the evening. While it is switched off, the daily routine moves nothing; protection keeps running. \"Inherit\" follows {schedule_enabled_source}."
+          }
+        },
+        "feature_daily_routine_general": {
+          "title": "Daily routine",
+          "description": "How far the shutters open and close, how workdays, weekends and public holidays are told apart, and what else can begin the evening. The times follow on the next pages, one page per kind of day.",
+          "data": {
+            "schedule_morning_position": "Morning position",
+            "schedule_evening_position": "Evening position",
+            "schedule_workday_source_choice": "Workday entity",
+            "schedule_workday_source": "Entity for workdays",
+            "schedule_holiday_source_choice": "Holiday entity",
+            "schedule_holiday_source": "Entity for public holidays",
+            "schedule_season_source_choice": "Summer entity",
+            "schedule_season_source": "Entity for summer",
+            "schedule_summer_by_date": "Summer by date",
+            "schedule_summer_first_day": "First day of summer",
+            "schedule_summer_last_day": "Last day of summer",
+            "schedule_evening_position_summer": "Evening position in summer",
+            "schedule_brightness_source_choice": "Outdoor brightness entity",
+            "schedule_brightness_source": "Entity for the outdoor brightness (lux)",
+            "schedule_brightness_threshold_lux": "Brightness threshold (lux)"
+          },
+          "data_description": {
+            "schedule_morning_position": "Where the shutter goes in the morning. 100 % is fully open, 0 % fully closed. The morning only raises: a shutter that is already higher stays where it is. Leave empty to inherit. Inherited at present: {schedule_morning_position_inherited} (from {schedule_morning_position_source}).",
+            "schedule_evening_position": "Where the shutter goes in the evening. 100 % is fully open, 0 % fully closed. The evening only lowers: a shutter that is already lower stays where it is. Leave empty to inherit. Inherited at present: {schedule_evening_position_inherited} (from {schedule_evening_position_source}).",
+            "schedule_workday_source_choice": "An entity that is on on workdays, for example the workday sensor of Home Assistant. With \"None\", Monday to Friday are workdays. Inherited at present: {schedule_workday_source_inherited} (from {schedule_workday_source_source}).",
+            "schedule_workday_source": "Counts only with \"Own selection\" above.",
+            "schedule_holiday_source_choice": "An entity that is on on public holidays; a calendar with an all-day event works too. With \"None\" there are no public holidays. Inherited at present: {schedule_holiday_source_inherited} (from {schedule_holiday_source_source}).",
+            "schedule_holiday_source": "Counts only with \"Own selection\" above.",
+            "schedule_season_source_choice": "An entity that is on while it is summer. While it has no value, its last known value counts. Inherited at present: {schedule_season_source_inherited} (from {schedule_season_source_source}).",
+            "schedule_season_source": "Counts only with \"Own selection\" above.",
+            "schedule_summer_by_date": "Without a summer entity, summer lasts from the first to the last day given below. \"Inherit\" follows {schedule_summer_by_date_source}.",
+            "schedule_summer_first_day": "Month and day with two digits each, for example 05-01 for 1 May. Leave empty to inherit. Inherited at present: {schedule_summer_first_day_inherited} (from {schedule_summer_first_day_source}).",
+            "schedule_summer_last_day": "Month and day with two digits each, for example 09-30 for 30 September. The range may run across the turn of the year. Leave empty to inherit. Inherited at present: {schedule_summer_last_day_inherited} (from {schedule_summer_last_day_source}).",
+            "schedule_evening_position_summer": "Replaces the evening position while it is summer, for example 30 % for privacy with some air. It counts only with a summer entity or with summer by date. Leave empty to inherit. Inherited at present: {schedule_evening_position_summer_inherited} (from {schedule_evening_position_summer_source}).",
+            "schedule_brightness_source_choice": "An entity that reports the outdoor brightness in lux. When it has been darker than the threshold for the delay, the evening begins early, but never before \"not before\" of the evening. An entity without a value begins nothing and blocks nothing. Inherited at present: {schedule_brightness_source_inherited} (from {schedule_brightness_source_source}).",
+            "schedule_brightness_source": "Counts only with \"Own selection\" above.",
+            "schedule_brightness_threshold_lux": "Below this outdoor brightness, in lux, it counts as dark. Leave empty to inherit. Inherited at present: {schedule_brightness_threshold_lux_inherited} (from {schedule_brightness_threshold_lux_source})."
+          },
+          "sections": {
+            "expert": {
+              "name": "Expert values",
+              "description": "Sensible defaults apply. Change them only if you know why.",
+              "data": {
+                "schedule_brightness_delay": "Brightness delay",
+                "schedule_random_offset": "Random offset"
+              },
+              "data_description": {
+                "schedule_brightness_delay": "For how many minutes it has to be dark before the evening begins. Leave empty to inherit. Inherited at present: {schedule_brightness_delay_inherited} (from {schedule_brightness_delay_source}).",
+                "schedule_random_offset": "Moves every trigger by up to this many minutes, earlier or later, differently for each window and day. 0 switches it off; 30 is the maximum. Leave empty to inherit. Inherited at present: {schedule_random_offset_inherited} (from {schedule_random_offset_source})."
+              }
+            }
+          }
+        },
+        "feature_daily_routine_workday": {
+          "title": "Daily routine on workdays",
+          "description": "When the morning and the evening begin on a workday.",
+          "data": {
+            "schedule_workday_morning_kind": "Morning: trigger",
+            "schedule_workday_morning_time": "Morning: time",
+            "schedule_workday_evening_kind": "Evening: trigger",
+            "schedule_workday_evening_time": "Evening: time"
+          },
+          "data_description": {
+            "schedule_workday_morning_kind": "A fixed time; sunrise in the morning or sunset in the evening, with an offset; or the elevation of the sun. For the two that follow the sun, \"not before\" and \"not after\" under the expert values limit the time. Inherited at present: {schedule_workday_morning_kind_inherited} (from {schedule_workday_morning_kind_source}).",
+            "schedule_workday_morning_time": "Counts with the trigger \"Fixed time\". Leave empty to inherit. Inherited at present: {schedule_workday_morning_time_inherited} (from {schedule_workday_morning_time_source}).",
+            "schedule_workday_evening_kind": "A fixed time; sunrise in the morning or sunset in the evening, with an offset; or the elevation of the sun. For the two that follow the sun, \"not before\" and \"not after\" under the expert values limit the time. Inherited at present: {schedule_workday_evening_kind_inherited} (from {schedule_workday_evening_kind_source}).",
+            "schedule_workday_evening_time": "Counts with the trigger \"Fixed time\". Leave empty to inherit. Inherited at present: {schedule_workday_evening_time_inherited} (from {schedule_workday_evening_time_source})."
+          },
+          "sections": {
+            "expert": {
+              "name": "Expert values",
+              "description": "Sensible defaults apply. Change them only if you know why.",
+              "data": {
+                "schedule_workday_morning_offset_minutes": "Morning: offset to sunrise or sunset",
+                "schedule_workday_morning_elevation": "Morning: elevation of the sun",
+                "schedule_workday_morning_not_before": "Morning: not before",
+                "schedule_workday_morning_not_after": "Morning: not after",
+                "schedule_workday_evening_offset_minutes": "Evening: offset to sunrise or sunset",
+                "schedule_workday_evening_elevation": "Evening: elevation of the sun",
+                "schedule_workday_evening_not_before": "Evening: not before",
+                "schedule_workday_evening_not_after": "Evening: not after"
+              },
+              "data_description": {
+                "schedule_workday_morning_offset_minutes": "Counts with the trigger \"Sunrise or sunset\". Minutes; a negative number means earlier. Leave empty to inherit. Inherited at present: {schedule_workday_morning_offset_minutes_inherited} (from {schedule_workday_morning_offset_minutes_source}).",
+                "schedule_workday_morning_elevation": "Counts with the trigger \"Elevation of the sun\". Degrees above the horizon; a negative number means below it. Leave empty to inherit. Inherited at present: {schedule_workday_morning_elevation_inherited} (from {schedule_workday_morning_elevation_source}).",
+                "schedule_workday_morning_not_before": "The earliest time for a trigger that follows the sun. On a day on which the sun gives no time, this time or \"not after\" stands in. Leave empty to inherit. Inherited at present: {schedule_workday_morning_not_before_inherited} (from {schedule_workday_morning_not_before_source}).",
+                "schedule_workday_morning_not_after": "The latest time for a trigger that follows the sun. Leave empty to inherit. Inherited at present: {schedule_workday_morning_not_after_inherited} (from {schedule_workday_morning_not_after_source}).",
+                "schedule_workday_evening_offset_minutes": "Counts with the trigger \"Sunrise or sunset\". Minutes; a negative number means earlier. Leave empty to inherit. Inherited at present: {schedule_workday_evening_offset_minutes_inherited} (from {schedule_workday_evening_offset_minutes_source}).",
+                "schedule_workday_evening_elevation": "Counts with the trigger \"Elevation of the sun\". Degrees above the horizon; a negative number means below it. Leave empty to inherit. Inherited at present: {schedule_workday_evening_elevation_inherited} (from {schedule_workday_evening_elevation_source}).",
+                "schedule_workday_evening_not_before": "The earliest time for a trigger that follows the sun. On a day on which the sun gives no time, this time or \"not after\" stands in. Leave empty to inherit. Inherited at present: {schedule_workday_evening_not_before_inherited} (from {schedule_workday_evening_not_before_source}).",
+                "schedule_workday_evening_not_after": "The latest time for a trigger that follows the sun. Leave empty to inherit. Inherited at present: {schedule_workday_evening_not_after_inherited} (from {schedule_workday_evening_not_after_source})."
+              }
+            }
+          }
+        },
+        "feature_daily_routine_weekend": {
+          "title": "Daily routine on weekends",
+          "description": "When the morning and the evening begin on a Saturday or Sunday, or on a day that the workday entity reports as free.",
+          "data": {
+            "schedule_weekend_morning_kind": "Morning: trigger",
+            "schedule_weekend_morning_time": "Morning: time",
+            "schedule_weekend_evening_kind": "Evening: trigger",
+            "schedule_weekend_evening_time": "Evening: time"
+          },
+          "data_description": {
+            "schedule_weekend_morning_kind": "A fixed time; sunrise in the morning or sunset in the evening, with an offset; or the elevation of the sun. For the two that follow the sun, \"not before\" and \"not after\" under the expert values limit the time. Inherited at present: {schedule_weekend_morning_kind_inherited} (from {schedule_weekend_morning_kind_source}).",
+            "schedule_weekend_morning_time": "Counts with the trigger \"Fixed time\". Leave empty to inherit. Inherited at present: {schedule_weekend_morning_time_inherited} (from {schedule_weekend_morning_time_source}).",
+            "schedule_weekend_evening_kind": "A fixed time; sunrise in the morning or sunset in the evening, with an offset; or the elevation of the sun. For the two that follow the sun, \"not before\" and \"not after\" under the expert values limit the time. Inherited at present: {schedule_weekend_evening_kind_inherited} (from {schedule_weekend_evening_kind_source}).",
+            "schedule_weekend_evening_time": "Counts with the trigger \"Fixed time\". Leave empty to inherit. Inherited at present: {schedule_weekend_evening_time_inherited} (from {schedule_weekend_evening_time_source})."
+          },
+          "sections": {
+            "expert": {
+              "name": "Expert values",
+              "description": "Sensible defaults apply. Change them only if you know why.",
+              "data": {
+                "schedule_weekend_morning_offset_minutes": "Morning: offset to sunrise or sunset",
+                "schedule_weekend_morning_elevation": "Morning: elevation of the sun",
+                "schedule_weekend_morning_not_before": "Morning: not before",
+                "schedule_weekend_morning_not_after": "Morning: not after",
+                "schedule_weekend_evening_offset_minutes": "Evening: offset to sunrise or sunset",
+                "schedule_weekend_evening_elevation": "Evening: elevation of the sun",
+                "schedule_weekend_evening_not_before": "Evening: not before",
+                "schedule_weekend_evening_not_after": "Evening: not after"
+              },
+              "data_description": {
+                "schedule_weekend_morning_offset_minutes": "Counts with the trigger \"Sunrise or sunset\". Minutes; a negative number means earlier. Leave empty to inherit. Inherited at present: {schedule_weekend_morning_offset_minutes_inherited} (from {schedule_weekend_morning_offset_minutes_source}).",
+                "schedule_weekend_morning_elevation": "Counts with the trigger \"Elevation of the sun\". Degrees above the horizon; a negative number means below it. Leave empty to inherit. Inherited at present: {schedule_weekend_morning_elevation_inherited} (from {schedule_weekend_morning_elevation_source}).",
+                "schedule_weekend_morning_not_before": "The earliest time for a trigger that follows the sun. On a day on which the sun gives no time, this time or \"not after\" stands in. Leave empty to inherit. Inherited at present: {schedule_weekend_morning_not_before_inherited} (from {schedule_weekend_morning_not_before_source}).",
+                "schedule_weekend_morning_not_after": "The latest time for a trigger that follows the sun. Leave empty to inherit. Inherited at present: {schedule_weekend_morning_not_after_inherited} (from {schedule_weekend_morning_not_after_source}).",
+                "schedule_weekend_evening_offset_minutes": "Counts with the trigger \"Sunrise or sunset\". Minutes; a negative number means earlier. Leave empty to inherit. Inherited at present: {schedule_weekend_evening_offset_minutes_inherited} (from {schedule_weekend_evening_offset_minutes_source}).",
+                "schedule_weekend_evening_elevation": "Counts with the trigger \"Elevation of the sun\". Degrees above the horizon; a negative number means below it. Leave empty to inherit. Inherited at present: {schedule_weekend_evening_elevation_inherited} (from {schedule_weekend_evening_elevation_source}).",
+                "schedule_weekend_evening_not_before": "The earliest time for a trigger that follows the sun. On a day on which the sun gives no time, this time or \"not after\" stands in. Leave empty to inherit. Inherited at present: {schedule_weekend_evening_not_before_inherited} (from {schedule_weekend_evening_not_before_source}).",
+                "schedule_weekend_evening_not_after": "The latest time for a trigger that follows the sun. Leave empty to inherit. Inherited at present: {schedule_weekend_evening_not_after_inherited} (from {schedule_weekend_evening_not_after_source})."
+              }
+            }
+          }
+        },
+        "feature_daily_routine_holiday": {
+          "title": "Daily routine on public holidays",
+          "description": "When the morning and the evening begin on a day that the holiday entity reports as a public holiday.",
+          "data": {
+            "schedule_holiday_morning_kind": "Morning: trigger",
+            "schedule_holiday_morning_time": "Morning: time",
+            "schedule_holiday_evening_kind": "Evening: trigger",
+            "schedule_holiday_evening_time": "Evening: time"
+          },
+          "data_description": {
+            "schedule_holiday_morning_kind": "A fixed time; sunrise in the morning or sunset in the evening, with an offset; or the elevation of the sun. For the two that follow the sun, \"not before\" and \"not after\" under the expert values limit the time. Inherited at present: {schedule_holiday_morning_kind_inherited} (from {schedule_holiday_morning_kind_source}).",
+            "schedule_holiday_morning_time": "Counts with the trigger \"Fixed time\". Leave empty to inherit. Inherited at present: {schedule_holiday_morning_time_inherited} (from {schedule_holiday_morning_time_source}).",
+            "schedule_holiday_evening_kind": "A fixed time; sunrise in the morning or sunset in the evening, with an offset; or the elevation of the sun. For the two that follow the sun, \"not before\" and \"not after\" under the expert values limit the time. Inherited at present: {schedule_holiday_evening_kind_inherited} (from {schedule_holiday_evening_kind_source}).",
+            "schedule_holiday_evening_time": "Counts with the trigger \"Fixed time\". Leave empty to inherit. Inherited at present: {schedule_holiday_evening_time_inherited} (from {schedule_holiday_evening_time_source})."
+          },
+          "sections": {
+            "expert": {
+              "name": "Expert values",
+              "description": "Sensible defaults apply. Change them only if you know why.",
+              "data": {
+                "schedule_holiday_morning_offset_minutes": "Morning: offset to sunrise or sunset",
+                "schedule_holiday_morning_elevation": "Morning: elevation of the sun",
+                "schedule_holiday_morning_not_before": "Morning: not before",
+                "schedule_holiday_morning_not_after": "Morning: not after",
+                "schedule_holiday_evening_offset_minutes": "Evening: offset to sunrise or sunset",
+                "schedule_holiday_evening_elevation": "Evening: elevation of the sun",
+                "schedule_holiday_evening_not_before": "Evening: not before",
+                "schedule_holiday_evening_not_after": "Evening: not after"
+              },
+              "data_description": {
+                "schedule_holiday_morning_offset_minutes": "Counts with the trigger \"Sunrise or sunset\". Minutes; a negative number means earlier. Leave empty to inherit. Inherited at present: {schedule_holiday_morning_offset_minutes_inherited} (from {schedule_holiday_morning_offset_minutes_source}).",
+                "schedule_holiday_morning_elevation": "Counts with the trigger \"Elevation of the sun\". Degrees above the horizon; a negative number means below it. Leave empty to inherit. Inherited at present: {schedule_holiday_morning_elevation_inherited} (from {schedule_holiday_morning_elevation_source}).",
+                "schedule_holiday_morning_not_before": "The earliest time for a trigger that follows the sun. On a day on which the sun gives no time, this time or \"not after\" stands in. Leave empty to inherit. Inherited at present: {schedule_holiday_morning_not_before_inherited} (from {schedule_holiday_morning_not_before_source}).",
+                "schedule_holiday_morning_not_after": "The latest time for a trigger that follows the sun. Leave empty to inherit. Inherited at present: {schedule_holiday_morning_not_after_inherited} (from {schedule_holiday_morning_not_after_source}).",
+                "schedule_holiday_evening_offset_minutes": "Counts with the trigger \"Sunrise or sunset\". Minutes; a negative number means earlier. Leave empty to inherit. Inherited at present: {schedule_holiday_evening_offset_minutes_inherited} (from {schedule_holiday_evening_offset_minutes_source}).",
+                "schedule_holiday_evening_elevation": "Counts with the trigger \"Elevation of the sun\". Degrees above the horizon; a negative number means below it. Leave empty to inherit. Inherited at present: {schedule_holiday_evening_elevation_inherited} (from {schedule_holiday_evening_elevation_source}).",
+                "schedule_holiday_evening_not_before": "The earliest time for a trigger that follows the sun. On a day on which the sun gives no time, this time or \"not after\" stands in. Leave empty to inherit. Inherited at present: {schedule_holiday_evening_not_before_inherited} (from {schedule_holiday_evening_not_before_source}).",
+                "schedule_holiday_evening_not_after": "The latest time for a trigger that follows the sun. Leave empty to inherit. Inherited at present: {schedule_holiday_evening_not_after_inherited} (from {schedule_holiday_evening_not_after_source})."
+              }
+            }
+          }
+        }
+      },
+      "error": {
+        "name_blank": "Enter a name.",
+        "invalid_value": "This value cannot be used.",
+        "fraction_not_allowed": "Enter a whole number.",
+        "invalid_day_of_year": "Enter the day as month and day with two digits each, for example 05-01.",
+        "leap_day_not_allowed": "29 February does not exist in every year. Choose 28 February or 1 March.",
+        "reference_missing": "Choose an entity, or choose \"None\" or \"Inherit\" above.",
+        "invalid_combination": "These values do not fit together: {combination}. Each of them alone would be fine."
+      },
+      "abort": {
+        "reconfigure_successful": "The group was saved.",
+        "subentry_removed": "The group was removed while this form was open. Nothing was saved."
+      }
+    },
+    "window": {
+      "entry_type": "Window",
+      "initiate_flow": {
+        "user": "Add window",
+        "reconfigure": "Change window"
+      },
+      "step": {
+        "basics": {
+          "title": "Window",
+          "description": "Choose the cover of this window. If several covers are always moved together, choose all of them or a cover group.",
+          "data": {
+            "name": "Name",
+            "covers": "Covers",
+            "group_id": "Group"
+          },
+          "data_description": {
+            "covers": "A cover can belong to one window only.",
+            "group_id": "The window inherits its values from this group. Leave empty to inherit from the house directly."
+          }
+        },
+        "members": {
+          "title": "Members of the cover group",
+          "description": "{groups} is a cover group. A group reports only the mean of its members, so the window stores and moves the members themselves:\n\n{members}",
+          "menu_options": {
+            "members_accept": "Continue with these covers",
+            "basics": "Choose other covers"
+          }
+        },
+        "degraded": {
+          "title": "Cover without positions",
+          "description": "These covers cannot be driven to a position, or do not report one: {covers}\n\nThey are accepted and are only opened and closed. For them shading positions, other positions in between and the detection of manual operation are inactive.",
+          "menu_options": {
+            "degraded_accept": "Continue with these covers",
+            "basics": "Choose other covers"
+          }
+        },
+        "features": {
+          "title": "Features",
+          "description": "Choose what is decided here. \"Inherit\" follows the level above; the entry shows what that means at present. Only the features that are switched on get a page of their own.",
+          "data": {
+            "schedule_enabled": "Daily routine"
+          },
+          "data_description": {
+            "schedule_enabled": "Opens the shutters in the morning and closes them in the evening. While it is switched off, the daily routine moves nothing; protection keeps running. \"Inherit\" follows {schedule_enabled_source}."
+          }
+        },
+        "feature_daily_routine_general": {
+          "title": "Daily routine",
+          "description": "How far the shutters open and close, how workdays, weekends and public holidays are told apart, and what else can begin the evening. The times follow on the next pages, one page per kind of day.",
+          "data": {
+            "schedule_morning_position": "Morning position",
+            "schedule_evening_position": "Evening position",
+            "schedule_workday_source_choice": "Workday entity",
+            "schedule_workday_source": "Entity for workdays",
+            "schedule_holiday_source_choice": "Holiday entity",
+            "schedule_holiday_source": "Entity for public holidays",
+            "schedule_season_source_choice": "Summer entity",
+            "schedule_season_source": "Entity for summer",
+            "schedule_summer_by_date": "Summer by date",
+            "schedule_summer_first_day": "First day of summer",
+            "schedule_summer_last_day": "Last day of summer",
+            "schedule_evening_position_summer": "Evening position in summer",
+            "schedule_brightness_source_choice": "Outdoor brightness entity",
+            "schedule_brightness_source": "Entity for the outdoor brightness (lux)",
+            "schedule_brightness_threshold_lux": "Brightness threshold (lux)"
+          },
+          "data_description": {
+            "schedule_morning_position": "Where the shutter goes in the morning. 100 % is fully open, 0 % fully closed. The morning only raises: a shutter that is already higher stays where it is. Leave empty to inherit. Inherited at present: {schedule_morning_position_inherited} (from {schedule_morning_position_source}).",
+            "schedule_evening_position": "Where the shutter goes in the evening. 100 % is fully open, 0 % fully closed. The evening only lowers: a shutter that is already lower stays where it is. Leave empty to inherit. Inherited at present: {schedule_evening_position_inherited} (from {schedule_evening_position_source}).",
+            "schedule_workday_source_choice": "An entity that is on on workdays, for example the workday sensor of Home Assistant. With \"None\", Monday to Friday are workdays. Inherited at present: {schedule_workday_source_inherited} (from {schedule_workday_source_source}).",
+            "schedule_workday_source": "Counts only with \"Own selection\" above.",
+            "schedule_holiday_source_choice": "An entity that is on on public holidays; a calendar with an all-day event works too. With \"None\" there are no public holidays. Inherited at present: {schedule_holiday_source_inherited} (from {schedule_holiday_source_source}).",
+            "schedule_holiday_source": "Counts only with \"Own selection\" above.",
+            "schedule_season_source_choice": "An entity that is on while it is summer. While it has no value, its last known value counts. Inherited at present: {schedule_season_source_inherited} (from {schedule_season_source_source}).",
+            "schedule_season_source": "Counts only with \"Own selection\" above.",
+            "schedule_summer_by_date": "Without a summer entity, summer lasts from the first to the last day given below. \"Inherit\" follows {schedule_summer_by_date_source}.",
+            "schedule_summer_first_day": "Month and day with two digits each, for example 05-01 for 1 May. Leave empty to inherit. Inherited at present: {schedule_summer_first_day_inherited} (from {schedule_summer_first_day_source}).",
+            "schedule_summer_last_day": "Month and day with two digits each, for example 09-30 for 30 September. The range may run across the turn of the year. Leave empty to inherit. Inherited at present: {schedule_summer_last_day_inherited} (from {schedule_summer_last_day_source}).",
+            "schedule_evening_position_summer": "Replaces the evening position while it is summer, for example 30 % for privacy with some air. It counts only with a summer entity or with summer by date. Leave empty to inherit. Inherited at present: {schedule_evening_position_summer_inherited} (from {schedule_evening_position_summer_source}).",
+            "schedule_brightness_source_choice": "An entity that reports the outdoor brightness in lux. When it has been darker than the threshold for the delay, the evening begins early, but never before \"not before\" of the evening. An entity without a value begins nothing and blocks nothing. Inherited at present: {schedule_brightness_source_inherited} (from {schedule_brightness_source_source}).",
+            "schedule_brightness_source": "Counts only with \"Own selection\" above.",
+            "schedule_brightness_threshold_lux": "Below this outdoor brightness, in lux, it counts as dark. Leave empty to inherit. Inherited at present: {schedule_brightness_threshold_lux_inherited} (from {schedule_brightness_threshold_lux_source})."
+          },
+          "sections": {
+            "expert": {
+              "name": "Expert values",
+              "description": "Sensible defaults apply. Change them only if you know why.",
+              "data": {
+                "schedule_brightness_delay": "Brightness delay",
+                "schedule_random_offset": "Random offset"
+              },
+              "data_description": {
+                "schedule_brightness_delay": "For how many minutes it has to be dark before the evening begins. Leave empty to inherit. Inherited at present: {schedule_brightness_delay_inherited} (from {schedule_brightness_delay_source}).",
+                "schedule_random_offset": "Moves every trigger by up to this many minutes, earlier or later, differently for each window and day. 0 switches it off; 30 is the maximum. Leave empty to inherit. Inherited at present: {schedule_random_offset_inherited} (from {schedule_random_offset_source})."
+              }
+            }
+          }
+        },
+        "feature_daily_routine_workday": {
+          "title": "Daily routine on workdays",
+          "description": "When the morning and the evening begin on a workday.",
+          "data": {
+            "schedule_workday_morning_kind": "Morning: trigger",
+            "schedule_workday_morning_time": "Morning: time",
+            "schedule_workday_evening_kind": "Evening: trigger",
+            "schedule_workday_evening_time": "Evening: time"
+          },
+          "data_description": {
+            "schedule_workday_morning_kind": "A fixed time; sunrise in the morning or sunset in the evening, with an offset; or the elevation of the sun. For the two that follow the sun, \"not before\" and \"not after\" under the expert values limit the time. Inherited at present: {schedule_workday_morning_kind_inherited} (from {schedule_workday_morning_kind_source}).",
+            "schedule_workday_morning_time": "Counts with the trigger \"Fixed time\". Leave empty to inherit. Inherited at present: {schedule_workday_morning_time_inherited} (from {schedule_workday_morning_time_source}).",
+            "schedule_workday_evening_kind": "A fixed time; sunrise in the morning or sunset in the evening, with an offset; or the elevation of the sun. For the two that follow the sun, \"not before\" and \"not after\" under the expert values limit the time. Inherited at present: {schedule_workday_evening_kind_inherited} (from {schedule_workday_evening_kind_source}).",
+            "schedule_workday_evening_time": "Counts with the trigger \"Fixed time\". Leave empty to inherit. Inherited at present: {schedule_workday_evening_time_inherited} (from {schedule_workday_evening_time_source})."
+          },
+          "sections": {
+            "expert": {
+              "name": "Expert values",
+              "description": "Sensible defaults apply. Change them only if you know why.",
+              "data": {
+                "schedule_workday_morning_offset_minutes": "Morning: offset to sunrise or sunset",
+                "schedule_workday_morning_elevation": "Morning: elevation of the sun",
+                "schedule_workday_morning_not_before": "Morning: not before",
+                "schedule_workday_morning_not_after": "Morning: not after",
+                "schedule_workday_evening_offset_minutes": "Evening: offset to sunrise or sunset",
+                "schedule_workday_evening_elevation": "Evening: elevation of the sun",
+                "schedule_workday_evening_not_before": "Evening: not before",
+                "schedule_workday_evening_not_after": "Evening: not after"
+              },
+              "data_description": {
+                "schedule_workday_morning_offset_minutes": "Counts with the trigger \"Sunrise or sunset\". Minutes; a negative number means earlier. Leave empty to inherit. Inherited at present: {schedule_workday_morning_offset_minutes_inherited} (from {schedule_workday_morning_offset_minutes_source}).",
+                "schedule_workday_morning_elevation": "Counts with the trigger \"Elevation of the sun\". Degrees above the horizon; a negative number means below it. Leave empty to inherit. Inherited at present: {schedule_workday_morning_elevation_inherited} (from {schedule_workday_morning_elevation_source}).",
+                "schedule_workday_morning_not_before": "The earliest time for a trigger that follows the sun. On a day on which the sun gives no time, this time or \"not after\" stands in. Leave empty to inherit. Inherited at present: {schedule_workday_morning_not_before_inherited} (from {schedule_workday_morning_not_before_source}).",
+                "schedule_workday_morning_not_after": "The latest time for a trigger that follows the sun. Leave empty to inherit. Inherited at present: {schedule_workday_morning_not_after_inherited} (from {schedule_workday_morning_not_after_source}).",
+                "schedule_workday_evening_offset_minutes": "Counts with the trigger \"Sunrise or sunset\". Minutes; a negative number means earlier. Leave empty to inherit. Inherited at present: {schedule_workday_evening_offset_minutes_inherited} (from {schedule_workday_evening_offset_minutes_source}).",
+                "schedule_workday_evening_elevation": "Counts with the trigger \"Elevation of the sun\". Degrees above the horizon; a negative number means below it. Leave empty to inherit. Inherited at present: {schedule_workday_evening_elevation_inherited} (from {schedule_workday_evening_elevation_source}).",
+                "schedule_workday_evening_not_before": "The earliest time for a trigger that follows the sun. On a day on which the sun gives no time, this time or \"not after\" stands in. Leave empty to inherit. Inherited at present: {schedule_workday_evening_not_before_inherited} (from {schedule_workday_evening_not_before_source}).",
+                "schedule_workday_evening_not_after": "The latest time for a trigger that follows the sun. Leave empty to inherit. Inherited at present: {schedule_workday_evening_not_after_inherited} (from {schedule_workday_evening_not_after_source})."
+              }
+            }
+          }
+        },
+        "feature_daily_routine_weekend": {
+          "title": "Daily routine on weekends",
+          "description": "When the morning and the evening begin on a Saturday or Sunday, or on a day that the workday entity reports as free.",
+          "data": {
+            "schedule_weekend_morning_kind": "Morning: trigger",
+            "schedule_weekend_morning_time": "Morning: time",
+            "schedule_weekend_evening_kind": "Evening: trigger",
+            "schedule_weekend_evening_time": "Evening: time"
+          },
+          "data_description": {
+            "schedule_weekend_morning_kind": "A fixed time; sunrise in the morning or sunset in the evening, with an offset; or the elevation of the sun. For the two that follow the sun, \"not before\" and \"not after\" under the expert values limit the time. Inherited at present: {schedule_weekend_morning_kind_inherited} (from {schedule_weekend_morning_kind_source}).",
+            "schedule_weekend_morning_time": "Counts with the trigger \"Fixed time\". Leave empty to inherit. Inherited at present: {schedule_weekend_morning_time_inherited} (from {schedule_weekend_morning_time_source}).",
+            "schedule_weekend_evening_kind": "A fixed time; sunrise in the morning or sunset in the evening, with an offset; or the elevation of the sun. For the two that follow the sun, \"not before\" and \"not after\" under the expert values limit the time. Inherited at present: {schedule_weekend_evening_kind_inherited} (from {schedule_weekend_evening_kind_source}).",
+            "schedule_weekend_evening_time": "Counts with the trigger \"Fixed time\". Leave empty to inherit. Inherited at present: {schedule_weekend_evening_time_inherited} (from {schedule_weekend_evening_time_source})."
+          },
+          "sections": {
+            "expert": {
+              "name": "Expert values",
+              "description": "Sensible defaults apply. Change them only if you know why.",
+              "data": {
+                "schedule_weekend_morning_offset_minutes": "Morning: offset to sunrise or sunset",
+                "schedule_weekend_morning_elevation": "Morning: elevation of the sun",
+                "schedule_weekend_morning_not_before": "Morning: not before",
+                "schedule_weekend_morning_not_after": "Morning: not after",
+                "schedule_weekend_evening_offset_minutes": "Evening: offset to sunrise or sunset",
+                "schedule_weekend_evening_elevation": "Evening: elevation of the sun",
+                "schedule_weekend_evening_not_before": "Evening: not before",
+                "schedule_weekend_evening_not_after": "Evening: not after"
+              },
+              "data_description": {
+                "schedule_weekend_morning_offset_minutes": "Counts with the trigger \"Sunrise or sunset\". Minutes; a negative number means earlier. Leave empty to inherit. Inherited at present: {schedule_weekend_morning_offset_minutes_inherited} (from {schedule_weekend_morning_offset_minutes_source}).",
+                "schedule_weekend_morning_elevation": "Counts with the trigger \"Elevation of the sun\". Degrees above the horizon; a negative number means below it. Leave empty to inherit. Inherited at present: {schedule_weekend_morning_elevation_inherited} (from {schedule_weekend_morning_elevation_source}).",
+                "schedule_weekend_morning_not_before": "The earliest time for a trigger that follows the sun. On a day on which the sun gives no time, this time or \"not after\" stands in. Leave empty to inherit. Inherited at present: {schedule_weekend_morning_not_before_inherited} (from {schedule_weekend_morning_not_before_source}).",
+                "schedule_weekend_morning_not_after": "The latest time for a trigger that follows the sun. Leave empty to inherit. Inherited at present: {schedule_weekend_morning_not_after_inherited} (from {schedule_weekend_morning_not_after_source}).",
+                "schedule_weekend_evening_offset_minutes": "Counts with the trigger \"Sunrise or sunset\". Minutes; a negative number means earlier. Leave empty to inherit. Inherited at present: {schedule_weekend_evening_offset_minutes_inherited} (from {schedule_weekend_evening_offset_minutes_source}).",
+                "schedule_weekend_evening_elevation": "Counts with the trigger \"Elevation of the sun\". Degrees above the horizon; a negative number means below it. Leave empty to inherit. Inherited at present: {schedule_weekend_evening_elevation_inherited} (from {schedule_weekend_evening_elevation_source}).",
+                "schedule_weekend_evening_not_before": "The earliest time for a trigger that follows the sun. On a day on which the sun gives no time, this time or \"not after\" stands in. Leave empty to inherit. Inherited at present: {schedule_weekend_evening_not_before_inherited} (from {schedule_weekend_evening_not_before_source}).",
+                "schedule_weekend_evening_not_after": "The latest time for a trigger that follows the sun. Leave empty to inherit. Inherited at present: {schedule_weekend_evening_not_after_inherited} (from {schedule_weekend_evening_not_after_source})."
+              }
+            }
+          }
+        },
+        "feature_daily_routine_holiday": {
+          "title": "Daily routine on public holidays",
+          "description": "When the morning and the evening begin on a day that the holiday entity reports as a public holiday.",
+          "data": {
+            "schedule_holiday_morning_kind": "Morning: trigger",
+            "schedule_holiday_morning_time": "Morning: time",
+            "schedule_holiday_evening_kind": "Evening: trigger",
+            "schedule_holiday_evening_time": "Evening: time"
+          },
+          "data_description": {
+            "schedule_holiday_morning_kind": "A fixed time; sunrise in the morning or sunset in the evening, with an offset; or the elevation of the sun. For the two that follow the sun, \"not before\" and \"not after\" under the expert values limit the time. Inherited at present: {schedule_holiday_morning_kind_inherited} (from {schedule_holiday_morning_kind_source}).",
+            "schedule_holiday_morning_time": "Counts with the trigger \"Fixed time\". Leave empty to inherit. Inherited at present: {schedule_holiday_morning_time_inherited} (from {schedule_holiday_morning_time_source}).",
+            "schedule_holiday_evening_kind": "A fixed time; sunrise in the morning or sunset in the evening, with an offset; or the elevation of the sun. For the two that follow the sun, \"not before\" and \"not after\" under the expert values limit the time. Inherited at present: {schedule_holiday_evening_kind_inherited} (from {schedule_holiday_evening_kind_source}).",
+            "schedule_holiday_evening_time": "Counts with the trigger \"Fixed time\". Leave empty to inherit. Inherited at present: {schedule_holiday_evening_time_inherited} (from {schedule_holiday_evening_time_source})."
+          },
+          "sections": {
+            "expert": {
+              "name": "Expert values",
+              "description": "Sensible defaults apply. Change them only if you know why.",
+              "data": {
+                "schedule_holiday_morning_offset_minutes": "Morning: offset to sunrise or sunset",
+                "schedule_holiday_morning_elevation": "Morning: elevation of the sun",
+                "schedule_holiday_morning_not_before": "Morning: not before",
+                "schedule_holiday_morning_not_after": "Morning: not after",
+                "schedule_holiday_evening_offset_minutes": "Evening: offset to sunrise or sunset",
+                "schedule_holiday_evening_elevation": "Evening: elevation of the sun",
+                "schedule_holiday_evening_not_before": "Evening: not before",
+                "schedule_holiday_evening_not_after": "Evening: not after"
+              },
+              "data_description": {
+                "schedule_holiday_morning_offset_minutes": "Counts with the trigger \"Sunrise or sunset\". Minutes; a negative number means earlier. Leave empty to inherit. Inherited at present: {schedule_holiday_morning_offset_minutes_inherited} (from {schedule_holiday_morning_offset_minutes_source}).",
+                "schedule_holiday_morning_elevation": "Counts with the trigger \"Elevation of the sun\". Degrees above the horizon; a negative number means below it. Leave empty to inherit. Inherited at present: {schedule_holiday_morning_elevation_inherited} (from {schedule_holiday_morning_elevation_source}).",
+                "schedule_holiday_morning_not_before": "The earliest time for a trigger that follows the sun. On a day on which the sun gives no time, this time or \"not after\" stands in. Leave empty to inherit. Inherited at present: {schedule_holiday_morning_not_before_inherited} (from {schedule_holiday_morning_not_before_source}).",
+                "schedule_holiday_morning_not_after": "The latest time for a trigger that follows the sun. Leave empty to inherit. Inherited at present: {schedule_holiday_morning_not_after_inherited} (from {schedule_holiday_morning_not_after_source}).",
+                "schedule_holiday_evening_offset_minutes": "Counts with the trigger \"Sunrise or sunset\". Minutes; a negative number means earlier. Leave empty to inherit. Inherited at present: {schedule_holiday_evening_offset_minutes_inherited} (from {schedule_holiday_evening_offset_minutes_source}).",
+                "schedule_holiday_evening_elevation": "Counts with the trigger \"Elevation of the sun\". Degrees above the horizon; a negative number means below it. Leave empty to inherit. Inherited at present: {schedule_holiday_evening_elevation_inherited} (from {schedule_holiday_evening_elevation_source}).",
+                "schedule_holiday_evening_not_before": "The earliest time for a trigger that follows the sun. On a day on which the sun gives no time, this time or \"not after\" stands in. Leave empty to inherit. Inherited at present: {schedule_holiday_evening_not_before_inherited} (from {schedule_holiday_evening_not_before_source}).",
+                "schedule_holiday_evening_not_after": "The latest time for a trigger that follows the sun. Leave empty to inherit. Inherited at present: {schedule_holiday_evening_not_after_inherited} (from {schedule_holiday_evening_not_after_source})."
+              }
+            }
+          }
+        }
+      },
+      "error": {
+        "name_blank": "Enter a name.",
+        "group_removed": "The group you chose no longer exists; it was removed while this form was open. Choose another group, or save without one and the window inherits from the house.",
+        "no_covers": "The selection contains no cover.",
+        "cover_in_use": "{cover} already belongs to the window \"{window}\". A cover can belong to one window only.",
+        "invalid_value": "This value cannot be used.",
+        "fraction_not_allowed": "Enter a whole number.",
+        "invalid_day_of_year": "Enter the day as month and day with two digits each, for example 05-01.",
+        "leap_day_not_allowed": "29 February does not exist in every year. Choose 28 February or 1 March.",
+        "reference_missing": "Choose an entity, or choose \"None\" or \"Inherit\" above.",
+        "invalid_combination": "These values do not fit together: {combination}. Each of them alone would be fine."
+      },
+      "abort": {
+        "reconfigure_successful": "The window was saved.",
+        "subentry_removed": "The window was removed while this form was open. Nothing was saved."
+      }
+    }
+  },
+  "selector": {
+    "inherited_switch": {
+      "options": {
+        "inherit_on": "Inherit (at present: on)",
+        "inherit_off": "Inherit (at present: off)",
+        "on": "On",
+        "off": "Off"
+      }
+    },
+    "reference_choice": {
+      "options": {
+        "inherit_none": "Inherit (at present: none)",
+        "inherit_reference": "Inherit (at present: the entity named below)",
+        "none": "None",
+        "own": "Own selection"
+      }
+    },
+    "schedule_trigger_kind": {
+      "options": {
+        "inherit": "Inherit",
+        "fixed_time": "Fixed time",
+        "sun_event": "Sunrise or sunset",
+        "elevation": "Elevation of the sun"
+      }
+    }
+  },
+  "issues": {
+    "window_covers_unreadable": {
+      "title": "Window \"{window}\" is not set up",
+      "description": "The stored covers of the window \"{window}\" cannot be read, so the window is not set up and nothing acts on it. Every other window runs as usual. To repair this, open the window, choose its covers again and save it, or remove the window."
+    },
+    "group_missing": {
+      "title": "The group of window \"{window}\" no longer exists",
+      "description": "The window \"{window}\" refers to a group that was removed. It inherits its values from the house until you open the window and save it, with another group or without one."
+    },
+    "group_reference_unreadable": {
+      "title": "The group of window \"{window}\" cannot be read",
+      "description": "The stored reference from the window \"{window}\" to its group cannot be read. Protection keeps running with the values of the house. The comfort functions of this window pause, because it is not known which values the group would have set. To repair this, open the window, choose its group again and save it."
+    },
+    "dry_run_unreadable": {
+      "title": "Dry-run of window \"{window}\" cannot be read",
+      "description": "The stored dry-run state of the window \"{window}\" cannot be read. The window is treated as being in dry-run, so it does not move. To repair this, open the window and save it."
+    },
+    "option_unavailable": {
+      "title": "Window \"{window}\" cannot use the setting \"{key}\"",
+      "description": "The window \"{window}\" sets \"{key}\" itself, but these covers cannot do what the setting needs: {covers}. The value stays stored and applies again as soon as the covers can do it."
+    },
+    "setting_combination": {
+      "title": "Stored settings do not fit together",
+      "description": "Each of these stored values alone is fine, but together they are not permitted: {settings}. The name in brackets says where each value is stored. Comfort functions that depend on them pause for the windows concerned; protection keeps running. To repair this, change one of the values and save."
+    },
+    "rule_without_keys": {
+      "title": "Stored settings were refused without a reason that can be named",
+      "description": "The settings of at least one window were refused as a whole, and the integration could not tell which values are concerned. This is an error in the integration, not in your data. Protection keeps running; comfort functions pause. Please report it to the author of the integration."
+    },
+    "setting_fault_global_unreadable": {
+      "title": "A stored setting cannot be used: the house",
+      "description": "The stored value of the setting \"{key}\" cannot be read. Functions that protect people or hardware or that restrict movement keep running with the value of the next level. Comfort functions that depend on a faulty value pause for the windows concerned, so that no shutter moves unexpectedly. To repair this, open the integration, choose \"Reconfigure\" and save the values of the house."
+    },
+    "setting_fault_global_none_not_allowed": {
+      "title": "A stored setting cannot be used: the house",
+      "description": "The setting \"{key}\" is stored as \"none\", but it always needs a value. Functions that protect people or hardware or that restrict movement keep running with the value of the next level. Comfort functions that depend on a faulty value pause for the windows concerned, so that no shutter moves unexpectedly. To repair this, open the integration, choose \"Reconfigure\" and save the values of the house."
+    },
+    "setting_fault_global_invalid": {
+      "title": "A stored setting cannot be used: the house",
+      "description": "The stored value of the setting \"{key}\" was read, but it is not a permitted value. Functions that protect people or hardware or that restrict movement keep running with the value of the next level. Comfort functions that depend on a faulty value pause for the windows concerned, so that no shutter moves unexpectedly. To repair this, open the integration, choose \"Reconfigure\" and save the values of the house."
+    },
+    "setting_fault_global_not_inheritable": {
+      "title": "A stored setting cannot be used: the house",
+      "description": "The setting \"{key}\" can be set by a window only, and it is stored here. It has no effect. Functions that protect people or hardware or that restrict movement keep running with the value of the next level. Comfort functions that depend on a faulty value pause for the windows concerned, so that no shutter moves unexpectedly. To repair this, open the integration, choose \"Reconfigure\" and save the values of the house."
+    },
+    "setting_fault_global_unknown_setting": {
+      "title": "A stored setting cannot be used: the house",
+      "description": "The stored setting \"{key}\" is not known to this version of the integration. It is ignored. A newer version may have written it. Functions that protect people or hardware or that restrict movement keep running with the value of the next level. Comfort functions that depend on a faulty value pause for the windows concerned, so that no shutter moves unexpectedly. To repair this, open the integration, choose \"Reconfigure\" and save the values of the house."
+    },
+    "setting_fault_global_level_unreadable": {
+      "title": "A stored setting cannot be used: the house",
+      "description": "The stored settings cannot be read as a whole. Functions that protect people or hardware or that restrict movement keep running with the value of the next level. Comfort functions that depend on a faulty value pause for the windows concerned, so that no shutter moves unexpectedly. To repair this, open the integration, choose \"Reconfigure\" and save the values of the house."
+    },
+    "setting_fault_global_other": {
+      "title": "A stored setting cannot be used: the house",
+      "description": "Something is wrong with the stored setting \"{key}\" that this version of the integration cannot describe more precisely. Functions that protect people or hardware or that restrict movement keep running with the value of the next level. Comfort functions that depend on a faulty value pause for the windows concerned, so that no shutter moves unexpectedly. To repair this, open the integration, choose \"Reconfigure\" and save the values of the house."
+    },
+    "setting_fault_group_unreadable": {
+      "title": "A stored setting cannot be used: group \"{name}\"",
+      "description": "The stored value of the setting \"{key}\" cannot be read. Functions that protect people or hardware or that restrict movement keep running with the value of the next level. Comfort functions that depend on a faulty value pause for the windows concerned, so that no shutter moves unexpectedly. To repair this, open the group, check its values and save it, or remove the group."
+    },
+    "setting_fault_group_none_not_allowed": {
+      "title": "A stored setting cannot be used: group \"{name}\"",
+      "description": "The setting \"{key}\" is stored as \"none\", but it always needs a value. Functions that protect people or hardware or that restrict movement keep running with the value of the next level. Comfort functions that depend on a faulty value pause for the windows concerned, so that no shutter moves unexpectedly. To repair this, open the group, check its values and save it, or remove the group."
+    },
+    "setting_fault_group_invalid": {
+      "title": "A stored setting cannot be used: group \"{name}\"",
+      "description": "The stored value of the setting \"{key}\" was read, but it is not a permitted value. Functions that protect people or hardware or that restrict movement keep running with the value of the next level. Comfort functions that depend on a faulty value pause for the windows concerned, so that no shutter moves unexpectedly. To repair this, open the group, check its values and save it, or remove the group."
+    },
+    "setting_fault_group_not_inheritable": {
+      "title": "A stored setting cannot be used: group \"{name}\"",
+      "description": "The setting \"{key}\" can be set by a window only, and it is stored here. It has no effect. Functions that protect people or hardware or that restrict movement keep running with the value of the next level. Comfort functions that depend on a faulty value pause for the windows concerned, so that no shutter moves unexpectedly. To repair this, open the group, check its values and save it, or remove the group."
+    },
+    "setting_fault_group_unknown_setting": {
+      "title": "A stored setting cannot be used: group \"{name}\"",
+      "description": "The stored setting \"{key}\" is not known to this version of the integration. It is ignored. A newer version may have written it. Functions that protect people or hardware or that restrict movement keep running with the value of the next level. Comfort functions that depend on a faulty value pause for the windows concerned, so that no shutter moves unexpectedly. To repair this, open the group, check its values and save it, or remove the group."
+    },
+    "setting_fault_group_level_unreadable": {
+      "title": "A stored setting cannot be used: group \"{name}\"",
+      "description": "The stored settings cannot be read as a whole. Functions that protect people or hardware or that restrict movement keep running with the value of the next level. Comfort functions that depend on a faulty value pause for the windows concerned, so that no shutter moves unexpectedly. To repair this, open the group, check its values and save it, or remove the group."
+    },
+    "setting_fault_group_other": {
+      "title": "A stored setting cannot be used: group \"{name}\"",
+      "description": "Something is wrong with the stored setting \"{key}\" that this version of the integration cannot describe more precisely. Functions that protect people or hardware or that restrict movement keep running with the value of the next level. Comfort functions that depend on a faulty value pause for the windows concerned, so that no shutter moves unexpectedly. To repair this, open the group, check its values and save it, or remove the group."
+    },
+    "setting_fault_window_unreadable": {
+      "title": "A stored setting cannot be used: window \"{name}\"",
+      "description": "The stored value of the setting \"{key}\" cannot be read. Functions that protect people or hardware or that restrict movement keep running with the value of the next level. Comfort functions that depend on a faulty value pause for the windows concerned, so that no shutter moves unexpectedly. To repair this, open the window, check its values and save it, or remove the window."
+    },
+    "setting_fault_window_none_not_allowed": {
+      "title": "A stored setting cannot be used: window \"{name}\"",
+      "description": "The setting \"{key}\" is stored as \"none\", but it always needs a value. Functions that protect people or hardware or that restrict movement keep running with the value of the next level. Comfort functions that depend on a faulty value pause for the windows concerned, so that no shutter moves unexpectedly. To repair this, open the window, check its values and save it, or remove the window."
+    },
+    "setting_fault_window_invalid": {
+      "title": "A stored setting cannot be used: window \"{name}\"",
+      "description": "The stored value of the setting \"{key}\" was read, but it is not a permitted value. Functions that protect people or hardware or that restrict movement keep running with the value of the next level. Comfort functions that depend on a faulty value pause for the windows concerned, so that no shutter moves unexpectedly. To repair this, open the window, check its values and save it, or remove the window."
+    },
+    "setting_fault_window_not_inheritable": {
+      "title": "A stored setting cannot be used: window \"{name}\"",
+      "description": "The setting \"{key}\" can be set by a window only, and it is stored here. It has no effect. Functions that protect people or hardware or that restrict movement keep running with the value of the next level. Comfort functions that depend on a faulty value pause for the windows concerned, so that no shutter moves unexpectedly. To repair this, open the window, check its values and save it, or remove the window."
+    },
+    "setting_fault_window_unknown_setting": {
+      "title": "A stored setting cannot be used: window \"{name}\"",
+      "description": "The stored setting \"{key}\" is not known to this version of the integration. It is ignored. A newer version may have written it. Functions that protect people or hardware or that restrict movement keep running with the value of the next level. Comfort functions that depend on a faulty value pause for the windows concerned, so that no shutter moves unexpectedly. To repair this, open the window, check its values and save it, or remove the window."
+    },
+    "setting_fault_window_level_unreadable": {
+      "title": "A stored setting cannot be used: window \"{name}\"",
+      "description": "The stored settings cannot be read as a whole. Functions that protect people or hardware or that restrict movement keep running with the value of the next level. Comfort functions that depend on a faulty value pause for the windows concerned, so that no shutter moves unexpectedly. To repair this, open the window, check its values and save it, or remove the window."
+    },
+    "setting_fault_window_other": {
+      "title": "A stored setting cannot be used: window \"{name}\"",
+      "description": "Something is wrong with the stored setting \"{key}\" that this version of the integration cannot describe more precisely. Functions that protect people or hardware or that restrict movement keep running with the value of the next level. Comfort functions that depend on a faulty value pause for the windows concerned, so that no shutter moves unexpectedly. To repair this, open the window, check its values and save it, or remove the window."
     }
   }
 }

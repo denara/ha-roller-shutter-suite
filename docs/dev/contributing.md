@@ -40,6 +40,14 @@ uv run python scripts/check_foreign_warnings.py
 uv run python scripts/check_coverage_exclusions.py
 ```
 
+Generated files (the test of the generator in `tests/scripts` checks the same):
+
+```sh
+uv run python scripts/build_translations.py --check
+```
+
+`strings.json` and the two files under `translations/` are generated from `translations_src/`; never edit them by hand. After changing a source, run the script without `--check` and commit the result. [The configuration flows](config-flow.md#translations-are-generated) explains the sources.
+
 Tests:
 
 ```sh

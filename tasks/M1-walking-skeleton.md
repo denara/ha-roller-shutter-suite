@@ -26,6 +26,11 @@ The owner wants to install something on a productive system early, next to the o
 - **A version number and a tagged pre-release** so it can be installed through HACS as a custom repository.
 - **Pilot guide** `docs/pilot.md`, generic for any user: install as a custom repository, add one window in dry-run, which entities to watch, how to compare decisions with what the existing control does, how long to observe, what to check before arming (the window is removed from every other controller first: one controller per window), how to uninstall without traces.
 
+## Added after block H01 was reviewed
+
+- **What no test replaces, done by the project owner at this milestone:** a look at every form in a real browser (placeholders in helper texts and in the error for a refused combination, the read-only stand-in, collapsed sections, menus, emptied fields), and proof-reading of the German texts. The reviews checked keys and placeholders for parity, not the wording.
+- **For the release notes:** the house level stores every value its form shows, the built-in defaults included. A later change of a built-in default in the core therefore does not reach an existing installation; that is intended (no silent change of behavior by an update) and has to be said.
+
 ## Out of scope
 
 - Any new feature. Arming a window on the owner's system. Anything on the owner's live system: installation there is done by the owner after the review, step by step and with approval for each step.

@@ -92,6 +92,8 @@ For behavior of the Home Assistant layer:
 4. Write the test as `async def`. No marker is needed, because `asyncio_mode = "auto"` is set.
 5. Run `uv run pytest tests/ha`.
 
+For a configuration form, `tests/ha/helpers.py` drives the flows the way the frontend does (one input per step) and holds a catalog of made-up settings of every kind. The fixture `example_catalog` puts it into effect, so the mechanism of the forms can be tested with kinds of settings the registry of the core does not hold yet; see [The configuration flows](config-flow.md).
+
 ## Running the Home Assistant tests on Windows
 
 The Home Assistant test harness does not run on native Windows, because Home Assistant imports modules that exist only on POSIX systems. The core tests run everywhere, so `uv run pytest tests/core` works in a Windows shell.

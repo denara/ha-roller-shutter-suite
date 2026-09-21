@@ -4,6 +4,7 @@
 |---|---|
 | Result of | Work block S2, "Spike: subentries, sections and inheritance in the configuration UI" |
 | Binding for | Block H01 and every later block that adds a configuration step |
+| Implemented by | Block H01; what was built, and where it deviates from this page, is described in [The configuration flows](config-flow.md). The layout sketched in section 8 changed in two places: the settings are described by the registry of the core instead of per feature, and the translation sources live in `translations_src/` at the root of the repository |
 | Tested against | Home Assistant Core 2026.9.2 (installed through `pytest-homeassistant-custom-component` 0.13.365), `probatio` 0.11.4 |
 | Spike code | Branch `spike/s2-config-flow`, created from `main` as it was after block T02. It is never merged. Its tests are `tests/ha/test_s2_*.py`; run them with `uv run pytest tests/ha` as described in [testing.md](testing.md). On that branch the whole suite, `ruff check`, `ruff format --check` and `mypy` pass. |
 | Date | 2026-09-20 |
@@ -245,9 +246,9 @@ Details that H01 and H12 need:
 
 - The stand-in must sit on the **top level** of the form, not inside a section: the frontend strips read-only values only there [source: FE-FORM]. The backend ignores every `*_unavailable` key anyway, so a client that submits one cannot smuggle a value in.
 - Capabilities are the lowest common denominator of the window's members, and the placeholder names the member that limits it (architecture document, section 9).
-- An own value that was stored for the option earlier is dropped when the step is saved while the option is unavailable.
+- ~~An own value that was stored for the option earlier is dropped when the step is saved while the option is unavailable.~~ **Superseded by the core model** ([Capability mask](core-model.md#the-resolver)): the own value stays stored, is masked while the capability is missing, applies again when it is back, and is reported as a repair issue. Block H01 implements the core model.
 - Capabilities are known on the window level only. A **group** can therefore set "hold to move: on", and a window whose cover cannot stop inherits it. The window's form explains it; at runtime the inherited value must be masked by the capability profile. This is a requirement for the resolver (C02) or the runtime (H02/H12), not something a form can solve.
-- The spike reads `supported_features` and `current_position` from the state. For a cover that has no state at configuration time, `homeassistant.helpers.entity.get_supported_features` falls back to the entity registry [source: CORE-ENTITY]; H01 should use it.
+- The spike reads `supported_features` and `current_position` from the state. For a cover that has no state at configuration time, `homeassistant.helpers.entity.get_supported_features` falls back to the entity registry [source: CORE-ENTITY]. **Block H01 does not use that helper:** for an entity whose state is `unavailable` it answers from the state, which has no attributes then, and returns 0, which would turn "unavailable" into "cannot do anything". H01 reads the state and the entity registry itself; see [The configuration flows](config-flow.md#capabilities).
 
 - **[test]** `test_s2_q6_capabilities.py::test_option_is_replaced_by_a_read_only_reason` (two members, one cannot stop) and `...::test_option_is_offered_when_every_member_supports_it`.
 

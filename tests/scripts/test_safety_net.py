@@ -14,6 +14,7 @@ from pathlib import Path
 import pytest
 
 from scripts import (
+    build_translations,
     check_core_purity,
     check_coverage,
     check_coverage_exclusions,
@@ -27,6 +28,7 @@ from scripts import (
 
 SCRIPTS_FOLDER = Path(__file__).parents[2] / "scripts"
 RUNNERS: dict[str, Callable[[Callable[[], int]], int]] = {
+    "build_translations.py": build_translations.run,
     "check_core_purity.py": check_core_purity.run,
     "check_coverage.py": check_coverage.run,
     "check_coverage_exclusions.py": check_coverage_exclusions.run,

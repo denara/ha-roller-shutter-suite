@@ -35,6 +35,7 @@ The core decides; something has to feed it and call it. This block is the thin a
 - **Schedule state.** The runtime persists what `schedule_state_after` returns right after a recompute at a boundary, not only on shutdown (day-type latch, brightness instants).
 - **`recheck_at` and the next planned action** are strictly in the future; the runtime enforces a minimum distance between wake-ups.
 - **`WorldSnapshot.controls`** carries pause, operating mode, maintenance lock and dry-run of the three levels; the arbiter works out what is effective.
+- **From the review of H01:** `WindowRuntime` is the hand-over point from the configuration side. The provisional travel time of 60 seconds that H01 uses for the core's capability profile lives in memory only; it is never stored and never treated as a value the user set, and it disappears with the block that introduces per-member values. Runtime state must survive the full reload that every configuration change causes. A window that is no longer set up keeps its old device until the subentry is removed (clean-up in H05).
 - **Fault details** that come from a caught exception should name the exception type when it is not a plain refusal of a value, so that diagnostics can tell a programming error from bad data.
 
 ## Out of scope
