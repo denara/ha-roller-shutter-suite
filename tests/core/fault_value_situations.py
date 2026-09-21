@@ -7,9 +7,15 @@ checks both over the registry, without knowing a single setting:
 1. **A faulty value never leads to a decision that a valid value would have
    forbidden.** For a COMFORT wish, the decision with the fault value never
    sends more than the decision with a valid sample value.
-2. **A fault value never restricts a PROTECTION wish more than the default
+2. **A fault on its own never restricts a PROTECTION wish more than the default
    does.** Cautious values may restrict comfort only: a hail opening must not
-   stop short because of a data fault.
+   stop short because of a data fault. The scope: a situation of the
+   protection class does NOT switch on a setting by which a person lets the
+   function restrict protection wishes (``frost_applies_to_protection``).
+   Where a person validly did, the cautious values of the other settings
+   reach protection wishes exactly as their valid restrictive values would;
+   named tests in ``test_fault_values.py`` document that side, and a test
+   there fails if a listed situation switches the setting on.
 
 A test over the registry can only judge a setting in a world in which its
 function restricts. Those worlds are listed here, in :data:`SITUATIONS`.

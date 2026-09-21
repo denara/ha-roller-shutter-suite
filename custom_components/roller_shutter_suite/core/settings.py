@@ -1440,8 +1440,11 @@ WINDOW_SETTINGS: Final = SettingsRegistry(
         # The fault values of the settings that fall back were confirmed by the
         # project owner. Each entry says why its value is the cautious one. Two
         # rules decide: a fault value never makes the function less restrictive
-        # for a comfort wish than a valid value would, and it never restricts a
-        # PROTECTION wish more than the default does.
+        # for a comfort wish than a valid value would, and a fault ON ITS OWN
+        # never restricts a PROTECTION wish more than the default does. (Where
+        # a person validly switched "frost applies to protection" on, the
+        # cautious values reach protection wishes as valid restrictive values
+        # would. Fire is untouched in every case.)
         SettingDefinition[str | BlindSource | None](
             key="frost_source",
             kind=SettingKind.OPTIONAL_REFERENCE,

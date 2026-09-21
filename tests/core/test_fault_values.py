@@ -6,7 +6,7 @@ never takes protection away.
 1. **The mandatory test of the project owner.** For every setting of every
    function that falls back, a faulty value never leads to a decision that a
    valid value would have forbidden.
-2. **The protection principle.** A fault value never restricts a PROTECTION
+2. **The protection principle.** A fault on its own never restricts a PROTECTION
    wish more than the default does; cautious values may restrict comfort only.
 
 Both walk ``WINDOW_SETTINGS`` and the situations of
@@ -29,8 +29,16 @@ listed situations, and nothing about a protection wish: that is test 2.
 (whatever its function), the protection wish decided with the fault value
 sends no less than the same wish decided with the default, for a faulty value
 and for an unreadable house level, where all fault values apply at once.
+**Its scope:** a fault ON ITS OWN. It compares with the default while
+``frost_applies_to_protection`` has its default or its fault value (both
+"off"); no listed situation switches it on. Where a person has validly
+switched on that a function that falls back restricts protection wishes, the
+cautious fault values of its other settings reach those wishes exactly as
+their valid restrictive values would. The named tests at the end of this
+module document that other side, and that fire stays untouched in every case.
 """
 
+import dataclasses
 from datetime import timedelta
 from typing import Any
 
@@ -42,6 +50,7 @@ from custom_components.roller_shutter_suite.core.model import (
     FunctionId,
     GateKind,
     Position,
+    SourceValue,
     WishClass,
 )
 from custom_components.roller_shutter_suite.core.model._data import as_str
@@ -248,6 +257,104 @@ def test_hail_opening_of_a_closed_shutter_goes_through_with_an_unreadable_house(
     assert faulty.constraints == default.constraints == ()
     assert faulty.gate is not None
     assert faulty.gate.kind is GateKind.SEND
+
+
+# --- The other side of test 2: a person switched "applies to protection" on ---------
+#
+# Test 2 compares with the default while ``frost_applies_to_protection`` has its
+# default or its fault value, which are both "off": a fault ON ITS OWN never
+# restricts a protection wish more than the default does. Where a person has
+# VALIDLY switched on that frost protection restricts protection wishes, the
+# cautious fault values of the other frost settings reach those wishes exactly
+# as their valid restrictive values would. Fire stays untouched in every case.
+
+PERSON_CHOSE_PROTECTION = dataclasses.replace(
+    HAIL_IN_FROST,
+    name="a person switched 'applies to protection' on; frost, hail, closed shutter",
+    settings={**HAIL_IN_FROST.settings, "frost_applies_to_protection": True},
+)
+BURNING_TOO = dataclasses.replace(
+    PERSON_CHOSE_PROTECTION,
+    name="the same window while the fire alarm is active",
+    sources={**PERSON_CHOSE_PROTECTION.sources, "fire_alarm": SourceValue.of(True)},
+)
+
+
+@pytest.mark.parametrize("fault_case", FAULT_CASES)
+def test_faulty_hold_closed_keeps_a_closed_shutter_closed_where_a_person_asked_for_it(
+    fault_case: str,
+) -> None:
+    """Hail wants to open: not raised, exactly as with a valid "on"; 90 with "off"."""
+    key = "frost_hold_closed"
+
+    faulty = decide(
+        WINDOW_SETTINGS, PERSON_CHOSE_PROTECTION, key, fault_case=fault_case
+    )
+    valid_on = decide(WINDOW_SETTINGS, PERSON_CHOSE_PROTECTION, key, value=True)
+    default_off = decide(WINDOW_SETTINGS, PERSON_CHOSE_PROTECTION, key, inherit=True)
+
+    assert sent(faulty) == sent(valid_on) == {}
+    assert faulty.gate is None
+    assert faulty.targets == valid_on.targets
+    assert sent(default_off) == {LEFT: Position(90)}
+    assert [result.reason for result in default_off.constraints] == [
+        ReasonCode.FROST_LIMIT
+    ]
+    # With a faulty value alone the measured frost holds the shutter; with an
+    # unreadable house nothing else is lost, because the window names its source.
+    assert [result.reason for result in faulty.constraints] == [ReasonCode.FROST_HOLD]
+
+
+def test_blind_frost_source_limits_the_hail_opening_like_a_valid_source_in_frost() -> (
+    None
+):
+    """The ``frost_source`` variant: blind gives 90, a valid source in frost gives 90."""
+    key = "frost_source"
+    source = PERSON_CHOSE_PROTECTION.settings[key]
+
+    faulty = decide(
+        WINDOW_SETTINGS, PERSON_CHOSE_PROTECTION, key, fault_case=FAULT_CASES[0]
+    )
+    valid = decide(WINDOW_SETTINGS, PERSON_CHOSE_PROTECTION, key, value=source)
+    none = decide(WINDOW_SETTINGS, PERSON_CHOSE_PROTECTION, key, inherit=True)
+
+    assert sent(faulty) == sent(valid) == {LEFT: Position(90)}
+    assert [result.reason for result in faulty.constraints] == [
+        ReasonCode.FROST_LIMIT_SOURCE_BLIND
+    ]
+    assert sent(none) == {LEFT: FULLY_OPEN}
+
+
+@pytest.mark.parametrize("key", ["frost_hold_closed", "frost_source"])
+@pytest.mark.parametrize("fault_case", FAULT_CASES)
+def test_fire_opens_untouched_in_each_of_these_situations(
+    key: str, fault_case: str
+) -> None:
+    """No constraint applies to fire, whatever is faulty and whatever a person chose."""
+    decisions = [
+        decide(WINDOW_SETTINGS, BURNING_TOO, key, fault_case=fault_case),
+        decide(WINDOW_SETTINGS, BURNING_TOO, key, inherit=True),
+        decide(WINDOW_SETTINGS, BURNING_TOO, "frost_hold_closed", value=True),
+    ]
+
+    for decision in decisions:
+        assert decision.winning_wish is not None
+        assert decision.winning_wish.wish_class is WishClass.FIRE
+        assert decision.constraints == ()
+        assert sent(decision) == {LEFT: FULLY_OPEN}
+
+
+def test_scope_of_test_two_is_the_default_of_applies_to_protection() -> None:
+    """No listed situation switches it on, and its fault value equals its default."""
+    assert not any(
+        "frost_applies_to_protection" in situation.settings for situation in SITUATIONS
+    )
+    (entry,) = (
+        definition
+        for definition in CAUTIOUS
+        if definition.key == "frost_applies_to_protection"
+    )
+    assert entry.fault_value is entry.default is False
 
 
 def test_kit_world_of_a_calm_day_opens_so_the_situations_want_a_movement() -> None:
