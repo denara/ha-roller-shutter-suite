@@ -434,7 +434,7 @@ def _night_since(
 
 def _sun_source(snapshot: WorldSnapshot, sun: Sun | None) -> SunSource:
     if sun is not None:
-        return PortSun(sun)
+        return PortSun(sun, zone_of(snapshot.time))
     if snapshot.almanac is None:
         raise ScheduleInputMissingError("the snapshot carries no sun almanac")
     return AlmanacSun(snapshot.almanac)

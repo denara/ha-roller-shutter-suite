@@ -1,7 +1,7 @@
 """Where the schedule gets sun times from: the sun port, or the almanac.
 
-The schedule asks three questions about a local date: sunrise, sunset, and
-the passage of an elevation. :class:`PortSun`
+The schedule asks four questions about a local date: sunrise, sunset, the
+passage of an elevation, and the elevation at local noon. :class:`PortSun`
 answers them from the sun port, for the builder of the almanac and for the
 simulation. :class:`AlmanacSun` answers them from the almanac of a world
 snapshot, which is how a recompute gets them, because a recompute asks no
@@ -10,14 +10,15 @@ answers.
 
 Two things must not be confused. "The sun does not rise on this date" (or
 does not set, or never passes the elevation) is an **answer**: the port
-returns no time, the almanac records that, and the clamp of the trigger
-decides. A date or a passage that is **not in the almanac** is missing data:
+returns no time, the almanac records that, and a clamp of the trigger
+decides; the elevation at noon says which one. A date or a passage that is
+**not in the almanac** is missing data:
 :class:`ScheduleInputMissingError` says what is missing, and nothing is
 guessed.
 """
 
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta, tzinfo
 from typing import Final, Protocol
 
 from custom_components.roller_shutter_suite.core.model import (
@@ -30,7 +31,9 @@ from custom_components.roller_shutter_suite.core.model import (
 )
 from custom_components.roller_shutter_suite.core.ports import Sun
 
-from .local_time import as_instant, zone_of
+from .local_time import as_instant, local_instant, zone_of
+
+_NOON: Final = time(12, 0)
 
 ALMANAC_DAYS_BEFORE: Final = 1
 """The almanac begins yesterday: before today's morning trigger, the night
@@ -47,7 +50,7 @@ class ScheduleInputMissingError(LookupError):
 
 
 class SunSource(Protocol):
-    """The three questions the schedule asks about the sun on a local date."""
+    """The four questions the schedule asks about the sun on a local date."""
 
     def sunrise(self, on: date) -> datetime | None:
         """Return the sunrise of the date as an instant in UTC, or ``None``."""
@@ -60,6 +63,9 @@ class SunSource(Protocol):
     ) -> datetime | None:
         """Return when the sun passes the elevation, in UTC, or ``None``."""
 
+    def noon_elevation(self, on: date) -> float:
+        """Return the elevation of the sun at 12:00 local time."""
+
 
 def _instant_or_none(moment: datetime | None) -> datetime | None:
     return None if moment is None else as_instant(moment, "a time of the sun port")
@@ -67,9 +73,10 @@ def _instant_or_none(moment: datetime | None) -> datetime | None:
 
 @dataclass(frozen=True, slots=True)
 class PortSun:
-    """The answers of the sun port, as instants in UTC."""
+    """The answers of the sun port; ``zone`` is the local zone."""
 
     port: Sun
+    zone: tzinfo
 
     def sunrise(self, on: date) -> datetime | None:
         """Ask the port."""
@@ -86,6 +93,10 @@ class PortSun:
         return _instant_or_none(
             self.port.elevation_reached(on, elevation, rising=rising)
         )
+
+    def noon_elevation(self, on: date) -> float:
+        """Ask the port for the position at local noon."""
+        return self.port.position(local_instant(on, _NOON, self.zone)).elevation
 
 
 @dataclass(frozen=True, slots=True)
@@ -119,6 +130,10 @@ class AlmanacSun:
             )
         return passage.at
 
+    def noon_elevation(self, on: date) -> float:
+        """Look the elevation at noon up."""
+        return self._day(on).noon_elevation
+
 
 def _named_elevations(settings: ScheduleSettings) -> tuple[tuple[float, bool], ...]:
     """Return the elevations that elevation triggers name, with their direction."""
@@ -135,15 +150,14 @@ def build_sun_almanac(config: WindowConfig, at: datetime, sun: Sun) -> SunAlmana
     """Ask the sun port everything the schedule of this window can need at ``at``.
 
     From yesterday to seven days ahead (see the two constants), for every
-    local date: sunrise, sunset, and the passage of every elevation that an
-    elevation trigger of the window names. "None on this date" is recorded
-    as such. The
+    local date: sunrise, sunset, the elevation at local noon, and the passage
+    of every elevation that an elevation trigger of the window names. "None
+    on this date" is recorded as such. The
     zone of ``at`` is the local zone. Whoever builds a world snapshot calls
     this and puts the result into the snapshot; it has to be built again when
     the date or the settings of the schedule change.
     """
-    zone_of(at)
-    source = PortSun(sun)
+    source = PortSun(sun, zone_of(at))
     elevations = _named_elevations(config.schedule)
     days = []
     for ahead in range(-ALMANAC_DAYS_BEFORE, ALMANAC_DAYS_AHEAD + 1):
@@ -153,6 +167,7 @@ def build_sun_almanac(config: WindowConfig, at: datetime, sun: Sun) -> SunAlmana
                 day=on,
                 sunrise=source.sunrise(on),
                 sunset=source.sunset(on),
+                noon_elevation=source.noon_elevation(on),
                 passages=tuple(
                     ElevationPassage(
                         elevation,

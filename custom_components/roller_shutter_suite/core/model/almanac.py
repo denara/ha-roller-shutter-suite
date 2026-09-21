@@ -3,8 +3,9 @@
 A recompute is a function of the window configuration and the world snapshot,
 and it asks no port. The clock port reaches it as the time of the snapshot,
 the sun port as the sun position of the snapshot and as this almanac: for a
-few local dates, sunrise, sunset and the moments at which the sun passes the
-elevations that the schedule of the window names. Whoever builds a snapshot asks the sun port once and writes the
+few local dates, sunrise, sunset, the elevation of the sun at local noon and
+the moments at which the sun passes the elevations that the schedule of the
+window names. Whoever builds a snapshot asks the sun port once and writes the
 answers down; ``build_sun_almanac`` of the schedule does that.
 
 An answer of the port can be "there is none on this day" (``None``). That is
@@ -82,11 +83,15 @@ class SunDay:
     ``sunrise`` and ``sunset`` are ``None`` if the day has none: that is what
     the port said, and it is not the same as a day that is missing from the
     almanac (``SunAlmanac.day`` returns ``None`` for that).
+    ``noon_elevation`` is the elevation of the sun at 12:00 local time. It
+    tells on which side of a threshold the sun stays on a date without the
+    event; a day of the almanac always has it.
     """
 
     day: date
     sunrise: datetime | None
     sunset: datetime | None
+    noon_elevation: float
     passages: tuple[ElevationPassage, ...] = ()
 
     def __post_init__(self) -> None:
@@ -100,6 +105,7 @@ class SunDay:
         object.__setattr__(
             self, "sunset", to_utc_or_none(self.sunset, "a sunset of the almanac")
         )
+        require_finite(self.noon_elevation, "the elevation at noon")
         object.__setattr__(self, "passages", tuple(self.passages))
         for passage in self.passages:
             require_type(passage, ElevationPassage, "a passage of the almanac")
@@ -121,17 +127,21 @@ class SunDay:
             "day": self.day.isoformat(),
             "sunrise": datetime_data(self.sunrise),
             "sunset": datetime_data(self.sunset),
+            "noon_elevation": self.noon_elevation,
             "passages": [passage.to_data() for passage in self.passages],
         }
 
     @classmethod
     def from_data(cls, data: JsonValue) -> Self:
         """Rebuild the day from plain data."""
-        content = as_object(data, "day", "sunrise", "sunset", "passages")
+        content = as_object(
+            data, "day", "sunrise", "sunset", "noon_elevation", "passages"
+        )
         return cls(
             day=read(content, "day", as_date),
             sunrise=read(content, "sunrise", optional(as_datetime)),
             sunset=read(content, "sunset", optional(as_datetime)),
+            noon_elevation=read(content, "noon_elevation", _as_number),
             passages=read(content, "passages", tuple_of(ElevationPassage.from_data)),
         )
 

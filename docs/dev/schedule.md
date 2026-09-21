@@ -18,7 +18,7 @@ Import from the package: `from custom_components.roller_shutter_suite.core.sched
 
 A layer of the arbiter is a function of the window configuration and the world snapshot, and a recompute asks no port. The schedule needs sun times for several dates and, for the random offset, the seed of the installation. Both reach it as data, the way the clock port reaches a recompute as `snapshot.time`:
 
-- `WorldSnapshot.almanac` is a `SunAlmanac`: per local date sunrise, sunset, and the passage of every elevation that an elevation trigger of the window names. `build_sun_almanac(config, time, sun_port)` asks the port and writes the answers down. It covers yesterday (`ALMANAC_DAYS_BEFORE`: before today's morning trigger, the night began with yesterday's evening) to seven days ahead (`ALMANAC_DAYS_AHEAD`: the next planned action is searched on a week and a day).
+- `WorldSnapshot.almanac` is a `SunAlmanac`: per local date sunrise, sunset, the elevation of the sun at local noon, and the passage of every elevation that an elevation trigger of the window names. `build_sun_almanac(config, time, sun_port)` asks the port and writes the answers down. It covers yesterday (`ALMANAC_DAYS_BEFORE`: before today's morning trigger, the night began with yesterday's evening) to seven days ahead (`ALMANAC_DAYS_AHEAD`: the next planned action is searched on a week and a day).
 - `WorldSnapshot.installation_seed` is the seed from the storage port.
 
 **Obligation for the block that builds snapshots (H02):** call `build_sun_almanac` whenever a snapshot is built, and build it again when the local date or the settings of the schedule change.
@@ -89,7 +89,14 @@ Every field of a trigger always has a value, because only an optional reference 
 
 The instant of a trigger is built in a fixed order: the moment of the kind, plus the random offset, then "not before" and "not after" where they apply, and last the limits of the local date itself, so a trigger always lies on its own date.
 
-**A moment that never comes.** If the sun does not rise, does not set, or never passes the elevation on a date, the clamp decides: **the morning trigger falls on "not before", the evening trigger on "not after".** That holds for the polar night and the polar day, for sunrise, sunset and an elevation alike, and also for an elevation that the sun simply does not reach on a winter day. It is an answer of the sun port, not missing data: the port returns no time, the almanac records "none on this date" (`SunDay.sunrise` is `None`, `ElevationPassage.at` is `None`), and the layer has an opinion. Missing data is something else: a date or a passage that is not in the almanac at all (`SunAlmanac.day(...)` or `SunDay.passage(...)` returns `None`), which makes the layer step aside with `input_unavailable`. Both states survive `to_data()` and `from_data()`.
+**A moment that never comes.** If the sun does not rise, does not set, or never passes the elevation on a date, a clamp decides, and **the side on which the sun stays all day chooses it**. The threshold is the horizon for sunrise and sunset and the configured elevation for an elevation trigger; the elevation of the sun at local noon (`SunDay.noon_elevation`, asked of the sun port) tells the side.
+
+| The sun stays | Morning trigger | Evening trigger |
+|---|---|---|
+| below the threshold: the **dark side** (the polar night; a December day on which "20 degrees" is never reached) | "not after": the morning does not come by itself, open late | "not before": it has been "below" all day, close early |
+| above the threshold: the **bright side** (the polar day) | "not before": the morning has begun already | "not after": the evening does not come by itself |
+
+A noon elevation that equals the threshold exactly counts as the dark side. All of this is an answer of the sun port, not missing data: the port returns no time, the almanac records "none on this date" (`SunDay.sunrise` is `None`, `ElevationPassage.at` is `None`), and the layer has an opinion. Missing data is something else: a date or a passage that is not in the almanac at all (`SunAlmanac.day(...)` or `SunDay.passage(...)` returns `None`), which makes the layer step aside with `input_unavailable`. Both states survive `to_data()` and `from_data()`.
 
 This is what the clamps of the two kinds that depend on the sun are for: a date never lacks a trigger. Such a trigger gets no random offset, because it is on a clamp already.
 

@@ -42,6 +42,7 @@ from custom_components.roller_shutter_suite.core.schedule import (
     ScheduleResult,
     build_sun_almanac,
     day_type_by_weekday,
+    evaluate_schedule,
     local_instant,
     morning_condition_fulfilled,
     random_offset,
@@ -71,6 +72,7 @@ from tests.core.schedule_kit import (
     fixed,
     local,
     snapshot,
+    snapshot_with_almanac,
     sun_event,
 )
 
@@ -201,7 +203,7 @@ def test_each_kind_of_trigger(
     trigger: Trigger, edge: Edge, sun: Sun, expected: time
 ) -> None:
     """Fixed time, sunrise or sunset with an offset, and sun elevation."""
-    instant = trigger_instant(trigger, edge, MONDAY, zone=ZONE, sun=PortSun(sun))
+    instant = trigger_instant(trigger, edge, MONDAY, zone=ZONE, sun=PortSun(sun, ZONE))
 
     assert instant == datetime.combine(MONDAY, expected, tzinfo=ZONE)
 
@@ -259,28 +261,53 @@ def test_clamps_hold_on_both_sides(
     trigger: Trigger, edge: Edge, sun: Sun, expected: time
 ) -> None:
     """'Not before' and 'not after' clamp the triggers of the sun."""
-    instant = trigger_instant(trigger, edge, MONDAY, zone=ZONE, sun=PortSun(sun))
+    instant = trigger_instant(trigger, edge, MONDAY, zone=ZONE, sun=PortSun(sun, ZONE))
 
     assert instant == datetime.combine(MONDAY, expected, tzinfo=ZONE)
 
 
+DECEMBER = date(2026, 12, 15)
+WINTER = FakeSun(sunrise_at=time(8, 15), sunset_at=time(16, 20), highest=17.0)
+AT_THE_HORIZON = FakeSun(sunrise_at=None, sunset_at=None, highest=0.0)
+DARK = (time(9, 0), time(16, 0))
+BRIGHT = (time(5, 0), time(22, 0))
+
 NO_EVENT = {
-    "sunrise and sunset, polar night": (sun_event(EARLY), sun_event(LATE), POLAR_NIGHT),
-    "sunrise and sunset, polar day": (sun_event(EARLY), sun_event(LATE), POLAR_DAY),
+    "sunrise and sunset, polar night": (
+        sun_event(EARLY),
+        sun_event(LATE),
+        POLAR_NIGHT,
+        DARK,
+    ),
+    "sunrise and sunset, polar day": (
+        sun_event(EARLY),
+        sun_event(LATE),
+        POLAR_DAY,
+        BRIGHT,
+    ),
     "elevation never reached, polar night": (
         elevation_trigger(3, EARLY),
         elevation_trigger(3, LATE),
         POLAR_NIGHT,
+        DARK,
     ),
     "elevation never left, polar day": (
         elevation_trigger(-3, EARLY),
         elevation_trigger(-3, LATE),
         POLAR_DAY,
+        BRIGHT,
     ),
-    "elevation too high in deep winter": (
-        elevation_trigger(45, EARLY),
-        elevation_trigger(45, LATE),
-        SUN,
+    "20 degrees on a December day in a moderate latitude": (
+        elevation_trigger(20, EARLY),
+        elevation_trigger(20, LATE),
+        WINTER,
+        DARK,
+    ),
+    "noon exactly at the threshold counts as the dark side": (
+        sun_event(EARLY),
+        sun_event(LATE),
+        AT_THE_HORIZON,
+        DARK,
     ),
 }
 
@@ -290,24 +317,27 @@ NO_EVENT = {
 def test_a_moment_that_never_comes_falls_on_the_clamp_in_its_direction(
     case: str, through: str
 ) -> None:
-    """The morning falls on "not before", the evening on "not after".
+    """The side on which the sun stays all day chooses the clamp.
 
-    The sun does not rise, does not set, or never passes the elevation on the
-    date: that is an answer, and the clamp decides. It is the same through the
-    sun port and through the almanac, which records "none on this date". The
-    random offset does not move the trigger off the clamp either.
+    Dark side (below the threshold, the polar night included): the morning
+    falls on "not after", the evening on "not before". Bright side (above it,
+    the polar day included): the morning on "not before", the evening on "not
+    after". A noon elevation equal to the threshold is the dark side. It is
+    the same through the sun port and through the almanac, which records
+    "none on this date" and the elevation at noon. The random offset does not
+    move the trigger off the clamp either.
     """
-    morning, evening, port = NO_EVENT[case]
+    morning, evening, port, expected = NO_EVENT[case]
     window = config(workday=DayTriggers(morning, evening))
-    source: PortSun | AlmanacSun = PortSun(port)
+    source: PortSun | AlmanacSun = PortSun(port, ZONE)
     if through == "the almanac":
-        source = AlmanacSun(build_sun_almanac(window, local(MONDAY, 12), port))
+        source = AlmanacSun(build_sun_almanac(window, local(DECEMBER, 12), port))
 
     instants = [
         trigger_instant(
             trigger,
             edge,
-            MONDAY,
+            DECEMBER,
             zone=ZONE,
             sun=source,
             offset=timedelta(minutes=17),
@@ -315,7 +345,46 @@ def test_a_moment_that_never_comes_falls_on_the_clamp_in_its_direction(
         for trigger, edge in ((morning, Edge.MORNING), (evening, Edge.EVENING))
     ]
 
-    assert instants == [local(MONDAY, 5, 0), local(MONDAY, 22, 0)]
+    assert instants == [
+        datetime.combine(DECEMBER, expected[0], tzinfo=ZONE),
+        datetime.combine(DECEMBER, expected[1], tzinfo=ZONE),
+    ]
+
+
+BELOW_20 = config(
+    workday=DayTriggers(elevation_trigger(20, EARLY), elevation_trigger(20, LATE))
+)
+
+
+@pytest.mark.parametrize("through", ["the sun port", "the almanac"])
+def test_a_december_evening_below_20_degrees_closes_at_not_before(through: str) -> None:
+    """The sun never reaches 20 degrees: it has been "below" all day, so close early."""
+    before = _either_way(through, local(DECEMBER, 15, 59), BELOW_20)
+    at_the_clamp = _either_way(through, local(DECEMBER, 16, 0), BELOW_20)
+
+    assert before.part_of_day is PartOfDay.DAY
+    assert at_the_clamp.part_of_day is PartOfDay.NIGHT
+    assert at_the_clamp.evening_trigger == local(DECEMBER, 16, 0)
+    assert at_the_clamp.wish.reason is ReasonCode.SCHEDULE_NIGHT
+
+
+@pytest.mark.parametrize("through", ["the sun port", "the almanac"])
+def test_a_december_morning_above_20_degrees_opens_at_not_after(through: str) -> None:
+    """The sun never reaches 20 degrees: the morning does not come by itself, so open late."""
+    early = _either_way(through, local(DECEMBER, 5, 0), BELOW_20)
+    before = _either_way(through, local(DECEMBER, 8, 59), BELOW_20)
+    at_the_clamp = _either_way(through, local(DECEMBER, 9, 0), BELOW_20)
+
+    assert early.part_of_day is PartOfDay.NIGHT
+    assert before.part_of_day is PartOfDay.NIGHT
+    assert at_the_clamp.part_of_day is PartOfDay.DAY
+    assert at_the_clamp.morning_trigger == local(DECEMBER, 9, 0)
+
+
+def _either_way(through: str, at: datetime, window: WindowConfig) -> ScheduleResult:
+    if through == "the sun port":
+        return evaluate(at, window, sun=WINTER)
+    return evaluate_schedule(window, snapshot_with_almanac(at, window, sun=WINTER))
 
 
 def test_a_trigger_stays_on_its_own_date() -> None:
@@ -325,7 +394,7 @@ def test_a_trigger_stays_on_its_own_date() -> None:
         Edge.EVENING,
         MONDAY,
         zone=ZONE,
-        sun=PortSun(SUN),
+        sun=PortSun(SUN, ZONE),
         offset=timedelta(minutes=25),
     )
     early = trigger_instant(
@@ -333,7 +402,7 @@ def test_a_trigger_stays_on_its_own_date() -> None:
         Edge.MORNING,
         MONDAY,
         zone=ZONE,
-        sun=PortSun(SUN),
+        sun=PortSun(SUN, ZONE),
         offset=timedelta(minutes=-25),
     )
 
@@ -357,7 +426,7 @@ def test_a_sun_port_that_answers_without_a_zone_is_refused() -> None:
             Edge.EVENING,
             MONDAY,
             zone=ZONE,
-            sun=PortSun(FakeSun(naive=True)),
+            sun=PortSun(FakeSun(naive=True), ZONE),
         )
 
 

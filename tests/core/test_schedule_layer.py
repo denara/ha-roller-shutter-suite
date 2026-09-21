@@ -83,6 +83,12 @@ BY_THE_SUN = config(
 )
 POLAR_NIGHT = FakeSun(sunrise_at=None, sunset_at=None, highest=-5.0)
 POLAR_DAY = FakeSun(sunrise_at=None, sunset_at=None, highest=50.0, lowest=5.0)
+WINTER = FakeSun(sunrise_at=time(8, 15), sunset_at=time(16, 20), highest=17.0)
+BELOW_20 = config(
+    workday=DayTriggers(elevation_trigger(20, EARLY), elevation_trigger(20, LATE)),
+    weekend=DayTriggers(elevation_trigger(20, EARLY), elevation_trigger(20, LATE)),
+    random_offset=timedelta(minutes=15),
+)
 
 
 def _at_position(world: WorldSnapshot, position: int) -> WorldSnapshot:
@@ -116,6 +122,7 @@ def test_the_almanac_runs_from_yesterday_to_seven_days_ahead() -> None:
     assert monday is not None
     assert monday.sunrise == local(MONDAY, 6)
     assert monday.sunset == local(MONDAY, 18)
+    assert monday.noon_elevation == SUN.position(local(MONDAY, 12)).elevation
     assert [(entry.elevation, entry.rising) for entry in monday.passages] == [
         (-6.0, False),
         (-4.0, False),
@@ -143,6 +150,14 @@ def test_the_almanac_is_a_value_that_survives_json() -> None:
             almanac.days[0],
             passages=(almanac.days[0].passages[0], almanac.days[0].passages[0]),
         )
+    assert almanac.days[0].to_data()["noon_elevation"] == almanac.days[0].noon_elevation
+    assert restored.days[0].noon_elevation == almanac.days[0].noon_elevation
+    with pytest.raises(ValueError, match="noon_elevation: expected a number"):
+        SunAlmanac.from_data(
+            {"days": [almanac.days[0].to_data() | {"noon_elevation": "high"}]}
+        )
+    with pytest.raises(ValueError, match="finite"):
+        replace(almanac.days[0], noon_elevation=float("inf"))
     with pytest.raises(ValueError, match="elevation: expected a number"):
         ElevationPassage.from_data(
             almanac.days[0].passages[0].to_data() | {"elevation": "high"}
@@ -150,13 +165,14 @@ def test_the_almanac_is_a_value_that_survives_json() -> None:
 
 
 @pytest.mark.parametrize(
-    ("first", "sun"),
+    ("first", "sun", "window"),
     [
-        (CLOCKS_FORWARD - timedelta(days=1), SUN),
-        (CLOCKS_BACK - timedelta(days=1), SUN),
-        (MONDAY, SUN),
-        (CLOCKS_FORWARD - timedelta(days=1), POLAR_NIGHT),
-        (MONDAY, POLAR_DAY),
+        (CLOCKS_FORWARD - timedelta(days=1), SUN, BY_THE_SUN),
+        (CLOCKS_BACK - timedelta(days=1), SUN, BY_THE_SUN),
+        (MONDAY, SUN, BY_THE_SUN),
+        (CLOCKS_FORWARD - timedelta(days=1), POLAR_NIGHT, BY_THE_SUN),
+        (MONDAY, POLAR_DAY, BY_THE_SUN),
+        (date(2026, 12, 14), WINTER, BELOW_20),
     ],
     ids=[
         "across the clocks going forward",
@@ -164,10 +180,11 @@ def test_the_almanac_is_a_value_that_survives_json() -> None:
         "three ordinary days",
         "polar night: no sunrise, no passage",
         "polar day: no sunset, no passage",
+        "winter in a moderate latitude: 20 degrees are never reached",
     ],
 )
 def test_the_almanac_gives_exactly_the_schedule_of_the_sun_port(
-    first: date, sun: Sun
+    first: date, sun: Sun, window: WindowConfig
 ) -> None:
     """The runtime and the simulation must not diverge, at any half hour.
 
@@ -178,10 +195,10 @@ def test_the_almanac_gives_exactly_the_schedule_of_the_sun_port(
     by_almanac = by_port = WindowState()
     for step in range(3 * 48 + 4):
         at = (start + timedelta(minutes=30 * step)).astimezone(ZONE)
-        from_port = evaluate(at, BY_THE_SUN, state=by_port, sun=sun)
+        from_port = evaluate(at, window, state=by_port, sun=sun)
         from_almanac = evaluate_schedule(
-            BY_THE_SUN,
-            snapshot_with_almanac(at, BY_THE_SUN, state=by_almanac, sun=sun),
+            window,
+            snapshot_with_almanac(at, window, state=by_almanac, sun=sun),
         )
         by_port, by_almanac = from_port.state, from_almanac.state
 
@@ -214,7 +231,9 @@ def test_the_almanac_tells_no_event_on_this_date_from_not_in_the_almanac() -> No
 
 
 @pytest.mark.parametrize(
-    "sun", [POLAR_NIGHT, POLAR_DAY], ids=["polar night", "polar day"]
+    ("sun", "morning", "evening"),
+    [(POLAR_NIGHT, time(9, 0), time(16, 0)), (POLAR_DAY, time(5, 0), time(22, 0))],
+    ids=["polar night: the dark side", "polar day: the bright side"],
 )
 @pytest.mark.parametrize(
     "window",
@@ -226,9 +245,9 @@ def test_the_almanac_tells_no_event_on_this_date_from_not_in_the_almanac() -> No
     ids=["sunrise and sunset", "elevation in the morning", "elevation in the evening"],
 )
 def test_without_a_sun_event_the_layer_has_an_opinion_and_the_clamp_decides(
-    window: WindowConfig, sun: Sun
+    window: WindowConfig, sun: Sun, morning: time, evening: time
 ) -> None:
-    """Never ``input_unavailable``: morning at "not before", evening at "not after"."""
+    """Never ``input_unavailable``: the side on which the sun stays picks the clamp."""
     day = schedule_layer(
         window, snapshot_with_almanac(local(MONDAY, 12), window, sun=sun)
     )
@@ -239,8 +258,8 @@ def test_without_a_sun_event_the_layer_has_an_opinion_and_the_clamp_decides(
 
     assert day.kind is WishKind.TARGET
     assert day.reason is ReasonCode.SCHEDULE_DAY
-    assert result.morning_trigger == local(MONDAY, 5, 0)
-    assert result.evening_trigger == local(MONDAY, 22, 0)
+    assert result.morning_trigger == datetime.combine(MONDAY, morning, tzinfo=ZONE)
+    assert result.evening_trigger == datetime.combine(MONDAY, evening, tzinfo=ZONE)
     assert result == by_port
     night = schedule_layer(
         window, snapshot_with_almanac(local(MONDAY, 22), window, sun=sun)
@@ -314,6 +333,7 @@ def test_an_almanac_answers_only_what_stands_in_it() -> None:
     source = AlmanacSun(almanac)
 
     assert source.elevation_reached(MONDAY, -6, rising=False) == local(MONDAY, 18, 24)
+    assert source.noon_elevation(MONDAY) == SUN.position(local(MONDAY, 12)).elevation
     with pytest.raises(ScheduleInputMissingError, match="passes -6"):
         source.elevation_reached(MONDAY, -6, rising=True)
     with pytest.raises(ScheduleInputMissingError, match="no entry"):
