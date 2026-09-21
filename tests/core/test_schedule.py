@@ -17,6 +17,7 @@ import pytest
 from custom_components.roller_shutter_suite.core.model import (
     AnySourceValue,
     CapabilityProfile,
+    Controls,
     DayType,
     Direction,
     HeldInput,
@@ -188,6 +189,7 @@ def _snapshot(
             (MemberObservation(MEMBER, Observation(MovementState.RESTING, OPEN)),)
         ),
         state=WindowState() if state is None else state,
+        controls=Controls(dry_run=False),
     )
 
 

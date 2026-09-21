@@ -6,6 +6,11 @@ from datetime import datetime
 from enum import StrEnum, unique
 from typing import Self
 
+from custom_components.roller_shutter_suite.core.reasons import (
+    ReasonCategory,
+    ReasonCode,
+)
+
 from ._data import (
     JsonObject,
     JsonValue,
@@ -256,6 +261,12 @@ class OwnCommand:
       late result of an older command is never attributed to a newer one.
     - ``target``, ``direction``, ``time``, ``wish_class``: what the movement
       tracker remembers about an own command.
+    - ``reason``: the reason code of the wish that caused the command, a code
+      of the group "winning or contributing layers". **The reason on the
+      command is authoritative** for what the movement is; a decision only
+      documents its moment. When a wish of a higher class takes a movement in
+      flight over, class and reason of the command change to those of that
+      wish.
     - ``context_id``: the identifier under which the outside world executed
       the command (in Home Assistant the context of the service call). It is
       known only once the result has come back, and it is a hint for
@@ -269,6 +280,7 @@ class OwnCommand:
     direction: TravelDirection
     time: datetime
     wish_class: WishClass
+    reason: ReasonCode
     context_id: str | None = None
 
     def __post_init__(self) -> None:
@@ -278,6 +290,13 @@ class OwnCommand:
         require_type(self.direction, TravelDirection, "the direction of a command")
         object.__setattr__(self, "time", to_utc(self.time, "the time of a command"))
         require_type(self.wish_class, WishClass, "the wish class of a command")
+        require_type(self.reason, ReasonCode, "the reason of a command")
+        if self.reason.category is not ReasonCategory.LAYER:
+            raise ValueError(
+                "the reason of a command is the reason of the wish that caused it, "
+                f"a code of the group 'layer'; {self.reason.value!r} belongs to "
+                f"{self.reason.category.value!r}"
+            )
         require_optional_type(self.context_id, str, "the context of a command")
 
     def to_data(self) -> JsonObject:
@@ -288,6 +307,7 @@ class OwnCommand:
             "direction": self.direction.value,
             "time": self.time.isoformat(),
             "wish_class": self.wish_class.value,
+            "reason": self.reason.value,
             "context_id": self.context_id,
         }
 
@@ -301,6 +321,7 @@ class OwnCommand:
             "direction",
             "time",
             "wish_class",
+            "reason",
             "context_id",
         )
         return cls(
@@ -309,6 +330,7 @@ class OwnCommand:
             direction=read(content, "direction", as_enum(TravelDirection)),
             time=read(content, "time", as_datetime),
             wish_class=read(content, "wish_class", as_enum(WishClass)),
+            reason=read(content, "reason", as_enum(ReasonCode)),
             context_id=read(content, "context_id", optional(as_str)),
         )
 

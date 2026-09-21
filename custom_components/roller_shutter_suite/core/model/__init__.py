@@ -10,7 +10,10 @@ Position``. The modules exist so that blocks that work in parallel edit
 different files. Their dependencies run one way:
 
 ``_validation`` ← ``_data`` ← ``values`` ← ``decision`` ← ``observation`` ←
-``state`` ← ``snapshot``; ``window`` depends on ``_validation`` only.
+``state`` ← ``snapshot``. ``functions`` depends on nothing; ``window`` depends
+on ``_validation``, ``functions`` and ``values``, ``controls`` on
+``_validation`` only; ``decision`` also uses ``functions``, and ``snapshot``
+also uses ``controls``.
 
 Conventions that hold for the whole package:
 
@@ -24,6 +27,7 @@ Conventions that hold for the whole package:
 """
 
 from ._data import JsonObject, JsonValue
+from .controls import ControlLevel, Controls, OperatingMode
 from .decision import (
     CONSTRAINT_REASONS,
     GATE_RULE_REASONS,
@@ -41,6 +45,7 @@ from .decision import (
     WishClass,
     WishKind,
 )
+from .functions import FaultBehavior, FunctionId
 from .observation import (
     MemberCommand,
     MemberObservation,
@@ -87,14 +92,19 @@ from .window import (
     DEFAULT_TOLERANCE_MEASURED,
     MIN_TOLERANCE,
     CapabilityProfile,
+    CapabilityState,
     CoveringType,
+    FrostSettings,
     MemberConfig,
+    MotorProtectionSettings,
     PositionSource,
     PositionUpdates,
     ScheduleProfile,
+    SettingsCombinationError,
     TemperatureTier,
     TransitReporting,
     WindowCapabilities,
+    WindowCapabilityStates,
     WindowConfig,
 )
 
@@ -109,13 +119,19 @@ __all__ = [
     "WINDOW_STATE_SCHEMA_VERSION",
     "AnySourceValue",
     "CapabilityProfile",
+    "CapabilityState",
     "Constraint",
     "ConstraintResult",
+    "ControlLevel",
+    "Controls",
     "CoveringType",
     "DayType",
     "Decision",
     "Direction",
     "ExternalRequest",
+    "FaultBehavior",
+    "FrostSettings",
+    "FunctionId",
     "GateKind",
     "GateOutcome",
     "GateRule",
@@ -133,8 +149,10 @@ __all__ = [
     "MemberTarget",
     "MembersAtTargets",
     "MissingSourceValueError",
+    "MotorProtectionSettings",
     "MovementState",
     "Observation",
+    "OperatingMode",
     "OverrideEndRule",
     "OwnCommand",
     "PersonAtWindowDam",
@@ -146,6 +164,7 @@ __all__ = [
     "ProtectionEventState",
     "ProtectionEventStatus",
     "ScheduleProfile",
+    "SettingsCombinationError",
     "ShadingEpisodeState",
     "SimulatedState",
     "SolarHeatingEpisodeState",
@@ -157,6 +176,7 @@ __all__ = [
     "TransitReporting",
     "TravelDirection",
     "WindowCapabilities",
+    "WindowCapabilityStates",
     "WindowConfig",
     "WindowObservation",
     "WindowState",

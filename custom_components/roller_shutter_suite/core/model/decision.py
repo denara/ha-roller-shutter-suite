@@ -13,7 +13,7 @@ Reason codes are tied to their group (``ReasonCategory`` of the module ``reasons
 """
 
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from enum import StrEnum, unique
 from types import MappingProxyType
@@ -28,9 +28,11 @@ from ._validation import (
     require_aware_or_none,
     require_finite,
     require_identifier,
+    require_optional_type,
     require_type,
     require_unique,
 )
+from .functions import FunctionId
 from .values import Position
 
 
@@ -154,6 +156,16 @@ class Wish:
       glass calibration has been applied by the shading layer already). A
       layer that decides per member (shading, decision 9) also states the
       quantity it decided in as ``ray_height`` (metres above the floor).
+
+    ``triggered_at`` is the time of the trigger of a wish for a target: the
+    moment from which the layer wants what it wants now. A boundary of the
+    schedule fired, sleep mode or privacy was switched, an external request
+    arrived, a shading or solar heating episode began. It stays the same
+    while the layer only tracks (a new shading position inside an episode),
+    and it stays the old one when the wish wins again because a higher layer
+    dropped out. Motor protection reads it: a wish whose trigger lies after
+    the last own comfort movement is fresh. A wish that states no trigger is
+    never fresh.
     """
 
     layer: Layer
@@ -163,6 +175,7 @@ class Wish:
     direction: Direction | None = None
     member_positions: tuple[MemberTarget, ...] = ()
     ray_height: float | None = None
+    triggered_at: datetime | None = None
 
     def __post_init__(self) -> None:
         """Reject combinations that do not describe one of the three answers."""
@@ -191,10 +204,11 @@ class Wish:
             or self.direction is not None
             or self.member_positions
             or self.ray_height is not None
+            or self.triggered_at is not None
         ):
             raise ValueError(
                 f"a wish of the kind {self.kind.value!r} carries no position, "
-                "direction, member positions or ray height"
+                "direction, member positions, ray height or trigger time"
             )
 
     def _validate_target(self) -> None:
@@ -214,6 +228,7 @@ class Wish:
         )
         if self.ray_height is not None:
             require_finite(self.ray_height, "the ray height of a wish")
+        require_aware_or_none(self.triggered_at, "the trigger time of a wish")
 
     @classmethod
     def target(
@@ -255,6 +270,10 @@ class Wish:
             ray_height=ray_height,
         )
 
+    def triggered(self, at: datetime) -> Self:
+        """Return the same wish for a target with the time of its trigger."""
+        return replace(self, triggered_at=at)
+
     @classmethod
     def leave_alone(cls, layer: Layer, reason: ReasonCode) -> Self:
         """Return a wish that wins and holds the window where it is."""
@@ -282,15 +301,26 @@ class Wish:
 
 @dataclass(frozen=True, slots=True)
 class LayerReason:
-    """Why one layer did not win a recompute."""
+    """Why one layer, or one part of a layer, did not win a recompute.
+
+    ``function`` is the function of the integration that spoke: the one the
+    registration of the layer, or of the part of the layer, declares. The
+    arbiter fills it from the registration, never the layer itself, so a
+    reader of the record does not need the registry. It is ``None`` for a
+    registration that declares no function and for a layer nobody registered.
+    """
 
     layer: Layer
     reason: ReasonCode
+    function: FunctionId | None = None
 
     def __post_init__(self) -> None:
         """Validate the types, so a reason is never free text."""
         require_type(self.layer, Layer, "the layer of a layer reason")
         _require_reason(self.reason, _LAYER_GROUPS, "the reason of a layer reason")
+        require_optional_type(
+            self.function, FunctionId, "the function of a layer reason"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -329,7 +359,11 @@ CONSTRAINT_REASONS: Final = MappingProxyType(
             {ReasonCode.RAIN_VENTILATION_FLOOR}
         ),
         Constraint.FROST_PROTECTION: frozenset(
-            {ReasonCode.FROST_LIMIT, ReasonCode.FROST_HOLD}
+            {
+                ReasonCode.FROST_LIMIT,
+                ReasonCode.FROST_LIMIT_SOURCE_BLIND,
+                ReasonCode.FROST_HOLD,
+            }
         ),
         Constraint.NO_INTERMEDIATE_POSITION: frozenset(
             {ReasonCode.NO_INTERMEDIATE_POSITION}
@@ -412,10 +446,18 @@ GATE_RULE_REASONS: Final = MappingProxyType(
         GateRule.PERSON_AT_WINDOW_DAM: frozenset({ReasonCode.PERSON_AT_WINDOW}),
         GateRule.MANUAL_OVERRIDE_DAM: frozenset({ReasonCode.MANUAL_OVERRIDE}),
         GateRule.MOVEMENT_IN_FLIGHT: frozenset(
-            {ReasonCode.MOVEMENT_IN_FLIGHT, ReasonCode.DUPLICATE_COMMAND}
+            {
+                ReasonCode.MOVEMENT_IN_FLIGHT,
+                ReasonCode.DUPLICATE_COMMAND,
+                ReasonCode.MOVEMENT_TAKEN_OVER,
+            }
         ),
         GateRule.MOTOR_PROTECTION: frozenset(
-            {ReasonCode.MIN_CHANGE, ReasonCode.MIN_INTERVAL}
+            {
+                ReasonCode.MIN_CHANGE,
+                ReasonCode.MIN_INTERVAL,
+                ReasonCode.TRIGGER_TIME_MISSING,
+            }
         ),
         GateRule.COMMAND_BACKOFF: frozenset({ReasonCode.COMMAND_BACKOFF}),
         GateRule.STAGGERING: frozenset({ReasonCode.STAGGERED}),
@@ -586,7 +628,16 @@ class Decision:
 
     - ``winning_wish``: the wish of the first layer with an opinion; ``None``
       if no layer had one (a window without a configured schedule).
-    - ``other_layers``: for every other layer the reason why it did not win.
+    - ``winning_function``: the function of the registration whose wish won,
+      written by the arbiter from that registration; ``None`` if nothing won
+      or the registration declares no function.
+    - ``other_layers``: for every other layer the reason why it did not win,
+      each with the function that spoke. A layer that is registered in parts
+      (one per function) has one entry per part that did not win, so entries
+      are unique per layer and function. The winning layer appears here only
+      through its other parts: with a function, and not the winner's. A part
+      whose function is disabled for the window by a faulty stored setting
+      was not asked and says ``function_disabled_by_fault``.
     - ``constraints``: the results of the constraints that applied, in order.
     - ``targets``: the target of every member after the constraints, on the
       motor scale. Empty if the winning wish is not a target. A member with
@@ -603,6 +654,7 @@ class Decision:
     constraints: tuple[ConstraintResult, ...] = ()
     targets: tuple[MemberTarget, ...] = ()
     gate: GateOutcome | None = None
+    winning_function: FunctionId | None = None
 
     def __post_init__(self) -> None:
         """Reject records whose parts contradict each other."""
@@ -633,14 +685,25 @@ class Decision:
             require_type(self.winning_wish, Wish, "the winning wish")
             if self.winning_wish.kind is WishKind.NO_OPINION:
                 raise ValueError("a wish without an opinion cannot win")
-        seen: set[Layer] = set()
+        require_optional_type(
+            self.winning_function, FunctionId, "the winning function of a decision"
+        )
+        if self.winning_function is not None and self.winning_wish is None:
+            raise ValueError("without a winning wish there is no winning function")
+        seen: set[tuple[Layer, FunctionId | None]] = set()
         for entry in self.other_layers:
             require_type(entry, LayerReason, "a layer reason of a decision")
-            if entry.layer in seen:
+            if (entry.layer, entry.function) in seen:
                 raise ValueError(f"the layer {entry.layer.value!r} is listed twice")
-            seen.add(entry.layer)
-        if self.winning_wish is not None and self.winning_wish.layer in seen:
-            raise ValueError("the winning layer is not one of the other layers")
+            seen.add((entry.layer, entry.function))
+            if self.winning_wish is None or entry.layer is not self.winning_wish.layer:
+                continue
+            if entry.function is None or entry.function is self.winning_function:
+                raise ValueError(
+                    "the winning layer is one of the other layers only through "
+                    "another part of it: an entry with a function that is not the "
+                    "winner's"
+                )
 
     def _validate_members(self) -> None:
         members = _member_ids(self.targets)
