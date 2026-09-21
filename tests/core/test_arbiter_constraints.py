@@ -24,6 +24,7 @@ from custom_components.roller_shutter_suite.core.engine import (
     build_arbiter,
 )
 from custom_components.roller_shutter_suite.core.model import (
+    BLIND_SOURCE,
     FULLY_CLOSED,
     FULLY_OPEN,
     AnySourceValue,
@@ -564,6 +565,61 @@ def test_a_frost_source_that_delivers_no_temperature_keeps_the_limit(
     assert _reasons(decision) == [ReasonCode.FROST_LIMIT_SOURCE_BLIND]
     assert decision.target == FrostSettings().position
     assert decision.faults == ()
+
+
+BLIND_FROST = FrostSettings(source=BLIND_SOURCE)
+
+
+def test_a_frost_source_that_is_configured_but_blind_is_blind_at_once() -> None:
+    """A faulty stored source: no held state is used, for nobody knows its source."""
+    config = window(frost=BLIND_FROST)
+    no_frost_an_hour_ago = WindowState(
+        held_frost=HeldInput(False, NOW - timedelta(hours=1))
+    )
+
+    assert frost_state(config, _world(None)) is FrostState.BLIND
+    assert frost_state(config, _world(MILD, no_frost_an_hour_ago)) is FrostState.BLIND
+    # What is held stays as it is: it belongs to the source the window had.
+    assert held_frost_after(config, _world(None)) is None
+    assert (
+        held_frost_after(config, _world(COLD, no_frost_an_hour_ago))
+        == no_frost_an_hour_ago.held_frost
+    )
+
+
+def test_a_blind_frost_source_limits_comfort_and_names_the_blind_source() -> None:
+    """The morning opening stops at the frost position; closing is never limited."""
+    subject = engine(window(frost=BLIND_FROST))
+
+    opening = subject.recompute(_world(None))
+    closing = subject.recompute(snapshot(sources=night(), position=100))
+
+    assert _reasons(opening) == [ReasonCode.FROST_LIMIT_SOURCE_BLIND]
+    assert opening.target == FrostSettings().position
+    assert opening.faults == ()
+    assert closing.target == FULLY_CLOSED
+    assert closing.constraints == ()
+
+
+def test_a_blind_frost_source_is_lifted_by_the_waiver_like_any_frost() -> None:
+    """The operator knows the shutter is free: the limit is lifted until the morning."""
+    waived = WindowState(frost_waiver_until=NOW + timedelta(hours=2))
+
+    decision = engine(window(frost=BLIND_FROST)).recompute(_world(None, waived))
+
+    assert decision.target == FULLY_OPEN
+    assert decision.constraints == ()
+
+
+def test_the_marker_is_no_string_and_the_only_other_thing_a_source_can_be() -> None:
+    """A source is a name, none, or blind; anything else is refused."""
+    assert not isinstance(BLIND_SOURCE, str)
+    assert window(frost_source=BLIND_SOURCE).frost.source is BLIND_SOURCE
+    bad: Any = 7
+    with pytest.raises(TypeError, match="the frost source"):
+        FrostSettings(source=bad)
+    with pytest.raises(ValueError, match="must not be empty"):
+        FrostSettings(source="")
 
 
 @pytest.mark.parametrize(

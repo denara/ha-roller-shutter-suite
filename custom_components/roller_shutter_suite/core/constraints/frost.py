@@ -34,8 +34,10 @@ from custom_components.roller_shutter_suite.core.arbiter.registry import (
     ConstraintRegistration,
 )
 from custom_components.roller_shutter_suite.core.model import (
+    BLIND_SOURCE,
     FULLY_CLOSED,
     AnySourceValue,
+    BlindSource,
     Constraint,
     ConstraintResult,
     FunctionId,
@@ -79,11 +81,13 @@ def _reading(config: WindowConfig, snapshot: WorldSnapshot) -> bool | None:
 
     Inside the hysteresis band the source says what was last known; without
     anything known, a temperature that is not below the threshold is no frost.
+    A window without a source, or with a source nobody knows (the marker
+    ``BLIND_SOURCE``), has nothing to read.
     """
     settings = config.frost
-    temperature = _temperature(
-        None if settings.source is None else snapshot.sources.get(settings.source)
-    )
+    if settings.source is None or isinstance(settings.source, BlindSource):
+        return None
+    temperature = _temperature(snapshot.sources.get(settings.source))
     if temperature is None:
         return None
     if temperature < settings.threshold:
@@ -114,9 +118,15 @@ def frost_state(config: WindowConfig, snapshot: WorldSnapshot) -> FrostState:
     never was a known state, the source is blind, and the constraint applies
     its limit as a cautious value until data returns or the operator waives
     frost protection.
+
+    A source that is configured, but blind because its stored setting is
+    faulty (``BLIND_SOURCE``), is blind at once. A held state is not used: it
+    belongs to a source, and nobody knows which source this window has.
     """
     if config.frost.source is None:
         return FrostState.NO_FROST
+    if config.frost.source is BLIND_SOURCE:
+        return FrostState.BLIND
     reading = _reading(config, snapshot)
     if reading is None:
         held = snapshot.state.held_frost
@@ -130,10 +140,12 @@ def held_frost_after(config: WindowConfig, snapshot: WorldSnapshot) -> HeldInput
     """Return the frost state to persist after this snapshot.
 
     While the source has a value, that is its reading with the time of the
-    snapshot; otherwise what was held stays as it is. The constraint only
-    reads ``held_frost``; whoever persists the window state writes it.
+    snapshot; otherwise what was held stays as it is, also for a window
+    without a source and for one whose source is ``BLIND_SOURCE``. The
+    constraint only reads ``held_frost``; whoever persists the window state
+    writes it.
     """
-    reading = None if config.frost.source is None else _reading(config, snapshot)
+    reading = _reading(config, snapshot)
     if reading is None:
         return snapshot.state.held_frost
     return HeldInput(value=reading, seen_at=snapshot.time)

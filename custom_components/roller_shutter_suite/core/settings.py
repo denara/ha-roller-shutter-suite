@@ -48,9 +48,11 @@ from types import MappingProxyType
 from typing import Any, Final
 
 from .model import (
+    BLIND_SOURCE,
     SCHEDULE_DAY_TYPES,
     SCHEDULE_EDGES,
     TRIGGER_FIELDS,
+    BlindSource,
     CapabilityState,
     CoveringType,
     FaultBehavior,
@@ -428,6 +430,10 @@ _NONE_FAULT: Final = (
 )
 _UNKNOWN_FAULT: Final = "the registry has no setting with this key"
 _NOT_INHERITABLE_FAULT: Final = "only a window can set this; it cannot be inherited"
+_BLIND_FAULT: Final = (
+    "the marker for a source that is configured, but blind, cannot be set; only "
+    "the resolver produces it"
+)
 _LEVEL_FAULT: Final = "the settings of this level are not a mapping of keys to values"
 
 _REFUSALS: Final = (
@@ -781,6 +787,11 @@ def _read_level(
                     key, _NOT_INHERITABLE_FAULT, SettingProblem.NOT_INHERITABLE
                 )
             )
+            continue
+        if isinstance(value, BlindSource):
+            # "Configured, but blind" is what a fault ends at. No level can
+            # say it: a level that names no source says none.
+            faults.append(SettingFault(key, _BLIND_FAULT, SettingProblem.INVALID))
             continue
         if rules is not None:
             try:
@@ -1426,14 +1437,20 @@ WINDOW_SETTINGS: Final = SettingsRegistry(
             default=ScheduleProfile.DEFAULT,
             parse=as_enum(ScheduleProfile),
         ),
-        # PROVISIONAL: the fault values of the entries below equal the defaults
-        # until the project owner has confirmed the list of cautious values.
-        SettingDefinition[str | None](
+        # The fault values of the settings that fall back were confirmed by the
+        # project owner. Each entry says why its value is the cautious one. Two
+        # rules decide: a fault value never makes the function less restrictive
+        # for a comfort wish than a valid value would, and it never restricts a
+        # PROTECTION wish more than the default does.
+        SettingDefinition[str | BlindSource | None](
             key="frost_source",
             kind=SettingKind.OPTIONAL_REFERENCE,
             function=FunctionId.FROST,
             default=None,
-            fault_value=None,
+            # "None" means "not configured" and would lift the frost limit.
+            # Configured, but blind: the limit stays until somebody repairs
+            # the setting or waives frost protection.
+            fault_value=BLIND_SOURCE,
             parse=as_str,
         ),
         SettingDefinition(
@@ -1441,6 +1458,9 @@ WINDOW_SETTINGS: Final = SettingsRegistry(
             kind=SettingKind.NUMBER,
             function=FunctionId.FROST,
             default=0.0,
+            # The default, stated on purpose. A higher threshold engages
+            # earlier, but a number has no most restrictive value; the
+            # freezing point never engages later than the approved default.
             fault_value=0.0,
             parse=_as_number,
         ),
@@ -1449,6 +1469,8 @@ WINDOW_SETTINGS: Final = SettingsRegistry(
             kind=SettingKind.NUMBER,
             function=FunctionId.FROST,
             default=1.0,
+            # The default, stated on purpose: frost never ends earlier than
+            # with the approved band.
             fault_value=1.0,
             parse=_as_number,
         ),
@@ -1457,6 +1479,8 @@ WINDOW_SETTINGS: Final = SettingsRegistry(
             kind=SettingKind.NUMBER,
             function=FunctionId.FROST,
             default=Position(90),
+            # The default, stated on purpose. Lower would open less, and its
+            # extreme, no opening at all in frost, was rejected (decision 13).
             fault_value=Position(90),
             parse=_as_position,
         ),
@@ -1465,6 +1489,10 @@ WINDOW_SETTINGS: Final = SettingsRegistry(
             kind=SettingKind.BOOLEAN,
             function=FunctionId.FROST,
             default=False,
+            # The default, although "on" restricts more: the switch restricts
+            # protection wishes only, and a fault value never restricts a
+            # protection wish more than the default does. A hail opening must
+            # not stop short because of a data fault.
             fault_value=False,
             parse=as_bool,
         ),
@@ -1473,7 +1501,11 @@ WINDOW_SETTINGS: Final = SettingsRegistry(
             kind=SettingKind.BOOLEAN,
             function=FunctionId.FROST,
             default=False,
-            fault_value=False,
+            # The more restrictive of the two: a closed shutter is not raised
+            # at all in frost. It reaches comfort wishes only, because with
+            # the fault value of "applies to protection" the constraint never
+            # touches a protection wish.
+            fault_value=True,
             parse=as_bool,
         ),
         SettingDefinition(
@@ -1481,6 +1513,8 @@ WINDOW_SETTINGS: Final = SettingsRegistry(
             kind=SettingKind.NUMBER,
             function=FunctionId.MOTOR_PROTECTION,
             default=5,
+            # The default, stated on purpose: never smaller than approved;
+            # zero would switch the minimum change off.
             fault_value=5,
             parse=as_int,
         ),
@@ -1489,6 +1523,7 @@ WINDOW_SETTINGS: Final = SettingsRegistry(
             kind=SettingKind.DURATION,
             function=FunctionId.MOTOR_PROTECTION,
             default=timedelta(minutes=10),
+            # The default, stated on purpose: never shorter than approved.
             fault_value=timedelta(minutes=10),
             parse=as_duration,
         ),
@@ -1501,6 +1536,9 @@ WINDOW_SETTINGS: Final = SettingsRegistry(
             kind=SettingKind.DURATION,
             function=FunctionId.COMMAND_VERIFICATION,
             default=timedelta(minutes=5),
+            # The default, stated on purpose. Neither direction is "more
+            # restrictive": the bound never lets a command through, it only
+            # says when a deferred window is evaluated again at the latest.
             fault_value=timedelta(minutes=5),
             parse=as_duration,
         ),
@@ -1554,15 +1592,20 @@ class WindowResolution:
     settings: ResolvedSettings
 
 
-def resolve_window(
+def resolve_window(  # noqa: PLR0913 - the three levels and the window are the input
     *,
     window_id: str,
     members: Iterable[MemberConfig],
     global_settings: PartialSettings,
     window_settings: PartialSettings,
     group: GroupLevel | None = None,
+    registry: SettingsRegistry = WINDOW_SETTINGS,
 ) -> WindowResolution:
     """Resolve :data:`WINDOW_SETTINGS` and build the configuration of one window.
+
+    ``registry`` is for tests that judge a changed registry of the window (a
+    fault value that was made less cautious, for example); the integration
+    never passes it.
 
     The window configuration validates itself, and it is the only place with
     value rules: every set value of every level is handed to it on its own,
@@ -1600,7 +1643,7 @@ def resolve_window(
         return dataclasses.replace(identity, **effective, disabled_functions=disabled)
 
     resolved, config = _resolve(
-        WINDOW_SETTINGS,
+        registry,
         capabilities=identity.capability_states,
         members=identity.members,
         global_settings=global_settings,

@@ -11,6 +11,7 @@ from typing import Any
 import pytest
 
 from custom_components.roller_shutter_suite.core.model import (
+    BLIND_SOURCE,
     FrostSettings,
     FunctionId,
     MotorProtectionSettings,
@@ -21,7 +22,9 @@ from custom_components.roller_shutter_suite.core.settings import (
     FaultAction,
     GroupLevel,
     Level,
+    PartialSettings,
     SettingKind,
+    SettingProblem,
     WindowResolution,
     resolve_window,
     settings_from_stored,
@@ -167,3 +170,126 @@ def test_a_faulty_stored_value_falls_back_and_pauses_nothing(
     (fault,) = resolution.settings.faults
     assert (fault.key, fault.level) == (key, Level.WINDOW)
     assert fault.action is FaultAction.FELL_BACK
+
+
+# --- The fault values: what applies when no level supplies a valid value ------------
+
+FAULT_VALUES = {
+    "frost_source": BLIND_SOURCE,
+    "frost_threshold": 0.0,
+    "frost_hysteresis": 1.0,
+    "frost_position": Position(90),
+    "frost_applies_to_protection": False,
+    "frost_hold_closed": True,
+    "motor_min_change": 5,
+    "motor_min_interval": timedelta(minutes=10),
+    "reevaluate_after": timedelta(minutes=5),
+}
+"""Confirmed by the project owner; the reasons stand at the entries of the registry."""
+
+
+def test_fault_values_are_the_confirmed_ones_and_stated_for_exactly_these_settings() -> (
+    None
+):
+    """Two differ from the default: the blind source, and "hold closed" switched on."""
+    stated = {
+        definition.key: definition.fault_value
+        for definition in WINDOW_SETTINGS.definitions
+        if definition.has_fault_value
+    }
+    defaults = {
+        definition.key: definition.default for definition in WINDOW_SETTINGS.definitions
+    }
+
+    assert stated == FAULT_VALUES
+    assert set(stated) == set(EXPECTED)
+    assert {key for key, value in stated.items() if value != defaults[key]} == {
+        "frost_source",
+        "frost_hold_closed",
+    }
+
+
+@pytest.mark.parametrize("level", ["house", "group", "own"])
+def test_unreadable_frost_source_on_the_only_level_is_configured_but_blind(
+    level: str,
+) -> None:
+    """Not "none", which would mean that frost protection is not configured."""
+    resolution = _resolve(**{level: {"frost_source": 7}})
+
+    assert resolution.config is not None
+    assert resolution.config.frost_source is BLIND_SOURCE
+    assert resolution.config.frost.source is BLIND_SOURCE
+    item = resolution.settings.values["frost_source"]
+    assert (item.level, item.cautious) == (Level.BUILT_IN, True)
+    (fault,) = resolution.settings.faults
+    assert fault.key == "frost_source"
+    assert fault.action is FaultAction.FELL_BACK_TO_CAUTIOUS_VALUE
+
+
+def test_unreadable_frost_source_with_a_valid_one_on_another_level_uses_that_one() -> (
+    None
+):
+    """The window's value cannot be read; the house names a source: it applies."""
+    resolution = _resolve(
+        house={"frost_source": "sensor.example_outdoor_temperature"},
+        own={"frost_source": 7},
+    )
+
+    assert resolution.config is not None
+    assert resolution.config.frost_source == "sensor.example_outdoor_temperature"
+    assert not resolution.settings.values["frost_source"].cautious
+    (fault,) = resolution.settings.faults
+    assert fault.action is FaultAction.FELL_BACK
+
+
+def test_window_that_says_none_on_purpose_is_not_blind() -> None:
+    """A person switched frost protection off for the window; that is no fault."""
+    resolution = _resolve(house={"frost_source": 7}, own={"frost_source": "__none__"})
+
+    assert resolution.config is not None
+    assert resolution.config.frost_source is None
+    assert [fault.action for fault in resolution.settings.faults] == [
+        FaultAction.NO_EFFECT
+    ]
+
+
+@pytest.mark.parametrize("level", [Level.GLOBAL, Level.GROUP, Level.WINDOW])
+def test_no_level_can_set_the_marker_for_a_blind_source(level: Level) -> None:
+    """Only the resolver produces it. Set on a level it is a fault, and it ends blind."""
+    levels = {
+        name: PartialSettings({"frost_source": BLIND_SOURCE})
+        if at is level
+        else PartialSettings()
+        for name, at in (
+            ("house", Level.GLOBAL),
+            ("group", Level.GROUP),
+            ("own", Level.WINDOW),
+        )
+    }
+    resolution = resolve_window(
+        window_id="window.example",
+        members=window().members,
+        global_settings=levels["house"],
+        group=GroupLevel("group.example", levels["group"]),
+        window_settings=levels["own"],
+    )
+
+    (fault,) = resolution.settings.faults
+    assert (fault.key, fault.level, fault.problem) == (
+        "frost_source",
+        level,
+        SettingProblem.INVALID,
+    )
+    assert "only the resolver produces it" in fault.detail
+    assert resolution.config is not None
+    assert resolution.config.frost_source is BLIND_SOURCE
+
+
+def test_stored_text_can_never_be_the_marker() -> None:
+    """The marker is no string: the text "blind" is the name of a source."""
+    resolution = _resolve(own={"frost_source": "blind"})
+
+    assert resolution.config is not None
+    assert resolution.config.frost_source == "blind"
+    assert isinstance(resolution.config.frost_source, str)
+    assert resolution.settings.faults == ()
