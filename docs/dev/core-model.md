@@ -312,12 +312,12 @@ What such a fault costs, by the fault behavior of the setting's function and by 
 | **Function falls back** (also a setting without a function) | `fell_back`: the next level supplies the value, last the built-in default; `level` of the resolved value says which. Nothing is paused. | `no_effect`: reported, nothing else. |
 | **Function pauses** | `functions_disabled`: the function of the setting is paused for this window and is part of `WindowConfig.disabled_functions`. | `no_effect`: reported, nothing else. |
 
-Two kinds of fault do not concern one setting:
+Some kinds of fault do not concern one setting:
 
 | Kind of fault | Problem code | Outcome on every level |
 |---|---|---|
 | a key the registry does not know | `unknown_setting` | `ignored`: reported, never silently dropped, but it pauses nothing and makes nothing invalid. A newer version may have written it (the downgrade case). |
-| member-level settings for a member the window does not have | `unknown_member` | `ignored`: reported, nothing else. A cover that was removed leaves them behind. |
+| member-level settings for a member the window does not have | `unknown_setting`, with the key `settings`, the level `member` and the identifier of that member | `ignored`: reported, nothing else. A cover that was removed leaves them behind. |
 | the settings of a level are unreadable as a whole (no mapping) | `level_unreadable` | The level counts as not present. `functions_disabled`: **all** functions with settings that pause on a fault are paused for the windows in whose chain the level lies (the window itself; every window of the group; every window of the house), also for a window that overrides some keys, because it is unknown which keys would have been concerned. The functions that fall back take the values of the other levels. |
 
 **A setting that cannot be inherited, set on a group or the house,** could never have been the effective value of any window. By the rule above it therefore pauses nothing and changes nothing: it is reported as `not_inheritable` with the action `no_effect`.

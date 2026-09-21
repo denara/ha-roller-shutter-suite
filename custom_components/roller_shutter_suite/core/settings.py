@@ -280,8 +280,6 @@ class SettingProblem(StrEnum):
     """The level sets a key that the registry does not know."""
     LEVEL_UNREADABLE = "level_unreadable"
     """The settings of the level are unreadable as a whole."""
-    UNKNOWN_MEMBER = "unknown_member"
-    """Member-level settings name a member the window does not have."""
     COMBINATION = "combination"
     """A rule that spans several settings refuses the combination of the
     effective values; each of them may be fine on its own."""
@@ -1658,8 +1656,14 @@ def _resolve_members(
         if member_id in known:
             _read_member(member_id, settings, found)
         else:
+            # Stored data that names something the window does not know, like
+            # an unknown key: the same problem code, reported and ignored. The
+            # key is that of the settings as a whole, and ``member_id`` names
+            # the stranger. No problem code of its own: the Home Assistant
+            # side explains every code on every level it knows, and the block
+            # that builds the member forms adds what the member level needs.
             stranger = SettingFault(
-                SETTINGS_KEY, _UNKNOWN_MEMBER_FAULT, SettingProblem.UNKNOWN_MEMBER
+                SETTINGS_KEY, _UNKNOWN_MEMBER_FAULT, SettingProblem.UNKNOWN_SETTING
             )
             found.report(str(member_id), stranger, ignored=True)
     pausable = frozenset(MEMBER_SETTINGS.pausable_functions)

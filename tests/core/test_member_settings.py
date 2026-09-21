@@ -609,7 +609,7 @@ def test_settings_of_a_member_the_window_does_not_have_are_reported_and_ignored(
         (
             SETTINGS_KEY,
             "cover.example_removed",
-            SettingProblem.UNKNOWN_MEMBER,
+            SettingProblem.UNKNOWN_SETTING,
             FaultAction.IGNORED,
         )
     ]
