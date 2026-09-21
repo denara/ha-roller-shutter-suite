@@ -20,6 +20,8 @@ ORDER = [
     "_data",
     "values",
     "functions",
+    "schedule",
+    "almanac",
     "window",
     "controls",
     "decision",

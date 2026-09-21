@@ -12,11 +12,10 @@ from typing import Final
 from custom_components.roller_shutter_suite.core.model import (
     AnySourceValue,
     DayType,
+    ScheduleSettings,
     SourceState,
 )
 from custom_components.roller_shutter_suite.core.reasons import ReasonCode
-
-from .settings import ScheduleSettings
 
 _SATURDAY: Final = 5
 

@@ -13,7 +13,9 @@ different files. Their dependencies run one way:
 ``state`` ← ``snapshot``. ``functions`` depends on nothing; ``window`` depends
 on ``_validation``, ``functions`` and ``values``, ``controls`` on
 ``_validation`` only; ``decision`` also uses ``functions``, and ``snapshot``
-also uses ``controls``.
+also uses ``controls`` and ``almanac``. ``schedule`` (the settings of the
+schedule as values) depends on ``_validation`` and ``values`` and is used by
+``window``; ``almanac`` depends on ``_validation`` and ``_data``.
 
 Conventions that hold for the whole package:
 
@@ -27,6 +29,7 @@ Conventions that hold for the whole package:
 """
 
 from ._data import JsonObject, JsonValue
+from .almanac import ElevationPassage, SunAlmanac, SunDay
 from .controls import ControlLevel, Controls, OperatingMode
 from .decision import (
     CONSTRAINT_REASONS,
@@ -55,6 +58,18 @@ from .observation import (
     OwnCommand,
     TravelDirection,
     WindowObservation,
+)
+from .schedule import (
+    MAX_RANDOM_OFFSET,
+    MAX_SUN_OFFSET_MINUTES,
+    TRIGGER_FIELDS,
+    DayTriggers,
+    ScheduleProfile,
+    ScheduleRuleError,
+    ScheduleSettings,
+    ScheduleTargets,
+    Trigger,
+    TriggerKind,
 )
 from .snapshot import WorldSnapshot
 from .state import (
@@ -91,6 +106,8 @@ from .window import (
     DEFAULT_TOLERANCE_CALCULATED,
     DEFAULT_TOLERANCE_MEASURED,
     MIN_TOLERANCE,
+    SCHEDULE_DAY_TYPES,
+    SCHEDULE_EDGES,
     CapabilityProfile,
     CapabilityState,
     CoveringType,
@@ -99,7 +116,6 @@ from .window import (
     MotorProtectionSettings,
     PositionSource,
     PositionUpdates,
-    ScheduleProfile,
     SettingsCombinationError,
     TemperatureTier,
     TransitReporting,
@@ -115,7 +131,12 @@ __all__ = [
     "FULLY_CLOSED",
     "FULLY_OPEN",
     "GATE_RULE_REASONS",
+    "MAX_RANDOM_OFFSET",
+    "MAX_SUN_OFFSET_MINUTES",
     "MIN_TOLERANCE",
+    "SCHEDULE_DAY_TYPES",
+    "SCHEDULE_EDGES",
+    "TRIGGER_FIELDS",
     "WINDOW_STATE_SCHEMA_VERSION",
     "AnySourceValue",
     "CapabilityProfile",
@@ -125,9 +146,11 @@ __all__ = [
     "ControlLevel",
     "Controls",
     "CoveringType",
+    "DayTriggers",
     "DayType",
     "Decision",
     "Direction",
+    "ElevationPassage",
     "ExternalRequest",
     "FaultBehavior",
     "FrostSettings",
@@ -164,6 +187,9 @@ __all__ = [
     "ProtectionEventState",
     "ProtectionEventStatus",
     "ScheduleProfile",
+    "ScheduleRuleError",
+    "ScheduleSettings",
+    "ScheduleTargets",
     "SettingsCombinationError",
     "ShadingEpisodeState",
     "SimulatedState",
@@ -171,10 +197,14 @@ __all__ = [
     "SourceScalar",
     "SourceState",
     "SourceValue",
+    "SunAlmanac",
+    "SunDay",
     "SunPosition",
     "TemperatureTier",
     "TransitReporting",
     "TravelDirection",
+    "Trigger",
+    "TriggerKind",
     "WindowCapabilities",
     "WindowCapabilityStates",
     "WindowConfig",

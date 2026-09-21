@@ -47,8 +47,7 @@ from tests.core.arbiter_kit import STUB_LAYERS
 
 NOT_BUILT_YET: frozenset[FunctionId] = frozenset(
     {
-        # The schedule layer and the shading layer come with their blocks.
-        FunctionId.SCHEDULE,
+        # The shading layer comes with its block.
         FunctionId.SHADING,
         # `reevaluate_after` bounds a wait for the reports of members; the gate
         # rule of command verification (the backoff) comes with its block.

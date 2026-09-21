@@ -25,12 +25,13 @@ from .arbiter import (
 from .constraints import DIRECTION_CONSTRAINT, FROST_CONSTRAINT
 from .model import Decision, WindowConfig, WindowState, WorldSnapshot
 from .reasons import ReasonCode
+from .schedule import SCHEDULE_LAYER
 
 BUILT_IN_CONSTRAINTS = (DIRECTION_CONSTRAINT, FROST_CONSTRAINT)
 """The constraints that belong to no single feature block."""
 
 
-FEATURE_LAYERS: tuple[LayerRegistration, ...] = ()
+FEATURE_LAYERS: tuple[LayerRegistration, ...] = (SCHEDULE_LAYER,)
 """The layers of the feature blocks; a block that builds a layer adds it here.
 
 ``tests/core/test_layer_triggers.py`` asks every comfort layer in this list for

@@ -13,13 +13,17 @@ from datetime import date, datetime, timedelta, tzinfo
 from enum import StrEnum, unique
 from typing import Final
 
+from custom_components.roller_shutter_suite.core.arbiter import LayerRegistration
 from custom_components.roller_shutter_suite.core.model import (
     DayType,
     Direction,
+    FunctionId,
     HeldInput,
     LatchedDayType,
     Layer,
     Position,
+    ScheduleSettings,
+    ScheduleTargets,
     WindowConfig,
     WindowState,
     Wish,
@@ -35,16 +39,22 @@ from .day_types import (
     read_switch,
 )
 from .local_time import as_instant, local_date, local_instant, zone_of
-from .settings import DayOfYear, ScheduleSettings, ScheduleTargets
+from .sun import (
+    ALMANAC_DAYS_AHEAD,
+    AlmanacSun,
+    PortSun,
+    ScheduleInputMissingError,
+    SunSource,
+)
 from .triggers import Edge, random_offset, trigger_instant
 
-_LOOK_AHEAD_DAYS: Final = 8
+_LOOK_AHEAD_DAYS: Final = ALMANAC_DAYS_AHEAD + 1
 """How many local dates the next planned action is searched on: a week and a day."""
 
 SCHEDULE_NOT_CONFIGURED: Final = Wish.no_opinion(
     Layer.SCHEDULE, ReasonCode.NOT_CONFIGURED
 )
-"""The answer of the schedule layer for a window without schedule settings."""
+"""The answer of the schedule layer for a window whose schedule is switched off."""
 
 
 @unique
@@ -155,8 +165,8 @@ class _Context:
     settings: ScheduleSettings
     snapshot: WorldSnapshot
     window_id: str
-    seed: int
-    sun: Sun
+    seed: int | None
+    sun: SunSource
     zone: tzinfo
     now: datetime
     today: date
@@ -170,6 +180,18 @@ class _DayPlan:
     evening: datetime
 
 
+def _random_offset(context: _Context, day: date, edge: Edge) -> timedelta:
+    """Return the random offset; without a range the seed is not needed."""
+    maximum = context.settings.random_offset
+    if not maximum:
+        return timedelta(0)
+    if context.seed is None:
+        raise ScheduleInputMissingError(
+            "a random offset is configured, but the seed of the installation is missing"
+        )
+    return random_offset(context.seed, context.window_id, day, edge, maximum)
+
+
 def _plan(context: _Context, day: date, day_type: DayType) -> _DayPlan:
     triggers = context.settings.triggers_for(day_type)
     morning, evening = (
@@ -179,13 +201,7 @@ def _plan(context: _Context, day: date, day_type: DayType) -> _DayPlan:
             day,
             zone=context.zone,
             sun=context.sun,
-            offset=random_offset(
-                context.seed,
-                context.window_id,
-                day,
-                edge,
-                context.settings.random_offset,
-            ),
+            offset=_random_offset(context, day, edge),
         )
         for trigger, edge in (
             (triggers.morning, Edge.MORNING),
@@ -260,8 +276,8 @@ class _Season:
     held: HeldInput | None
 
 
-def _in_summer_range(day: date, first: DayOfYear, last: DayOfYear) -> bool:
-    current = DayOfYear.of(day)
+def _in_summer_range(day: date, first: tuple[int, int], last: tuple[int, int]) -> bool:
+    current = (day.month, day.day)
     if first <= last:
         return first <= current <= last
     return current >= first or current <= last
@@ -320,7 +336,7 @@ def _brightness(context: _Context, plan: _DayPlan, day_type: DayType) -> _Bright
     settings = context.settings
     threshold = settings.brightness_threshold
     not_before = settings.triggers_for(day_type).evening.not_before
-    if settings.brightness_source is None or threshold is None or not_before is None:
+    if settings.brightness_source is None:
         return _Brightness()
     state = context.snapshot.state
     evening_at = state.evening_brightness_at
@@ -416,26 +432,41 @@ def _night_since(
     return max(evening, last_night.morning)
 
 
+def _sun_source(snapshot: WorldSnapshot, sun: Sun | None) -> SunSource:
+    if sun is not None:
+        return PortSun(sun, zone_of(snapshot.time))
+    if snapshot.almanac is None:
+        raise ScheduleInputMissingError("the snapshot carries no sun almanac")
+    return AlmanacSun(snapshot.almanac)
+
+
 def evaluate_schedule(
-    settings: ScheduleSettings,
     window: WindowConfig,
     snapshot: WorldSnapshot,
-    sun: Sun,
+    sun: Sun | None = None,
     *,
-    seed: int,
+    seed: int | None = None,
 ) -> ScheduleResult:
     """Return the wish of the schedule and its facts for one world snapshot.
 
-    ``seed`` is the installation's seed for random offsets (storage port).
+    The settings are ``window.schedule``. Sun times come from the almanac of
+    the snapshot and the seed for random offsets from
+    ``snapshot.installation_seed``: that is how a recompute runs, which asks no
+    port. The simulation can hand in the sun port and the seed instead; both
+    ways give the same result, because the almanac holds the port's answers.
     The local zone is the zone of ``snapshot.time``. The function reads no
     clock and keeps nothing: the same arguments give the same result.
+
+    Raises :class:`ScheduleInputMissingError` if an answer about the sun or
+    the seed is needed and missing. Nothing is guessed.
     """
+    settings = window.schedule
     context = _Context(
         settings=settings,
         snapshot=snapshot,
         window_id=window.window_id,
-        seed=seed,
-        sun=sun,
+        seed=snapshot.installation_seed if seed is None else seed,
+        sun=_sun_source(snapshot, sun),
         zone=zone_of(snapshot.time),
         now=as_instant(snapshot.time, "the time of the snapshot"),
         today=snapshot.time.date(),
@@ -451,6 +482,7 @@ def evaluate_schedule(
 
     is_day = plan.morning <= context.now < plan.evening
     is_day = is_day and morning_condition_fulfilled(window, snapshot)
+    since = plan.morning if is_day else _night_since(context, plan, brightness)
     if is_day:
         wish = Wish.target(
             Layer.SCHEDULE,
@@ -465,6 +497,9 @@ def evaluate_schedule(
             targets.evening(summer=season.summer),
             direction=Direction.LOWER_ONLY,
         )
+    # The trigger of the wish is the boundary at which the part of the day
+    # really began, never the first evaluation that noticed it.
+    wish = wish.triggered(since)
 
     state = replace(
         snapshot.state,
@@ -477,9 +512,7 @@ def evaluate_schedule(
         evaluated_at=context.now,
         wish=wish,
         part_of_day=PartOfDay.DAY if is_day else PartOfDay.NIGHT,
-        part_of_day_since=(
-            plan.morning if is_day else _night_since(context, plan, brightness)
-        ),
+        part_of_day_since=since,
         morning_trigger=plan.morning,
         evening_trigger=plan.evening,
         evening_by_brightness=brightness.evening_at is not None,
@@ -493,3 +526,46 @@ def evaluate_schedule(
         recheck_at=brightness.recheck_at,
         state=state,
     )
+
+
+def schedule_layer(config: WindowConfig, snapshot: WorldSnapshot) -> Wish:
+    """Answer for the schedule layer of the arbiter.
+
+    - The switch of the schedule is off: no opinion, ``not_configured``.
+    - The almanac, an answer in it, or the seed for a configured random offset
+      is missing: no opinion, ``input_unavailable``. Nothing is guessed.
+    - Otherwise the wish of the current part of the day, with its direction
+      and with the start of that part as its trigger.
+
+    The layer only reads. What the schedule has to remember is returned by
+    :func:`schedule_state_after`. Whether the function is paused for the
+    window because of a faulty setting is the arbiter's business: it does not
+    call this layer then.
+    """
+    if not config.schedule_enabled:
+        return SCHEDULE_NOT_CONFIGURED
+    try:
+        return evaluate_schedule(config, snapshot).wish
+    except ScheduleInputMissingError:
+        return Wish.no_opinion(Layer.SCHEDULE, ReasonCode.INPUT_UNAVAILABLE)
+
+
+def schedule_state_after(config: WindowConfig, snapshot: WorldSnapshot) -> WindowState:
+    """Return the window state with what the schedule has to remember.
+
+    The runtime persists it after a recompute. While the schedule does not
+    run for the window (switched off, paused because of a faulty setting, or
+    an input is missing), the state stays as it is.
+    """
+    if not config.schedule_enabled or FunctionId.SCHEDULE in config.disabled_functions:
+        return snapshot.state
+    try:
+        return evaluate_schedule(config, snapshot).state
+    except ScheduleInputMissingError:
+        return snapshot.state
+
+
+SCHEDULE_LAYER: Final = LayerRegistration(
+    Layer.SCHEDULE, schedule_layer, function=FunctionId.SCHEDULE
+)
+"""The registration of the schedule layer for the arbiter."""
