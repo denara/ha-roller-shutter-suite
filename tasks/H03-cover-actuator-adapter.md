@@ -29,6 +29,10 @@ This is the only place in the integration that is allowed to move a cover (G1). 
 - **Observation:** map the cover's state and position to the core's window state (position or none, moving, available), including covers that never report transit states. Identical repeated state writes, attribute-only writes that precede the resting state by milliseconds, and a rewritten unchanged state with a new change time must not reach the core as separate movements or changes; the rules are in `docs/architecture.md` ("Observing a movement").
 - Errors of the service call are caught, logged with the window's name, and reported to the core as a failed command (`command_failed`). Nothing in this adapter, its logs or its documentation claims that a curtain has arrived: on many installations the reported position is calculated from run time (architecture document, "Calculated positions and drift"). Retry, backoff and the repair issue are block H15 (command verification, after S1).
 
+## Added after block H01 was reviewed
+
+- **Forms for the settings this block makes effective.** The settings registry of the core already holds the motor protection settings (`motor_min_change`, `motor_min_interval`) and the re-evaluation time (`reevaluate_after`); block H01 built the form mechanism but offers no form for them. This block adds their form metadata and translations (English and German) as a feature page, without a change to a flow class, as `docs/dev/config-flow.md` describes.
+
 ## Out of scope
 
 - Manual operation detection (C06, H10). Command verification and retries (H15). Stop and hold-to-move for buttons (H14). Tilt.

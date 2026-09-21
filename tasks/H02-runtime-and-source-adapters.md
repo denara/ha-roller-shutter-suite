@@ -28,6 +28,16 @@ The core decides; something has to feed it and call it. This block is the thin a
 - **Unload and reload** cancel every listener and timer.
 - The actuator port is called with the gate's outcome; its implementation is H03. Until then a recording stub is used in tests.
 
+## Added after blocks C03 and C04 were merged
+
+- **The snapshot carries the sun times as data.** A recompute asks no port. Whenever the runtime builds a `WorldSnapshot` it calls `build_sun_almanac(config, time, sun_port)` of the core and passes the result as `almanac`, and it rebuilds the almanac when the local date or the schedule settings change. It provides the `installation_seed` (stable per installation, stored). Without them the schedule has no opinion (`input_unavailable`).
+- **Local time zone.** `WorldSnapshot.time` and the time handed to `build_sun_almanac` carry the NAMED local zone of the installation. A time in UTC or with a fixed offset would silently put every local time of the schedule into the wrong zone or lose the rule for clock changes. A test with a zone that changes its clock.
+- **Schedule state.** The runtime persists what `schedule_state_after` returns right after a recompute at a boundary, not only on shutdown (day-type latch, brightness instants).
+- **`recheck_at` and the next planned action** are strictly in the future; the runtime enforces a minimum distance between wake-ups.
+- **`WorldSnapshot.controls`** carries pause, operating mode, maintenance lock and dry-run of the three levels; the arbiter works out what is effective.
+- **From the review of H01:** `WindowRuntime` is the hand-over point from the configuration side. The provisional travel time of 60 seconds that H01 uses for the core's capability profile lives in memory only; it is never stored and never treated as a value the user set, and it disappears with the block that introduces per-member values. Runtime state must survive the full reload that every configuration change causes. A window that is no longer set up keeps its old device until the subentry is removed (clean-up in H05).
+- **Fault details** that come from a caught exception should name the exception type when it is not a plain refusal of a value, so that diagnostics can tell a programming error from bad data.
+
 ## Out of scope
 
 - Sending commands (H03), entities and events (H04), persistence (H05), forecasts and weather (H11).
