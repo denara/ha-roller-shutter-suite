@@ -593,6 +593,7 @@ class WindowConfig:
             refused = SettingsCombinationError(
                 str(err), [f"{GEOMETRY_PREFIX}{field}" for field in err.fields]
             )
+            refused.__cause__ = err
         try:
             _ = self.schedule
         except ScheduleRuleError as err:
@@ -600,6 +601,7 @@ class WindowConfig:
                 refused = SettingsCombinationError(
                     str(err), [f"schedule_{field}" for field in err.fields]
                 )
+                refused.__cause__ = err
         if refused is None:
             # What the members state has to fit the measurements of the
             # window; a ``MemberGlassError`` names the member and its fields.

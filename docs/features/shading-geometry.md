@@ -17,7 +17,7 @@ You can switch between the two at any time; the numbers you entered stay.
 
 | Setting | What to enter | Default |
 |---|---|---|
-| Orientation known | Switch it on once you have entered the orientation. While it is off, the integration does not know where the window looks and does not shade it. | off |
+| Orientation known | Switch it on once you have entered the orientation. While it is off, the integration does not know where the window looks and does not shade it. The switch alone is not enough: if it is on, for example for the whole house, but no orientation was entered for the window, its group or the house, the window still counts as "direction unknown" and is not shaded. That is not reported as an error, because nothing you stored is wrong; the window simply stays unshaded until it has a direction. | off |
 | Orientation | The compass direction you face when you look **out** of the window, in degrees clockwise from north: north 0, east 90, south 180, west 270. A compass app held flat against the glass, pointing outwards, shows it. A few degrees do not matter. | 180 |
 | Field of view, left and right | How far to the side the sun can stand and still reach the window, in degrees, seen **from inside looking out**. Without an obstacle that is 90 on both sides. If a wall, a neighbouring house or a deep reveal blocks the sun on one side, enter a smaller number there: a projecting wall on the left that cuts the sun off at about 40 degrees gives "left 40, right 90". | 90 and 90 |
 | Minimum elevation | How high the sun has to stand before shading **starts**. Use it when a hill, trees or houses hide the low sun: if the sun only clears them at 12 degrees, enter 12. | 0 |

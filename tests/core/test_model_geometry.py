@@ -6,21 +6,29 @@ from typing import Any
 
 import pytest
 
+from custom_components.roller_shutter_suite.core.geometry import (
+    ShadedElement,
+    SunExclusion,
+    compute_shading,
+)
 from custom_components.roller_shutter_suite.core.model import (
     FULLY_CLOSED,
     FULLY_OPEN,
     GEOMETRY_FIELDS,
     MIN_CALIBRATION_SPAN,
     NO_CALIBRATION,
+    NO_MEASUREMENTS,
     CapabilityProfile,
     FunctionId,
     GeometryRuleError,
     GlassCalibration,
     MemberConfig,
     MemberGlass,
+    MemberMeasurements,
     Position,
     SettingsCombinationError,
     ShadingGeometrySettings,
+    SunPosition,
     WindowConfig,
 )
 from custom_components.roller_shutter_suite.core.settings import (
@@ -30,6 +38,7 @@ from custom_components.roller_shutter_suite.core.settings import (
     Level,
     SettingKind,
     SettingProblem,
+    WindowResolution,
     resolve_window,
     settings_from_stored,
     shading_geometry_keys,
@@ -201,6 +210,7 @@ def test_the_calibration_of_the_window_must_be_in_order_and_apart() -> None:
         )
 
     assert view_error.value.fields == ("calibration_seat", "calibration_glass_top")
+    assert isinstance(error.value.__cause__, GeometryRuleError)
     assert error.value.keys == (
         "shading_calibration_seat",
         "shading_calibration_glass_top",
@@ -241,6 +251,7 @@ def test_a_violated_rule_of_the_schedule_is_still_reported() -> None:
         )
 
     assert "schedule_workday_evening_not_before" in error.value.keys
+    assert isinstance(error.value.__cause__, ValueError)
 
 
 def test_two_refused_rules_are_reported_one_after_the_other() -> None:
@@ -534,3 +545,140 @@ def test_a_faulty_measurement_pauses_shading_for_the_window_it_reaches() -> None
     assert [fault.action for fault in with_own_value.settings.faults] == [
         FaultAction.NO_EFFECT
     ]
+
+
+# --- The orientation counts as known only if a level stated it ---------------------------
+
+SWITCH = {"shading_orientation_known": True}
+SUN_IN_THE_SOUTH = SunPosition(180.0, 40.0)
+
+
+def _exclusion(resolution: WindowResolution) -> SunExclusion | None:
+    """Return what the geometry says for a sun in the south, in the simple mode."""
+    config = resolution.config
+    assert config is not None
+    result = compute_shading(
+        SUN_IN_THE_SOUTH, ShadedElement(config.geometry, config.member_glass)
+    )
+    if result.sun.exclusion is not None:
+        assert [member.position for member in result.members] == [FULLY_OPEN]
+    return result.sun.exclusion
+
+
+def test_a_switch_without_an_azimuth_does_not_make_the_orientation_known() -> None:
+    """The house stores only the switch; no level states an azimuth.
+
+    The built-in azimuth is a number nobody entered. The window is not
+    shaded, nothing is reported as a fault, and the provenance says what the
+    levels yield and what the configuration carries.
+    """
+    resolution = _resolve({}, house=SWITCH)
+    switch = resolution.settings.values["shading_orientation_known"]
+
+    assert resolution.config is not None
+    assert resolution.config.shading_orientation_known is False
+    assert resolution.settings.faults == ()
+    assert resolution.config.disabled_functions == frozenset()
+    assert (switch.value, switch.effective, switch.level) == (True, False, Level.GLOBAL)
+    assert resolution.settings.values["shading_orientation"].level is Level.BUILT_IN
+    assert _exclusion(resolution) is SunExclusion.ORIENTATION_UNKNOWN
+
+
+def test_the_switch_of_the_house_and_the_azimuth_of_the_window_make_it_known() -> None:
+    """The two settings inherit on their own; an azimuth of 180 that is stated counts."""
+    resolution = _resolve({"shading_orientation": 180}, house=SWITCH)
+    switch = resolution.settings.values["shading_orientation_known"]
+
+    assert resolution.config is not None
+    assert resolution.config.shading_orientation_known is True
+    assert (switch.value, switch.effective) == (True, True)
+    assert _exclusion(resolution) is None
+
+
+def test_switch_and_azimuth_of_a_group_make_it_known_for_its_windows() -> None:
+    """A row of windows in one façade shares its direction."""
+    resolution = _resolve({}, group=SWITCH | {"shading_orientation": 170})
+
+    assert resolution.config is not None
+    assert resolution.config.shading_orientation_known is True
+    assert resolution.config.shading_orientation == pytest.approx(170.0)
+    assert resolution.settings.values["shading_orientation"].level is Level.GROUP
+    assert _exclusion(resolution) is None
+
+
+@pytest.mark.parametrize("azimuth", [{}, {"shading_orientation": 180}])
+def test_with_the_switch_off_the_orientation_is_unknown_whatever_the_azimuth(
+    azimuth: dict[str, Any],
+) -> None:
+    """The switch of the window beats the one of the house."""
+    resolution = _resolve(
+        {"shading_orientation_known": False} | azimuth,
+        house=SWITCH | {"shading_orientation": 90},
+    )
+
+    assert resolution.config is not None
+    assert resolution.config.shading_orientation_known is False
+    assert resolution.settings.faults == ()
+    assert _exclusion(resolution) is SunExclusion.ORIENTATION_UNKNOWN
+
+
+def test_a_faulty_azimuth_is_not_a_stated_one() -> None:
+    """The window's azimuth is unreadable; the one of the house does not stand in.
+
+    Shading pauses, as for every faulty measurement, and the configuration
+    does not carry "known" either, whatever value the walk outwards found.
+    """
+    resolution = _resolve(
+        {"shading_orientation": "south"}, house=SWITCH | {"shading_orientation": 90}
+    )
+
+    assert resolution.config is not None
+    assert resolution.config.disabled_functions == frozenset({FunctionId.SHADING})
+    assert [
+        (fault.key, fault.level, fault.action) for fault in resolution.settings.faults
+    ] == [("shading_orientation", Level.WINDOW, FaultAction.FUNCTIONS_DISABLED)]
+    assert resolution.config.shading_orientation_known is False
+    assert resolution.settings.values["shading_orientation_known"].effective is False
+    assert _exclusion(resolution) is SunExclusion.ORIENTATION_UNKNOWN
+    assert (
+        resolution.config.frost_position
+        == WindowConfig("window_example", MEMBERS).frost_position
+    )
+
+
+# --- Measurements that arrive on a member are not an input of the resolver --------------
+
+
+def _prefilled(**stated: Any) -> tuple[MemberConfig, ...]:
+    return (dataclasses.replace(MEMBERS[0], measurements=MemberMeasurements(**stated)),)
+
+
+def test_a_prefilled_measurement_never_costs_the_window_its_configuration() -> None:
+    """A glass higher than the built-in element would refuse the identity."""
+    resolution = resolve_window(
+        window_id="window_example",
+        members=_prefilled(glass_height=2.0),
+        global_settings=_stored({}),
+        window_settings=_stored({"frost_position": 70}),
+    )
+
+    assert resolution.config is not None
+    assert resolution.settings.faults == ()
+    assert resolution.config.frost_position == Position(70)
+    assert resolution.config.members[0].measurements == NO_MEASUREMENTS
+
+
+def test_a_prefilled_measurement_never_blames_a_sound_value_of_the_window() -> None:
+    """An element of 1.0 m is sound; the pre-filled glass of 1.1 m would refuse it."""
+    resolution = resolve_window(
+        window_id="window_example",
+        members=_prefilled(glass_height=1.1),
+        global_settings=_stored({}),
+        window_settings=_stored({"shading_element_height": 1.0}),
+    )
+
+    assert resolution.config is not None
+    assert resolution.settings.faults == ()
+    assert resolution.config.disabled_functions == frozenset()
+    assert resolution.config.shading_element_height == pytest.approx(1.0)
+    assert resolution.config.member_glass == (MemberGlass("cover.example_window", 1.0),)

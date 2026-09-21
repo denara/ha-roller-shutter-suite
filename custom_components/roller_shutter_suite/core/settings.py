@@ -1697,6 +1697,49 @@ def _resolve_members(
     )
 
 
+_ORIENTATION_KEY: Final = f"{GEOMETRY_PREFIX}orientation"
+_ORIENTATION_KNOWN_KEY: Final = f"{GEOMETRY_PREFIX}orientation_known"
+
+
+def _orientation_as_stated(
+    config: WindowConfig, resolved: ResolvedSettings
+) -> tuple[WindowConfig, ResolvedSettings]:
+    """Let the orientation count as known only if a level really stated it.
+
+    Shading needs the orientation, and nothing is assumed in its place. The
+    switch "orientation known" and the azimuth are two settings that inherit
+    on their own, and the azimuth always has a value. A house or a group that
+    stores only the switch would therefore turn every window below it into a
+    window that faces the built-in azimuth, a number nobody entered. So the
+    configuration carries "known" only if the switch is on **and** a level
+    supplies the azimuth: its provenance is not the built-in level, and no
+    fault in it reached the window (shading is paused then anyway).
+
+    This is no fault: nothing stored is wrong, the configuration is
+    incomplete. The geometry says ``orientation_unknown``, which explains it.
+    ``value`` of the switch stays what the levels yield; ``effective`` says
+    what the configuration carries.
+    """
+    if not config.shading_orientation_known:
+        return config, resolved
+    azimuth = resolved.values[_ORIENTATION_KEY]
+    faulty = any(
+        fault.key == _ORIENTATION_KEY and fault.action is FaultAction.FUNCTIONS_DISABLED
+        for fault in resolved.faults
+    )
+    if azimuth.level is not Level.BUILT_IN and not faulty:
+        return config, resolved
+    switch = resolved.values[_ORIENTATION_KNOWN_KEY]
+    values = dict(resolved.values)
+    values[_ORIENTATION_KNOWN_KEY] = dataclasses.replace(switch, effective=False)
+    return (
+        dataclasses.replace(config, shading_orientation_known=False),
+        ResolvedSettings(
+            values, resolved.faults, resolved.group_missing, resolved.member_values
+        ),
+    )
+
+
 def functions_with_settings(
     registry: SettingsRegistry | None = None,
 ) -> frozenset[FunctionId]:
@@ -1765,7 +1808,19 @@ def resolve_window(  # noqa: PLR0913 - the levels of a window are the input
     value that applies to every member, with its provenance.
     """
     try:
-        identity = WindowConfig(window_id=window_id, members=tuple(members))
+        # The member level is the only input for what a member states itself.
+        # Measurements that arrive on a member are dropped here: a comfort
+        # measurement must never cost the window its configuration, and it
+        # must never make a sound value of the window look invalid.
+        identity = WindowConfig(
+            window_id=window_id,
+            members=tuple(
+                dataclasses.replace(member, measurements=MemberMeasurements())
+                if isinstance(member, MemberConfig)
+                else member
+                for member in members
+            ),
+        )
     except _REFUSALS as err:
         key = (
             "window_id"
@@ -1801,4 +1856,5 @@ def resolve_window(  # noqa: PLR0913 - the levels of a window are the input
     )
     if not isinstance(config, WindowConfig):
         return WindowResolution(None, resolved)
+    config, resolved = _orientation_as_stated(config, resolved)
     return WindowResolution(*_resolve_members(config, resolved, member_settings or {}))
