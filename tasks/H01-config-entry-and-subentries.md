@@ -83,4 +83,5 @@ None. S2 is accepted, C02 is merged.
 
 - The forms are driven by the settings registry of the core (`core/settings.py`); this block adds only what the registry does not know (step, section, expert flag, selector, translation keys).
 - The schedule settings of block C04 arrive after this block started. The mechanism must take settings of the kinds `time`, `duration` and `day_of_year` without a change to a flow class. The core refuses the day "02-29" for a day of the year; the form needs its own translated error message for that refusal.
+- The brightness threshold of the schedule is in lux; the translated field name or its helper text and the translation key say so.
 - Where `docs/dev/config-flow-findings.md` (section 7) and `docs/dev/core-model.md` disagree about a masked own value, the core model wins: the own value stays stored while the capability is missing.
