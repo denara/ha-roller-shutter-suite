@@ -309,9 +309,9 @@ What such a fault costs, by the fault behavior of the setting's function and by 
 | **Function falls back**, and another level supplies a valid value | `fell_back`: that level supplies the value; `level` of the resolved value says which. Nothing is paused. | `no_effect`: reported, nothing else. |
 | **Function falls back**, and no level supplies a valid value | `fell_back_to_cautious_value`: the fault value of the setting is effective, not its default; `cautious` of the resolved value is true and its `level` is `built_in`. Nothing is paused. | (does not occur: a closer sound value is a valid value) |
 | **A setting without a function** | `fell_back`: the next level supplies the value, last the built-in default; it has no fault value, because nothing depends on it. | `no_effect` |
+| **Function pauses** | `functions_disabled`: the function of the setting is paused for this window and is part of `WindowConfig.disabled_functions`. | `no_effect`: reported, nothing else. |
 
 **How a repair issue tells the two apart.** After `fell_back` the window runs on a value somebody chose, on another level. After `fell_back_to_cautious_value` it runs on a value **nobody chose**: the restriction is kept or tightened on purpose (frost protection limits although no source can be read, a closed shutter is not raised in frost), and it stays that way until the stored value is repaired. `ReportedFault.action` carries the difference, and `ResolvedValue.cautious` names the settings concerned.
-| **Function pauses** | `functions_disabled`: the function of the setting is paused for this window and is part of `WindowConfig.disabled_functions`. | `no_effect`: reported, nothing else. |
 
 Two kinds of fault do not concern one setting:
 
