@@ -5,7 +5,13 @@ from dataclasses import dataclass
 from datetime import datetime
 from types import MappingProxyType
 
-from ._validation import require_aware, require_identifier, require_type
+from ._validation import (
+    require_aware,
+    require_identifier,
+    require_optional_type,
+    require_type,
+)
+from .almanac import SunAlmanac
 from .controls import Controls
 from .observation import MembersAtTargets, WindowObservation
 from .state import WindowState
@@ -31,6 +37,13 @@ class WorldSnapshot:
     maintenance lock and operating mode on their three levels, and dry-run.
     They change while the integration runs, so they are part of the snapshot
     and not of the window configuration.
+
+    ``almanac`` holds the answers of the sun port that the schedule needs:
+    sun times for a few local dates. ``installation_seed`` is the seed for
+    random offsets from the storage port. Both are data here, because a
+    recompute asks no port. Both may be absent; a layer that needs one of
+    them and does not find it steps aside with ``input_unavailable`` and
+    never guesses.
     """
 
     time: datetime
@@ -39,6 +52,8 @@ class WorldSnapshot:
     observation: WindowObservation
     state: WindowState
     controls: Controls
+    almanac: SunAlmanac | None = None
+    installation_seed: int | None = None
 
     def __post_init__(self) -> None:
         """Reject a naive time and copy the sources."""
@@ -47,6 +62,10 @@ class WorldSnapshot:
         require_type(self.observation, WindowObservation, "the observed window")
         require_type(self.state, WindowState, "the persisted window state")
         require_type(self.controls, Controls, "the controls of a snapshot")
+        require_optional_type(self.almanac, SunAlmanac, "the almanac of a snapshot")
+        seed: object = self.installation_seed
+        if seed is not None and (isinstance(seed, bool) or not isinstance(seed, int)):
+            raise TypeError("the seed of the installation is a whole number or None")
         sources = dict(self.sources)
         for key, value in sources.items():
             require_identifier(key, "the key of a source")

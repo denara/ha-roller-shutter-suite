@@ -48,13 +48,20 @@ from tests.core.arbiter_kit import (
     snapshot,
     window,
 )
+from tests.core.schedule_kit import CONFIG, MONDAY, local, snapshot_with_almanac
 
 type Provocation = Callable[[], tuple[WindowConfig, WorldSnapshot]]
 
 type Part = FunctionId | Layer
 """A registration: by its function, or by its layer if it declares none."""
 
-PROVOCATIONS: dict[Part, Provocation] = {}
+
+def _schedule_by_day() -> tuple[WindowConfig, WorldSnapshot]:
+    """Noon on a Monday, with the almanac and the seed a snapshot carries."""
+    return CONFIG, snapshot_with_almanac(local(MONDAY, 12))
+
+
+PROVOCATIONS: dict[Part, Provocation] = {FunctionId.SCHEDULE: _schedule_by_day}
 """Per registration: a situation in which it wants a position for comfort.
 
 A layer that is registered in parts (one per function) needs one entry per

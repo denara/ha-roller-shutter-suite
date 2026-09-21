@@ -117,13 +117,15 @@ def _full_state() -> WindowState:
             Position(80), "alarm clock", expires_at=NOW + timedelta(hours=1)
         ),
         latched_day_types=(
-            LatchedDayType(date(2026, 3, 1), DayType.WEEKEND),
+            LatchedDayType(date(2026, 3, 1), DayType.WEEKEND, fallback=True),
             LatchedDayType(date(2026, 3, 2), DayType.WORKDAY),
         ),
         last_comfort_movement=NOW - timedelta(minutes=20),
         held_frost=HeldInput(value=True, seen_at=NOW - timedelta(hours=3)),
         held_season=HeldInput(value=False, seen_at=NOW - timedelta(days=2)),
         frost_waiver_until=NOW + timedelta(hours=18),
+        brightness_below_since=NOW - timedelta(minutes=25),
+        evening_brightness_at=NOW - timedelta(minutes=15),
         simulated=SimulatedState(
             commands=(
                 MemberCommand(LEFT, _command(Position(0), NOW, WishClass.PROTECTION)),
@@ -225,6 +227,8 @@ def test_round_trip_in_the_repeated_hour_of_a_clock_change(fold: int) -> None:
         last_comfort_movement=repeated,
         held_frost=HeldInput(value=True, seen_at=repeated),
         frost_waiver_until=repeated,
+        brightness_below_since=repeated,
+        evening_brightness_at=repeated,
         simulated=SimulatedState(last_comfort_movement=repeated),
     )
 
@@ -254,6 +258,7 @@ def test_round_trip_in_the_repeated_hour_of_a_clock_change(fold: int) -> None:
         SolarHeatingEpisodeState(NOW),
         ExternalRequest(Position(50), ""),
         LatchedDayType(date(2026, 12, 25), DayType.HOLIDAY),
+        LatchedDayType(date(2026, 12, 28), DayType.WORKDAY, fallback=True),
         HeldInput(value=False, seen_at=LOCAL),
         SimulatedState(),
     ],
@@ -296,6 +301,8 @@ def test_every_persisted_part_round_trips(value: Any) -> None:
         ),
         lambda: WindowState(last_comfort_movement=NAIVE),
         lambda: WindowState(frost_waiver_until=NAIVE),
+        lambda: WindowState(brightness_below_since=NAIVE),
+        lambda: WindowState(evening_brightness_at=NAIVE),
     ],
 )
 def test_naive_datetime_is_rejected_on_construction(build: Any) -> None:
@@ -326,6 +333,8 @@ def test_datetime_with_a_tzinfo_that_gives_no_offset_is_rejected() -> None:
     [
         ("last_comfort_movement",),
         ("frost_waiver_until",),
+        ("brightness_below_since",),
+        ("evening_brightness_at",),
         ("manual_override", "armed_at"),
         ("manual_override", "ends_at"),
         ("person_at_window", "ends_at"),
@@ -392,6 +401,7 @@ def _changed(path: tuple[str | int, ...], value: object) -> Any:
         (("last_comfort_movement",), "yesterday", "last_comfort_movement"),
         (("latched_day_types", 0, "day"), "2026-13-01", "day"),
         (("latched_day_types", 0, "day_type"), "school_holiday", "DayType"),
+        (("latched_day_types", 0, "fallback"), 1, "fallback: expected true or false"),
         (("manual_override", "end_rule"), "never", "OverrideEndRule"),
         (("protection_events", 0, "status"), "blind", "ProtectionEventStatus"),
         (("members", 0, "position_reference"), "lost", "PositionReference"),
@@ -837,6 +847,8 @@ def test_day_type_is_latched_for_a_date_not_for_a_point_in_time() -> None:
         LatchedDayType(bad, DayType.WORKDAY)
     with pytest.raises(TypeError, match="latched day type"):
         LatchedDayType(date(2026, 3, 1), bad)
+    with pytest.raises(TypeError, match="fallback flag"):
+        LatchedDayType(date(2026, 3, 1), DayType.WORKDAY, fallback=bad)
 
 
 def test_enumerations_of_the_state() -> None:

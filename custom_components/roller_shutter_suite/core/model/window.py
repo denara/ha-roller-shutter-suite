@@ -2,7 +2,7 @@
 
 from collections.abc import Iterable
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import time, timedelta
 from enum import StrEnum, unique
 from typing import Final
 
@@ -13,7 +13,46 @@ from ._validation import (
     require_unique,
 )
 from .functions import FaultBehavior, FunctionId
-from .values import Position
+from .schedule import (
+    TRIGGER_FIELDS,
+    DayTriggers,
+    ScheduleProfile,
+    ScheduleRuleError,
+    ScheduleSettings,
+    ScheduleTargets,
+    Trigger,
+    TriggerKind,
+)
+from .values import FULLY_CLOSED, FULLY_OPEN, Position
+
+SCHEDULE_DAY_TYPES: Final = ("workday", "weekend", "holiday")
+"""The day types as they appear in the names of the schedule's settings."""
+
+SCHEDULE_EDGES: Final = ("morning", "evening")
+"""The two triggers of a day as they appear in the names of the settings."""
+
+# --- The built-in defaults of the schedule: this is the one place ---------------------
+_SCHEDULE_ENABLED: Final = True
+_MORNING_KIND: Final = TriggerKind.FIXED_TIME
+_MORNING_TIME_WORKDAY: Final = time(7, 0)
+_MORNING_TIME_FREE_DAY: Final = time(8, 30)
+_MORNING_NOT_BEFORE: Final = time(6, 0)
+_MORNING_NOT_AFTER: Final = time(9, 0)
+_EVENING_KIND: Final = TriggerKind.SUN_EVENT
+_EVENING_TIME: Final = time(20, 0)
+_EVENING_NOT_BEFORE: Final = time(17, 0)
+_EVENING_NOT_AFTER: Final = time(22, 0)
+_SUN_OFFSET_MINUTES: Final = 0
+_ELEVATION: Final = 0.0
+_MORNING_POSITION: Final = FULLY_OPEN
+_EVENING_POSITION: Final = FULLY_CLOSED
+_EVENING_POSITION_SUMMER: Final = FULLY_CLOSED
+_SUMMER_FIRST_DAY: Final = (5, 1)
+_SUMMER_LAST_DAY: Final = (9, 30)
+_BRIGHTNESS_THRESHOLD: Final = 50.0  # lux
+_BRIGHTNESS_DELAY: Final = timedelta(minutes=10)
+_RANDOM_OFFSET: Final = timedelta(0)
+# ---------------------------------------------------------------------------------------
 
 MIN_TOLERANCE: Final = 1
 DEFAULT_TOLERANCE_CALCULATED: Final = 2
@@ -220,17 +259,6 @@ class WindowCapabilityStates:
             )
 
 
-@unique
-class ScheduleProfile(StrEnum):
-    """The key under which the schedule looks up its targets.
-
-    It has one value. The key exists so that an absence profile or named
-    profiles can be added without restructuring.
-    """
-
-    DEFAULT = "default"
-
-
 @dataclass(frozen=True, slots=True)
 class TemperatureTier:
     """One tier of the temperature condition of shading: threshold and hysteresis."""
@@ -376,6 +404,13 @@ class WindowConfig:
     - ``reevaluate_after``: the upper bound of a deferral whose end is not
       known: that long after the recompute, at the latest, the window is
       evaluated again.
+    - ``schedule_enabled`` and the other ``schedule_*`` fields: the settings of
+      the schedule, one field per setting; :attr:`schedule` is the view over
+      them and describes them. Per day type (workday, weekend, holiday) and
+      per edge (morning, evening) there are the six fields of a ``Trigger``.
+      ``schedule_brightness_threshold`` is **in lux**, the unit the
+      brightness source has to report in. The built-in defaults of all of
+      them stand in one block at the top of this module.
     - ``disabled_functions``: the functions that are paused for this window
       because a stored setting of theirs is faulty (the inheritance resolver
       fills it; it is never stored). The arbiter skips the layers of such a
@@ -399,6 +434,56 @@ class WindowConfig:
     motor_min_change: int = 5
     motor_min_interval: timedelta = _DEFAULT_MIN_INTERVAL
     reevaluate_after: timedelta = _DEFAULT_REEVALUATE_AFTER
+    schedule_enabled: bool = _SCHEDULE_ENABLED
+    schedule_workday_morning_kind: TriggerKind = _MORNING_KIND
+    schedule_workday_morning_time: time = _MORNING_TIME_WORKDAY
+    schedule_workday_morning_offset_minutes: int = _SUN_OFFSET_MINUTES
+    schedule_workday_morning_elevation: float = _ELEVATION
+    schedule_workday_morning_not_before: time = _MORNING_NOT_BEFORE
+    schedule_workday_morning_not_after: time = _MORNING_NOT_AFTER
+    schedule_workday_evening_kind: TriggerKind = _EVENING_KIND
+    schedule_workday_evening_time: time = _EVENING_TIME
+    schedule_workday_evening_offset_minutes: int = _SUN_OFFSET_MINUTES
+    schedule_workday_evening_elevation: float = _ELEVATION
+    schedule_workday_evening_not_before: time = _EVENING_NOT_BEFORE
+    schedule_workday_evening_not_after: time = _EVENING_NOT_AFTER
+    schedule_weekend_morning_kind: TriggerKind = _MORNING_KIND
+    schedule_weekend_morning_time: time = _MORNING_TIME_FREE_DAY
+    schedule_weekend_morning_offset_minutes: int = _SUN_OFFSET_MINUTES
+    schedule_weekend_morning_elevation: float = _ELEVATION
+    schedule_weekend_morning_not_before: time = _MORNING_NOT_BEFORE
+    schedule_weekend_morning_not_after: time = _MORNING_NOT_AFTER
+    schedule_weekend_evening_kind: TriggerKind = _EVENING_KIND
+    schedule_weekend_evening_time: time = _EVENING_TIME
+    schedule_weekend_evening_offset_minutes: int = _SUN_OFFSET_MINUTES
+    schedule_weekend_evening_elevation: float = _ELEVATION
+    schedule_weekend_evening_not_before: time = _EVENING_NOT_BEFORE
+    schedule_weekend_evening_not_after: time = _EVENING_NOT_AFTER
+    schedule_holiday_morning_kind: TriggerKind = _MORNING_KIND
+    schedule_holiday_morning_time: time = _MORNING_TIME_FREE_DAY
+    schedule_holiday_morning_offset_minutes: int = _SUN_OFFSET_MINUTES
+    schedule_holiday_morning_elevation: float = _ELEVATION
+    schedule_holiday_morning_not_before: time = _MORNING_NOT_BEFORE
+    schedule_holiday_morning_not_after: time = _MORNING_NOT_AFTER
+    schedule_holiday_evening_kind: TriggerKind = _EVENING_KIND
+    schedule_holiday_evening_time: time = _EVENING_TIME
+    schedule_holiday_evening_offset_minutes: int = _SUN_OFFSET_MINUTES
+    schedule_holiday_evening_elevation: float = _ELEVATION
+    schedule_holiday_evening_not_before: time = _EVENING_NOT_BEFORE
+    schedule_holiday_evening_not_after: time = _EVENING_NOT_AFTER
+    schedule_morning_position: Position = _MORNING_POSITION
+    schedule_evening_position: Position = _EVENING_POSITION
+    schedule_evening_position_summer: Position = _EVENING_POSITION_SUMMER
+    schedule_workday_source: str | None = None
+    schedule_holiday_source: str | None = None
+    schedule_season_source: str | None = None
+    schedule_summer_by_date: bool = False
+    schedule_summer_first_day: tuple[int, int] = _SUMMER_FIRST_DAY
+    schedule_summer_last_day: tuple[int, int] = _SUMMER_LAST_DAY
+    schedule_brightness_source: str | None = None
+    schedule_brightness_threshold: float = _BRIGHTNESS_THRESHOLD
+    schedule_brightness_delay: timedelta = _BRIGHTNESS_DELAY
+    schedule_random_offset: timedelta = _RANDOM_OFFSET
     disabled_functions: frozenset[FunctionId] = frozenset()
 
     def __post_init__(self) -> None:
@@ -443,6 +528,57 @@ class WindowConfig:
                     f"the function {function.value!r} falls back on a fault; it "
                     "can never be switched off"
                 )
+        # Last, because it ends with rules over several settings: the view
+        # checks every single value of the schedule first, then those rules.
+        try:
+            _ = self.schedule
+        except ScheduleRuleError as err:
+            raise SettingsCombinationError(
+                str(err), [f"schedule_{field}" for field in err.fields]
+            ) from err
+
+    def _schedule_trigger(self, day_type: str, edge: str) -> Trigger:
+        values = {
+            field: getattr(self, f"schedule_{day_type}_{edge}_{field}")
+            for field in TRIGGER_FIELDS
+        }
+        return Trigger(**values)
+
+    @property
+    def schedule(self) -> ScheduleSettings:
+        """Return the settings of the schedule as one value.
+
+        The targets are filed under the profile key of the window; the key
+        has one value.
+        """
+        workday, weekend, holiday = (
+            DayTriggers(
+                *(self._schedule_trigger(day_type, edge) for edge in SCHEDULE_EDGES)
+            )
+            for day_type in SCHEDULE_DAY_TYPES
+        )
+        targets = ScheduleTargets(
+            morning_position=self.schedule_morning_position,
+            evening_position=self.schedule_evening_position,
+            evening_position_summer=self.schedule_evening_position_summer,
+        )
+        return ScheduleSettings(
+            enabled=self.schedule_enabled,
+            workday=workday,
+            weekend=weekend,
+            holiday=holiday,
+            targets={self.schedule_profile: targets},
+            workday_source=self.schedule_workday_source,
+            holiday_source=self.schedule_holiday_source,
+            season_source=self.schedule_season_source,
+            summer_by_date=self.schedule_summer_by_date,
+            summer_first_day=self.schedule_summer_first_day,
+            summer_last_day=self.schedule_summer_last_day,
+            brightness_source=self.schedule_brightness_source,
+            brightness_threshold=self.schedule_brightness_threshold,
+            brightness_delay=self.schedule_brightness_delay,
+            random_offset=self.schedule_random_offset,
+        )
 
     @property
     def frost(self) -> FrostSettings:

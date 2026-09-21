@@ -46,6 +46,9 @@ from types import MappingProxyType
 from typing import Any, Final
 
 from .model import (
+    SCHEDULE_DAY_TYPES,
+    SCHEDULE_EDGES,
+    TRIGGER_FIELDS,
     CapabilityState,
     CoveringType,
     FaultBehavior,
@@ -56,6 +59,7 @@ from .model import (
     ScheduleProfile,
     SettingsCombinationError,
     TemperatureTier,
+    TriggerKind,
     WindowCapabilityStates,
     WindowConfig,
 )
@@ -1147,6 +1151,90 @@ def _as_temperature_tier(value: JsonValue) -> TemperatureTier:
     )
 
 
+def _signed_minutes(value: JsonValue) -> int:
+    """Return a whole number of minutes; it may be negative."""
+    return as_int(value)
+
+
+_TRIGGER_FIELD_KINDS: Final[
+    Mapping[str, tuple[SettingKind, Callable[[JsonValue], Any]]]
+] = MappingProxyType(
+    {
+        "kind": (SettingKind.ENUMERATION, as_enum(TriggerKind)),
+        "time": (SettingKind.TIME, as_time),
+        "offset_minutes": (SettingKind.NUMBER, _signed_minutes),
+        "elevation": (SettingKind.NUMBER, _as_number),
+        "not_before": (SettingKind.TIME, as_time),
+        "not_after": (SettingKind.TIME, as_time),
+    }
+)
+"""Kind and reader of every field of a trigger of the schedule."""
+
+
+def _schedule_setting(
+    key: str, kind: SettingKind, parse: Callable[[JsonValue], Any]
+) -> SettingDefinition[Any]:
+    """Return one setting of the schedule; its default is that of the field.
+
+    The built-in defaults of the schedule stand in one place, at the fields
+    of ``WindowConfig``; this entry reads them from there.
+    """
+    defaults = {entry.name: entry.default for entry in dataclasses.fields(WindowConfig)}
+    return SettingDefinition(
+        key=key,
+        kind=kind,
+        function=FunctionId.SCHEDULE,
+        default=defaults[key],
+        parse=parse,
+    )
+
+
+def schedule_trigger_keys() -> tuple[str, ...]:
+    """Return the keys of the trigger settings: day type, edge, field.
+
+    The registry entries are generated from this one list, and the tests walk
+    the same list, so no entry can be forgotten or mistyped.
+    """
+    return tuple(key for key, _ in _trigger_entries())
+
+
+def _trigger_entries() -> tuple[tuple[str, str], ...]:
+    """Return every trigger setting as (key, field of the trigger)."""
+    return tuple(
+        (f"schedule_{day_type}_{edge}_{name}", name)
+        for day_type in SCHEDULE_DAY_TYPES
+        for edge in SCHEDULE_EDGES
+        for name in TRIGGER_FIELDS
+    )
+
+
+def _schedule_settings() -> tuple[SettingDefinition[Any], ...]:
+    triggers = tuple(
+        _schedule_setting(key, *_TRIGGER_FIELD_KINDS[name])
+        for key, name in _trigger_entries()
+    )
+    boolean, number = SettingKind.BOOLEAN, SettingKind.NUMBER
+    reference, duration = SettingKind.OPTIONAL_REFERENCE, SettingKind.DURATION
+    others = (
+        ("schedule_enabled", boolean, as_bool),
+        ("schedule_morning_position", number, _as_position),
+        ("schedule_evening_position", number, _as_position),
+        ("schedule_evening_position_summer", number, _as_position),
+        ("schedule_workday_source", reference, as_str),
+        ("schedule_holiday_source", reference, as_str),
+        ("schedule_season_source", reference, as_str),
+        ("schedule_summer_by_date", boolean, as_bool),
+        ("schedule_summer_first_day", SettingKind.DAY_OF_YEAR, as_day_of_year),
+        ("schedule_summer_last_day", SettingKind.DAY_OF_YEAR, as_day_of_year),
+        ("schedule_brightness_source", reference, as_str),
+        # In lux: the unit the brightness source has to report in.
+        ("schedule_brightness_threshold", number, _as_number),
+        ("schedule_brightness_delay", duration, as_duration),
+        ("schedule_random_offset", duration, as_duration),
+    )
+    return (*triggers, *(_schedule_setting(*entry) for entry in others))
+
+
 WINDOW_SETTINGS: Final = SettingsRegistry(
     (
         SettingDefinition(
@@ -1245,6 +1333,7 @@ WINDOW_SETTINGS: Final = SettingsRegistry(
             default=timedelta(minutes=5),
             parse=as_duration,
         ),
+        *_schedule_settings(),
     )
 )
 """The settings of ``WindowConfig``. A new setting is one more entry here.
