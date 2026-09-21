@@ -28,8 +28,9 @@ Plain Python under `custom_components/roller_shutter_suite/core/`, tested withou
 |---|---|---|---|---|
 | [C01](tasks/C01-core-model-and-ports.md) | Core model and ports | E5, N2, N3; doors for C15, A7 | D00, T01, T02 | done |
 | [C02](tasks/C02-inheritance-resolver.md) | Inheritance resolver | E12, N4 | C01 | done |
-| [C03](tasks/C03-arbiter.md) | Arbiter: layers, constraints, gate | E5, E4, E9, E10, E11, A6, A12 | C01 | in progress (pull request follows; C02 is merged) |
+| [C03](tasks/C03-arbiter.md) | Arbiter: layers, constraints, gate | E5, E4, E9, E10, E11, A6, A12 | C01 | done |
 | [C04](tasks/C04-schedule-and-day-types.md) | Schedule and day types | A1–A6, E13 (offset) | C01 | in progress (merges after C03) |
+| [C03a](tasks/C03a-cautious-fault-values-and-safety-net.md) | Cautious fault values for functions that fall back; safety net of the arbiter for exceptions. **Binding before M1 and before any real installation** | E12, guardrails on protection | C02, C03, C04 | planned |
 | [C05](tasks/C05-time-lapse-simulation.md) | Time-lapse simulation harness | N6 | C03, C04 | planned |
 
 ## Phase 2 — Home Assistant layer up to M1

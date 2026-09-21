@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Kind | Integration and acceptance block; milestone and review gate |
-| Depends on | T01–T03, D00, C01–C05, H01–H04 |
+| Depends on | T01–T03, D00, C01–C05, C03a (binding: cautious fault values and the arbiter's safety net come before the milestone and before any real installation), H01–H04 |
 | Blocks | Installation on the project owner's live system; every block after it |
 
 ## Goal and reason
