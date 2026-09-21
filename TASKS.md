@@ -37,7 +37,7 @@ Plain Python under `custom_components/roller_shutter_suite/core/`, tested withou
 
 | ID | Block | Features | Depends on | Status |
 |---|---|---|---|---|
-| [H01](tasks/H01-config-entry-and-subentries.md) | Config entry, group and window subentries | E12, F4, F7 (part), N2, N3, N4 (part), N5 (part) | S2, C02, T03 | in progress |
+| [H01](tasks/H01-config-entry-and-subentries.md) | Config entry, group and window subentries | E12, F4, F7 (part), N2, N3, N4 (part), N5 (part) | S2, C02, T03 | in review (pull request 38) |
 | [H02](tasks/H02-runtime-and-source-adapters.md) | Runtime and source adapters | guardrails 4 and 8, G3, G5 | C03, C04, H01 | planned |
 | [H03](tasks/H03-cover-actuator-adapter.md) | Cover actuator adapter | E11, E13, E10 (settings), N2 | H01, H02 | planned |
 | [H04](tasks/H04-status-entities-events-diagnostics.md) | Status entities, reason events, logbook, diagnostics | E7, E8 | H02 | planned |
