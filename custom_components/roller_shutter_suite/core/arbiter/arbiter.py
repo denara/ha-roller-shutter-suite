@@ -9,9 +9,10 @@ order of the design specification.
 **The safety net.** No exception that a registered function raises leaves
 ``recompute``, and none loosens a restriction or stops a fire or a protection
 decision. A layer that raises has no opinion; a constraint that raises
-applies its cautious result; a gate rule that raises holds the wish back (one
-exception, decided by the project owner: a failed dry-run rule sends a
-pending fire wish). Each case is a reason code in the decision and a fact in
+applies its cautious result; a gate rule that raises holds the wish back
+(decided by the project owner for a fire wish: only a failed maintenance lock
+holds it back, every other failed rule sends it, and never twice inside one
+expectation window). Each case is a reason code in the decision and a fact in
 ``Decision.faults``; the core does not log. Only ``Exception`` is caught,
 never ``BaseException``.
 """
@@ -42,6 +43,7 @@ from custom_components.roller_shutter_suite.core.reasons import ReasonCode
 from .controls import effective_controls
 from .dry_run import is_standing, simulated_state
 from .fire_bypass import skips
+from .gate import fire_command_pending
 from .layers import disabled_functions
 from .registry import (
     ConstraintFunction,
@@ -301,12 +303,20 @@ class Arbiter:
         knows, so the window is evaluated again. An outcome that is no
         outcome of this rule counts as raised. A fire wish is never asked
         the rules of the fire bypass, so whatever they raise cannot stop it.
-        The two rules the bypass does not skip differ, as decided by the
-        project owner: a failed maintenance lock holds back every wish, fire
-        included, because it protects a person working at the shutter; a
-        failed dry-run rule holds back every wish except fire, because an
-        escape route that stays closed in a fire is the greater evil than a
-        test window that opens on a fire alarm. See ``_failed_rule_lets_pass``.
+        For the rules the bypass does not skip the project owner decided:
+        only a failed maintenance lock holds a fire wish back, because it
+        protects a person working at the shutter; every other failed rule
+        lets a pending fire wish pass, because an escape route that stays
+        closed in a fire is the greater evil. See ``_failed_rule_lets_pass``.
+
+        A fire wish that passed a failed rule is still never repeated inside
+        the expectation window of its own command: a rule that fails at
+        every recompute must not send at every recompute, and the failed
+        rule may be the one that suppresses duplicates. The arbiter checks
+        that itself, from the persisted own commands and without calling any
+        rule (``fire_command_pending``). When the window has ended and the
+        alarm is still active, the command is sent again, as on the normal
+        path.
         """
         controls = effective_controls(snapshot.controls)
         state = snapshot.state
@@ -339,6 +349,8 @@ class Arbiter:
             last_comfort_movement=clock,
             restores_constraint=restores,
         )
+        passed_a_failed_rule = False
+        outcome: GateOutcome | None = None
         for registration in self.gate_rules:
             if skips(wish.wish_class, registration.reasons):
                 continue
@@ -351,16 +363,28 @@ class Arbiter:
                     EvaluationFault.of(registration.rule, registration.function, error)
                 )
                 if _failed_rule_lets_pass(registration.rule, wish.wish_class):
+                    passed_a_failed_rule = True
                     continue
                 outcome = GateOutcome.defer(
                     registration.rule,
                     ReasonCode.GATE_RULE_FAILED,
                     reevaluate_no_later_than=snapshot.time + config.reevaluate_after,
                 )
-            if outcome is None:
-                continue
-            return replace(outcome, dry_run=True) if controls.dry_run else outcome
-        return GateOutcome.send()
+            if outcome is not None:
+                break
+        if (
+            outcome is None
+            and passed_a_failed_rule
+            and fire_command_pending(gate_input)
+        ):
+            # The rule that failed may be the very one that keeps a command
+            # from being repeated, so the safety net guarantees that itself.
+            outcome = GateOutcome.suppress(
+                GateRule.MOVEMENT_IN_FLIGHT, ReasonCode.DUPLICATE_COMMAND
+            )
+        if outcome is None:
+            return GateOutcome.send()
+        return replace(outcome, dry_run=True) if controls.dry_run else outcome
 
     # --- Recompute ----------------------------------------------------------
 
@@ -517,18 +541,19 @@ def _outcome_of(
 
 
 def _failed_rule_lets_pass(rule: GateRule, wish_class: WishClass) -> bool:
-    """Say whether a wish passes a gate rule that raised. One case: fire at dry-run.
+    """Say whether a wish passes a gate rule that raised: only fire, never the lock.
 
-    Decided by the project owner (section 13a of the design specification).
-    Every rule that raises holds the wish back, for every class it was asked
-    for. That includes the rules the fire bypass does not skip: the
-    maintenance lock, "no member can execute", "target reached" and the part
-    of "movement in flight" about a command that is still pending. The one
-    exception is the dry-run rule with a fire wish pending: the command is
-    sent, because an escape route that stays closed in a fire is the greater
-    evil than a test window that opens on a fire alarm.
+    Decided by the project owner. For a protection and a comfort wish every
+    rule that raises holds the wish back. A fire wish is held back by one
+    failed rule only, the **maintenance lock**, because the lock protects a
+    person working at the shutter. Every other failed rule that a fire wish
+    is asked lets it pass: "no member can execute", "target reached", the part
+    of "movement in flight" about a command that is still pending, and
+    dry-run. An escape route that stays closed in a fire is the greater evil
+    than a test window that opens on a fire alarm, or a command that goes to
+    a member that cannot execute it.
     """
-    return rule is GateRule.DRY_RUN and wish_class is WishClass.FIRE
+    return wish_class is WishClass.FIRE and rule is not GateRule.MAINTENANCE_LOCK
 
 
 def _require_same_members(

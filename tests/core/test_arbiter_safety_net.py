@@ -6,9 +6,9 @@ leaves ``recompute``:
 
 - a layer or a part that raises has no opinion (``layer_failed``);
 - a constraint that raises applies its cautious result (``constraint_failed``);
-- a gate rule that raises holds the wish back (``gate_rule_failed``), with one
-  exception that the project owner decided: a failed dry-run rule sends a
-  pending fire wish.
+- a gate rule that raises holds the wish back (``gate_rule_failed``). For a fire
+  wish the project owner decided: only a failed maintenance lock holds it
+  back; every other failed rule sends it, once per expectation window.
 
 The fire layer and the protection layer are always asked, and a fire wish is
 never asked the rules of the fire bypass. Every case is a fact in
@@ -19,6 +19,7 @@ first known case, the frost reader, no longer raises.
 """
 
 from dataclasses import replace
+from datetime import timedelta
 from typing import NoReturn
 
 import pytest
@@ -56,10 +57,14 @@ from custom_components.roller_shutter_suite.core.model import (
     GateRule,
     Layer,
     LayerReason,
+    MemberState,
     MemberTarget,
+    OwnCommand,
     Position,
     SourceValue,
+    TravelDirection,
     WindowConfig,
+    WindowState,
     Wish,
     WishClass,
     WorldSnapshot,
@@ -71,6 +76,7 @@ from tests.core.arbiter_kit import (
     FUNCTION_OF,
     LEFT,
     NOW,
+    RIGHT,
     STUB_LAYERS,
     day,
     fire,
@@ -649,8 +655,8 @@ def test_dry_run_rule_that_raises_holds_back_every_wish_but_fire(
         GateRule.MOVEMENT_IN_FLIGHT,
     ],
 )
-@pytest.mark.parametrize("wish_class", ALL)
-def test_every_other_rule_fire_does_not_skip_holds_back_like_the_lock(
+@pytest.mark.parametrize("wish_class", [WishClass.PROTECTION, WishClass.COMFORT])
+def test_every_other_rule_fire_does_not_skip_holds_back_protection_and_comfort(
     rule: GateRule, wish_class: WishClass
 ) -> None:
     """What is possible, what is already true, and a command that is still pending."""
@@ -663,6 +669,195 @@ def test_every_other_rule_fire_does_not_skip_holds_back_like_the_lock(
     assert decision.gate.reason is ReasonCode.GATE_RULE_FAILED
     assert decision.gate.rule is rule
     assert decision.faults[0] == _fault(rule, None)
+
+
+# --- Fire passes every failed rule but the lock, and is never repeated --------------
+
+FAILED_RULES_THAT_SEND_FIRE = [
+    GateRule.NO_MEMBER_CAN_EXECUTE,
+    GateRule.TARGET_REACHED,
+    GateRule.MOVEMENT_IN_FLIGHT,
+    GateRule.DRY_RUN,
+]
+"""Every rule a fire wish is asked, except the maintenance lock."""
+
+EXPECTATION_WINDOW = window().members[0].capabilities.travel_time_up
+
+
+def test_only_the_maintenance_lock_is_missing_from_the_rules_that_send_fire() -> None:
+    """The list above is complete: what fire is asked, minus the lock."""
+    asked = {
+        entry.rule
+        for entry in BUILT_IN_GATE_RULES
+        if WishClass.FIRE in entry.applies_to
+    }
+
+    assert asked - set(FAILED_RULES_THAT_SEND_FIRE) == {GateRule.MAINTENANCE_LOCK}
+
+
+def _after_sending(world: WorldSnapshot, decision: Decision) -> WindowState:
+    """Return the state the block that sends leaves behind: the real own command."""
+    assert decision.winning_wish is not None
+    assert decision.target is not None
+    command = OwnCommand(
+        f"command-{world.time.isoformat()}",
+        decision.target,
+        TravelDirection.UP,
+        world.time,
+        decision.winning_wish.wish_class,
+        decision.winning_wish.reason,
+    )
+    return replace(world.state, members=(MemberState(LEFT, last_own_command=command),))
+
+
+def _burning(state: WindowState, seconds: float, controls: Controls) -> WorldSnapshot:
+    """Return the world of a fire alarm, some seconds after ``NOW``; the shutter is stuck."""
+    world = snapshot(sources=fire(), state=state, controls=controls)
+    return replace(world, time=NOW + timedelta(seconds=seconds))
+
+
+@pytest.mark.parametrize("rule", FAILED_RULES_THAT_SEND_FIRE)
+def test_rule_that_fails_for_good_sends_fire_once_per_expectation_window(
+    rule: GateRule,
+) -> None:
+    """Sent, not repeated while the command is pending, sent again afterwards.
+
+    The rule fails at every recompute, and it may be the very rule that
+    suppresses duplicates, so the arbiter reads the persisted own command
+    itself. When the expectation window has ended and the alarm is still
+    active, the command is sent again, as on the normal path.
+    """
+    subject = Engine(window(), _arbiter(gate_rules=_gate_rules(rule)))
+    state = WindowState()
+    sent_at: list[float] = []
+    window_seconds = EXPECTATION_WINDOW.total_seconds()
+
+    for seconds in (0, 1, 5, window_seconds - 1, window_seconds, window_seconds + 1):
+        world = _burning(state, seconds, ARMED)
+        decision = subject.recompute(world)
+        assert decision.gate is not None
+        if decision.gate.kind is GateKind.SEND:
+            assert _fault(rule, None) in decision.faults
+            sent_at.append(seconds)
+            state = _after_sending(world, decision)
+        else:
+            assert decision.gate.reason is ReasonCode.DUPLICATE_COMMAND
+            assert decision.gate.rule is GateRule.MOVEMENT_IN_FLIGHT
+            assert subject.state_after(world, decision) == state
+
+    assert sent_at == [0, window_seconds]
+
+
+def test_dry_run_rule_that_fails_for_good_sends_fire_once_per_window_in_dry_run() -> (
+    None
+):
+    """The window is in dry-run, its dry-run rule is broken, and it burns: really sent.
+
+    The real command is what is persisted, and it is what keeps the command
+    from being repeated; no would-be command is remembered.
+    """
+    subject = Engine(window(), _arbiter(gate_rules=_gate_rules(GateRule.DRY_RUN)))
+    state = WindowState()
+    kinds: list[GateKind] = []
+
+    for seconds in (0, 2, EXPECTATION_WINDOW.total_seconds()):
+        world = _burning(state, seconds, DRY_RUN)
+        decision = subject.recompute(world)
+        assert decision.gate is not None
+        kinds.append(decision.gate.kind)
+        assert subject.state_after(world, decision) == state
+        if decision.gate.kind is GateKind.SEND:
+            state = _after_sending(world, decision)
+        else:
+            assert decision.gate.reason is ReasonCode.DUPLICATE_COMMAND
+            assert decision.gate.dry_run
+
+    assert kinds == [GateKind.SEND, GateKind.SUPPRESS, GateKind.SEND]
+    assert state.simulated is None
+
+
+@pytest.mark.parametrize(
+    "rule",
+    [rule for rule in FAILED_RULES_THAT_SEND_FIRE if rule is not GateRule.DRY_RUN],
+)
+def test_other_rule_that_fails_in_dry_run_leaves_the_would_be_record_as_it_is(
+    rule: GateRule,
+) -> None:
+    """Fire passes the failed rule and reaches a working dry-run rule: nothing moves.
+
+    The record reads "would have sent" at every recompute, and the would-be
+    command is remembered once, exactly as without the failed rule.
+    """
+    broken = Engine(window(), _arbiter(gate_rules=_gate_rules(rule)))
+    sound = Engine(window(), _arbiter())
+    states = {"broken": WindowState(), "sound": WindowState()}
+
+    for seconds in (0, 2, EXPECTATION_WINDOW.total_seconds() + 1):
+        for name, subject in (("broken", broken), ("sound", sound)):
+            world = _burning(states[name], seconds, DRY_RUN)
+            decision = subject.recompute(world)
+            assert decision.gate is not None
+            assert decision.gate.reason is ReasonCode.DRY_RUN
+            assert decision.gate.would_send == (MemberTarget(LEFT, FULLY_OPEN),)
+            states[name] = subject.state_after(world, decision)
+        assert states["broken"] == states["sound"]
+
+    assert states["broken"].simulated is not None
+    assert states["broken"].members == ()
+
+
+@pytest.mark.parametrize("controls", [ARMED, DRY_RUN], ids=["armed", "dry-run"])
+def test_maintenance_lock_that_fails_for_good_never_sends_fire(
+    controls: Controls,
+) -> None:
+    """Over several recomputes: held back every time, nothing is remembered."""
+    subject = Engine(
+        window(), _arbiter(gate_rules=_gate_rules(GateRule.MAINTENANCE_LOCK))
+    )
+    state = WindowState()
+
+    for seconds in (0, 2, EXPECTATION_WINDOW.total_seconds() + 1):
+        world = _burning(state, seconds, controls)
+        decision = subject.recompute(world)
+        assert decision.gate is not None
+        assert decision.gate.kind is GateKind.DEFER
+        assert decision.gate.rule is GateRule.MAINTENANCE_LOCK
+        state = subject.state_after(world, decision)
+
+    assert state == WindowState()
+
+
+def test_fire_command_of_another_class_or_target_does_not_count_as_pending() -> None:
+    """Only a pending FIRE command of THIS window with THIS target holds the next back.
+
+    The rule about pending commands is the broken one here, so nothing else
+    could suppress or take over.
+    """
+    subject = Engine(
+        window(), _arbiter(gate_rules=_gate_rules(GateRule.MOVEMENT_IN_FLIGHT))
+    )
+
+    for member_id, wish_class, target in (
+        (LEFT, WishClass.COMFORT, FULLY_OPEN),
+        (LEFT, WishClass.FIRE, Position(90)),
+        (RIGHT, WishClass.FIRE, FULLY_OPEN),
+    ):
+        command = OwnCommand(
+            "command-1",
+            target,
+            TravelDirection.UP,
+            NOW,
+            wish_class,
+            ReasonCode.FIRE_ALARM
+            if wish_class is WishClass.FIRE
+            else ReasonCode.SCHEDULE_DAY,
+        )
+        state = WindowState(members=(MemberState(member_id, last_own_command=command),))
+
+        decision = subject.recompute(_burning(state, 1, ARMED))
+
+        assert decision.gate is not None
+        assert decision.gate.kind is GateKind.SEND, (member_id, wish_class, target)
 
 
 def test_rule_that_raises_behind_a_rule_that_applies_is_never_asked() -> None:
