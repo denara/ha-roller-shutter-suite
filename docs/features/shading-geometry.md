@@ -6,16 +6,18 @@ On a sunny day a shutter does not have to be closed to keep a room cool and the 
 
 ## Two ways to shade
 
-- **Simple mode, the start for every window.** You state one **shading position**, for example 30 %, and the shutter goes there while the sun is on the window. No tape measure needed. This is what a new window does.
+- **Simple mode, the start for every window.** You state the direction of the window and one **shading position**, for example 30 %, and the shutter goes there while the sun is on the window. No tape measure needed.
 - **Computed mode.** You switch on "use measurements" and enter the measurements below. The shutter then follows the sun: low in the morning when the sun is low and shines deep into the room, higher around noon, and it opens as soon as the sun has left the window.
 
 You can switch between the two at any time; the numbers you entered stay.
+
+**Both need the direction of the window.** Until you have entered it, the integration cannot tell whether the sun is on the window, and it does not shade the window at all. It never guesses: a guess would lower the shutters of a north window on every sunny day.
 
 ## The direction of the window
 
 | Setting | What to enter | Default |
 |---|---|---|
-| Orientation known | Switch it on once you have entered the orientation. While it is off, the integration does not know where the window looks: it shades whenever the sun is up (and the other conditions for shading hold), and in computed mode it assumes that the sun shines straight into the window, which is the deepest it can reach. | off |
+| Orientation known | Switch it on once you have entered the orientation. While it is off, the integration does not know where the window looks and does not shade it. | off |
 | Orientation | The compass direction you face when you look **out** of the window, in degrees clockwise from north: north 0, east 90, south 180, west 270. A compass app held flat against the glass, pointing outwards, shows it. A few degrees do not matter. | 180 |
 | Field of view, left and right | How far to the side the sun can stand and still reach the window, in degrees, seen **from inside looking out**. Without an obstacle that is 90 on both sides. If a wall, a neighbouring house or a deep reveal blocks the sun on one side, enter a smaller number there: a projecting wall on the left that cuts the sun off at about 40 degrees gives "left 40, right 90". | 90 and 90 |
 | Minimum elevation | How high the sun has to stand before shading **starts**. Use it when a hill, trees or houses hide the low sun: if the sun only clears them at 12 degrees, enter 12. | 0 |
@@ -65,7 +67,7 @@ Shutters that are always operated together form one window with several members.
 If they differ, measure the window as **one element**: from the lowest glass edge to the highest glass edge. Then state for each member that differs
 
 - its own **glass height**, and
-- its **top offset**: how far the upper edge of its glass lies **below** the upper edge of the highest glass. A member that reaches up to the top has 0.
+- its **top offset**: how far the upper edge of its glass lies **below** the upper edge of the highest glass. A member that reaches up to the top has 0. A member with a top offset always needs its own glass height as well.
 
 Example: a wide pane of 1.4 m next to a narrow one of 0.8 m, both beginning 0.9 m above the floor. The element is 1.4 m high. The narrow pane ends 0.6 m lower, so its top offset is 0.6 m. With 1.0 m of permitted sun and the sun at 50°, the wide shutter goes to 21 % and the narrow one to 36 %: different numbers, but the same edge of light on the floor. At 60° the wide one goes to 59 % and the narrow one opens fully, because the sun no longer reaches its glass too deeply.
 
@@ -131,3 +133,5 @@ A shutter that can only open and close cannot follow the sun. For such a shutter
 ## What happens with a faulty value
 
 Every measurement can be set for the house, for a group or for a window; a window takes the value of the closest level that sets one. If a stored measurement is unreadable or impossible (a pitch of 120, a glass height of 0, calibration values in the wrong order), **shading pauses** for the windows that would have used that value, and the integration reports which setting on which level is the cause. It does not fall back to somebody else's numbers, because a shutter must not move to a position that nobody chose. Everything else, above all the protection functions and the daily routine, keeps running.
+
+The same holds for the values of a single shutter (its glass height, top offset and calibration): if one of them is unreadable, impossible, or does not fit the window (glass that would reach below the element, for example), shading pauses for the **whole window**, not only for that shutter, and the report names the shutter and the value. The shutters of one window shade together or not at all.

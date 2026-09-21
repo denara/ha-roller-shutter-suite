@@ -55,6 +55,10 @@ only keeps the divisions of this package away from zero.
 class SunExclusion(StrEnum):
     """Why the sun is not on a window. A later layer turns it into a reason code."""
 
+    ORIENTATION_UNKNOWN = "orientation_unknown"
+    """The orientation of the window was never stated, so nobody can say
+    whether the sun is on it. Nothing is assumed in its place: a window
+    without an orientation would otherwise be shaded in every sun."""
     BELOW_HORIZON = "below_horizon"
     """The elevation of the sun is zero or negative."""
     BELOW_END_ELEVATION = "below_end_elevation"
@@ -119,15 +123,16 @@ def incidence(elevation: float, angle: float, pitch: float) -> float:
 class SunOnWindow:
     """Whether the sun is on a window, and if not, why.
 
-    - ``on_window``: the sun is above the horizon and not below the end
-      elevation, inside the field of view, and in front of the glass.
+    - ``on_window``: the orientation of the window is known, and the sun is
+      above the horizon and not below the end elevation, inside the field of
+      view, and in front of the glass.
     - ``exclusion``: the first reason that excludes it, in the order of
       :class:`SunExclusion`; ``None`` exactly when the sun is on the window.
     - ``start_permitted``: the sun is on the window **and** at least at the
       minimum elevation for the start of shading. Whether an episode starts
       or goes on is the decision of the shading layer.
-    - ``horizontal_angle``: see :func:`horizontal_angle`; ``None`` when the
-      orientation of the window is not known.
+    - ``horizontal_angle``: see :func:`horizontal_angle`; ``None`` exactly
+      when the orientation of the window is not known.
     """
 
     on_window: bool
@@ -149,6 +154,12 @@ class SunOnWindow:
             raise ValueError(
                 "shading cannot start while the sun is not on the window "
                 "(start_permitted, on_window)"
+            )
+        unknown = self.exclusion is SunExclusion.ORIENTATION_UNKNOWN
+        if unknown is not (self.horizontal_angle is None):
+            raise ValueError(
+                "there is no horizontal angle exactly when the orientation is "
+                "unknown (horizontal_angle, exclusion)"
             )
         if self.horizontal_angle is not None:
             angle = self.horizontal_angle
@@ -198,18 +209,18 @@ def as_float(value: JsonValue) -> float:
 def _exclusion(
     sun: SunPosition, angle: float | None, settings: ShadingGeometrySettings
 ) -> SunExclusion | None:
-    if sun.elevation <= 0:
-        return SunExclusion.BELOW_HORIZON
-    if sun.elevation < settings.end_elevation:
-        return SunExclusion.BELOW_END_ELEVATION
-    if angle is not None and angle < -settings.view_left:
-        return SunExclusion.LEFT_OF_VIEW
-    if angle is not None and angle > settings.view_right:
-        return SunExclusion.RIGHT_OF_VIEW
-    facing = 0.0 if angle is None else angle
-    if incidence(sun.elevation, facing, settings.pitch) <= GRAZING:
-        return SunExclusion.BEHIND_GLASS
-    return None
+    """Return the first reason that excludes the sun, in the order of the enumeration."""
+    if angle is None:
+        return SunExclusion.ORIENTATION_UNKNOWN
+    grazing = incidence(sun.elevation, angle, settings.pitch) <= GRAZING
+    checks = (
+        (sun.elevation <= 0, SunExclusion.BELOW_HORIZON),
+        (sun.elevation < settings.end_elevation, SunExclusion.BELOW_END_ELEVATION),
+        (angle < -settings.view_left, SunExclusion.LEFT_OF_VIEW),
+        (angle > settings.view_right, SunExclusion.RIGHT_OF_VIEW),
+        (grazing, SunExclusion.BEHIND_GLASS),
+    )
+    return next((exclusion for excluded, exclusion in checks if excluded), None)
 
 
 def sun_on_window(sun: SunPosition, settings: ShadingGeometrySettings) -> SunOnWindow:
@@ -217,9 +228,9 @@ def sun_on_window(sun: SunPosition, settings: ShadingGeometrySettings) -> SunOnW
 
     The limits of the field of view belong to it: a sun exactly at a limit is
     inside. The end elevation belongs to the sun being on the window as well;
-    only below it shading ends. Without a known orientation the horizontal
-    direction is not judged; the elevation limits and the glass plane still
-    are, the latter with the sun straight ahead.
+    only below it shading ends. **Shading needs the orientation:** without
+    it the answer is "cannot say", which is "not on the window" with the
+    exclusion ``orientation_unknown``. Nothing is assumed instead.
     """
     require_type(sun, SunPosition, "the sun position")
     require_type(settings, ShadingGeometrySettings, "the measurements of the window")

@@ -16,8 +16,12 @@ from .functions import FaultBehavior, FunctionId
 from .geometry import (
     GEOMETRY_FIELDS,
     GEOMETRY_PREFIX,
+    NO_MEASUREMENTS,
     GeometryRuleError,
+    MemberGlass,
+    MemberMeasurements,
     ShadingGeometrySettings,
+    member_glass_for,
 )
 from .schedule import (
     TRIGGER_FIELDS,
@@ -373,16 +377,26 @@ class FrostSettings:
 
 @dataclass(frozen=True, slots=True)
 class MemberConfig:
-    """One cover of a window as the core sees it."""
+    """One cover of a window as the core sees it.
+
+    ``measurements`` is what the member states itself for geometric shading
+    (glass height, top offset, glass calibration); by default nothing, and
+    the member inherits the measurements of its window. The inheritance
+    resolver fills it from the member-level settings, with sound values only.
+    """
 
     member_id: str
     capabilities: CapabilityProfile
+    measurements: MemberMeasurements = NO_MEASUREMENTS
 
     def __post_init__(self) -> None:
         """Validate the member identifier."""
         require_identifier(self.member_id, "the identifier of a member")
         require_type(
             self.capabilities, CapabilityProfile, "the capability profile of a member"
+        )
+        require_type(
+            self.measurements, MemberMeasurements, "the measurements of a member"
         )
 
 
@@ -424,6 +438,9 @@ class WindowConfig:
       setting; :attr:`geometry` is the view over them and describes them,
       with units and conventions. Their built-in defaults stand at the view
       and mean "no measurements": the simple mode with a fixed position.
+      What a member states itself lives with the member
+      (``MemberConfig.measurements``); :attr:`member_glass` is the glass
+      that applies to every member.
     - ``disabled_functions``: the functions that are paused for this window
       because a stored setting of theirs is faulty (the inheritance resolver
       fills it; it is never stored). The arbiter skips the layers of such a
@@ -583,6 +600,10 @@ class WindowConfig:
                 refused = SettingsCombinationError(
                     str(err), [f"schedule_{field}" for field in err.fields]
                 )
+        if refused is None:
+            # What the members state has to fit the measurements of the
+            # window; a ``MemberGlassError`` names the member and its fields.
+            _ = self.member_glass
         return refused
 
     def _schedule_trigger(self, day_type: str, edge: str) -> Trigger:
@@ -635,6 +656,20 @@ class WindowConfig:
             name: getattr(self, f"{GEOMETRY_PREFIX}{name}") for name in GEOMETRY_FIELDS
         }
         return ShadingGeometrySettings(**values)
+
+    @property
+    def member_glass(self) -> tuple[MemberGlass, ...]:
+        """Return the glass that applies to every member, in their order.
+
+        A member's own measurements, else those of the window: this is what
+        the geometry computes with (``ShadedElement(config.geometry,
+        config.member_glass)``).
+        """
+        window = self.geometry
+        return tuple(
+            member_glass_for(window, member.member_id, member.measurements)
+            for member in self.members
+        )
 
     @property
     def frost(self) -> FrostSettings:

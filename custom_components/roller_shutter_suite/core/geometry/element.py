@@ -32,7 +32,7 @@ falls into its own range: ``clamp(e - offset, 0, glass height)``.
 
 from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Self
+from typing import Final, Self
 
 from custom_components.roller_shutter_suite.core.model import (
     FULLY_OPEN,
@@ -97,15 +97,21 @@ class ShadedElement:
                 )
 
 
-def _capped_cosine(angle: float | None, cap: float) -> float:
-    """Return ``cos g``, never below ``1 / cap``; straight ahead without an angle."""
-    if angle is None:
-        return 1.0
+STRAIGHT_AHEAD: Final = 0.0
+"""The horizontal angle of a sun that stands exactly in front of the window.
+
+For callers that ask for the frontal case by name: worked examples and
+tables. It is never what happens when the orientation is missing.
+"""
+
+
+def _capped_cosine(angle: float, cap: float) -> float:
+    """Return ``cos g``, never below ``1 / cap``."""
     return max(cosine(angle), 1.0 / cap)
 
 
 def free_glass_length(
-    elevation: float, angle: float | None, settings: ShadingGeometrySettings
+    elevation: float, angle: float, settings: ShadingGeometrySettings
 ) -> float:
     """Return ``t_free``: how far up from its lower edge the glass may stay free.
 
@@ -210,7 +216,7 @@ class ShadingGeometry:
       along the glass, clamped to the element; ``None`` like the ray height.
     - ``members``: one entry per member, in the order of the element. While
       the sun is not on the window, the geometry asks for nothing: every
-      member is open.
+      member is open. That includes a window whose orientation is unknown.
     """
 
     sun: SunOnWindow
@@ -326,13 +332,14 @@ def compute_shading(sun: SunPosition, element: ShadedElement) -> ShadingGeometry
     settings = element.settings
     on_window = sun_on_window(sun, settings)
     measured = settings.use_measurements
-    if not on_window.on_window:
+    angle = on_window.horizontal_angle
+    if not on_window.on_window or angle is None:
         members = _same_for_all(element, FULLY_OPEN, 0.0 if measured else None)
         return ShadingGeometry(on_window, measured, None, None, members)
     if not measured:
         members = _same_for_all(element, settings.fixed_position, None)
         return ShadingGeometry(on_window, measured, None, None, members)
-    free = free_glass_length(sun.elevation, on_window.horizontal_angle, settings)
+    free = free_glass_length(sun.elevation, angle, settings)
     edge = curtain_edge(free, settings.element_height)
     return ShadingGeometry(
         sun=on_window,

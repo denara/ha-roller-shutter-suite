@@ -160,6 +160,7 @@ def test_the_elevation_is_judged_before_the_field_of_view() -> None:
         is SunExclusion.BELOW_END_ELEVATION
     )
     assert list(SunExclusion) == [
+        SunExclusion.ORIENTATION_UNKNOWN,
         SunExclusion.BELOW_HORIZON,
         SunExclusion.BELOW_END_ELEVATION,
         LEFT,
@@ -232,19 +233,25 @@ def test_the_incidence_is_the_cosine_between_the_sun_and_the_normal() -> None:
 # --- Without a known orientation ----------------------------------------------------------
 
 
-def test_without_a_known_orientation_only_the_elevation_is_judged() -> None:
-    """The stated orientation and the field of view are ignored; no angle is given."""
-    settings = ShadingGeometrySettings(
-        orientation=180.0, view_left=10.0, view_right=10.0, end_elevation=5.0
-    )
+@pytest.mark.parametrize("azimuth", [0.0, 90.0, 180.0, 270.0])
+@pytest.mark.parametrize("elevation", [-20.0, 0.0, 3.0, 30.0, 90.0])
+def test_without_a_known_orientation_nobody_can_say_that_the_sun_is_on_the_window(
+    azimuth: float, elevation: float
+) -> None:
+    """Shading needs the orientation; nothing is assumed in its place.
 
-    north = sun_on_window(SunPosition(0.0, 30.0), settings)
-    low = sun_on_window(SunPosition(180.0, 3.0), settings)
+    The number that stands in the field ``orientation`` does not count while
+    the switch is off: it is the built-in default, not a statement. Assuming
+    the sun straight ahead instead would shade a north window in every sun.
+    """
+    settings = ShadingGeometrySettings(orientation=180.0, end_elevation=5.0)
 
-    assert north.on_window
-    assert north.start_permitted
-    assert north.horizontal_angle is None
-    assert low.exclusion is SunExclusion.BELOW_END_ELEVATION
+    result = sun_on_window(SunPosition(azimuth, elevation), settings)
+
+    assert not result.on_window
+    assert not result.start_permitted
+    assert result.exclusion is SunExclusion.ORIENTATION_UNKNOWN
+    assert result.horizontal_angle is None
 
 
 # --- The result type ---------------------------------------------------------------------
@@ -254,7 +261,8 @@ def test_the_result_survives_plain_data() -> None:
     """With and without an exclusion, with and without an angle."""
     for value in (
         SunOnWindow(True, None, True, -12.5),
-        SunOnWindow(True, None, False, None),
+        SunOnWindow(True, None, False, 0.0),
+        SunOnWindow(False, SunExclusion.ORIENTATION_UNKNOWN, False, None),
         SunOnWindow(False, RIGHT, False, 180.0),
     ):
         assert SunOnWindow.from_data(value.to_data()) == value
@@ -266,6 +274,9 @@ def test_the_result_survives_plain_data() -> None:
         (True, RIGHT, False, 10.0),
         (False, None, False, 10.0),
         (False, LEFT, True, -100.0),
+        (True, None, True, None),
+        (False, RIGHT, False, None),
+        (False, SunExclusion.ORIENTATION_UNKNOWN, False, 10.0),
         (True, None, True, 180.5),
         (True, None, True, -180.0),
         (True, None, True, "10"),

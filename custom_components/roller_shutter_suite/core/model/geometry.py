@@ -25,7 +25,8 @@ Conventions, stated once:
 
 Every value always has a value: a window without measurements is the normal
 start, and the two switches say so (``use_measurements`` and
-``orientation_known`` are off by default). The numbers behind a switch that
+``orientation_known`` are off by default). Without an orientation the
+geometry never says that the sun is on the window. The numbers behind a switch that
 is off are checked on their own and otherwise ignored, so a user can switch
 back and forth without clearing what was entered before.
 """
@@ -195,10 +196,10 @@ class ShadingGeometrySettings:
       measurements below.
     - ``fixed_position``: the shading position of the simple mode, on the
       motor scale.
-    - ``orientation_known``: whether ``orientation`` was stated. Off (the
-      default): the horizontal direction of the sun is not judged at all; only
-      the elevation limits decide, and a computed position assumes the sun
-      straight ahead, which is the deepest it can shine into the room.
+    - ``orientation_known``: whether ``orientation`` was stated. **Shading
+      needs the orientation.** Off (the default): nobody can say whether the
+      sun is on the window, so it is not, in the simple mode and in the
+      computed mode alike; nothing is assumed in its place.
     - ``orientation``: azimuth of the outward normal, 0 up to (not including)
       360.
     - ``view_left``, ``view_right``: how far to the left and to the right of
@@ -295,3 +296,119 @@ GEOMETRY_FIELDS: Final = tuple(entry.name for entry in fields(ShadingGeometrySet
 
 GEOMETRY_PREFIX: Final = "shading_"
 """What stands in front of a field of the view in the name of its flat setting."""
+
+
+MEMBER_MEASUREMENT_FIELDS: Final = (
+    "glass_height",
+    "top_offset",
+    "calibration_seat",
+    "calibration_glass_top",
+)
+"""What a member can state itself; also the keys of the member-level settings."""
+
+
+class MemberGlassError(ValueError):
+    """What a member states does not fit together with what applies to it.
+
+    Each value may be fine on its own. ``member_id`` names the member and
+    ``fields`` the measurements the violated rule concerns, as fields of
+    :class:`MemberMeasurements`.
+    """
+
+    def __init__(self, message: str, member_id: str, fields: tuple[str, ...]) -> None:
+        """Keep the message, the member and the fields the rule concerns."""
+        if not fields:
+            raise ValueError("a rule over several measurements names its fields")
+        super().__init__(f"{message} (member {member_id!r}: {', '.join(fields)})")
+        self.member_id = member_id
+        self.fields = fields
+
+
+@dataclass(frozen=True, slots=True)
+class MemberMeasurements:
+    """What one member states itself; ``None`` means that it states nothing.
+
+    A member inherits the measurements of its window unless it states its
+    own: its glass is as high as the element, its top edge has the offset 0,
+    and its motor has the calibration of the window. ``None`` is not a value
+    of any of these measurements, so it can say "not stated" here. Every
+    stated value is checked on its own; what has to fit together is judged
+    by :func:`member_glass_for`.
+    """
+
+    glass_height: float | None = None
+    top_offset: float | None = None
+    calibration_seat: Position | None = None
+    calibration_glass_top: Position | None = None
+
+    def __post_init__(self) -> None:
+        """Validate every stated value on its own."""
+        if self.glass_height is not None:
+            _LENGTH_ABOVE_ZERO.require(
+                self.glass_height, "the field 'glass_height' of a member"
+            )
+        if self.top_offset is not None:
+            _LENGTH.require(self.top_offset, "the field 'top_offset' of a member")
+        for name in ("calibration_seat", "calibration_glass_top"):
+            value = getattr(self, name)
+            if value is not None:
+                require_type(value, Position, f"the field {name!r} of a member")
+
+    @property
+    def stated(self) -> tuple[str, ...]:
+        """Return the fields the member states itself."""
+        return tuple(
+            name
+            for name in MEMBER_MEASUREMENT_FIELDS
+            if getattr(self, name) is not None
+        )
+
+
+NO_MEASUREMENTS: Final = MemberMeasurements()
+"""A member that states nothing: everything is inherited from the window."""
+
+
+def member_glass_for(
+    window: ShadingGeometrySettings, member_id: str, stated: MemberMeasurements
+) -> MemberGlass:
+    """Return the glass that applies to a member: its own values, else the window's.
+
+    Two rules span several values, and both raise :class:`MemberGlassError`
+    with the fields the **member** states among those concerned, because the
+    values of the window are fine among themselves: the calibration points
+    in order and apart, and the glass inside the element.
+    """
+    require_type(window, ShadingGeometrySettings, "the measurements of the window")
+    require_type(stated, MemberMeasurements, "the measurements of a member")
+    seat = _own_or(stated.calibration_seat, window.calibration_seat)
+    glass_top = _own_or(stated.calibration_glass_top, window.calibration_glass_top)
+    if _calibration_in_disorder(seat, glass_top):
+        pair = ("calibration_seat", "calibration_glass_top")
+        raise MemberGlassError(
+            _CALIBRATION_RULE, member_id, _stated_among(stated, pair)
+        )
+    glass = MemberGlass(
+        member_id,
+        glass_height=_own_or(stated.glass_height, window.element_height),
+        top_offset=_own_or(stated.top_offset, 0.0),
+        calibration=GlassCalibration(seat, glass_top),
+    )
+    if not glass.fits_into(window.element_height):
+        raise MemberGlassError(
+            "the glass of the member reaches below the element: its top offset "
+            "plus its glass height must not exceed the element height of the "
+            "window; a member that states an offset states its glass height too",
+            member_id,
+            _stated_among(stated, ("glass_height", "top_offset")),
+        )
+    return glass
+
+
+def _own_or[T](own: T | None, inherited: T) -> T:
+    return inherited if own is None else own
+
+
+def _stated_among(
+    stated: MemberMeasurements, names: tuple[str, ...]
+) -> tuple[str, ...]:
+    return tuple(name for name in names if name in stated.stated)

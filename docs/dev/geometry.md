@@ -8,7 +8,7 @@ The shading layer (a later block), the status display and the simulation all use
 
 | Module | Content |
 |---|---|
-| `core/model/geometry.py` | the measurements as values: `ShadingGeometrySettings` (the window), `MemberGlass` (one member), `GlassCalibration` (one motor), with their value rules |
+| `core/model/geometry.py` | the measurements as values: `ShadingGeometrySettings` (the window), `MemberMeasurements` (what a member states itself), `MemberGlass` (the glass that applies to a member), `GlassCalibration` (one motor), with their value rules |
 | `core/geometry/sun.py` | the sun relative to the window: `horizontal_angle`, `incidence`, `sun_on_window` → `SunOnWindow` |
 | `core/geometry/element.py` | one element, one curtain edge: `ShadedElement`, `free_glass_length`, `curtain_edge`, `covered_fraction`, `members_for_edge`, and the entry point `compute_shading` → `ShadingGeometry` |
 | `core/geometry/calibration.py` | covered fraction ↔ motor position: `position_for_cover`, `cover_at_position`, `ideal_position`, `end_position_for`, and `to_position`, the one place that rounds |
@@ -35,10 +35,10 @@ Each is stated once in the code (`core/model/geometry.py`) and tested.
 
 | Field | Meaning |
 |---|---|
-| `on_window` | the sun is above the horizon, not below the end elevation, inside the field of view, and in front of the glass |
-| `exclusion` | if not: the first reason, a `SunExclusion`, in this order: `below_horizon` (elevation zero or negative), `below_end_elevation`, `left_of_view`, `right_of_view`, `behind_glass`. `None` exactly when the sun is on the window. |
+| `on_window` | the orientation of the window is known, and the sun is above the horizon, not below the end elevation, inside the field of view, and in front of the glass |
+| `exclusion` | if not: the first reason, a `SunExclusion`, in this order: `orientation_unknown`, `below_horizon` (elevation zero or negative), `below_end_elevation`, `left_of_view`, `right_of_view`, `behind_glass`. `None` exactly when the sun is on the window. |
 | `start_permitted` | the sun is on the window **and** at least at the minimum elevation for the start of shading |
-| `horizontal_angle` | `g`, or `None` when the orientation of the window is not known |
+| `horizontal_angle` | `g`; `None` exactly when the orientation of the window is not known |
 
 `SunExclusion` is not a reason code. The shading layer turns it into one; this block adds no reason codes.
 
@@ -54,7 +54,7 @@ incidence = cos h · cos g · sin b + sin h · cos b
 
 The sun shines onto the glass while the incidence is positive (above `GRAZING`, a value far below anything a sun position can resolve). For vertical glass that is `cos h · cos g`: at and beyond the façade plane (`|g| ≥ 90`) the sun is not on the window, and neither is a sun in the zenith. Tilted glass is reached by a high sun from behind: straight from behind, as soon as the elevation exceeds the pitch. The sine and cosine of this package are exact at the right angles, so a pitch of exactly 90 and a sun exactly in the façade plane are computed without a rounding residue.
 
-**Without a known orientation** (`orientation_known` is off, the default) the horizontal direction is not judged: only the elevation limits and the glass plane decide, and every computation assumes the sun straight ahead. That is the deepest the sun can shine into the room, so the result never shades less than the real angle would need.
+**Shading needs the orientation.** Without it (`orientation_known` is off, the default) nobody can say whether the sun is on the window, so the answer is "not on the window" with the exclusion `orientation_unknown`, in the computed mode and in the simple mode alike: nothing is computed and every member stays open. Nothing is assumed in its place. Assuming the sun straight ahead, or applying the fixed position whenever the sun is up, would shade a north window in every sun: more movement because a setting is missing, which is the wrong direction. The frontal case exists only for callers that ask for it by name (`STRAIGHT_AHEAD`, the horizontal angle 0, for worked examples and tables).
 
 ## Ray height and the curtain edge
 
@@ -141,7 +141,7 @@ The geometry always reports the computed position. Next to it, every member gets
 
 ## Simple mode
 
-A window without measurements (`use_measurements` is off, the default) gets a fixed shading position instead of a computed one. `compute_shading` offers the same interface for it, so the shading layer does not branch: `sun` is computed as above, `computed` is false, ray height and curtain edge are `None`, every member has the `fixed_position` of the window (a motor position; no calibration is applied) and no covered fraction.
+A window without measurements (`use_measurements` is off, the default) gets a fixed shading position instead of a computed one. `compute_shading` offers the same interface for it, so the shading layer does not branch: `sun` is computed as above (the orientation is needed here too), `computed` is false, ray height and curtain edge are `None`, every member has the `fixed_position` of the window (a motor position; no calibration is applied) and no covered fraction.
 
 ## The result
 
@@ -162,7 +162,7 @@ It never raises for a sun position and an element that exist, and every position
 ## How the shading layer will call it
 
 ```python
-element = ShadedElement(config.geometry, members)  # members: one MemberGlass each
+element = ShadedElement(config.geometry, config.member_glass)
 result = compute_shading(snapshot.sun, element)
 
 if not result.sun.on_window:
@@ -173,7 +173,7 @@ else:
     wish = Wish.target_per_member(..., ray_height=result.ray_height)
 ```
 
-`Wish` already carries `ray_height` and one target per member. For a member without position control the layer takes `end_position` instead of `position`. The layer will need reason codes for the five `SunExclusion` values (or one code for "sun not on the window" with the exclusion as detail) and for "below the start elevation"; they are added with the layer, in the closed list of the specification.
+`Wish` already carries `ray_height` and one target per member. For a member without position control the layer takes `end_position` instead of `position`. The layer will need a reason code of its own for `orientation_unknown` (it has no opinion then, and the status has to say why), reason codes for the other `SunExclusion` values (or one code for "sun not on the window"), and one for "below the start elevation"; they are added with the layer, in the closed list of the specification. The configuration form (block H11) requires the orientation as soon as shading is switched on.
 
 ## Settings
 
@@ -183,7 +183,7 @@ The window-level measurements are flat, inheritable settings of the function `sh
 |---|---|---|---|---|
 | `shading_use_measurements` | boolean | off (simple mode) | | `as_bool` |
 | `shading_fixed_position` | number | 30 | position 0 to 100 | `_as_position` |
-| `shading_orientation_known` | boolean | off | | `as_bool` |
+| `shading_orientation_known` | boolean | off: the sun is never "on the window" | | `as_bool` |
 | `shading_orientation` | number | 180 | 0 up to, not including, 360 | `_as_number` |
 | `shading_view_left`, `shading_view_right` | number | 90 | more than 0, at most 180 | `_as_number` |
 | `shading_min_elevation`, `shading_end_elevation` | number | 0 | 0 to 90 | `_as_number` |
@@ -199,9 +199,39 @@ One rule spans two settings: the glass top lies at least 10 above the seating po
 
 The element is described by its lower edge and its height rather than by "glass top above the floor": both are lengths one reads off a tape measure, the height is the same number for vertical and for tilted glass, and no rule "top above bottom" is needed that two levels of inheritance could violate together.
 
+## Member-level settings
+
+Members inherit the window's measurements unless they state their own (decision 9). What a member can state is declared in one place, `MEMBER_SETTINGS` in `core/settings.py`: a small registry of the same `SettingDefinition`s as every other setting, plus a mapping that says which **window** setting a member inherits when it states nothing. Block H11 builds the member form from it like a window form: an empty field is inherited, and the inherited value can be shown next to it.
+
+| Member key | Kind | Function | Inherits from | Reader |
+|---|---|---|---|---|
+| `glass_height` | number, more than 0, at most 100 m | `shading` | `shading_element_height` | `_as_number` |
+| `top_offset` | number, 0 to 100 m | `shading` | nothing: built-in 0 | `_as_number` |
+| `calibration_seat` | number, position | `shading` | `shading_calibration_seat` | `_as_position` |
+| `calibration_glass_top` | number, position | `shading` | `shading_calibration_glass_top` | `_as_position` |
+
+**The member level is a fourth level below the window.** `resolve_window(..., member_settings={member_id: PartialSettings})` takes one `PartialSettings` per member; `settings_from_stored(data, MEMBER_SETTINGS.registry)` reads the stored settings of one member with the rules of every level (an absent key or blank text is inherited, `null` is a fault, an unknown key is reported, nothing can be "none"). A member inherits from the **resolved** window, so its value comes from the member, else from whatever level gave the window its value, and `ResolvedSettings.member_values[member_id][key]` says which (`Level.MEMBER` with the `member_id`, or the window's provenance). The resolution of the three levels above is not changed by it.
+
+**How the Home Assistant side stores member settings is its own decision** (block H11). The core takes the per-member mappings already separated. One possible shape, as an illustration only:
+
+```json
+{
+  "members": [
+    {"entity_id": "cover.example_upper", "settings": {"glass_height": 1.0}},
+    {"entity_id": "cover.example_lower", "settings": {"glass_height": 0.6, "top_offset": 1.1, "calibration_seat": 8}}
+  ]
+}
+```
+
+**In the model** the result is additive: `MemberConfig.measurements` (a `MemberMeasurements`: the four values, each `None` while the member does not state it) and the view `WindowConfig.member_glass`, the `MemberGlass` that applies to every member. `member_glass_for` holds the rule "a member's own value, else the window's" and the two rules that span several values: the calibration points in order and apart, and the glass inside the element. A member that states a top offset has to state its glass height too, because the inherited glass height is the whole element.
+
+**A faulty member-level value pauses shading for the whole window.** That holds for a value that cannot be read, a value that is invalid on its own, and a value that is refused together with the window's values (`combination`). There is no fall-back to the window's value: the members are one element with one curtain edge and one status, and a shutter must not move by a number nobody chose for it. The fault is reported with the level `member`, the member and the key. An unknown member key is reported and ignored. Settings of a member that are unreadable as a whole pause shading for the window. Settings for a member the window does not have are reported (`unknown_member`) and ignored. While shading is paused, no member carries measurements of its own in the configuration; and if the window's own levels paused it, the members are judged value by value only, not against the stand-in values of the window.
+
+**Protection is untouched.** No member-level setting belongs to a function that falls back, and `MemberSettingsRegistry` refuses such an entry (and one with a capability requirement) until somebody defines what a member-level fault of such a function means. The cautious fault values of decision 15 are therefore not needed on this level. Tests show for every kind of member fault that frost protection and motor protection keep the values the window set.
+
 ## The examples on paper
 
-Both examples of decision 9 of the [design specification](../architecture.md#9-several-covers-operated-as-one-window) are tests with the numbers of that document (`tests/core/test_geometry_element.py`). In the first one the element is as high as the large member (1.4 m), and the small member (0.8 m, same sill) states a top offset of 0.6 m.
+Both examples of decision 9 of the [design specification](../architecture.md#9-several-covers-operated-as-one-window) are tests with the numbers of that document (`tests/core/test_geometry_element.py`). In the first one the element is as high as the large member (1.4 m), and the small member (0.8 m, same sill) states a top offset of 0.6 m: only with that offset does the example fit "one element, one curtain edge".
 
 The roof example of the user documentation is a test as well: pitch 40 degrees, lower edge of the glass 1.0 m above the floor, an upper row of 1.0 m, a frame of 0.1 m, a lower row of 0.6 m (element 1.7 m along the glass), permitted depth 1.5 m, window facing south.
 

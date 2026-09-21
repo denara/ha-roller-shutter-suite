@@ -20,6 +20,7 @@ from .calibration import (
     to_position,
 )
 from .element import (
+    STRAIGHT_AHEAD,
     MemberShading,
     ShadedElement,
     ShadingGeometry,
@@ -40,6 +41,7 @@ from .sun import (
 
 __all__ = [
     "GRAZING",
+    "STRAIGHT_AHEAD",
     "MemberShading",
     "ShadedElement",
     "ShadingGeometry",

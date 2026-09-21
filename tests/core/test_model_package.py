@@ -49,7 +49,9 @@ def test_every_public_name_is_exported_by_the_package() -> None:
         }
 
     assert defined <= exported
-    assert exported - defined == {"JsonObject", "JsonValue"}
+    # Beyond the types: the two aliases of plain data, and the one function of
+    # the package, which holds the rule "a member's own value, else the window's".
+    assert exported - defined == {"JsonObject", "JsonValue", "member_glass_for"}
     assert sorted(model.__all__) == sorted(exported)
     for name in model.__all__:
         assert hasattr(model, name)

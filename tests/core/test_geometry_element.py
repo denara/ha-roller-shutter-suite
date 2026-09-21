@@ -8,6 +8,7 @@ from typing import Any
 import pytest
 
 from custom_components.roller_shutter_suite.core.geometry import (
+    STRAIGHT_AHEAD,
     MemberShading,
     ShadedElement,
     ShadingGeometry,
@@ -339,21 +340,45 @@ def test_a_depth_of_zero_lets_no_sun_in() -> None:
     assert _positions(result) == [0]
 
 
-def test_without_a_known_orientation_the_sun_counts_as_straight_ahead() -> None:
-    """The deepest the sun can shine: never less shade than the real angle needs."""
-    known = ShadedElement(_measured(element_height=1.4), UNEQUAL.members[:1])
-    unknown = ShadedElement(
-        _measured(element_height=1.4, orientation_known=False), UNEQUAL.members[:1]
+@pytest.mark.parametrize("use_measurements", [True, False])
+def test_without_a_known_orientation_nothing_is_computed_and_nothing_moves(
+    use_measurements: bool,
+) -> None:
+    """In the computed mode and in the simple mode alike: every member stays open.
+
+    Assuming the sun straight ahead, or applying the fixed position whenever
+    the sun is up, would shade a north window in every sun.
+    """
+    element = ShadedElement(
+        _measured(
+            use_measurements=use_measurements,
+            orientation_known=False,
+            element_height=1.4,
+        ),
+        UNEQUAL.members,
     )
+    for azimuth, elevation in itertools.product(
+        (0.0, 120.0, SOUTH), (-5.0, 25.0, 60.0)
+    ):
+        result = compute_shading(SunPosition(azimuth, elevation), element)
 
-    straight = compute_shading(SunPosition(SOUTH, 40.0), known)
-    oblique = compute_shading(SunPosition(SOUTH + 50.0, 40.0), known)
-    anywhere = compute_shading(SunPosition(20.0, 40.0), unknown)
+        assert result.sun.exclusion is SunExclusion.ORIENTATION_UNKNOWN
+        assert not result.sun.on_window
+        assert result.ray_height is None
+        assert result.curtain_edge is None
+        assert _positions(result) == [MAX_POSITION, MAX_POSITION]
 
-    assert anywhere.sun.horizontal_angle is None
-    assert anywhere.ray_height == straight.ray_height
-    assert anywhere.members == straight.members
-    assert anywhere.members[0].position <= oblique.members[0].position
+
+def test_the_frontal_case_exists_only_for_callers_that_ask_for_it_by_name() -> None:
+    """``STRAIGHT_AHEAD`` is an angle for worked examples, not a fall-back."""
+    settings = _measured(element_bottom=0.9, element_height=1.4, depth=1.0)
+
+    frontal = free_glass_length(50.0, STRAIGHT_AHEAD, settings)
+
+    assert STRAIGHT_AHEAD == 0.0
+    assert settings.element_bottom + frontal == pytest.approx(
+        math.tan(math.radians(50.0))
+    )
 
 
 # --- The pieces -------------------------------------------------------------------------------
@@ -385,9 +410,6 @@ def test_the_free_length_is_not_clamped() -> None:
 
     assert free_glass_length(10.0, 0.0, settings) < 0
     assert free_glass_length(80.0, 0.0, settings) > settings.element_height
-    assert free_glass_length(50.0, None, settings) == free_glass_length(
-        50.0, 0.0, settings
-    )
 
 
 def test_equal_members_get_equal_positions() -> None:
@@ -465,14 +487,17 @@ def test_the_simple_mode_has_the_same_interface_and_a_fixed_position() -> None:
     assert _positions(away) == [100, 100]
 
 
-def test_the_simple_mode_without_an_orientation_follows_the_elevation_only() -> None:
-    """The defaults of a new window: the fixed position while the sun is up."""
+def test_a_new_window_is_never_shaded_by_the_geometry() -> None:
+    """The built-in defaults: no orientation, so the sun is never "on the window"."""
     element = ShadedElement(
         ShadingGeometrySettings(), (MemberGlass("cover.example_window", 1.2),)
     )
 
-    assert _positions(compute_shading(SunPosition(10.0, 25.0), element)) == [30]
-    assert _positions(compute_shading(SunPosition(10.0, -5.0), element)) == [100]
+    for elevation in (-5.0, 25.0, 70.0):
+        result = compute_shading(SunPosition(190.0, elevation), element)
+
+        assert result.sun.exclusion is SunExclusion.ORIENTATION_UNKNOWN
+        assert _positions(result) == [MAX_POSITION]
 
 
 def test_while_the_sun_is_not_on_the_window_the_geometry_asks_for_nothing() -> None:
