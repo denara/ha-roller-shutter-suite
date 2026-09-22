@@ -31,6 +31,7 @@ This is the only place in the integration that is allowed to move a cover (G1). 
 
 ## Added after block H01 was reviewed
 
+- **The adapter's dry-run check follows the fire ruling of the arbiter's safety net.** Since block C03a, a failed dry-run rule (an exception inside it) does not hold a pending fire wish back: the decision names the failed rule in `Decision.faults`, and the command is sent, because an escape route that stays closed in a fire is the greater evil (`docs/architecture.md`, section 13a; `docs/dev/arbiter.md`). The adapter's second check must not undo that: for a window in dry-run it sends nothing, except a fire command whose decision names the dry-run rule as failed. For every other class the second check stays as it is. A test for each case; `docs/features/dry-run.md` states this one exception in plain words.
 - **Forms for the settings this block makes effective.** The settings registry of the core already holds the motor protection settings (`motor_min_change`, `motor_min_interval`) and the re-evaluation time (`reevaluate_after`); block H01 built the form mechanism but offers no form for them. This block adds their form metadata and translations (English and German) as a feature page, without a change to a flow class, as `docs/dev/config-flow.md` describes.
 
 ## Out of scope
