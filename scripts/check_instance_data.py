@@ -21,7 +21,9 @@ name of the local network is judged in strings and comments only, because
 outside of them a name with the attribute ``.local`` behind it is an object
 with an attribute, not a host. The tokenizer of the standard library tells the
 two apart; a file it cannot read is judged in full, like a file of any other
-kind.
+kind. The limit: a file named ``.py`` that holds prose which happens to
+tokenize has its hosts outside of quotes taken for code; such a file cannot
+be committed here by accident, because ``ruff`` refuses it.
 
 **Names are judged too.** Git publishes the name of a file or folder exactly
 like its content, so the whole relative path of every listed entry is judged
@@ -239,7 +241,8 @@ _TEXT_TOKENS = frozenset(
 
 PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     # Not preceded by a letter: ``v10.1.2.3`` is a version with a marker in
-    # front, and nobody writes an address that way.
+    # front, and nobody writes an address that way (a word glued directly to
+    # an address, without a separator, passes with it).
     (
         "private IPv4 address",
         re.compile(
@@ -300,12 +303,17 @@ PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
         "path with a Windows drive letter",
         re.compile(r"(?<![A-Za-z])[A-Za-z]:[\\/]{1,2}[A-Za-z_]"),
     ),
-    # Not preceded by a word character: ``docs/home/index.md`` is a folder
-    # called ``home`` inside another folder, not a home directory. A home
-    # directory starts the path or follows a quote, a space, ``=`` or ``:``.
+    # A folder called ``home`` inside a relative path (``docs/home/index.md``)
+    # is not a home directory. An absolute one is, wherever it is mounted:
+    # ``/home/``, ``/var/home/``, ``/usr/home/``, ``/export/home/``, or behind
+    # the host of a URL. So the home folder is taken when it starts the text,
+    # follows a character that is no part of a path, or follows a whole path
+    # segment that itself starts with a slash.
     (
         "path inside a user's home directory",
-        re.compile(r"(?<![\w.-])(?:/home/|/Users/|\\Users\\)[A-Za-z0-9][\w.-]*"),
+        re.compile(
+            r"(?:^|[^\w.-]|/[\w.-]+)(?:/home/|/Users/|\\Users\\)[A-Za-z0-9][\w.-]*"
+        ),
     ),
     (
         "path of a mounted Windows drive",

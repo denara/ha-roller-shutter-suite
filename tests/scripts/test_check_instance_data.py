@@ -72,6 +72,13 @@ SUSPICIOUS = {
         "/home" + "/someone/checkout",
         "/Users" + "/someone",
         "\\Users" + "\\someone",
+        # Home directories mounted elsewhere, and one behind the host of a URL.
+        "/var" + "/home" + "/someone",
+        "/usr" + "/home" + "/someone/.config",
+        "/export" + "/home" + "/someone",
+        "sftp://host" + "/home" + "/someone",
+        "smb://nas" + "/home" + "/someone/share",
+        "path=" + "/home" + "/someone",
     ],
     "path of a mounted Windows drive": ["/mnt" + "/c/" + "checkout"],
     "e-mail address": [

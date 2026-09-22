@@ -50,7 +50,8 @@ def test_thresholds_are_the_ones_of_the_block() -> None:
     ("path", "groups"),
     [
         (f"{INTEGRATION_DIR}/config_flow.py", ["home assistant", "flow"]),
-        (f"{INTEGRATION_DIR}/window_subentry_flow.py", ["home assistant", "flow"]),
+        # A made-up module outside the package whose name ends in flow.py.
+        (f"{INTEGRATION_DIR}/example_flow.py", ["home assistant", "flow"]),
         (f"{INTEGRATION_DIR}/flow/__init__.py", ["home assistant", "flow"]),
         (f"{INTEGRATION_DIR}/flow/inheritance.py", ["home assistant", "flow"]),
         (f"{INTEGRATION_DIR}/flow/window_flow.py", ["home assistant", "flow"]),
