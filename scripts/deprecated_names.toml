@@ -35,6 +35,9 @@
 # kind = "mapping": `<object>.name[...]` and `<object>.name.<anything>` are
 #   forbidden, iterating `<object>.name` and `len()` are not. The receivers
 #   work as for "attribute".
+# kind = "keyword": passing `name=...` to a call of `<object>.<method>(...)`
+#   is forbidden; `method` names the method, the receivers work as for
+#   "attribute". The same keyword on any other call is not matched.
 #
 # `receivers` is a guess at how the code names the object; a narrow entry can
 # miss a use on another name, and then the log guard is the net. `registry`
@@ -151,3 +154,68 @@ behavior = "logs"
 reason = "Reading DeviceEntry.suggested_area is deprecated; removal was announced for Home Assistant 2026.9, the property is still present and logs."
 replacement = "Nothing; use the device's area_id if the area is needed."
 source = "homeassistant/helpers/device_registry.py, Core 2026.9.2: the property is wrapped in deprecated_function"
+
+# The keyword arguments of DeviceRegistry.async_update_device that Core
+# 2026.9.2 reports. The integration does not call the method yet; the entries
+# are here so that a later block cannot start doing so with a deprecated
+# keyword unnoticed.
+
+[[deprecated]]
+kind = "keyword"
+name = "add_config_entry_id"
+method = "async_update_device"
+receivers = ["registry", "_registry", "device_registry", "_device_registry"]
+behavior = "logs"
+reason = "A device belongs to a single config entry; add_config_entry_id of async_update_device is deprecated and breaks in Home Assistant 2027.8."
+replacement = "new_config_entry_id to move a device, async_remove_device to remove it"
+source = "homeassistant/helpers/device_registry.py, Core 2026.9.2: async_update_device calls report_usage when the keyword is passed"
+
+[[deprecated]]
+kind = "keyword"
+name = "add_config_subentry_id"
+method = "async_update_device"
+receivers = ["registry", "_registry", "device_registry", "_device_registry"]
+behavior = "logs"
+reason = "A device belongs to a single subentry; add_config_subentry_id of async_update_device is deprecated and breaks in Home Assistant 2027.8."
+replacement = "new_config_subentry_id to move a device, async_remove_device to remove it"
+source = "homeassistant/helpers/device_registry.py, Core 2026.9.2: async_update_device calls report_usage when the keyword is passed"
+
+[[deprecated]]
+kind = "keyword"
+name = "remove_config_entry_id"
+method = "async_update_device"
+receivers = ["registry", "_registry", "device_registry", "_device_registry"]
+behavior = "logs"
+reason = "A device belongs to a single config entry; remove_config_entry_id of async_update_device is deprecated and breaks in Home Assistant 2027.8."
+replacement = "new_config_entry_id to move a device, async_remove_device to remove it"
+source = "homeassistant/helpers/device_registry.py, Core 2026.9.2: async_update_device calls report_usage when the keyword is passed"
+
+[[deprecated]]
+kind = "keyword"
+name = "remove_config_subentry_id"
+method = "async_update_device"
+receivers = ["registry", "_registry", "device_registry", "_device_registry"]
+behavior = "logs"
+reason = "A device belongs to a single subentry; remove_config_subentry_id of async_update_device is deprecated and breaks in Home Assistant 2027.8."
+replacement = "new_config_subentry_id to move a device, async_remove_device to remove it"
+source = "homeassistant/helpers/device_registry.py, Core 2026.9.2: async_update_device calls report_usage when the keyword is passed"
+
+[[deprecated]]
+kind = "keyword"
+name = "merge_connections"
+method = "async_update_device"
+receivers = ["registry", "_registry", "device_registry", "_device_registry"]
+behavior = "logs"
+reason = "merge_connections of async_update_device only adds to the existing connections; it is deprecated and breaks in Home Assistant 2027.9."
+replacement = "new_connections with the full set"
+source = "homeassistant/helpers/device_registry.py, Core 2026.9.2: async_update_device calls report_usage when the keyword is passed"
+
+[[deprecated]]
+kind = "keyword"
+name = "merge_identifiers"
+method = "async_update_device"
+receivers = ["registry", "_registry", "device_registry", "_device_registry"]
+behavior = "logs"
+reason = "merge_identifiers of async_update_device only adds to the existing identifiers; it is deprecated and breaks in Home Assistant 2027.9."
+replacement = "new_identifiers with the full set"
+source = "homeassistant/helpers/device_registry.py, Core 2026.9.2: async_update_device calls report_usage when the keyword is passed"

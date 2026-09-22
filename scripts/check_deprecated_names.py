@@ -22,8 +22,10 @@ is used (the ``behavior`` of the entry):
   The name is therefore matched narrowly, where Home Assistant exposes it:
   an ``identifier`` when it is imported, or read from one of the ``receivers``
   of the entry; an ``attribute`` or ``mapping`` on the ``receivers`` of the
-  entry and on the result of a call (``async_get(hass).devices``). An own
-  attribute of the same name on another object is not reported.
+  entry and on the result of a call (``async_get(hass).devices``); a
+  ``keyword`` when it is passed to a call of the entry's ``method`` on those
+  receivers. An own attribute of the same name on another object, or the
+  same keyword on another call, is not reported.
 
 Limits, stated honestly. The script does not know types. A broad entry of kind
 ``attribute`` or ``mapping`` is matched by the attribute's name alone, so it
@@ -60,15 +62,17 @@ REPOSITORY_ROOT = Path(__file__).parents[1]
 LIST_FILE = Path(__file__).with_name("deprecated_names.toml")
 SCANNED_FOLDERS = ("custom_components", "tests")
 BEHAVIORS = {"silent", "logs"}
-_KINDS = {"identifier", "module", "attribute", "mapping"}
+_KINDS = {"identifier", "module", "attribute", "mapping", "keyword"}
 _TEXT_FIELDS = ("kind", "name", "behavior", "reason", "replacement", "source")
 # Broad entries (silent) name where the attribute is fine; narrow entries
 # (logs) name where the deprecated attribute is read.
 _ALLOWED_FIELD = "allowed_receivers"
 _RECEIVERS_FIELD = "receivers"
-_KINDS_WITH_ALLOWED = {"attribute", "mapping"}
-_KINDS_WITH_RECEIVERS = {"identifier", "attribute", "mapping"}
-_KINDS_NEEDING_RECEIVERS = {"attribute", "mapping"}
+# A keyword argument belongs to a call of this method.
+_METHOD_FIELD = "method"
+_KINDS_WITH_ALLOWED = {"attribute", "mapping", "keyword"}
+_KINDS_WITH_RECEIVERS = {"identifier", "attribute", "mapping", "keyword"}
+_KINDS_NEEDING_RECEIVERS = {"attribute", "mapping", "keyword"}
 EXIT_FINDINGS = 1
 EXIT_CANNOT_CHECK = 2
 
@@ -95,6 +99,8 @@ class Deprecated:
     # deprecated name is read. See the module documentation.
     allowed_receivers: tuple[str, ...] = ()
     receivers: tuple[str, ...] = ()
+    # For a keyword: the method whose call carries it.
+    method: str = ""
 
     @property
     def narrow(self) -> bool:
@@ -126,17 +132,25 @@ def _names(raw: dict[str, Any], field: str) -> tuple[str, ...]:
 
 
 def _parse_entry(raw: dict[str, Any]) -> Deprecated:
-    known = {*_TEXT_FIELDS, _ALLOWED_FIELD, _RECEIVERS_FIELD}
+    known = {*_TEXT_FIELDS, _ALLOWED_FIELD, _RECEIVERS_FIELD, _METHOD_FIELD}
     if not set(_TEXT_FIELDS) <= set(raw) or set(raw) - known:
         raise ListError(
             f"the fields are {', '.join(_TEXT_FIELDS)}; a silent entry of the kinds "
             f"{sorted(_KINDS_WITH_ALLOWED)} may add {_ALLOWED_FIELD}, an entry that "
-            f"logs, of the kinds {sorted(_KINDS_WITH_RECEIVERS)}, {_RECEIVERS_FIELD}"
+            f"logs, of the kinds {sorted(_KINDS_WITH_RECEIVERS)}, {_RECEIVERS_FIELD}; "
+            f"a keyword names its {_METHOD_FIELD}"
         )
     if not all(isinstance(raw[f], str) and raw[f].strip() for f in _TEXT_FIELDS):
         raise ListError("every text field is a non-empty string")
     if raw["kind"] not in _KINDS:
         raise ListError(f"kind must be one of {sorted(_KINDS)}")
+    method = raw.get(_METHOD_FIELD, "")
+    if (raw["kind"] == "keyword") != (_METHOD_FIELD in raw) or not (
+        isinstance(method, str) and (method.isidentifier() or _METHOD_FIELD not in raw)
+    ):
+        raise ListError(
+            f"'{_METHOD_FIELD}' is a plain name and belongs to a keyword, which needs it"
+        )
     if raw["behavior"] not in BEHAVIORS:
         raise ListError(f"behavior must be one of {sorted(BEHAVIORS)}")
     narrow = raw["behavior"] == "logs"
@@ -161,7 +175,10 @@ def _parse_entry(raw: dict[str, Any]) -> Deprecated:
         )
     texts = {field: raw[field] for field in _TEXT_FIELDS}
     return Deprecated(
-        **texts, allowed_receivers=_names(raw, _ALLOWED_FIELD), receivers=receivers
+        **texts,
+        allowed_receivers=_names(raw, _ALLOWED_FIELD),
+        receivers=receivers,
+        method=method,
     )
 
 
@@ -215,19 +232,34 @@ def _receiver_name(node: ast.expr) -> str | None:
     return None
 
 
-def _is_access(node: ast.AST, entry: Deprecated) -> bool:
-    """Tell whether ``node`` reads ``entry.name`` where the entry reports it.
+def _is_access(node: ast.AST, entry: Deprecated, name: str | None = None) -> bool:
+    """Tell whether ``node`` reads ``name`` where the entry reports it.
 
-    A broad entry is read everywhere except on its allowed receivers. A narrow
+    ``name`` is the entry's name unless given (the method of a keyword). A
+    broad entry is read everywhere except on its allowed receivers. A narrow
     entry is read on its receivers and on the result of a call, which has no
     name: ``async_get(hass).devices``.
     """
-    if not isinstance(node, ast.Attribute) or node.attr != entry.name:
+    if not isinstance(node, ast.Attribute) or node.attr != (name or entry.name):
         return False
     receiver = _receiver_name(node.value)
     if entry.narrow:
         return receiver in entry.receivers or isinstance(node.value, ast.Call)
     return receiver not in entry.allowed_receivers
+
+
+def _is_keyword_use(node: ast.AST, entry: Deprecated) -> bool:
+    """Tell whether ``node`` calls the entry's method with the keyword ``entry.name``.
+
+    The call has to be a call of the method on a receiver the entry reports,
+    ``device_registry.async_update_device(..., merge_identifiers=...)``; the
+    same keyword on any other call is not the deprecated one.
+    """
+    return (
+        isinstance(node, ast.Call)
+        and _is_access(node.func, entry, entry.method)
+        and any(keyword.arg == entry.name for keyword in node.keywords)
+    )
 
 
 def _is_narrow_identifier_use(node: ast.AST, entry: Deprecated) -> bool:
@@ -257,6 +289,7 @@ def _describe(entry: Deprecated) -> str:
     shown = {
         "attribute": f"the attribute '.{entry.name}'",
         "mapping": f"'.{entry.name}' used as a mapping",
+        "keyword": f"the keyword argument '{entry.name}' of '.{entry.method}()'",
     }.get(entry.kind, f"'{entry.name}'")
     noise = (
         "Home Assistant logs nothing about it, so no test will notice"
@@ -285,11 +318,13 @@ def check_source(source: str, path: str, entries: list[Deprecated]) -> list[Find
     modules = [e for e in entries if e.kind == "module"]
     attributes = [e for e in entries if e.kind == "attribute"]
     mappings = [e for e in entries if e.kind == "mapping"]
+    keywords = [e for e in entries if e.kind == "keyword"]
     findings: list[Finding] = []
     for node in ast.walk(tree):
         line = getattr(node, "lineno", 0)
         found = [identifiers[i] for i in _identifiers(node) if i in identifiers]
         found += [e for e in narrow_identifiers if _is_narrow_identifier_use(node, e)]
+        found += [e for e in keywords if _is_keyword_use(node, e)]
         found += [
             e
             for module in _imported_modules(node)

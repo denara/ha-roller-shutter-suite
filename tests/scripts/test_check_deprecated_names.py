@@ -59,6 +59,16 @@ ENTRIES = [
         SOURCE,
         receivers=("registry", "_registry"),
     ),
+    Deprecated(
+        "keyword",
+        "merge_things",
+        "logs",
+        "It reports.",
+        "new_things",
+        SOURCE,
+        receivers=("registry",),
+        method="update",
+    ),
 ]
 
 
@@ -97,6 +107,10 @@ ENTRIES = [
         "registry.things.get(device_id)",
         "list(self._registry.things.values())",
         "async_get(hass).things[device_id]",
+        # A keyword that logs: passed to a call of its method on its receivers.
+        "registry.update(device_id, merge_things={x})",
+        "self.registry.update(device_id, name='x', merge_things={x})",
+        "async_get(hass).update(device_id, merge_things={x})",
     ],
 )
 def test_reference_is_found(source: str) -> None:
@@ -134,6 +148,12 @@ def test_reference_is_found(source: str) -> None:
         "self.things[device_id]",
         "entry.runtime_data.things.values()",
         "things[device_id]",
+        # The same keyword on another call, method or receiver.
+        "update(device_id, merge_things={x})",
+        "self.update(device_id, merge_things={x})",
+        "registry.other(device_id, merge_things={x})",
+        "registry.update(device_id, new_things={x})",
+        "merge_things = {x}\nregistry.update(device_id, *merge_things)",
     ],
 )
 def test_harmless_source_passes(source: str) -> None:
@@ -210,6 +230,7 @@ def test_every_entry_that_logs_is_narrow_and_every_silent_one_broad() -> None:
         "deleted_devices",
         "async_is_composite_device_id",
         "suggested_area",
+        *UPDATE_KEYWORDS,
     }
     assert {e.name for e in entries if not e.narrow} == {
         "voluptuous",
@@ -219,7 +240,24 @@ def test_every_entry_that_logs_is_narrow_and_every_silent_one_broad() -> None:
     }
 
 
+# The keyword arguments of async_update_device that Core reports.
+UPDATE_KEYWORDS = (
+    "add_config_entry_id",
+    "add_config_subentry_id",
+    "remove_config_entry_id",
+    "remove_config_subentry_id",
+    "merge_connections",
+    "merge_identifiers",
+)
 REAL_USE = {
+    **{
+        keyword: [
+            f"device_registry.async_update_device(device.id, {keyword}=value)",
+            f"registry.async_update_device(device.id, name='x', {keyword}=value)",
+            f"dr.async_get(hass).async_update_device(device.id, {keyword}=value)",
+        ]
+        for keyword in UPDATE_KEYWORDS
+    },
     "show_advanced_options": [
         "if self.show_advanced_options:\n    pass",
     ],
@@ -267,9 +305,15 @@ OWN_USE = [
     "DeviceInfo(suggested_area=area)",
     "def get_astral_location(self) -> Location:\n    pass",
     "self.get_astral_location()",
+    # The same keyword names on an own call or on another method.
+    "self.async_update_device(window_id, merge_identifiers=keys)",
+    "runtime.update(window_id, add_config_entry_id=entry.entry_id)",
+    "device_registry.async_get_or_create(config_entry_id=entry.entry_id)",
     # And the real thing where it is fine.
     "for device in registry.devices:\n    pass",
     "len(registry.devices)",
+    "device_registry.async_update_device(device.id, new_config_entry_id=entry_id)",
+    "device_registry.async_update_device(device.id, new_identifiers=keys)",
 ]
 
 
@@ -288,6 +332,9 @@ def test_entry_that_logs_is_found_where_home_assistant_exposes_it(
     assert len(findings) == 1, findings
     assert f"'{name}'" in findings[0].message or f".{name}'" in findings[0].message
     assert "logs a report" in findings[0].message
+    if name in UPDATE_KEYWORDS:
+        assert "keyword argument" in findings[0].message
+        assert "'.async_update_device()'" in findings[0].message
 
 
 @pytest.mark.parametrize("source", OWN_USE)
@@ -328,6 +375,8 @@ def _entry(**changes: object) -> str:
         _entry(kind="attribute", behavior="silent", allowed_receivers=["hass"]),
         _entry(kind="mapping", behavior="silent", allowed_receivers=[]),
         _entry(kind="module", behavior="silent"),
+        _entry(kind="keyword", method="update", receivers=["registry"]),
+        _entry(kind="keyword", method="update", behavior="silent"),
     ],
 )
 def test_complete_entry_is_accepted(text: str) -> None:
@@ -359,6 +408,12 @@ def test_complete_entry_is_accepted(text: str) -> None:
         # A silent entry is matched broadly and has no receivers to name.
         _entry(kind="attribute", behavior="silent", receivers=["registry"]),
         _entry(behavior="silent", receivers=["sun"]),
+        # A keyword names its method, and nothing else does.
+        _entry(kind="keyword", receivers=["registry"]),
+        _entry(kind="keyword", method="", receivers=["registry"]),
+        _entry(kind="keyword", method="self.update", receivers=["registry"]),
+        _entry(kind="attribute", method="update", receivers=["registry"]),
+        _entry(method="update"),
     ],
 )
 def test_malformed_list_is_refused(text: str) -> None:
