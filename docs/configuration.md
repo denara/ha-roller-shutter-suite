@@ -171,7 +171,7 @@ Open the menu of the window or group and choose **Delete**.
 You will normally never see this. Stored settings can be faulty after a failed update, after a downgrade to an older version, or if somebody edited the storage by hand. The integration then does not give up:
 
 - **The integration always loads**, and every window that can be read is set up.
-- **Protection never depends on a single stored value.** A faulty setting of a function that protects people or hardware, or that restricts movement, is skipped, and the value of the next level applies: the group, then the house, then the built-in default.
+- **Protection never depends on a single stored value.** A faulty setting of a function that protects people or hardware, or that restricts movement, is skipped, and the value of the next level applies: the group instead of the window, the house instead of the group. If no level has a valid value, the integration takes the **cautious value** of that setting, not its built-in default, so that a data fault never weakens a protection ([Concepts](concepts.md#if-a-stored-setting-is-faulty) explains it with an example).
 - **Comfort becomes cautious.** A faulty setting of a comfort function, such as the daily routine or shading, pauses that function for the windows that would have used the value. No shutter moves unexpectedly because of a data fault.
 - **Everything is reported.** A repair issue names where the fault is (the house, a group or a window, by its name), which setting it is, and what is wrong with it. If stored values of several levels do not fit together, one issue names all of them and where each is stored.
 - **Only a window whose covers cannot be read is not set up.** A repair issue names it. Every other window runs as usual.
