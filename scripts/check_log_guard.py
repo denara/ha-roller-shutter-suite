@@ -8,14 +8,17 @@ The script fails when
   ``integration_reports`` or ``log_guard_collector`` or the helper
   ``log_guard_blind_spots``, which are the only handles on the collected
   reports; when any file other than the log guard defines a function with the
-  name of one of the guard's fixtures, which would replace the fixture for the
+  name of one of the guard's fixtures, or gives a fixture that name through
+  ``name=`` of the fixture decorator, which would replace the fixture for the
   tests below it; or when the log guard's own file empties a list;
 - ``filterwarnings`` in ``pyproject.toml`` or in a ``pytest.ini`` under
   ``tests/`` is anything but exactly ``error``, or ``addopts`` there carries an
-  option that changes warnings, logging or the configuration (``-W``,
-  ``-o``/``--override-ini``, ``-p no:warnings``, ``-p no:logging``, ...); the
-  same options on a ``pytest`` command line in a workflow, and the variable
-  ``PYTHONWARNINGS`` there;
+  option that changes warnings, logging, the configuration or which
+  ``conftest.py`` files are loaded (``-W``, ``-o``/``--override-ini``,
+  ``-p no:warnings``, ``-p no:logging``, ``--noconftest``, ``--rootdir``, ...);
+  the same options on a ``pytest`` command line in a workflow, also on a line
+  that is continued with a backslash, and the variables ``PYTHONWARNINGS`` and
+  ``PYTEST_ADDOPTS`` there;
 - a test or the integration uses ``pytest.mark.filterwarnings``,
   ``warnings.simplefilter``, ``warnings.filterwarnings``,
   ``warnings.catch_warnings`` or ``warnings.resetwarnings``, or pytest's
@@ -95,9 +98,18 @@ _OPTION_PREFIXES = (
     "--override-ini",
     "-c",
     "--config-file",
+    # These decide which conftest.py files pytest loads, the log guard's among them.
+    "--noconftest",
+    "--confcutdir",
+    "--rootdir",
+    # The coverage configuration is pinned by scripts/check_coverage_exclusions.py.
+    "--cov-config",
 )
 _SWITCHED_OFF_PLUGINS = ("no:warnings", "no:logging")
-_WARNINGS_VARIABLE = "PYTHONWARNINGS"
+# Variables that change warning filters or add pytest options behind the back
+# of the command line.
+_FORBIDDEN_VARIABLES = ("PYTHONWARNINGS", "PYTEST_ADDOPTS")
+_FIXTURE_NAME_KEYWORD = "name"
 _EMPTYING_METHODS = {"clear", "pop", "remove"}
 _FILTER_FILES = (FILTER_INSTALLER, FILTER_CHECK)
 _OVERRIDING_FILES = ("pytest.ini", ".pytest.ini", "pytest.toml", ".pytest.toml")
@@ -151,6 +163,25 @@ def _names(node: ast.AST) -> list[str]:
     return []
 
 
+def _redefined_fixture(node: ast.AST) -> str | None:
+    """Return the guard fixture a node would define, by its own name or ``name=``.
+
+    ``@pytest.fixture(name="integration_reports")`` on a function of another
+    name registers the fixture under the given name just like a definition.
+    """
+    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+        return node.name if node.name in GUARD_FIXTURES else None
+    if (
+        isinstance(node, ast.keyword)
+        and node.arg == _FIXTURE_NAME_KEYWORD
+        and isinstance(node.value, ast.Constant)
+        and isinstance(node.value.value, str)
+        and node.value.value in GUARD_FIXTURES
+    ):
+        return node.value.value
+    return None
+
+
 def _empties_a_list(node: ast.AST) -> bool:
     if isinstance(node, ast.Delete):
         return True
@@ -188,16 +219,12 @@ def check_python_source(source: str, path: str) -> list[Finding]:
                     "see or clear the collected reports",
                 )
             )
-        if (
-            isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
-            and node.name in GUARD_FIXTURES
-            and path != LOG_GUARD_FILE
-        ):
+        if (redefined := _redefined_fixture(node)) and path != LOG_GUARD_FILE:
             findings.append(
                 Finding(
                     path,
                     line,
-                    f"'{node.name}' is a fixture of the log guard; defining it "
+                    f"'{redefined}' is a fixture of the log guard; defining it "
                     f"outside {LOG_GUARD_FILE} would replace the guard",
                 )
             )
@@ -270,18 +297,32 @@ def forbidden_options(arguments: list[str]) -> list[str]:
     return found
 
 
+def _joined_lines(text: str) -> list[tuple[int, str]]:
+    """Return the lines of a shell-like text with continuations joined."""
+    joined: list[tuple[int, str]] = []
+    for number, line in enumerate(text.splitlines(), start=1):
+        if joined and joined[-1][1].endswith("\\"):
+            first, previous = joined[-1]
+            joined[-1] = (first, previous[:-1] + " " + line.strip())
+        else:
+            joined.append((number, line))
+    return joined
+
+
 def check_workflow(text: str, path: str) -> list[Finding]:
     """Check the pytest command lines of one workflow file.
 
     The file is read line by line instead of being parsed as YAML, because the
-    script uses the standard library only.
+    script uses the standard library only. A line that ends with a backslash
+    continues on the next one; such lines are joined and counted by the first.
     """
     findings: list[Finding] = []
-    for number, line in enumerate(text.splitlines(), start=1):
-        if _WARNINGS_VARIABLE in line:
-            findings.append(
-                Finding(path, number, f"{_WARNINGS_VARIABLE} changes warning filters")
-            )
+    for number, line in _joined_lines(text):
+        findings += [
+            Finding(path, number, f"{variable} changes what pytest runs with")
+            for variable in _FORBIDDEN_VARIABLES
+            if variable in line
+        ]
         if "pytest" not in line:
             continue
         try:

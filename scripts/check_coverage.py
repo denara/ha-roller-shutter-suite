@@ -7,8 +7,9 @@ code path without a test is a path where a deprecation can hide.
 The thresholds apply to lines and to branches separately, and to each group as
 a whole:
 
-- ``flow``: ``config_flow.py`` and every other module outside ``core/`` whose
-  file name ends in ``flow.py``: 100 %.
+- ``flow``: the configuration flows: ``config_flow.py``, every module of the
+  package ``flow/``, and every other module outside ``core/`` whose file name
+  ends in ``flow.py``: 100 %.
 - ``home assistant``: everything under the integration except ``core/``,
   including the flow modules: 90 %.
 - ``core``: everything under ``core/``: 95 %.
@@ -51,6 +52,8 @@ from pathlib import Path, PurePosixPath
 REPOSITORY_ROOT = Path(__file__).parents[1]
 INTEGRATION_DIR = "custom_components/roller_shutter_suite"
 CORE_DIR = f"{INTEGRATION_DIR}/core"
+# The package that holds the forms of the configuration flows, whole.
+FLOW_DIR = f"{INTEGRATION_DIR}/flow"
 THRESHOLDS = {"flow": 100.0, "home assistant": 90.0, "core": 95.0}
 _EXPECTED_ARGUMENTS = 2
 _SUMMARY_KEYS = ("num_statements", "covered_lines", "num_branches", "covered_branches")
@@ -113,7 +116,7 @@ def groups_of(path: str) -> list[str]:
     if not normalized.startswith(f"{INTEGRATION_DIR}/"):
         return []
     groups = ["home assistant"]
-    if normalized.endswith("flow.py"):
+    if normalized.endswith("flow.py") or normalized.startswith(f"{FLOW_DIR}/"):
         groups.append("flow")
     return groups
 

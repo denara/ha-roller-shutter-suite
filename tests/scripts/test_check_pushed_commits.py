@@ -213,7 +213,9 @@ def test_tagger_of_a_pushed_tag_is_compared_too(repository: Repository) -> None:
     ] == [("line 2 of what git handed to the hook: tag object", "tagger")]
     assert len(report.findings) == 1
     assert OTHER_ADDRESS not in _shown(report)
-    assert report.identities == 2  # noqa: PLR2004 - both tag objects were compared
+    # Both tag objects were compared, and they are not counted as commits.
+    assert (report.identities, report.tag_identities) == (0, 2)
+    assert "of 0 commit(s) and of the tagger of 2 tag object(s)" in report.summary()
 
 
 def test_refusal_says_to_fetch_when_no_remote_tracking_ref_exists(
@@ -677,6 +679,29 @@ def test_tags_are_judged_like_branches(repository: Repository) -> None:
         "path inside a user's home directory",
     ]
     assert (report.commits, report.refs, report.messages) == (1, 2, 2)
+    assert (report.identities, report.tag_identities) == (1, 1)
+    assert "of 1 commit(s) and of the tagger of 1 tag object(s)" in report.summary()
+
+
+def test_attribute_called_local_in_a_pushed_python_file_passes(
+    repository: Repository,
+) -> None:
+    """The kind of file is told by its path in this mode too; a link is text."""
+    attribute = "." + "local"
+    repository.write("module.py", f"x = ref{attribute}\n")
+    repository.write("notes.md", f"x = ref{attribute}\n")
+    blob = repository.git(
+        "hash-object", "-w", "--stdin", data=f"nas{attribute}".encode()
+    )
+    repository.git("update-index", "--add", "--cacheinfo", f"120000,{blob},link.py")
+    commit = repository.commit()
+
+    report = _judge(repository, hook_line(commit, _base(repository)))
+
+    assert [str(finding).split(":")[1].strip() for finding in report.findings] == [
+        "link.py",
+        "notes.md",
+    ]
 
 
 def test_ref_that_leads_to_no_commit_cannot_be_checked(repository: Repository) -> None:

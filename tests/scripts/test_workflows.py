@@ -13,7 +13,13 @@ from pathlib import Path
 import pytest
 
 REPOSITORY_ROOT = Path(__file__).parents[2]
-WORKFLOWS = sorted((REPOSITORY_ROOT / ".github" / "workflows").glob("*.yml"))
+# GitHub reads both spellings of the extension, so a workflow cannot hide
+# behind the longer one.
+WORKFLOWS = sorted(
+    path
+    for pattern in ("*.yml", "*.yaml")
+    for path in (REPOSITORY_ROOT / ".github" / "workflows").glob(pattern)
+)
 REQUIRED_CHECKS = {
     "validate.yml": ["hassfest", "HACS"],
     "test.yml": ["Static checks and guards", "Tests and coverage"],

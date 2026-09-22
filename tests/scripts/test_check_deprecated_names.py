@@ -19,8 +19,18 @@ from scripts.check_deprecated_names import (
 )
 
 SOURCE = "example/module.py, version 1"
+# Silent entries are matched broadly, entries that log narrowly.
 ENTRIES = [
-    Deprecated("identifier", "old_helper", "logs", "Going away.", "new_helper", SOURCE),
+    Deprecated("identifier", "old_shim", "silent", "It is a shim.", "new_shim", SOURCE),
+    Deprecated(
+        "identifier",
+        "old_helper",
+        "logs",
+        "Going away.",
+        "new_helper",
+        SOURCE,
+        receivers=("example",),
+    ),
     Deprecated("module", "oldlib", "silent", "It was replaced.", "newlib", SOURCE),
     Deprecated(
         "attribute",
@@ -31,29 +41,76 @@ ENTRIES = [
         SOURCE,
         allowed_receivers=("hass", "_hass"),
     ),
-    Deprecated("mapping", "things", "logs", "Not a mapping.", "iterate it", SOURCE),
+    Deprecated(
+        "attribute",
+        "old_lookup",
+        "logs",
+        "It reports.",
+        "new_lookup",
+        SOURCE,
+        receivers=("registry",),
+    ),
+    Deprecated(
+        "mapping",
+        "things",
+        "logs",
+        "Not a mapping.",
+        "iterate it",
+        SOURCE,
+        receivers=("registry", "_registry"),
+    ),
+    Deprecated(
+        "keyword",
+        "merge_things",
+        "logs",
+        "It reports.",
+        "new_things",
+        SOURCE,
+        receivers=("registry",),
+        method="update",
+    ),
 ]
 
 
 @pytest.mark.parametrize(
     "source",
     [
+        # A silent identifier: wherever it appears.
+        "from homeassistant.helpers.example import old_shim",
+        "from homeassistant.helpers import example\nexample.old_shim()",
+        "if self.old_shim:\n    pass",
+        "call(old_shim=True)",
+        "def old_shim() -> None:\n    pass",
+        # An identifier that logs: imported, or read from its receivers.
         "from homeassistant.helpers.example import old_helper",
+        "from homeassistant.helpers.example import old_helper as helper",
+        "import homeassistant.helpers.example.old_helper",
         "from homeassistant.helpers import example\nexample.old_helper()",
-        "if self.old_helper:\n    pass",
-        "call(old_helper=True)",
+        "helpers.example.old_helper(hass)",
+        # A module: every way of importing it.
         "import oldlib",
         "import oldlib.validators as v",
         "from oldlib import Schema",
         "from oldlib.validators import Any",
+        # A silent attribute: on every object but the allowed ones.
         "device = registry.async_get(device_id)\nfound = device.entries",
         "def f(device: Device) -> None:\n    return device.entries",
         "registry.async_get(device_id).entries",
         "self.device.entries",
         "for entry in device.entries:\n    pass",
+        # An attribute that logs: on its receivers and on the result of a call.
+        "registry.old_lookup(identifiers={key})",
+        "self.registry.old_lookup(identifiers={key})",
+        "async_get(hass).old_lookup(identifiers={key})",
+        # A mapping that logs: used as a mapping on its receivers.
         "registry.things[device_id]",
         "registry.things.get(device_id)",
         "list(self._registry.things.values())",
+        "async_get(hass).things[device_id]",
+        # A keyword that logs: passed to a call of its method on its receivers.
+        "registry.update(device_id, merge_things={x})",
+        "self.registry.update(device_id, name='x', merge_things={x})",
+        "async_get(hass).update(device_id, merge_things={x})",
     ],
 )
 def test_reference_is_found(source: str) -> None:
@@ -79,6 +136,24 @@ def test_reference_is_found(source: str) -> None:
         "for thing in registry.things:\n    pass",
         "count = len(registry.things)",
         "things = {}\nthings['a']",
+        # Own names that only share a name with something that logs: the log
+        # guard is the net for these, so they are not reported here.
+        "def old_helper(self) -> None:\n    pass",
+        "if self.old_helper:\n    pass",
+        "call(old_helper=True)",
+        "old_helper()",
+        "def old_lookup(self) -> None:\n    pass",
+        "self.old_lookup(key)",
+        "device.old_lookup",
+        "self.things[device_id]",
+        "entry.runtime_data.things.values()",
+        "things[device_id]",
+        # The same keyword on another call, method or receiver.
+        "update(device_id, merge_things={x})",
+        "self.update(device_id, merge_things={x})",
+        "registry.other(device_id, merge_things={x})",
+        "registry.update(device_id, new_things={x})",
+        "merge_things = {x}\nregistry.update(device_id, *merge_things)",
     ],
 )
 def test_harmless_source_passes(source: str) -> None:
@@ -130,6 +205,184 @@ def test_silent_device_entry_shim_is_found_in_its_usual_form() -> None:
     assert "config_entry_id" in findings[0].message
 
 
+def test_every_entry_that_logs_is_narrow_and_every_silent_one_broad() -> None:
+    """The rule of the contributing page holds for the whole list.
+
+    Narrow entries name where the name is read; broad attribute entries name
+    where it is fine. The classification of every entry is verified against
+    the Core source named in its ``source`` field.
+    """
+    entries = parse_list(LIST_FILE.read_text(encoding="utf-8"))
+
+    for entry in entries:
+        assert entry.narrow == (entry.behavior == "logs"), entry.name
+        if entry.narrow and entry.kind != "module":
+            assert entry.receivers, entry.name
+            assert not entry.allowed_receivers, entry.name
+        else:
+            assert not entry.receivers, entry.name
+    assert {e.name for e in entries if e.narrow} == {
+        "show_advanced_options",
+        "get_astral_location",
+        "get_location_astral_event_next",
+        "async_get_device",
+        "devices",
+        "deleted_devices",
+        "async_is_composite_device_id",
+        "suggested_area",
+        *UPDATE_KEYWORDS,
+        *CREATE_KEYWORDS,
+    }
+    # The name is an attribute of a device entry and a keyword of the update.
+    assert [e.kind for e in entries if e.name == "suggested_area"] == [
+        "attribute",
+        "keyword",
+    ]
+    assert {e.name for e in entries if not e.narrow} == {
+        "voluptuous",
+        "config_entries",
+        "config_entries_subentries",
+        "primary_config_entry",
+    }
+
+
+# The keyword arguments of async_update_device that Core reports.
+UPDATE_KEYWORDS = (
+    "add_config_entry_id",
+    "add_config_subentry_id",
+    "remove_config_entry_id",
+    "remove_config_subentry_id",
+    "merge_connections",
+    "merge_identifiers",
+    "suggested_area",
+)
+# The parameters of async_get_or_create that Core reports.
+CREATE_KEYWORDS = (
+    "created_at",
+    "modified_at",
+    "default_manufacturer",
+    "default_model",
+    "default_name",
+    "via_device",
+)
+REAL_USE = {
+    **{
+        keyword: [
+            f"device_registry.async_update_device(device.id, {keyword}=value)",
+            f"registry.async_update_device(device.id, name='x', {keyword}=value)",
+            f"dr.async_get(hass).async_update_device(device.id, {keyword}=value)",
+        ]
+        for keyword in UPDATE_KEYWORDS
+    },
+    **{
+        keyword: [
+            f"device_registry.async_get_or_create(config_entry_id=x, {keyword}=value)",
+            f"self._device_registry.async_get_or_create({keyword}=value, name='x')",
+            f"dr.async_get(hass).async_get_or_create(identifiers=k, {keyword}=value)",
+        ]
+        for keyword in CREATE_KEYWORDS
+    },
+    "show_advanced_options": [
+        "if self.show_advanced_options:\n    pass",
+    ],
+    "get_astral_location": [
+        "from homeassistant.helpers.sun import get_astral_location",
+        "from homeassistant.helpers import sun\nsun.get_astral_location(hass)",
+    ],
+    "get_location_astral_event_next": [
+        "from homeassistant.helpers.sun import get_location_astral_event_next",
+        "sun.get_location_astral_event_next(location, elevation, event)",
+    ],
+    "async_get_device": [
+        "registry = dr.async_get(hass)\nregistry.async_get_device(identifiers={key})",
+        "dr.async_get(hass).async_get_device(identifiers={key})",
+        "self._device_registry.async_get_device(connections={key})",
+    ],
+    "devices": [
+        "device_registry.devices[device_id]",
+        "dr.async_get(hass).devices.get(device_id)",
+        "list(self._registry.devices.values())",
+    ],
+    "deleted_devices": [
+        "registry.deleted_devices",
+        "dr.async_get(hass).deleted_devices",
+    ],
+    "async_is_composite_device_id": [
+        "registry.async_is_composite_device_id(device_id)",
+    ],
+    "suggested_area": [
+        "device = registry.async_get(device_id)\narea = device.suggested_area",
+        "registry.async_get(device_id).suggested_area",
+        "self._device.suggested_area",
+        # And as a keyword of async_update_device, which is a second entry.
+        "device_registry.async_update_device(device.id, suggested_area=area)",
+        "registry.async_update_device(device.id, name='x', suggested_area=area)",
+    ],
+}
+# Own names that share the name with an entry that logs; not reported here,
+# because Home Assistant logs the real thing and the log guard sees it.
+OWN_USE = [
+    "self.devices[window_id]",
+    "entry.runtime_data.devices.values()",
+    "def async_get_device(self, window_id: str) -> Device:\n    pass",
+    "self.async_get_device(window_id)",
+    "runtime.async_get_device(window_id)",
+    "self.data.deleted_devices",
+    "form.suggested_area",
+    "DeviceInfo(suggested_area=area)",
+    "def get_astral_location(self) -> Location:\n    pass",
+    "self.get_astral_location()",
+    # The same keyword names on an own call or on another method.
+    "self.async_update_device(window_id, merge_identifiers=keys)",
+    "runtime.update(window_id, add_config_entry_id=entry.entry_id)",
+    "device_registry.async_get_or_create(config_entry_id=entry.entry_id)",
+    "DeviceInfo(via_device=(DOMAIN, key), default_name='x')",
+    "self.async_get_or_create(created_at=now, via_device=key)",
+    "device_registry.async_update_device(device.id, via_device=key)",
+    "runtime.async_get_or_create(default_model='x', modified_at=now)",
+    "self.form.suggested_area(area)",
+    # And the real thing where it is fine.
+    "for device in registry.devices:\n    pass",
+    "len(registry.devices)",
+    "device_registry.async_update_device(device.id, new_config_entry_id=entry_id)",
+    "device_registry.async_update_device(device.id, new_identifiers=keys)",
+    "device_registry.async_get_or_create(via_device_id=parent.id, name='x')",
+    "device_registry.async_get_or_create(manufacturer='x', model='y')",
+]
+
+
+@pytest.mark.parametrize(
+    ("name", "source"),
+    [(name, source) for name, sources in REAL_USE.items() for source in sources],
+)
+def test_entry_that_logs_is_found_where_home_assistant_exposes_it(
+    name: str, source: str
+) -> None:
+    """The narrow match still sees the usual spelling of every real use."""
+    entries = parse_list(LIST_FILE.read_text(encoding="utf-8"))
+
+    findings = check_source(source, "example.py", entries)
+
+    assert len(findings) == 1, findings
+    assert f"'{name}'" in findings[0].message or f".{name}'" in findings[0].message
+    assert "logs a report" in findings[0].message
+    for method, keywords in (
+        ("async_update_device", UPDATE_KEYWORDS),
+        ("async_get_or_create", CREATE_KEYWORDS),
+    ):
+        if name in keywords and f".{method}(" in source:
+            assert "keyword argument" in findings[0].message
+            assert f"'.{method}()'" in findings[0].message
+
+
+@pytest.mark.parametrize("source", OWN_USE)
+def test_own_name_that_shares_a_logging_name_passes(source: str) -> None:
+    """A plausible own name is not renamed to get around the guard."""
+    entries = parse_list(LIST_FILE.read_text(encoding="utf-8"))
+
+    assert check_source(source, "example.py", entries) == []
+
+
 def _entry(**changes: object) -> str:
     fields: dict[str, object] = {
         "kind": "identifier",
@@ -148,11 +401,25 @@ def _entry(**changes: object) -> str:
     return "[[deprecated]]\n" + "\n".join(lines)
 
 
-def test_complete_entry_is_accepted() -> None:
+@pytest.mark.parametrize(
+    "text",
+    [
+        _entry(),
+        _entry(behavior="silent"),
+        _entry(receivers=["sun"]),
+        _entry(kind="attribute", receivers=["registry"]),
+        _entry(kind="mapping", receivers=["registry"]),
+        _entry(kind="attribute", behavior="silent"),
+        _entry(kind="attribute", behavior="silent", allowed_receivers=["hass"]),
+        _entry(kind="mapping", behavior="silent", allowed_receivers=[]),
+        _entry(kind="module", behavior="silent"),
+        _entry(kind="keyword", method="update", receivers=["registry"]),
+        _entry(kind="keyword", method="update", behavior="silent"),
+    ],
+)
+def test_complete_entry_is_accepted(text: str) -> None:
     """The helper below produces a valid entry, so each refusal has one cause."""
-    assert len(parse_list(_entry())) == 1
-    assert len(parse_list(_entry(kind="attribute", allowed_receivers=["hass"]))) == 1
-    assert len(parse_list(_entry(kind="mapping"))) == 1
+    assert len(parse_list(text)) == 1
 
 
 @pytest.mark.parametrize(
@@ -167,8 +434,24 @@ def test_complete_entry_is_accepted() -> None:
         _entry(kind="word"),
         _entry(behavior="loud"),
         _entry(owner="Device"),
-        _entry(kind="module", allowed_receivers=["hass"]),
-        _entry(kind="attribute", allowed_receivers=["self.hass"]),
+        _entry(kind="module", behavior="silent", allowed_receivers=["hass"]),
+        _entry(kind="module", receivers=["hass"]),
+        _entry(kind="attribute", behavior="silent", allowed_receivers=["self.hass"]),
+        _entry(kind="attribute", receivers=["self.registry"]),
+        # An entry that logs is matched narrowly and names its receivers.
+        _entry(kind="attribute"),
+        _entry(kind="mapping"),
+        _entry(kind="attribute", receivers=[]),
+        _entry(kind="attribute", allowed_receivers=["hass"]),
+        # A silent entry is matched broadly and has no receivers to name.
+        _entry(kind="attribute", behavior="silent", receivers=["registry"]),
+        _entry(behavior="silent", receivers=["sun"]),
+        # A keyword names its method, and nothing else does.
+        _entry(kind="keyword", receivers=["registry"]),
+        _entry(kind="keyword", method="", receivers=["registry"]),
+        _entry(kind="keyword", method="self.update", receivers=["registry"]),
+        _entry(kind="attribute", method="update", receivers=["registry"]),
+        _entry(method="update"),
     ],
 )
 def test_malformed_list_is_refused(text: str) -> None:

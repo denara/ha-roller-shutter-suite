@@ -25,6 +25,7 @@ from scripts.check_instance_data import (
     list_files,
     listing_commands,
     main,
+    name_kinds,
     run,
 )
 
@@ -43,10 +44,14 @@ SUSPICIOUS = {
         ":".join(["fe80", "", "1a2b", "3c4d"]),
         ":".join(["fd12", "3456", "789a", "1", "", "5"]),
         ":".join(["2a02", "1234", "5678", "9abc", "def0", "1234", "5678", "9abc"]),
+        "http://[" + ":".join(["fe80", "", "1"]) + "]:8123",
+        ":".join(["1", "2", "", "3"]),  # three groups: no slice looks like that
     ],
     "host name in the local network": [
         "nas" + ".local",
         "http://my-server" + ".local:8123",
+        "(see nas" + ".local)",
+        "value = self" + ".local",  # text of any kind, this is no Python file
     ],
     "pair of coordinates": [
         "12." + "3456, 98." + "7654",
@@ -67,11 +72,20 @@ SUSPICIOUS = {
         "/home" + "/someone/checkout",
         "/Users" + "/someone",
         "\\Users" + "\\someone",
+        # Home directories mounted elsewhere, and one behind the host of a URL.
+        "/var" + "/home" + "/someone",
+        "/usr" + "/home" + "/someone/.config",
+        "/export" + "/home" + "/someone",
+        "sftp://host" + "/home" + "/someone",
+        "smb://nas" + "/home" + "/someone/share",
+        "path=" + "/home" + "/someone",
     ],
     "path of a mounted Windows drive": ["/mnt" + "/c/" + "checkout"],
     "e-mail address": [
         "someone" + AT + "provider.test",
         "a.b" + AT + "mail.provider.test",
+        "design" + AT + "2xstudio.test",
+        "icon" + AT + "2x.png.provider.test",
     ],
     "link to a session of an assistant tool": [
         "https://claude" + ".ai/code/" + "session_0123ABCdef",
@@ -106,6 +120,12 @@ HARMLESS = [
     "the documentation address 2001:db8::1 and the loopback ::1",
     "http://homeassistant.local:8123 and threading.local()",
     "relative: ../local/file and a.local_name",
+    # The fixed names of high-resolution brand images, spelled as they are.
+    "the brand images icon@2x.png, logo@2x.png and dark_icon@2x.png",
+    "a folder called home: docs/home/index.md and home/page.md",
+    "every second element: items[1::2], text[0::2], rows[10::3] and rest[1::]",
+    "ratios = (0.1234, 0.5678) and weights = 0.12345 / 0.6789",
+    "the release v10.1.2.3 and the version 10.1.2 with three parts",
     # The attribution line and the trailer of generated commits, and plain
     # links to a product: none of them leads to somebody's session.
     "\N{ROBOT FACE} Generated with [Claude Code](https://claude.com/claude-code)",
@@ -138,6 +158,137 @@ def test_suspicious_text_is_found(kind: str, text: str) -> None:
 def test_harmless_text_passes(text: str) -> None:
     """Neutral examples, versions, hashes and documentation addresses pass."""
     assert check_text(text, "example.md") == []
+
+
+def _pattern(kind: str) -> re.Pattern[str]:
+    return dict(PATTERNS)[kind]
+
+
+def test_documentation_ipv6_address_is_still_recognized_and_only_then_allowed() -> None:
+    """The narrowing for slices does not touch the shape of a real address."""
+    documentation = "2001:db8::1"
+
+    assert _pattern("IPv6 address").search(documentation) is not None
+    assert check_text(documentation, "example.md") == []
+    assert check_text(documentation.replace("db8", "db9"), "example.md") != []
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "brand/icon@2x.png",
+        "brand/dark_logo@2x.png",
+        "logo@3x.svg",
+        "docs/home/index.md",
+        "home/page.md",
+        "settings.local.json",
+        ".env.local",
+        "release-v10.1.2.3.md",
+        "docs/3d3c42e5aac5ba805825da76410c181273ba90b1.md",
+        "tests/fixtures/cover.example_window.json",
+    ],
+)
+def test_plausible_own_name_passes(name: str) -> None:
+    """Names a contributor cannot or need not change are not false alarms.
+
+    A brand image carries its scale factor before the extension; a folder
+    called ``home`` sits inside another folder; a settings file marks a local
+    variant with ``.local`` in front of its real extension; a version carries
+    a marker letter; a hash has no entity domain in front of it.
+    """
+    assert name_kinds(name) == []
+
+
+@pytest.mark.parametrize(
+    ("name", "kind"),
+    [
+        ("config" + ".local", "host name in the local network"),
+        ("upgrade-" + ".".join(["10", "1", "2", "3"]) + ".md", "private IPv4 address"),
+        (
+            "sensor." + "abcdef1234" + ".json",
+            "entity ID with a serial-number-like part",
+        ),
+        ("someone" + AT + "provider.test.md", "e-mail address"),
+    ],
+)
+def test_name_with_the_exact_shape_of_a_private_value_stays_flagged(
+    name: str, kind: str
+) -> None:
+    """Judged and left as they are: no shape tells them from the real thing.
+
+    A bare ``<word>.local`` is how a host is written; a four-part number
+    behind a hyphen is how an address is put into a name; a long hexadecimal
+    part behind an entity domain is a serial number. Such a name is the
+    documented exception: report it, the guard is not narrowed for it.
+    """
+    assert name_kinds(name) == [kind]
+
+
+# The attribute, put together at runtime: inside a string of this file it
+# would be text, and text of this shape is what the guard looks for.
+ATTRIBUTE = "." + "local"
+PYTHON_WITH_ATTRIBUTES = "\n".join(
+    [
+        '"""A module whose objects have an attribute of the flagged name."""',
+        "",
+        "",
+        "def judge(ref: object, remote: object) -> tuple[object, object]:",
+        '    """Return both ends; nothing here is a host."""',
+        f"    return ref{ATTRIBUTE}, remote{ATTRIBUTE}",
+        "",
+        "",
+        "class Ends:",
+        "    local = None",
+        "",
+        "    def take(self) -> object:",
+        f"        return self{ATTRIBUTE}",
+        "",
+    ]
+)
+
+
+def test_attribute_called_local_passes_in_a_python_file() -> None:
+    """Outside of strings and comments the attribute is no host name.
+
+    The same text in a file of any other kind is judged as text, where the
+    guard cannot know better.
+    """
+    assert check_text(PYTHON_WITH_ATTRIBUTES, "module.py", python=True) == []
+    assert check_text(PYTHON_WITH_ATTRIBUTES, "notes.md") != []
+
+
+@pytest.mark.parametrize(
+    ("source", "line"),
+    [
+        (f'HOST = "nas{ATTRIBUTE}"\n', 1),
+        (f"value = ref{ATTRIBUTE}  # or nas{ATTRIBUTE}\n", 1),
+        (
+            f'"""Docstring.\n\nConnect to nas{ATTRIBUTE} first.\n"""\nx = ref{ATTRIBUTE}\n',
+            3,
+        ),
+        (f"url = f'http://nas{ATTRIBUTE}:{{port}}/'\n", 1),
+        # An unterminated string cannot be tokenized: the file is judged in full.
+        (f"broken = 'unterminated\nx = ref{ATTRIBUTE}\n", 2),
+    ],
+)
+def test_host_in_the_text_of_a_python_file_is_found(source: str, line: int) -> None:
+    """Strings, comments, docstrings and f-strings are text and are judged."""
+    findings = check_text(source, "module.py", python=True)
+
+    assert [(f.line, f.kind) for f in findings] == [
+        (line, "host name in the local network")
+    ]
+
+
+def test_python_file_is_told_by_its_name_in_a_tree(tmp_path: Path) -> None:
+    """The kind of file is decided by the listed name, a link is never Python."""
+    (tmp_path / "module.py").write_text(f"x = ref{ATTRIBUTE}\n", encoding="utf-8")
+    (tmp_path / "notes.md").write_text(f"x = ref{ATTRIBUTE}\n", encoding="utf-8")
+    _link(tmp_path / "shortcut.py", "nas" + ATTRIBUTE)
+
+    report = check_tree(tmp_path, ["module.py", "notes.md", "shortcut.py"])
+
+    assert [finding.path for finding in report.findings] == ["notes.md", "shortcut.py"]
 
 
 def test_finding_does_not_repeat_the_matched_text() -> None:
