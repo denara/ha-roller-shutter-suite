@@ -107,6 +107,27 @@ def test_redefined_guard_fixture_is_found(name: str, path: str) -> None:
     assert check_python_source(source, LOG_GUARD_FILE) == []
 
 
+@pytest.mark.parametrize("name", sorted(GUARD_FIXTURES))
+def test_guard_fixture_registered_under_its_name_by_the_decorator_is_found(
+    name: str,
+) -> None:
+    """``name=`` of the fixture decorator registers the fixture like a definition."""
+    source = (
+        "import pytest\n\n\n"
+        f'@pytest.fixture(name="{name}", autouse=True)\n'
+        "def _other_name():\n    yield\n"
+    )
+
+    findings = check_python_source(source, OTHER_TEST)
+
+    assert [f.message for f in findings if "would replace the guard" in f.message]
+    assert check_python_source(source, LOG_GUARD_FILE) == []
+    # The same string anywhere else is not a registration (two of the names
+    # are handles on the reports and are refused as such, which is another rule).
+    elsewhere = check_python_source(f'TEXT = "{name}"\nf(other="{name}")', OTHER_TEST)
+    assert [f for f in elsewhere if "would replace the guard" in f.message] == []
+
+
 @pytest.mark.parametrize(
     "source",
     [
@@ -227,6 +248,15 @@ def test_ordinary_options_pass() -> None:
         "        run: pytest --disable-warnings",
         "          PYTHONWARNINGS: ignore",
         "        run: PYTHONWARNINGS=ignore uv run pytest",
+        "          PYTEST_ADDOPTS: -W ignore",
+        "        run: PYTEST_ADDOPTS='-p no:warnings' uv run pytest",
+        "        run: uv run pytest --noconftest tests/ha",
+        "        run: uv run pytest --confcutdir=tests/ha/flows tests/ha",
+        "        run: uv run pytest --rootdir=tests/ha tests/ha",
+        "        run: uv run pytest --cov-config=other.toml --cov",
+        # A continued line: the option stands on the line after the backslash.
+        "        run: uv run --no-sync pytest tests/ha \\\n            -W ignore",
+        "        run: uv run pytest \\\n          tests/ha \\\n          -pno:warnings",
     ],
 )
 def test_weakened_command_line_in_a_workflow_is_found(line: str) -> None:
@@ -244,6 +274,8 @@ def test_ordinary_workflow_passes() -> None:
         "      - run: uv run --no-sync pytest tests/core --cov --cov-report=\n"
         "      - run: uv pip install --upgrade pytest-homeassistant-custom-component\n"
         "      - run: uv run --no-sync pytest --junitxml=report.xml  # -W in a comment\n"
+        "      - run: uv run --no-sync pytest tests/core \\\n"
+        "          --cov --cov-report=\n"
     )
 
     assert check_workflow(text, ".github/workflows/test.yml") == []

@@ -51,17 +51,41 @@ def test_thresholds_are_the_ones_of_the_block() -> None:
     [
         (f"{INTEGRATION_DIR}/config_flow.py", ["home assistant", "flow"]),
         (f"{INTEGRATION_DIR}/window_subentry_flow.py", ["home assistant", "flow"]),
+        (f"{INTEGRATION_DIR}/flow/__init__.py", ["home assistant", "flow"]),
+        (f"{INTEGRATION_DIR}/flow/inheritance.py", ["home assistant", "flow"]),
+        (f"{INTEGRATION_DIR}/flow/window_flow.py", ["home assistant", "flow"]),
+        (f"{INTEGRATION_DIR}/flow/deeper/steps.py", ["home assistant", "flow"]),
+        (f"checkout/{INTEGRATION_DIR}/flow/model.py", ["home assistant", "flow"]),
+        (
+            INTEGRATION_DIR.replace("/", "\\") + "\\flow\\covers.py",
+            ["home assistant", "flow"],
+        ),
+        (f"{INTEGRATION_DIR}/flows.py", ["home assistant"]),
+        (f"{INTEGRATION_DIR}/flow_helpers.py", ["home assistant"]),
         (f"{INTEGRATION_DIR}/__init__.py", ["home assistant"]),
         (f"{INTEGRATION_DIR}/core/arbiter.py", ["core"]),
         (f"{INTEGRATION_DIR}/core/flow.py", ["core"]),
+        (f"{INTEGRATION_DIR}/core/flow/steps.py", ["core"]),
         (f"checkout/{INTEGRATION_DIR}/cover.py", ["home assistant"]),
         (INTEGRATION_DIR.replace("/", "\\") + "\\core\\model.py", ["core"]),
         ("tests/ha/test_config_entry.py", []),
     ],
 )
 def test_file_belongs_to_its_groups(path: str, groups: list[str]) -> None:
-    """Flow modules count twice, the core counts on its own."""
+    """The whole flow package and flow modules count twice, the core on its own."""
     assert groups_of(path) == groups
+
+
+def test_every_module_of_the_flow_package_is_a_flow_module() -> None:
+    """The real package: no module of it falls out of the 100 % rule."""
+    package = Path(__file__).parents[2] / INTEGRATION_DIR / "flow"
+    modules = sorted(path.name for path in package.glob("*.py"))
+
+    assert "inheritance.py" in modules, (
+        "the package looks different from what is expected"
+    )
+    for name in modules:
+        assert groups_of(f"{INTEGRATION_DIR}/flow/{name}") == ["home assistant", "flow"]
 
 
 def test_fully_covered_report_passes() -> None:

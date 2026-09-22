@@ -16,6 +16,13 @@ The check is a net with holes. It cannot know that a harmless looking room
 name is real. It complements the rule in ``tasks/README.md``, it does not
 replace reading what you publish.
 
+One kind of pattern knows the kind of file: in a Python file (``.py``) a host
+name of the local network is judged in strings and comments only, because
+outside of them a name with the attribute ``.local`` behind it is an object
+with an attribute, not a host. The tokenizer of the standard library tells the
+two apart; a file it cannot read is judged in full, like a file of any other
+kind.
+
 **Names are judged too.** Git publishes the name of a file or folder exactly
 like its content, so the whole relative path of every listed entry is judged
 with the same patterns and the same allowed documentation values (once as it
@@ -172,6 +179,7 @@ import shutil
 import stat
 import subprocess
 import sys
+import tokenize
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -207,15 +215,35 @@ _ALLOWED_MAIL_DOMAINS = ("example.com", "example.org", "example.net")
 # The no-reply address in the co-author trailer of generated commits may also
 # appear in contributor documentation.
 _ALLOWED_MAIL_SUFFIXES = ("noreply@anthropic.com", "users.noreply.github.com")
+# The name of a high-resolution image carries its scale factor between an ``@``
+# and the extension (``icon@2x.png``, the fixed names of brand images). What
+# stands behind the ``@`` is then a scale factor and an image extension, which
+# no mail domain is.
+_SCALED_IMAGE_DOMAIN = re.compile(r"\d+x\.(?:png|svg|jpe?g|gif|webp)")
 # The IPv6 documentation range, and the host names every installation has.
 _ALLOWED_IPV6_PREFIX = "2001:db8:"
 _ALLOWED_HOST_NAMES = ("homeassistant.local", "example.local")
+# A Python file spells a host name only as text: inside a string or a comment.
+# Outside of them the attribute ``.local`` of an object has the same shape.
+# These kinds are judged in the text of a Python file only; see
+# ``_text_columns``.
+_TEXT_ONLY_KINDS = frozenset({"host name in the local network"})
+_TEXT_TOKENS = frozenset(
+    {
+        tokenize.STRING,
+        tokenize.COMMENT,
+        tokenize.FSTRING_MIDDLE,
+        tokenize.TSTRING_MIDDLE,
+    }
+)
 
 PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
+    # Not preceded by a letter: ``v10.1.2.3`` is a version with a marker in
+    # front, and nobody writes an address that way.
     (
         "private IPv4 address",
         re.compile(
-            r"(?<![\d.])(?:10\.\d{1,3}|192\.168|172\.(?:1[6-9]|2\d|3[01]))"
+            r"(?<![A-Za-z\d.])(?:10\.\d{1,3}|192\.168|172\.(?:1[6-9]|2\d|3[01]))"
             r"\.\d{1,3}\.\d{1,3}(?![\d.])"
         ),
     ),
@@ -225,10 +253,15 @@ PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
             r"(?<![0-9A-Fa-f:-])(?:[0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}(?![:-])"
         ),
     ),
+    # A Python slice with a start and a step (every second element, say) has
+    # the shape of a compressed address. A decimal start of at most three
+    # digits, the double colon and an optional decimal step are excluded:
+    # every address of that shape lies in the reserved block ``::/4`` (its
+    # first group is below ``0x1000``), never at an installation.
     (
         "IPv6 address",
         re.compile(
-            r"(?<![\w:.])(?:"
+            r"(?<![\w:.])(?!\d{1,3}::(?:\d{1,3})?(?![\w:]))(?:"
             r"(?:[0-9A-Fa-f]{1,4}:){7}[0-9A-Fa-f]{1,4}"
             r"|(?:[0-9A-Fa-f]{1,4}:){1,6}:(?:[0-9A-Fa-f]{1,4}(?::[0-9A-Fa-f]{1,4}){0,5})?"
             r")(?![\w:])"
@@ -240,10 +273,13 @@ PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ),
     # A plain number with many decimals is not reported: constants of the
     # domain core look like that. A coordinate is recognized by its company.
+    # Two numbers that both lie between -1 and 1 are a pair of ratios, not a
+    # place: the point they would name is in the sea off West Africa.
     (
         "pair of coordinates",
         re.compile(
-            r"(?<![\w.])-?\d{1,2}\.\d{4,}\s*[,;/ ]\s*-?\d{1,3}\.\d{4,}(?![\w.])"
+            r"(?<![\w.])(?!-?0\.\d{4,}\s*[,;/ ]\s*-?0\.\d{4,}(?![\w.]))"
+            r"-?\d{1,2}\.\d{4,}\s*[,;/ ]\s*-?\d{1,3}\.\d{4,}(?![\w.])"
         ),
     ),
     (
@@ -264,9 +300,12 @@ PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
         "path with a Windows drive letter",
         re.compile(r"(?<![A-Za-z])[A-Za-z]:[\\/]{1,2}[A-Za-z_]"),
     ),
+    # Not preceded by a word character: ``docs/home/index.md`` is a folder
+    # called ``home`` inside another folder, not a home directory. A home
+    # directory starts the path or follows a quote, a space, ``=`` or ``:``.
     (
         "path inside a user's home directory",
-        re.compile(r"(?:/home/|/Users/|\\Users\\)[A-Za-z0-9][\w.-]*"),
+        re.compile(r"(?<![\w.-])(?:/home/|/Users/|\\Users\\)[A-Za-z0-9][\w.-]*"),
     ),
     (
         "path of a mounted Windows drive",
@@ -321,27 +360,95 @@ def _is_allowed(kind: str, matched: str) -> bool:
         return lowered in _ALLOWED_HOST_NAMES
     if kind != "e-mail address":
         return False
-    return lowered.endswith(_ALLOWED_MAIL_SUFFIXES) or lowered.rsplit("@", 1)[
-        -1
-    ].endswith(_ALLOWED_MAIL_DOMAINS)
+    domain = lowered.rsplit("@", 1)[-1]
+    return (
+        lowered.endswith(_ALLOWED_MAIL_SUFFIXES)
+        or domain.endswith(_ALLOWED_MAIL_DOMAINS)
+        or _SCALED_IMAGE_DOMAIN.fullmatch(domain) is not None
+    )
 
 
-def _kinds(line: str) -> list[str]:
-    """Return the kinds of pattern that one line of text looks like."""
+# The columns of one line that hold text: ``None`` when every column counts.
+TextColumns = Sequence[tuple[int, int]] | None
+
+
+def _counts(kind: str, match: re.Match[str], text: TextColumns) -> bool:
+    """Tell whether a match is a finding: not allowed, and text where that matters."""
+    if _is_allowed(kind, match.group()):
+        return False
+    if text is None or kind not in _TEXT_ONLY_KINDS:
+        return True
+    return any(first <= match.start() < last for first, last in text)
+
+
+def _kinds(line: str, text: TextColumns = None) -> list[str]:
+    """Return the kinds of pattern that one line of text looks like.
+
+    ``text`` names the columns of the line that are text, for a line of a
+    Python file; ``None`` means that the whole line is text.
+    """
     return [
         kind
         for kind, pattern in PATTERNS
-        if any(not _is_allowed(kind, m.group()) for m in pattern.finditer(line))
+        if any(_counts(kind, match, text) for match in pattern.finditer(line))
     ]
 
 
-def check_text(text: str, path: str) -> list[Finding]:
-    """Check the content of one file."""
+def _text_columns(lines: list[str]) -> dict[int, list[tuple[int, int]]] | None:
+    """Return the columns of every line of a Python file that are text.
+
+    Text is what a string literal or a comment holds; the rest is code, in
+    which an attribute is an attribute and not a host. The lines are handed to the
+    tokenizer one by one, so its line numbers are those of ``lines``. A file
+    that cannot be tokenized (a syntax error, an unterminated string) gets
+    ``None``: then every column counts, as in a file of any other kind.
+    """
+    found: dict[int, list[tuple[int, int]]] = {}
+    source = iter([f"{line}\n" for line in lines])
+    try:
+        for token in tokenize.generate_tokens(lambda: next(source, "")):
+            if token.type not in _TEXT_TOKENS:
+                continue
+            (first_row, first_column), (last_row, last_column) = token.start, token.end
+            for row in range(first_row, last_row + 1):
+                first = first_column if row == first_row else 0
+                last = last_column if row == last_row else len(lines[row - 1]) + 1
+                found.setdefault(row, []).append((first, last))
+    except tokenize.TokenError, SyntaxError, ValueError:
+        return None
+    return found
+
+
+def judged_lines(text: str, *, python: bool) -> list[tuple[int, str, list[str]]]:
+    """Return every line of a text with its number and the kinds it looks like.
+
+    With ``python`` the text is read as a Python file, in which the kinds of
+    ``_TEXT_ONLY_KINDS`` are judged in strings and comments only.
+    """
+    lines = text.splitlines()
+    columns = _text_columns(lines) if python else None
+    return [
+        (
+            number,
+            line,
+            _kinds(line, None if columns is None else columns.get(number, ())),
+        )
+        for number, line in enumerate(lines, start=1)
+    ]
+
+
+def check_text(text: str, path: str, *, python: bool = False) -> list[Finding]:
+    """Check the content of one file; ``python`` says that it is a Python file."""
     return [
         Finding(path, number, kind)
-        for number, line in enumerate(text.splitlines(), start=1)
-        for kind in _kinds(line)
+        for number, _, kinds in judged_lines(text, python=python)
+        for kind in kinds
     ]
+
+
+def is_python(path: str) -> bool:
+    """Tell whether a path names a Python file."""
+    return path.endswith(".py")
 
 
 @dataclass(frozen=True)
@@ -632,7 +739,7 @@ def check_tree(root: Path, paths: list[str]) -> Report:
             report.binary.append(relative)
         else:
             report.checked.append(relative)
-            report.findings += check_text(text, shown)
+            report.findings += check_text(text, shown, python=is_python(relative))
     return report
 
 
@@ -752,7 +859,10 @@ class PushedReport:
     refs: int = 0
     deletions: int = 0
     commits: int = 0
+    # Commits whose author and committer were compared with the configured
+    # address, and tag objects whose tagger was.
     identities: int = 0
+    tag_identities: int = 0
     messages: int = 0
     names: int = 0
     files: int = 0
@@ -777,7 +887,8 @@ class PushedReport:
             f"text(s), {self.lines} added line(s) in {self.files} file(s); skipped: "
             f"{self.binary} binary, {self.generated} generated, {self.nested} "
             f"nested checkout(s); compared the addresses of author and committer of "
-            f"{self.identities} commit(s) with the one configured for this clone; "
+            f"{self.identities} commit(s) and of the tagger of {self.tag_identities} "
+            "tag object(s) with the one configured for this clone; "
             f"{self.deletions} deletion(s) of a remote ref, which send nothing"
         )
 
@@ -1088,7 +1199,10 @@ def _judge_identity(
             raise CannotCheckError(f"{subject} names its {role} unreadably")
         if match[1].strip().casefold() != expected:
             report.findings.append(IdentityFinding(subject, role))
-    report.identities += 1
+    if roles == ("tagger",):
+        report.tag_identities += 1
+    else:
+        report.identities += 1
 
 
 def _judge_commit(
@@ -1149,10 +1263,11 @@ def _judge_content(
             # Nothing of an old content that is not text counts as known.
             known = set()
     report.files += 1
-    for number, line in enumerate(text.splitlines(), start=1):
+    python = entry.new_mode != _MODE_LINK and is_python(entry.path)
+    for number, line, kinds in judged_lines(text, python=python):
         if line not in known:
             report.lines += 1
-            report.findings += [Finding(shown, number, kind) for kind in _kinds(line)]
+            report.findings += [Finding(shown, number, kind) for kind in kinds]
 
 
 def check_pushed(
@@ -1277,8 +1392,11 @@ def main(arguments: Sequence[str] = ()) -> int:
         and arguments[0] == SUPPORTS_OPTION
         and arguments[1] in SUPPORTED_MODES
     ):
-        # Exactly the token, without a line end, which Windows would write as two
-        # characters; the hook compares the whole output.
+        # Exactly the token. The hook reads the answer through a command
+        # substitution of the shell, which drops trailing line ends (and the
+        # sh of git for Windows also a carriage return before them), so a line
+        # end here would not hurt the comparison. None is written all the same,
+        # so that the answer is the token wherever and however it is read.
         sys.stdout.write(SUPPORTED_MODES[arguments[1]])
         return 0
     if arguments:

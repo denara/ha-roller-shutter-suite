@@ -11,11 +11,26 @@ The log guard of the Home Assistant tests stays the main line of defense. This
 list is the net for what the log guard cannot see: compatibility shims that
 Home Assistant keeps without logging anything, and code paths no test reaches.
 
-Limits, stated honestly. The script does not know types. An entry of kind
+How closely a name is matched follows from what Home Assistant does when it
+is used (the ``behavior`` of the entry):
+
+- ``silent``: Home Assistant logs nothing, so this list is the only net, and
+  the name is matched broadly, wherever it appears; ``allowed_receivers``
+  names the objects on which an attribute of that name is known to be fine.
+- ``logs``: Home Assistant logs a report, which the log guard turns into a
+  failing test as soon as a test reaches the code, and coverage sees to that.
+  The name is therefore matched narrowly, where Home Assistant exposes it:
+  an ``identifier`` when it is imported, or read from one of the ``receivers``
+  of the entry; an ``attribute`` or ``mapping`` on the ``receivers`` of the
+  entry and on the result of a call (``async_get(hass).devices``). An own
+  attribute of the same name on another object is not reported.
+
+Limits, stated honestly. The script does not know types. A broad entry of kind
 ``attribute`` or ``mapping`` is matched by the attribute's name alone, so it
-can flag an unrelated attribute of the same name; ``allowed_receivers`` lists
-the objects on which the name is known to be fine. A deprecated name that is
-built at runtime (``getattr`` with a computed string) is not seen.
+can flag an unrelated attribute of the same name; a narrow entry can miss the
+deprecated name on a receiver that is not on its list, and then the log guard
+catches it. A deprecated name that is built at runtime (``getattr`` with a
+computed string) is not seen.
 
 **The guard fails closed.** "Could not check" means here, and ends with exit
 status 2: the list file is missing, unreadable, malformed or has no entry (a
@@ -47,8 +62,13 @@ SCANNED_FOLDERS = ("custom_components", "tests")
 BEHAVIORS = {"silent", "logs"}
 _KINDS = {"identifier", "module", "attribute", "mapping"}
 _TEXT_FIELDS = ("kind", "name", "behavior", "reason", "replacement", "source")
-_RECEIVER_FIELD = "allowed_receivers"
-_KINDS_WITH_RECEIVERS = {"attribute", "mapping"}
+# Broad entries (silent) name where the attribute is fine; narrow entries
+# (logs) name where the deprecated attribute is read.
+_ALLOWED_FIELD = "allowed_receivers"
+_RECEIVERS_FIELD = "receivers"
+_KINDS_WITH_ALLOWED = {"attribute", "mapping"}
+_KINDS_WITH_RECEIVERS = {"identifier", "attribute", "mapping"}
+_KINDS_NEEDING_RECEIVERS = {"attribute", "mapping"}
 EXIT_FINDINGS = 1
 EXIT_CANNOT_CHECK = 2
 
@@ -71,7 +91,15 @@ class Deprecated:
     reason: str
     replacement: str
     source: str
+    # Broad entries: where the attribute is fine. Narrow entries: where the
+    # deprecated name is read. See the module documentation.
     allowed_receivers: tuple[str, ...] = ()
+    receivers: tuple[str, ...] = ()
+
+    @property
+    def narrow(self) -> bool:
+        """Tell whether the entry is matched narrowly: Home Assistant logs it."""
+        return self.behavior == "logs"
 
 
 @dataclass(frozen=True)
@@ -87,11 +115,23 @@ class Finding:
         return f"{self.path}:{self.line}: {self.message}"
 
 
+def _names(raw: dict[str, Any], field: str) -> tuple[str, ...]:
+    """Return the list of plain names under ``field``, empty if absent."""
+    names = raw.get(field, [])
+    if not isinstance(names, list) or not all(
+        isinstance(name, str) and name.isidentifier() for name in names
+    ):
+        raise ListError(f"'{field}' is a list of plain names")
+    return tuple(names)
+
+
 def _parse_entry(raw: dict[str, Any]) -> Deprecated:
-    if not set(_TEXT_FIELDS) <= set(raw) or set(raw) - {*_TEXT_FIELDS, _RECEIVER_FIELD}:
+    known = {*_TEXT_FIELDS, _ALLOWED_FIELD, _RECEIVERS_FIELD}
+    if not set(_TEXT_FIELDS) <= set(raw) or set(raw) - known:
         raise ListError(
-            f"the fields are {', '.join(_TEXT_FIELDS)} and, for the kinds "
-            f"{sorted(_KINDS_WITH_RECEIVERS)}, {_RECEIVER_FIELD}"
+            f"the fields are {', '.join(_TEXT_FIELDS)}; a silent entry of the kinds "
+            f"{sorted(_KINDS_WITH_ALLOWED)} may add {_ALLOWED_FIELD}, an entry that "
+            f"logs, of the kinds {sorted(_KINDS_WITH_RECEIVERS)}, {_RECEIVERS_FIELD}"
         )
     if not all(isinstance(raw[f], str) and raw[f].strip() for f in _TEXT_FIELDS):
         raise ListError("every text field is a non-empty string")
@@ -99,17 +139,30 @@ def _parse_entry(raw: dict[str, Any]) -> Deprecated:
         raise ListError(f"kind must be one of {sorted(_KINDS)}")
     if raw["behavior"] not in BEHAVIORS:
         raise ListError(f"behavior must be one of {sorted(BEHAVIORS)}")
-    receivers = raw.get(_RECEIVER_FIELD, [])
-    if _RECEIVER_FIELD in raw and raw["kind"] not in _KINDS_WITH_RECEIVERS:
+    narrow = raw["behavior"] == "logs"
+    if _ALLOWED_FIELD in raw and (narrow or raw["kind"] not in _KINDS_WITH_ALLOWED):
         raise ListError(
-            f"'{_RECEIVER_FIELD}' belongs to {sorted(_KINDS_WITH_RECEIVERS)}"
+            f"'{_ALLOWED_FIELD}' belongs to silent entries of the kinds "
+            f"{sorted(_KINDS_WITH_ALLOWED)}; an entry that logs is matched narrowly "
+            f"and names its '{_RECEIVERS_FIELD}' instead"
         )
-    if not isinstance(receivers, list) or not all(
-        isinstance(receiver, str) and receiver.isidentifier() for receiver in receivers
+    if _RECEIVERS_FIELD in raw and (
+        not narrow or raw["kind"] not in _KINDS_WITH_RECEIVERS
     ):
-        raise ListError(f"'{_RECEIVER_FIELD}' is a list of plain names")
+        raise ListError(
+            f"'{_RECEIVERS_FIELD}' belongs to entries that log, of the kinds "
+            f"{sorted(_KINDS_WITH_RECEIVERS)}"
+        )
+    receivers = _names(raw, _RECEIVERS_FIELD)
+    if narrow and raw["kind"] in _KINDS_NEEDING_RECEIVERS and not receivers:
+        raise ListError(
+            f"an entry that logs, of the kinds {sorted(_KINDS_NEEDING_RECEIVERS)}, "
+            f"names at least one of the '{_RECEIVERS_FIELD}' on which the name is read"
+        )
     texts = {field: raw[field] for field in _TEXT_FIELDS}
-    return Deprecated(**texts, allowed_receivers=tuple(receivers))
+    return Deprecated(
+        **texts, allowed_receivers=_names(raw, _ALLOWED_FIELD), receivers=receivers
+    )
 
 
 def parse_list(text: str) -> list[Deprecated]:
@@ -163,11 +216,28 @@ def _receiver_name(node: ast.expr) -> str | None:
 
 
 def _is_access(node: ast.AST, entry: Deprecated) -> bool:
-    """Tell whether ``node`` reads ``entry.name`` from a receiver not allowed."""
+    """Tell whether ``node`` reads ``entry.name`` where the entry reports it.
+
+    A broad entry is read everywhere except on its allowed receivers. A narrow
+    entry is read on its receivers and on the result of a call, which has no
+    name: ``async_get(hass).devices``.
+    """
+    if not isinstance(node, ast.Attribute) or node.attr != entry.name:
+        return False
+    receiver = _receiver_name(node.value)
+    if entry.narrow:
+        return receiver in entry.receivers or isinstance(node.value, ast.Call)
+    return receiver not in entry.allowed_receivers
+
+
+def _is_narrow_identifier_use(node: ast.AST, entry: Deprecated) -> bool:
+    """Tell whether ``node`` imports ``entry.name`` or reads it from a receiver."""
+    if isinstance(node, ast.alias):
+        return node.name.rsplit(".", 1)[-1] == entry.name
     return (
         isinstance(node, ast.Attribute)
         and node.attr == entry.name
-        and _receiver_name(node.value) not in entry.allowed_receivers
+        and _receiver_name(node.value) in entry.receivers
     )
 
 
@@ -208,7 +278,10 @@ def check_source(source: str, path: str, entries: list[Deprecated]) -> list[Find
             f"{path} cannot be parsed as Python ({type(error).__name__}); fix the "
             "file, its names cannot be judged like this"
         ) from error
-    identifiers = {e.name: e for e in entries if e.kind == "identifier"}
+    identifiers = {
+        e.name: e for e in entries if e.kind == "identifier" and not e.narrow
+    }
+    narrow_identifiers = [e for e in entries if e.kind == "identifier" and e.narrow]
     modules = [e for e in entries if e.kind == "module"]
     attributes = [e for e in entries if e.kind == "attribute"]
     mappings = [e for e in entries if e.kind == "mapping"]
@@ -216,6 +289,7 @@ def check_source(source: str, path: str, entries: list[Deprecated]) -> list[Find
     for node in ast.walk(tree):
         line = getattr(node, "lineno", 0)
         found = [identifiers[i] for i in _identifiers(node) if i in identifiers]
+        found += [e for e in narrow_identifiers if _is_narrow_identifier_use(node, e)]
         found += [
             e
             for module in _imported_modules(node)

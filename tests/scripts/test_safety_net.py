@@ -135,6 +135,12 @@ def test_nothing_happens_at_import_that_the_net_could_miss(script: str) -> None:
     happens before that, so it must not be able to fail: no file is read, no
     program is started, nothing is resolved. This test reads the syntax tree,
     so a later edit cannot move work to the module level unnoticed.
+
+    Strict on purpose, and on two legitimate things in particular: a constant
+    built with a call that is not in ``PURE_CALLS`` (``tuple(...)``, a
+    ``join``), and an ``if TYPE_CHECKING:`` block at module level. The failure
+    names the line; for a call that cannot fail, the remedy is one entry in
+    ``PURE_CALLS``, where a review sees it.
     """
     tree = ast.parse((SCRIPTS_FOLDER / script).read_text(encoding="utf-8"))
     docstring, *body, start = tree.body

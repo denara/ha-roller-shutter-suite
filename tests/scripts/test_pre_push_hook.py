@@ -182,6 +182,37 @@ def test_nothing_in_the_hook_can_swallow_or_pass_by_a_status() -> None:
     assert code[position - 3] == "pushed_status=$?"
 
 
+def test_python_probe_accepts_only_the_exact_token() -> None:
+    """The probe compiles the guard and prints a token; the shell compares it whole.
+
+    Structurally: the token the probe prints is the token the hook compares
+    with, the comparison is an equality of the whole answer, and a candidate
+    is usable only behind that comparison and a status of 0. The behavior
+    tests with stand-in programs remain the real proof.
+    """
+    code = _code_lines()
+    (token_line,) = [line for line in code if line.startswith("token=")]
+    (probe_line,) = [line for line in code if line.startswith("probe=")]
+    token = token_line.removeprefix("token=").strip('"')
+
+    assert token
+    assert f'sys.stdout.write("{token}")' in probe_line
+    assert "compile(" in probe_line
+    assert probe_line.count("sys.stdout.write(") == 1
+    position = code.index("try_python() {")
+    assert code[position + 1 : position + 9] == [
+        "usable=no",
+        'answer=$("$@" -c "$probe" "$guard" 2>/dev/null </dev/null)',
+        "status=$?",
+        'if [ "$status" -eq 0 ]; then',
+        'if [ "$answer" = "$token" ]; then',
+        "usable=yes",
+        "fi",
+        "fi",
+    ]
+    assert [line for line in code if "usable=yes" in line] == ["usable=yes"]
+
+
 def test_standard_input_reaches_exactly_one_call() -> None:
     """The lines of git belong to the call that judges the pushed commits.
 
