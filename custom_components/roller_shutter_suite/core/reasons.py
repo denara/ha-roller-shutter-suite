@@ -66,6 +66,8 @@ class ReasonCode(StrEnum):
     CAPABILITY_MISSING = "capability_missing"
     DAY_TYPE_FALLBACK = "day_type_fallback"
     FUNCTION_DISABLED_BY_FAULT = "function_disabled_by_fault"
+    LAYER_FAILED = "layer_failed"
+    """The layer, or the part of a layer, raised an exception: no opinion."""
 
     # Constraints
     ONLY_RAISE = "only_raise"
@@ -80,6 +82,8 @@ class ReasonCode(StrEnum):
     FROST_LIMIT_SOURCE_BLIND = "frost_limit_source_blind"
     FROST_HOLD = "frost_hold"
     NO_INTERMEDIATE_POSITION = "no_intermediate_position"
+    CONSTRAINT_FAILED = "constraint_failed"
+    """The constraint raised an exception: its cautious result applies."""
 
     # Gate
     SENT = "sent"
@@ -100,6 +104,8 @@ class ReasonCode(StrEnum):
     TRIGGER_TIME_MISSING = "trigger_time_missing"
     COMMAND_BACKOFF = "command_backoff"
     STAGGERED = "staggered"
+    GATE_RULE_FAILED = "gate_rule_failed"
+    """The gate rule raised an exception: it holds the wish back."""
 
     # Tracker and life cycle (events only)
     MANUAL_DETECTED = "manual_detected"
@@ -161,6 +167,7 @@ _GROUPS: Final = MappingProxyType(
             ReasonCode.CAPABILITY_MISSING,
             ReasonCode.DAY_TYPE_FALLBACK,
             ReasonCode.FUNCTION_DISABLED_BY_FAULT,
+            ReasonCode.LAYER_FAILED,
         ),
         ReasonCategory.CONSTRAINT: (
             ReasonCode.ONLY_RAISE,
@@ -175,6 +182,7 @@ _GROUPS: Final = MappingProxyType(
             ReasonCode.FROST_LIMIT_SOURCE_BLIND,
             ReasonCode.FROST_HOLD,
             ReasonCode.NO_INTERMEDIATE_POSITION,
+            ReasonCode.CONSTRAINT_FAILED,
         ),
         ReasonCategory.GATE: (
             ReasonCode.SENT,
@@ -195,6 +203,7 @@ _GROUPS: Final = MappingProxyType(
             ReasonCode.TRIGGER_TIME_MISSING,
             ReasonCode.COMMAND_BACKOFF,
             ReasonCode.STAGGERED,
+            ReasonCode.GATE_RULE_FAILED,
         ),
         ReasonCategory.EVENT: (
             ReasonCode.MANUAL_DETECTED,

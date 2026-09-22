@@ -3,7 +3,7 @@
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import time, timedelta
-from enum import StrEnum, unique
+from enum import Enum, StrEnum, unique
 from typing import Final
 
 from ._validation import (
@@ -298,6 +298,29 @@ class SettingsCombinationError(ValueError):
             require_identifier(key, "a key of a rule over several settings")
 
 
+@unique
+class BlindSource(Enum):
+    """The type of the marker :data:`BLIND_SOURCE`. It has exactly one member."""
+
+    BLIND = "blind"
+
+
+BLIND_SOURCE: Final = BlindSource.BLIND
+"""An optional reference to a source is **configured, but blind**.
+
+``None`` in such a field means "not configured": the feature is off. This
+marker means the opposite: a level tried to name a source and the stored value
+is faulty, or a level that could have named one is unreadable as a whole. The
+feature stays on, nothing is known about its input, and the rules for a blind
+source apply (the frost limit stays). It is the fault value of such a
+reference in the settings registry.
+
+It is no string, so no stored text can ever equal it. It has no stored form,
+no level can set it, and only the inheritance resolver produces it. A reader
+of such a field therefore handles three cases: a source, none, blind.
+"""
+
+
 @dataclass(frozen=True, slots=True)
 class MotorProtectionSettings:
     """Motor protection: it applies to comfort movements only.
@@ -332,7 +355,9 @@ class FrostSettings:
     inherited one by one; it holds their value rules.
 
     - ``source``: key of the temperature source; ``None`` means that frost
-      protection is not configured.
+      protection is not configured; :data:`BLIND_SOURCE` means that it is
+      configured, but nobody knows the source (a faulty stored setting): the
+      frost limit applies as for a source that is blind.
     - Frost is active below ``threshold``; it ends at ``threshold`` plus
       ``hysteresis``.
     - ``position``: how far own movements open while frost is active.
@@ -341,7 +366,7 @@ class FrostSettings:
     - ``hold_closed``: the option "do not raise a closed window at all".
     """
 
-    source: str | None = None
+    source: str | BlindSource | None = None
     threshold: float = 0.0
     hysteresis: float = 1.0
     position: Position = _DEFAULT_FROST_POSITION
@@ -350,7 +375,7 @@ class FrostSettings:
 
     def __post_init__(self) -> None:
         """Validate the types and the numbers."""
-        if self.source is not None:
+        if self.source is not None and self.source is not BLIND_SOURCE:
             require_identifier(self.source, "the frost source")
         require_finite(self.threshold, "the frost threshold")
         require_finite(self.hysteresis, "the frost hysteresis")
@@ -399,6 +424,9 @@ class WindowConfig:
       ``frost_hold_closed``: the settings of frost protection, one field per
       setting so that each can be inherited on its own; :attr:`frost` is the
       view over them. Without a source, frost protection is not configured.
+      ``frost_source`` can also be :data:`BLIND_SOURCE`, "configured, but
+      blind": the inheritance resolver puts it there when a stored frost
+      source is faulty and no level supplies a valid one. It is never stored.
     - ``motor_min_change`` and ``motor_min_interval``: the settings of motor
       protection; :attr:`motor_protection` is the view over them.
     - ``reevaluate_after``: the upper bound of a deferral whose end is not
@@ -425,7 +453,7 @@ class WindowConfig:
     morning_condition_source: str | None = None
     shading_temperature_tiers: tuple[TemperatureTier, ...] = ()
     schedule_profile: ScheduleProfile = ScheduleProfile.DEFAULT
-    frost_source: str | None = None
+    frost_source: str | BlindSource | None = None
     frost_threshold: float = 0.0
     frost_hysteresis: float = 1.0
     frost_position: Position = _DEFAULT_FROST_POSITION

@@ -38,6 +38,8 @@ from .decision import (
     ConstraintResult,
     Decision,
     Direction,
+    EvaluationFault,
+    EvaluationStage,
     GateKind,
     GateOutcome,
     GateRule,
@@ -103,11 +105,13 @@ from .values import (
     SunPosition,
 )
 from .window import (
+    BLIND_SOURCE,
     DEFAULT_TOLERANCE_CALCULATED,
     DEFAULT_TOLERANCE_MEASURED,
     MIN_TOLERANCE,
     SCHEDULE_DAY_TYPES,
     SCHEDULE_EDGES,
+    BlindSource,
     CapabilityProfile,
     CapabilityState,
     CoveringType,
@@ -125,6 +129,7 @@ from .window import (
 )
 
 __all__ = [
+    "BLIND_SOURCE",
     "CONSTRAINT_REASONS",
     "DEFAULT_TOLERANCE_CALCULATED",
     "DEFAULT_TOLERANCE_MEASURED",
@@ -139,6 +144,7 @@ __all__ = [
     "TRIGGER_FIELDS",
     "WINDOW_STATE_SCHEMA_VERSION",
     "AnySourceValue",
+    "BlindSource",
     "CapabilityProfile",
     "CapabilityState",
     "Constraint",
@@ -151,6 +157,8 @@ __all__ = [
     "Decision",
     "Direction",
     "ElevationPassage",
+    "EvaluationFault",
+    "EvaluationStage",
     "ExternalRequest",
     "FaultBehavior",
     "FrostSettings",

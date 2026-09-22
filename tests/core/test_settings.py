@@ -71,6 +71,11 @@ GROUP_ID = "group_example_south"
 OWN_OFFSET = 30
 DEFAULT_FROST_POSITION = 90
 DEFAULT_VENTILATION_POSITION = 30
+# The fault values of the settings that fall back differ from their defaults
+# here, so that every test shows which of the two built-in values applied.
+CAUTIOUS_FROST_POSITION = 75
+CAUTIOUS_VENTILATION_POSITION = 35
+CAUTIOUS_SOURCE = "blind"
 DEFAULT_SHADING_POSITION = 40
 DEFAULT_GLASS_HEIGHT = 100
 OWN_GLASS_HEIGHT = 140
@@ -117,6 +122,7 @@ REGISTRY = SettingsRegistry(
             kind=SettingKind.OPTIONAL_REFERENCE,
             function=FunctionId.FROST,
             default=None,
+            fault_value=CAUTIOUS_SOURCE,
             parse=as_str,
         ),
         SettingDefinition[tuple[str, ...]](
@@ -147,6 +153,7 @@ REGISTRY = SettingsRegistry(
             kind=SettingKind.NUMBER,
             function=FunctionId.FROST,
             default=DEFAULT_FROST_POSITION,
+            fault_value=CAUTIOUS_FROST_POSITION,
             parse=as_int,
         ),
         SettingDefinition(
@@ -154,6 +161,7 @@ REGISTRY = SettingsRegistry(
             kind=SettingKind.NUMBER,
             function=FunctionId.VENTILATION,
             default=DEFAULT_VENTILATION_POSITION,
+            fault_value=CAUTIOUS_VENTILATION_POSITION,
             parse=as_int,
         ),
         SettingDefinition(
@@ -985,10 +993,13 @@ FURTHER_OUT = {
     Level.GROUP: Level.GLOBAL,
     Level.GLOBAL: Level.BUILT_IN,
 }
-BUILT_IN_DEFAULTS: dict[str, JsonValue] = {
+# What applies when the faulty value is passed by and no level is left: the
+# default for a function that pauses (nobody acts on it), the fault value for a
+# function that falls back.
+BUILT_IN_VALUES: dict[str, JsonValue] = {
     "offset": 5,
-    "frost_position": DEFAULT_FROST_POSITION,
-    "ventilation_position": DEFAULT_VENTILATION_POSITION,
+    "frost_position": CAUTIOUS_FROST_POSITION,
+    "ventilation_position": CAUTIOUS_VENTILATION_POSITION,
 }
 # (the faulty stored value, the problem)
 FAULTY_VALUES = [
@@ -1019,7 +1030,7 @@ def _reached(level: Level, key: str, faulty: JsonValue) -> dict[Level, Any]:
 def _expected(level: Level, key: str) -> JsonValue:
     supplier = FURTHER_OUT[level]
     if supplier is Level.BUILT_IN:
-        return BUILT_IN_DEFAULTS[key]
+        return BUILT_IN_VALUES[key]
     return SOUND[supplier][key]
 
 
@@ -1039,16 +1050,23 @@ def _resolve_stored(stored: dict[Level, Any]) -> ResolvedSettings:
 def test_faulty_setting_of_a_function_that_falls_back_takes_the_next_level(
     key: str, level: Level, faulty: JsonValue, problem: SettingProblem
 ) -> None:
-    """Nothing is paused; the result says which level supplied the value."""
+    """Nothing is paused; the result says which level supplied the value.
+
+    A fault of the house has no level behind it: the fault value of the
+    setting applies then, not its default, and the action says so.
+    """
     resolved = _resolve_stored(_reached(level, key, faulty))
 
+    no_level_left = FURTHER_OUT[level] is Level.BUILT_IN
     assert resolved.faults == (
         ReportedFault(
             key,
             level,
             problem,
             resolved.faults[0].detail,
-            FaultAction.FELL_BACK,
+            FaultAction.FELL_BACK_TO_CAUTIOUS_VALUE
+            if no_level_left
+            else FaultAction.FELL_BACK,
             (),
             GROUP_ID if level is Level.GROUP else None,
         ),
@@ -1057,7 +1075,10 @@ def test_faulty_setting_of_a_function_that_falls_back_takes_the_next_level(
     item = resolved.values[key]
     assert item.level is FURTHER_OUT[level]
     assert item.value == _expected(level, key)
+    assert item.effective == item.value
+    assert item.cautious is no_level_left
     assert resolved.values["offset"].value == SOUND[Level.GROUP]["offset"]
+    assert not resolved.values["offset"].cautious
 
 
 @pytest.mark.parametrize("level", LEVELS)
@@ -1108,10 +1129,10 @@ def test_fault_behind_a_sound_value_of_a_closer_level_has_no_effect(
     assert resolved.values[key].level is Level.WINDOW
 
 
-def test_setting_that_falls_back_and_is_faulty_on_every_level_gets_its_default() -> (
+def test_setting_that_falls_back_and_is_faulty_on_every_level_gets_its_fault_value() -> (
     None
 ):
-    """Window, group and house are faulty: the built-in default is the last resort."""
+    """Window, group and house are faulty: the cautious value is the last resort."""
     resolved = _resolve_stored(
         {
             Level.GLOBAL: {"frost_position": "low"},
@@ -1120,13 +1141,15 @@ def test_setting_that_falls_back_and_is_faulty_on_every_level_gets_its_default()
         }
     )
 
+    cautious = FaultAction.FELL_BACK_TO_CAUTIOUS_VALUE
     assert [(fault.level, fault.action) for fault in resolved.faults] == [
-        (Level.WINDOW, FaultAction.FELL_BACK),
-        (Level.GROUP, FaultAction.FELL_BACK),
-        (Level.GLOBAL, FaultAction.FELL_BACK),
+        (Level.WINDOW, cautious),
+        (Level.GROUP, cautious),
+        (Level.GLOBAL, cautious),
     ]
-    assert resolved.values["frost_position"].value == DEFAULT_FROST_POSITION
+    assert resolved.values["frost_position"].value == CAUTIOUS_FROST_POSITION
     assert resolved.values["frost_position"].level is Level.BUILT_IN
+    assert resolved.values["frost_position"].cautious
     assert resolved.disabled_functions == frozenset()
 
 
@@ -1195,7 +1218,12 @@ def test_unknown_key_in_stored_data_is_noticed() -> None:
 def test_level_that_is_unreadable_as_a_whole_counts_as_not_present(
     level: Level, stored: object
 ) -> None:
-    """What pauses is paused for the window; what falls back uses the other levels."""
+    """What pauses is paused for the window; what falls back uses the other levels.
+
+    No level names a frost source here. Nobody can see whether the unreadable
+    level had named one, so the source takes its fault value, and the result
+    says so for that setting and that level.
+    """
     resolved = _resolve_stored(SOUND | {level: stored})
 
     assert _stored(stored) == PartialSettings(unreadable=True)
@@ -1208,8 +1236,17 @@ def test_level_that_is_unreadable_as_a_whole_counts_as_not_present(
             level,
             SettingProblem.LEVEL_UNREADABLE,
             FaultAction.FUNCTIONS_DISABLED,
-        )
+        ),
+        (
+            "source",
+            level,
+            SettingProblem.LEVEL_UNREADABLE,
+            FaultAction.FELL_BACK_TO_CAUTIOUS_VALUE,
+        ),
     ]
+    assert resolved.values["source"].value == CAUTIOUS_SOURCE
+    assert resolved.values["source"].cautious
+    assert resolved.faults[1].disabled_functions == ()
     assert resolved.disabled_functions == set(REGISTRY.pausable_functions)
     assert resolved.disabled_functions == {
         FunctionId.SCHEDULE,
@@ -1240,7 +1277,12 @@ def test_partial_settings_built_in_code_are_judged_like_stored_ones() -> None:
             SettingProblem.INVALID,
             FaultAction.FUNCTIONS_DISABLED,
         ),
-        ("frost_position", Level.GROUP, SettingProblem.INVALID, FaultAction.FELL_BACK),
+        (
+            "frost_position",
+            Level.GROUP,
+            SettingProblem.INVALID,
+            FaultAction.FELL_BACK_TO_CAUTIOUS_VALUE,
+        ),
         ("offse", Level.GLOBAL, SettingProblem.UNKNOWN_SETTING, FaultAction.IGNORED),
     ]
     assert resolved.values["source"].level is Level.WINDOW
@@ -1366,9 +1408,15 @@ def test_fault_of_the_house_pauses_the_function_for_windows_that_inherit_the_key
 
 
 def test_group_that_is_unreadable_as_a_whole_pauses_every_pausable_function() -> None:
-    """Also for the window that overrides some keys; what falls back takes the house's."""
+    """Also for the window that overrides some keys; what falls back takes the house's.
+
+    What the house does not supply either takes its fault value, for the
+    windows of that group only.
+    """
     results = _four_windows(
-        house={"frost_position": 80}, south="not a mapping", north={"mode": "house"}
+        house={"frost_position": 80, "source": "sensor.example_house"},
+        south="not a mapping",
+        north={"mode": "house"},
     )
 
     everything = set(REGISTRY.pausable_functions)
@@ -1380,16 +1428,37 @@ def test_group_that_is_unreadable_as_a_whole_pauses_every_pausable_function() ->
     }
     for name in ("south_inheriting", "south_overriding"):
         assert [
-            (fault.key, fault.level, fault.group_id, fault.problem)
+            (fault.key, fault.level, fault.group_id, fault.problem, fault.action)
             for fault in results[name].faults
-        ] == [("settings", Level.GROUP, GROUP_ID, SettingProblem.LEVEL_UNREADABLE)]
+        ] == [
+            (
+                "settings",
+                Level.GROUP,
+                GROUP_ID,
+                SettingProblem.LEVEL_UNREADABLE,
+                FaultAction.FUNCTIONS_DISABLED,
+            ),
+            (
+                "ventilation_position",
+                Level.GROUP,
+                GROUP_ID,
+                SettingProblem.LEVEL_UNREADABLE,
+                FaultAction.FELL_BACK_TO_CAUTIOUS_VALUE,
+            ),
+        ]
         frost = results[name].values["frost_position"]
-        assert (frost.value, frost.level) == (80, Level.GLOBAL)
+        assert (frost.value, frost.level, frost.cautious) == (80, Level.GLOBAL, False)
+        floor = results[name].values["ventilation_position"]
+        assert (floor.value, floor.cautious) == (CAUTIOUS_VENTILATION_POSITION, True)
     assert results["south_overriding"].values["mode"].value is ExampleMode.OWN
+    for name in ("north", "alone"):
+        assert results[name].faults == ()
+        floor = results[name].values["ventilation_position"]
+        assert (floor.value, floor.cautious) == (DEFAULT_VENTILATION_POSITION, False)
 
 
 def test_fault_of_the_house_in_a_setting_that_falls_back_pauses_nothing() -> None:
-    """Every window keeps all its functions and gets the default."""
+    """Every window keeps all its functions and gets the cautious value."""
     results = _four_windows(
         house={"frost_position": "low"}, south={"mode": "south"}, north={}
     )
@@ -1397,7 +1466,10 @@ def test_fault_of_the_house_in_a_setting_that_falls_back_pauses_nothing() -> Non
     for name, result in results.items():
         assert result.disabled_functions == frozenset(), name
         assert result.values["frost_position"].level is Level.BUILT_IN, name
-        assert [fault.action for fault in result.faults] == [FaultAction.FELL_BACK]
+        assert result.values["frost_position"].value == CAUTIOUS_FROST_POSITION, name
+        assert [fault.action for fault in result.faults] == [
+            FaultAction.FELL_BACK_TO_CAUTIOUS_VALUE
+        ]
 
 
 # --- A rule that spans several settings ---------------------------------------------------
@@ -1537,18 +1609,28 @@ def test_refused_combination_of_a_function_that_falls_back_passes_the_innermost_
     assert resolved.disabled_functions == frozenset()
 
 
-def test_refused_combination_falls_back_level_by_level_to_the_defaults() -> None:
-    """Every level sets the refused frost position: the default is the last resort."""
+def test_refused_combination_falls_back_level_by_level_to_the_fault_value() -> None:
+    """Every level sets the refused frost position: the fault value is the last resort."""
     zero = PartialSettings({"frost_position": 0})
 
     resolved = _resolve(house=zero, group=GroupLevel(GROUP_ID, zero), window=zero)
 
     assert _summary(resolved) == [
-        ("frost_position", level, COMBINATION, FaultAction.FELL_BACK, ())
+        (
+            "frost_position",
+            level,
+            COMBINATION,
+            FaultAction.FELL_BACK_TO_CAUTIOUS_VALUE,
+            (),
+        )
         for level in (Level.WINDOW, Level.GROUP, Level.GLOBAL)
     ]
-    assert resolved.values["frost_position"].value == DEFAULT_FROST_POSITION
+    assert resolved.values["frost_position"].value == CAUTIOUS_FROST_POSITION
     assert resolved.values["frost_position"].level is Level.BUILT_IN
+    assert resolved.values["frost_position"].cautious
+    # The source was never part of a fault, so it keeps its default.
+    assert resolved.values["source"].value is None
+    assert not resolved.values["source"].cautious
 
 
 def test_rule_over_a_pausing_and_a_falling_back_function_pauses_first() -> None:
@@ -1610,17 +1692,29 @@ def test_rule_that_names_no_keys_pauses_everything_pausable_and_keeps_protection
     assert resolved.values["ventilation_position"].value == 55  # noqa: PLR2004
 
 
-def test_rule_that_names_no_keys_in_a_function_that_falls_back_takes_the_defaults() -> (
+def test_rule_that_names_no_keys_in_a_function_that_falls_back_takes_fault_values() -> (
     None
 ):
-    """Second step: the settings that fall back take their defaults as well."""
+    """Second step: the settings that fall back take their fault values as well.
+
+    Nobody knows which of them the refusal concerned, so none of them may end
+    less restrictive than a level had made it.
+    """
     resolved = _resolve(window=PartialSettings({"source": UNDECLARED}))
 
     assert [(fault.problem, fault.action) for fault in resolved.faults] == [
         (SettingProblem.RULE_WITHOUT_KEYS, FaultAction.FUNCTIONS_DISABLED),
-        (SettingProblem.RULE_WITHOUT_KEYS, FaultAction.FELL_BACK),
+        (SettingProblem.RULE_WITHOUT_KEYS, FaultAction.FELL_BACK_TO_CAUTIOUS_VALUE),
     ]
     assert {item.level for item in resolved.values.values()} == {Level.BUILT_IN}
+    assert {
+        key: item.value for key, item in resolved.values.items() if item.cautious
+    } == {
+        "source": CAUTIOUS_SOURCE,
+        "frost_position": CAUTIOUS_FROST_POSITION,
+        "ventilation_position": CAUTIOUS_VENTILATION_POSITION,
+    }
+    assert resolved.values["offset"].value == REGISTRY.definitions[1].default
 
 
 def test_refusal_of_the_built_in_defaults_is_reported_and_not_raised() -> None:
@@ -1635,7 +1729,7 @@ def test_refusal_of_the_built_in_defaults_is_reported_and_not_raised() -> None:
 
     assert [(fault.level, fault.action) for fault in resolved.faults] == [
         (Level.BUILT_IN, FaultAction.FUNCTIONS_DISABLED),
-        (Level.BUILT_IN, FaultAction.FELL_BACK),
+        (Level.BUILT_IN, FaultAction.FELL_BACK_TO_CAUTIOUS_VALUE),
         (Level.BUILT_IN, FaultAction.CONFIGURATION_WITHHELD),
     ]
 
@@ -2343,9 +2437,21 @@ def test_fault_in_the_windows_own_data_never_costs_it_its_configuration(
     assert resolution.config is not None
     assert resolution.config.disabled_functions == disabled
     assert resolution.settings.disabled_functions == disabled
-    assert [(fault.level, fault.problem) for fault in resolution.settings.faults] == [
+    # One fault; an unreadable window is named once more for every setting that
+    # runs on its fault value because of it.
+    faults = resolution.settings.faults
+    assert {(fault.level, fault.problem) for fault in faults} == {
         (Level.WINDOW, problem)
-    ]
+    }
+    assert [fault.key for fault in faults[1:]] == (
+        [
+            definition.key
+            for definition in WINDOW_SETTINGS.definitions
+            if definition.has_fault_value
+        ]
+        if problem is SettingProblem.LEVEL_UNREADABLE
+        else []
+    )
     assert tuple(resolution.settings.values) == WINDOW_SETTINGS.keys
 
 

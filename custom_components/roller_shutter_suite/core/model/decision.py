@@ -13,7 +13,7 @@ Reason codes are tied to their group (``ReasonCategory`` of the module ``reasons
 """
 
 from collections.abc import Iterable
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from enum import StrEnum, unique
 from types import MappingProxyType
@@ -382,6 +382,10 @@ class ConstraintResult:
     pinned: it stays where it is. A constraint that reports without changing
     anything (lockout protection that is void because of the tamper contact)
     repeats the targets it received.
+
+    ``constraint_failed`` is the one reason every constraint can carry. The
+    arbiter writes it, never a constraint itself: the constraint raised an
+    exception, and ``targets`` are its cautious result.
     """
 
     constraint: Constraint
@@ -396,7 +400,10 @@ class ConstraintResult:
             (ReasonCategory.CONSTRAINT,),
             "the reason of a constraint result",
         )
-        if self.reason not in CONSTRAINT_REASONS[self.constraint]:
+        if (
+            self.reason is not ReasonCode.CONSTRAINT_FAILED
+            and self.reason not in CONSTRAINT_REASONS[self.constraint]
+        ):
             raise ValueError(
                 f"the constraint {self.constraint.value!r} does not report the "
                 f"reason {self.reason.value!r}"
@@ -496,6 +503,10 @@ class GateOutcome:
     hypothetical one: either the rule ``dry_run`` decided and ``would_send``
     lists the command that would have been sent, or ``rule`` names the earlier
     rule that would have held the wish back.
+
+    ``gate_rule_failed`` is the one reason every rule can carry. The arbiter
+    writes it, never a rule itself: the rule raised an exception and holds
+    the wish back. A dry-run rule that failed records no would-be command.
     """
 
     kind: GateKind
@@ -553,7 +564,8 @@ class GateOutcome:
         if self.rule is None:
             raise ValueError("a deferral or a suppression names the rule that decided")
         require_type(self.rule, GateRule, "the rule of a gate outcome")
-        if self.reason not in GATE_RULE_REASONS[self.rule]:
+        failed = self.reason is ReasonCode.GATE_RULE_FAILED
+        if not failed and self.reason not in GATE_RULE_REASONS[self.rule]:
             raise ValueError(
                 f"the gate rule {self.rule.value!r} does not give the reason "
                 f"{self.reason.value!r}"
@@ -565,7 +577,9 @@ class GateOutcome:
                 "a deferral states either the time at which it ends or, if that "
                 "is not known, the latest time of the re-evaluation"
             )
-        by_dry_run_rule = self.rule is GateRule.DRY_RUN
+        # A dry-run rule that failed recorded nothing: it holds the wish back
+        # like every failed rule, without a would-be command.
+        by_dry_run_rule = self.rule is GateRule.DRY_RUN and not failed
         if by_dry_run_rule != bool(self.would_send):
             raise ValueError(
                 "the rule 'dry_run', and only it, records the would-be command"
@@ -622,6 +636,80 @@ class GateOutcome:
 # ---------------------------------------------------------------------------
 
 
+@unique
+class EvaluationStage(StrEnum):
+    """The stage of a recompute in which a registered function raised."""
+
+    LAYER = "layer"
+    CONSTRAINT = "constraint"
+    GATE_RULE = "gate_rule"
+
+
+_PLACE_OF_STAGE: Final = MappingProxyType(
+    {
+        EvaluationStage.LAYER: Layer,
+        EvaluationStage.CONSTRAINT: Constraint,
+        EvaluationStage.GATE_RULE: GateRule,
+    }
+)
+
+
+@dataclass(frozen=True, slots=True)
+class EvaluationFault:
+    """A layer, a constraint or a gate rule raised an exception during a recompute.
+
+    A fact for the caller, which logs it and may raise a repair issue; the
+    core does not log. The decision itself already carries the consequence,
+    with a reason code: the layer had no opinion (``layer_failed``), the
+    constraint applied its cautious result (``constraint_failed``), the gate
+    rule held the wish back (``gate_rule_failed``).
+
+    - ``stage`` and ``place``: where it happened; ``place`` is the member of
+      ``Layer``, ``Constraint`` or ``GateRule`` that belongs to the stage.
+    - ``function``: the function the registration declares, if any. For a
+      layer that is registered in parts it tells the parts apart.
+    - ``error``: the name of the exception class, an identifier and no text.
+    - ``exception``: the exception itself, for the log of the caller. It takes
+      no part in comparing two faults, so the same snapshot still gives an
+      equal decision.
+    """
+
+    stage: EvaluationStage
+    place: Layer | Constraint | GateRule
+    error: str
+    function: FunctionId | None = None
+    exception: Exception | None = field(default=None, compare=False, repr=False)
+
+    def __post_init__(self) -> None:
+        """Validate that the place belongs to the stage."""
+        require_type(self.stage, EvaluationStage, "the stage of an evaluation fault")
+        require_type(
+            self.place,
+            _PLACE_OF_STAGE[self.stage],
+            f"the place of a fault in the stage {self.stage.value!r}",
+        )
+        require_identifier(self.error, "the error of an evaluation fault")
+        require_optional_type(
+            self.function, FunctionId, "the function of an evaluation fault"
+        )
+        require_optional_type(
+            self.exception, Exception, "the exception of an evaluation fault"
+        )
+
+    @classmethod
+    def of(
+        cls,
+        place: Layer | Constraint | GateRule,
+        function: FunctionId | None,
+        exception: Exception,
+    ) -> Self:
+        """Return the fault for an exception that was raised at the place."""
+        stage = next(
+            stage for stage, kind in _PLACE_OF_STAGE.items() if isinstance(place, kind)
+        )
+        return cls(stage, place, type(exception).__name__, function, exception)
+
+
 @dataclass(frozen=True, slots=True)
 class Decision:
     """The complete result of one recompute.
@@ -644,6 +732,15 @@ class Decision:
       the position ``None`` was pinned by a constraint.
     - ``gate``: the outcome of the gate; ``None`` if nothing reached the gate,
       because there is no target or a constraint pinned every member.
+    - ``faults``: the layers, constraints and gate rules that raised an
+      exception during this recompute, in the order in which they were
+      evaluated; empty in a sound installation. The parts above already carry
+      what each fault led to (``layer_failed``, ``constraint_failed``,
+      ``gate_rule_failed``); this is the fact for the caller, who logs it.
+      Two faults have no entry of their own above: an exception in the check
+      whether the current position violates a constraint (no exemption from
+      the minimum change is granted then), and a dry-run rule that failed
+      with a fire wish pending (the command is sent).
 
     The member positions of the wish, the targets of every constraint result
     and ``targets`` name the same members in the same order.
@@ -655,12 +752,16 @@ class Decision:
     targets: tuple[MemberTarget, ...] = ()
     gate: GateOutcome | None = None
     winning_function: FunctionId | None = None
+    faults: tuple[EvaluationFault, ...] = ()
 
     def __post_init__(self) -> None:
         """Reject records whose parts contradict each other."""
         object.__setattr__(self, "other_layers", tuple(self.other_layers))
         object.__setattr__(self, "constraints", tuple(self.constraints))
         object.__setattr__(self, "targets", tuple(self.targets))
+        object.__setattr__(self, "faults", tuple(self.faults))
+        for fault in self.faults:
+            require_type(fault, EvaluationFault, "a fault of a decision")
         self._validate_layers()
         for result in self.constraints:
             require_type(result, ConstraintResult, "a constraint of a decision")

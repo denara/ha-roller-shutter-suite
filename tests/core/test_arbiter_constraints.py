@@ -24,8 +24,10 @@ from custom_components.roller_shutter_suite.core.engine import (
     build_arbiter,
 )
 from custom_components.roller_shutter_suite.core.model import (
+    BLIND_SOURCE,
     FULLY_CLOSED,
     FULLY_OPEN,
+    AnySourceValue,
     Constraint,
     ConstraintResult,
     Decision,
@@ -220,8 +222,13 @@ def test_a_target_pinned_for_every_member_never_reaches_the_gate() -> None:
     assert pinned.gate is None
 
 
-def test_a_constraint_that_breaks_the_interface_is_refused() -> None:
-    """It answers in its own name, names the same members, and invents no target."""
+def test_a_constraint_that_breaks_the_interface_has_failed() -> None:
+    """It answers in its own name, names the same members, and invents no target.
+
+    A result that does none of this is a programming error. It counts like an
+    exception of the constraint: the wish is not executed, the record says
+    ``constraint_failed``, and the decision carries the fault for the caller.
+    """
 
     def answering(result: ConstraintResult) -> ConstraintRegistration:
         return ConstraintRegistration(
@@ -231,43 +238,58 @@ def test_a_constraint_that_breaks_the_interface_is_refused() -> None:
             FunctionId.VENTILATION,
         )
 
-    def recompute(result: ConstraintResult, position: int = 30) -> None:
+    def refused(result: ConstraintResult, message: str, position: int = 30) -> None:
         arbiter = build_arbiter([_RAISE_TO_60], constraints=[answering(result)])
-        arbiter.recompute(window(), snapshot(position=position))
+        decision = arbiter.recompute(window(), snapshot(position=position))
 
-    with pytest.raises(ValueError, match="answered as 'rain_while_ventilating'"):
-        recompute(
-            ConstraintResult(
-                Constraint.RAIN_WHILE_VENTILATING,
-                ReasonCode.RAIN_VENTILATION_FLOOR,
-                (MemberTarget(LEFT, Position(10)),),
-            )
-        )
+        assert _reasons(decision)[-1] is ReasonCode.CONSTRAINT_FAILED
+        assert decision.targets == (MemberTarget(LEFT, None),)
+        assert decision.gate is None
+        (fault,) = decision.faults
+        assert fault.place is Constraint.VENTILATION_FLOOR
+        assert fault.function is FunctionId.VENTILATION
+        assert fault.error == "ValueError"
+        assert message in str(fault.exception)
+
+    refused(
+        ConstraintResult(
+            Constraint.RAIN_WHILE_VENTILATING,
+            ReasonCode.RAIN_VENTILATION_FLOOR,
+            (MemberTarget(LEFT, Position(10)),),
+        ),
+        "answered as 'rain_while_ventilating'",
+    )
     floor = ReasonCode.VENTILATION_FLOOR
-    with pytest.raises(ValueError, match="target of every member"):
-        recompute(
-            ConstraintResult(
-                Constraint.VENTILATION_FLOOR,
-                floor,
-                (MemberTarget(LEFT, Position(10)), MemberTarget(RIGHT, Position(10))),
-            )
-        )
-    with pytest.raises(ValueError, match="members in their order"):
-        recompute(
-            ConstraintResult(
-                Constraint.VENTILATION_FLOOR,
-                floor,
-                (MemberTarget(RIGHT, Position(10)),),
-            )
-        )
-    with pytest.raises(ValueError, match="never gives a pinned member a target"):
-        # The wish only raises, so the direction pinned the member that stands at 80.
-        recompute(
-            ConstraintResult(
-                Constraint.VENTILATION_FLOOR, floor, (MemberTarget(LEFT, Position(10)),)
-            ),
-            position=80,
-        )
+    refused(
+        ConstraintResult(
+            Constraint.VENTILATION_FLOOR,
+            floor,
+            (MemberTarget(LEFT, Position(10)), MemberTarget(RIGHT, Position(10))),
+        ),
+        "target of every member",
+    )
+    refused(
+        ConstraintResult(
+            Constraint.VENTILATION_FLOOR, floor, (MemberTarget(RIGHT, Position(10)),)
+        ),
+        "members in their order",
+    )
+    # The wish only raises, so the direction pinned the member that stands at 80.
+    refused(
+        ConstraintResult(
+            Constraint.VENTILATION_FLOOR, floor, (MemberTarget(LEFT, Position(10)),)
+        ),
+        "never gives a pinned member a target",
+        position=80,
+    )
+    refused(
+        ConstraintResult(
+            Constraint.VENTILATION_FLOOR,
+            ReasonCode.CONSTRAINT_FAILED,
+            (MemberTarget(LEFT, Position(10)),),
+        ),
+        "only the arbiter says that a constraint failed",
+    )
 
 
 # --- Direction --------------------------------------------------------------------
@@ -348,7 +370,7 @@ def test_direction_is_judged_per_member() -> None:
 
 
 def _world(
-    temperature: SourceValue[float] | None, state: WindowState | None = None
+    temperature: AnySourceValue | None, state: WindowState | None = None
 ) -> WorldSnapshot:
     sources = day() if temperature is None else day(outdoor_temperature=temperature)
     return snapshot(sources=sources, position=0, state=state)
@@ -504,11 +526,120 @@ def test_the_frost_state_to_persist_follows_the_source() -> None:
     )
 
 
-@pytest.mark.parametrize("value", [SourceValue.of("cold"), SourceValue.of(True)])
-def test_a_frost_source_that_is_no_temperature_is_refused(value: Any) -> None:
-    """A switch or a text is a configuration error, not a temperature."""
-    with pytest.raises(TypeError, match="temperature as a number"):
-        frost_state(window(frost=FROST), _world(value))
+NO_TEMPERATURE = [
+    pytest.param(SourceValue.of("cold"), id="text"),
+    pytest.param(SourceValue.of(""), id="empty-text"),
+    pytest.param(SourceValue.of("nan"), id="text-not-a-number"),
+    pytest.param(SourceValue.of("inf"), id="text-infinity"),
+    pytest.param(SourceValue.of(True), id="switch-on"),
+    pytest.param(SourceValue.of(False), id="switch-off"),
+    pytest.param(SourceValue.of(10**400), id="number-too-large"),
+]
+
+
+@pytest.mark.parametrize("value", NO_TEMPERATURE)
+def test_a_frost_source_that_delivers_no_temperature_is_silent(value: Any) -> None:
+    """Text that is not a number is "no value": it never raises, never means "no frost".
+
+    Without a held state the source is blind; with one, that state is held
+    like for any silent source, and it is not overwritten.
+    """
+    config = window(frost=FROST)
+    recent = WindowState(held_frost=HeldInput(False, NOW - timedelta(hours=1)))
+    old = WindowState(held_frost=HeldInput(False, NOW - timedelta(hours=25)))
+
+    assert frost_state(config, _world(value)) is FrostState.BLIND
+    assert frost_state(config, _world(value, recent)) is FrostState.NO_FROST
+    assert frost_state(config, _world(value, old)) is FrostState.BLIND
+    assert held_frost_after(config, _world(value)) is None
+    assert held_frost_after(config, _world(value, recent)) == recent.held_frost
+
+
+@pytest.mark.parametrize("value", NO_TEMPERATURE)
+def test_a_frost_source_that_delivers_no_temperature_keeps_the_limit(
+    value: Any,
+) -> None:
+    """The case the review found: the morning opening stops at the frost position."""
+    decision = _frosty().recompute(_world(value))
+
+    assert _reasons(decision) == [ReasonCode.FROST_LIMIT_SOURCE_BLIND]
+    assert decision.target == FrostSettings().position
+    assert decision.faults == ()
+
+
+BLIND_FROST = FrostSettings(source=BLIND_SOURCE)
+
+
+def test_a_frost_source_that_is_configured_but_blind_is_blind_at_once() -> None:
+    """A faulty stored source: no held state is used, for nobody knows its source."""
+    config = window(frost=BLIND_FROST)
+    no_frost_an_hour_ago = WindowState(
+        held_frost=HeldInput(False, NOW - timedelta(hours=1))
+    )
+
+    assert frost_state(config, _world(None)) is FrostState.BLIND
+    assert frost_state(config, _world(MILD, no_frost_an_hour_ago)) is FrostState.BLIND
+    # What is held stays as it is: it belongs to the source the window had.
+    assert held_frost_after(config, _world(None)) is None
+    assert (
+        held_frost_after(config, _world(COLD, no_frost_an_hour_ago))
+        == no_frost_an_hour_ago.held_frost
+    )
+
+
+def test_a_blind_frost_source_limits_comfort_and_names_the_blind_source() -> None:
+    """The morning opening stops at the frost position; closing is never limited."""
+    subject = engine(window(frost=BLIND_FROST))
+
+    opening = subject.recompute(_world(None))
+    closing = subject.recompute(snapshot(sources=night(), position=100))
+
+    assert _reasons(opening) == [ReasonCode.FROST_LIMIT_SOURCE_BLIND]
+    assert opening.target == FrostSettings().position
+    assert opening.faults == ()
+    assert closing.target == FULLY_CLOSED
+    assert closing.constraints == ()
+
+
+def test_a_blind_frost_source_is_lifted_by_the_waiver_like_any_frost() -> None:
+    """The operator knows the shutter is free: the limit is lifted until the morning."""
+    waived = WindowState(frost_waiver_until=NOW + timedelta(hours=2))
+
+    decision = engine(window(frost=BLIND_FROST)).recompute(_world(None, waived))
+
+    assert decision.target == FULLY_OPEN
+    assert decision.constraints == ()
+
+
+def test_the_marker_is_no_string_and_the_only_other_thing_a_source_can_be() -> None:
+    """A source is a name, none, or blind; anything else is refused."""
+    assert not isinstance(BLIND_SOURCE, str)
+    assert window(frost_source=BLIND_SOURCE).frost.source is BLIND_SOURCE
+    bad: Any = 7
+    with pytest.raises(TypeError, match="the frost source"):
+        FrostSettings(source=bad)
+    with pytest.raises(ValueError, match="must not be empty"):
+        FrostSettings(source="")
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("-3.5", FrostState.FROST),
+        (" 6 ", FrostState.NO_FROST),
+        ("-1e1", FrostState.FROST),
+    ],
+)
+def test_text_that_spells_a_number_is_that_temperature(
+    text: str, expected: FrostState
+) -> None:
+    """An adapter that hands the state of an entity on as text is no fault."""
+    config = window(frost=FROST)
+
+    assert frost_state(config, _world(SourceValue.of(text))) is expected
+    assert held_frost_after(config, _world(SourceValue.of(text))) == HeldInput(
+        expected is FrostState.FROST, NOW
+    )
 
 
 # --- Frost: what it limits --------------------------------------------------------

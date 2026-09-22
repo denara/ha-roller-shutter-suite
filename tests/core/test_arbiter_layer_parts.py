@@ -176,9 +176,17 @@ def test_with_both_functions_disabled_neither_part_is_called() -> None:
 
 
 def test_the_stub_that_proves_never_called_does_raise_when_it_is_called() -> None:
-    """Otherwise the tests above would prove nothing."""
-    with pytest.raises(AssertionError, match="was evaluated"):
-        _decide(_arbiter(_never_called, _answers(HEAT)))
+    """Otherwise the tests above would prove nothing.
+
+    The exception does not leave the recompute; the decision carries it, and
+    the part reads ``layer_failed`` instead of ``function_disabled_by_fault``.
+    """
+    decision = _decide(_arbiter(_never_called, _answers(HEAT)))
+
+    (fault,) = decision.faults
+    assert fault.error == "AssertionError"
+    assert "was evaluated" in str(fault.exception)
+    assert _shading_entries(decision) == [_shading(ReasonCode.LAYER_FAILED)]
 
 
 # --- Order ---------------------------------------------------------------------------

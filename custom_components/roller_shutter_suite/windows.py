@@ -24,6 +24,7 @@ from .capabilities import member_configs
 from .const import SUBENTRY_GROUP, SUBENTRY_WINDOW
 from .core.model import MemberConfig
 from .core.settings import (
+    FaultAction,
     GroupLevel,
     Level,
     MissingCapability,
@@ -133,6 +134,15 @@ def _report_faults(
     combination: list[ReportedFault] = []
     for fault in settings.faults:
         if fault.group_id == _UNREADABLE_REFERENCE:
+            continue
+        if (
+            fault.problem is SettingProblem.LEVEL_UNREADABLE
+            and fault.action is FaultAction.FELL_BACK_TO_CAUTIOUS_VALUE
+        ):
+            # The core names an unreadable level once as a whole and once more
+            # for every setting that runs on its cautious value because of it.
+            # The repair is the same for all of them, saving the level again,
+            # so the one issue of the level stands for them.
             continue
         if fault.problem is SettingProblem.COMBINATION:
             combination.append(fault)
