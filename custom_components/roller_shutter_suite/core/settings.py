@@ -49,6 +49,9 @@ from typing import Any, Final
 
 from .model import (
     BLIND_SOURCE,
+    GEOMETRY_FIELDS,
+    GEOMETRY_PREFIX,
+    MEMBER_MEASUREMENT_FIELDS,
     SCHEDULE_DAY_TYPES,
     SCHEDULE_EDGES,
     TRIGGER_FIELDS,
@@ -59,6 +62,8 @@ from .model import (
     FunctionId,
     JsonValue,
     MemberConfig,
+    MemberGlassError,
+    MemberMeasurements,
     Position,
     ScheduleProfile,
     SettingsCombinationError,
@@ -66,6 +71,7 @@ from .model import (
     TriggerKind,
     WindowCapabilityStates,
     WindowConfig,
+    member_glass_for,
 )
 from .model._data import (
     as_bool,
@@ -100,6 +106,8 @@ class Level(StrEnum):
     """The house."""
     GROUP = "group"
     WINDOW = "window"
+    MEMBER = "member"
+    """One member of the window; only member-level settings have this level."""
 
 
 @unique
@@ -592,6 +600,8 @@ class ResolvedValue[T]:
     capability: CapabilityState | None = None
     unavailable: MissingCapability | None = None
     cautious: bool = False
+    member_id: str | None = None
+    """The member, for a value the member states itself (level ``member``)."""
 
     @property
     def available(self) -> bool:
@@ -643,7 +653,8 @@ class ReportedFault:
     what; ``detail`` is English text for logs and diagnostics, never for the
     user. ``action`` says what the resolver did, and ``disabled_functions``
     names the functions it switched off because of this fault. A missing
-    capability is never a fault; see :class:`ResolvedValue`.
+    capability is never a fault; see :class:`ResolvedValue`. ``member_id``
+    names the member for a fault on the level ``member``.
     """
 
     key: str
@@ -653,6 +664,7 @@ class ReportedFault:
     action: FaultAction
     disabled_functions: tuple[FunctionId, ...] = ()
     group_id: str | None = None
+    member_id: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -664,15 +676,27 @@ class ResolvedSettings:
     group, the house) once, with what it costs **this** window; a fault that
     does not reach the window has the action ``no_effect``. ``group_missing``
     is set when the window refers to a group that no longer exists.
+    ``member_values`` has, per member and per member-level setting, the value
+    that applies to the member with its provenance: the level ``member`` for
+    a value the member states, else the level that gave the window's value.
+    It is empty where no member level was resolved.
     """
 
     values: Mapping[str, ResolvedValue[Any]]
     faults: tuple[ReportedFault, ...] = ()
     group_missing: GroupMissing | None = None
+    member_values: Mapping[str, Mapping[str, ResolvedValue[Any]]] = field(
+        default_factory=dict
+    )
 
     def __post_init__(self) -> None:
-        """Copy the mapping so it cannot be changed afterwards."""
+        """Copy the mappings so they cannot be changed afterwards."""
         object.__setattr__(self, "values", MappingProxyType(dict(self.values)))
+        members = {
+            member_id: MappingProxyType(dict(values))
+            for member_id, values in dict(self.member_values).items()
+        }
+        object.__setattr__(self, "member_values", MappingProxyType(members))
 
     @property
     def disabled_functions(self) -> frozenset[FunctionId]:
@@ -1406,6 +1430,60 @@ def _schedule_settings() -> tuple[SettingDefinition[Any], ...]:
     return (*triggers, *(_schedule_setting(*entry) for entry in others))
 
 
+_GEOMETRY_FIELD_KINDS: Final[
+    Mapping[str, tuple[SettingKind, Callable[[JsonValue], Any]]]
+] = MappingProxyType(
+    {
+        "use_measurements": (SettingKind.BOOLEAN, as_bool),
+        "fixed_position": (SettingKind.NUMBER, _as_position),
+        "orientation_known": (SettingKind.BOOLEAN, as_bool),
+        # Degrees; an azimuth runs clockwise from north.
+        "orientation": (SettingKind.NUMBER, _as_number),
+        "view_left": (SettingKind.NUMBER, _as_number),
+        "view_right": (SettingKind.NUMBER, _as_number),
+        "min_elevation": (SettingKind.NUMBER, _as_number),
+        "end_elevation": (SettingKind.NUMBER, _as_number),
+        # Metres.
+        "element_bottom": (SettingKind.NUMBER, _as_number),
+        "element_height": (SettingKind.NUMBER, _as_number),
+        "depth": (SettingKind.NUMBER, _as_number),
+        "pitch": (SettingKind.NUMBER, _as_number),
+        "amplification_cap": (SettingKind.NUMBER, _as_number),
+        "calibration_seat": (SettingKind.NUMBER, _as_position),
+        "calibration_glass_top": (SettingKind.NUMBER, _as_position),
+    }
+)
+"""Kind and reader of every window-level measurement of shading."""
+
+
+def shading_geometry_keys() -> tuple[str, ...]:
+    """Return the keys of the window-level measurements of shading.
+
+    They are the fields of ``WindowConfig.geometry`` with the prefix in
+    front; the registry entries are generated from this one list.
+    """
+    return tuple(f"{GEOMETRY_PREFIX}{name}" for name in GEOMETRY_FIELDS)
+
+
+def _shading_geometry_settings() -> tuple[SettingDefinition[Any], ...]:
+    """Return the measurements of shading; their defaults are those of the fields.
+
+    They belong to ``shading``, which pauses on a fault: a faulty measurement
+    never moves a shutter to a position somebody else's numbers gave.
+    """
+    defaults = {entry.name: entry.default for entry in dataclasses.fields(WindowConfig)}
+    return tuple(
+        SettingDefinition(
+            key=key,
+            kind=_GEOMETRY_FIELD_KINDS[name][0],
+            function=FunctionId.SHADING,
+            default=defaults[key],
+            parse=_GEOMETRY_FIELD_KINDS[name][1],
+        )
+        for key, name in zip(shading_geometry_keys(), GEOMETRY_FIELDS, strict=True)
+    )
+
+
 WINDOW_SETTINGS: Final = SettingsRegistry(
     (
         SettingDefinition(
@@ -1546,6 +1624,7 @@ WINDOW_SETTINGS: Final = SettingsRegistry(
             parse=as_duration,
         ),
         *_schedule_settings(),
+        *_shading_geometry_settings(),
     )
 )
 """The settings of ``WindowConfig``. A new setting is one more entry here.
@@ -1553,6 +1632,324 @@ WINDOW_SETTINGS: Final = SettingsRegistry(
 The key of an entry is the name of its field of ``WindowConfig``. The fields
 in :data:`WINDOW_FIELDS_THAT_ARE_NO_SETTINGS` have no entry.
 """
+
+
+# --- The settings of a member: a fourth level below the window ---------------------
+#
+# Kept apart from the resolution of the three levels above: a member inherits
+# from the RESOLVED window, so this runs after it and changes nothing in it.
+
+
+@dataclass(frozen=True, slots=True)
+class MemberSettingsRegistry:
+    """The settings one member of a window can state itself, and what they inherit.
+
+    ``registry`` describes them like any other setting. ``inherits_from`` maps
+    every key to the key of the **window** setting whose resolved value
+    applies to a member that does not state its own, or to ``None`` if the
+    built-in default of the member setting applies.
+
+    **Only a function that pauses on a fault may have member-level
+    settings.** A faulty member-level value pauses its function for the whole
+    window and never falls back. What a fault would mean for a function that
+    falls back (which cautious value applies, and for which member) is not
+    defined, so such an entry is refused here until somebody defines it. A
+    capability requirement is refused for the same reason: there is no mask
+    on this level.
+    """
+
+    registry: SettingsRegistry
+    inherits_from: Mapping[str, str | None]
+
+    def __post_init__(self) -> None:
+        """Validate the entries and that the mapping names exactly their keys."""
+        require_type(self.registry, SettingsRegistry, "the registry of member settings")
+        object.__setattr__(
+            self, "inherits_from", MappingProxyType(dict(self.inherits_from))
+        )
+        if set(self.inherits_from) != set(self.registry.keys):
+            raise ValueError(
+                "every member-level setting says what it inherits from, and "
+                "nothing else does"
+            )
+        for definition in self.registry.definitions:
+            if not _pauses(definition):
+                raise ValueError(
+                    f"the member-level setting {definition.key!r} belongs to a "
+                    "function that falls back on a fault; what a member-level "
+                    "fault of such a function means is not defined yet"
+                )
+            if definition.requires is not None:
+                raise ValueError(
+                    f"the member-level setting {definition.key!r} requires a "
+                    "capability; there is no capability mask on this level"
+                )
+
+    @property
+    def pausable_functions(self) -> tuple[FunctionId, ...]:
+        """Return the functions a member-level fault pauses, in a stable order."""
+        return self.registry.pausable_functions
+
+
+def _member_settings() -> MemberSettingsRegistry:
+    window_keys = (
+        "shading_element_height",
+        None,
+        "shading_calibration_seat",
+        "shading_calibration_glass_top",
+    )
+    inherits = dict(zip(MEMBER_MEASUREMENT_FIELDS, window_keys, strict=True))
+    readers = (_as_number, _as_number, _as_position, _as_position)
+    defaults = {entry.name: entry.default for entry in dataclasses.fields(WindowConfig)}
+    definitions = tuple(
+        SettingDefinition(
+            key=key,
+            kind=SettingKind.NUMBER,
+            function=FunctionId.SHADING,
+            default=0.0 if window_key is None else defaults[window_key],
+            parse=parse,
+        )
+        for (key, window_key), parse in zip(inherits.items(), readers, strict=True)
+    )
+    return MemberSettingsRegistry(SettingsRegistry(definitions), inherits)
+
+
+MEMBER_SETTINGS: Final = _member_settings()
+"""What a member of a window can state itself: glass height, top offset and
+the two calibration positions, all of the function ``shading``.
+
+``settings_from_stored(data, MEMBER_SETTINGS.registry)`` reads the stored
+settings of one member, with the rules of every level. How and where the Home
+Assistant side stores them is its own decision; the core takes one mapping
+per member. The default of an entry is what applies while no level sets the
+window's value either.
+"""
+
+_UNKNOWN_MEMBER_FAULT: Final = "the window has no member with this identifier"
+
+
+@dataclass(slots=True)
+class _MemberFaults:
+    """The faults of the member level found so far, and the sound stated values."""
+
+    reports: list[ReportedFault] = field(default_factory=list)
+    stated: dict[str, dict[str, Any]] = field(default_factory=dict)
+
+    def report(
+        self, member_id: str, fault: SettingFault, *, ignored: bool = False
+    ) -> None:
+        """Report a fault of one member; unless ignored, it pauses the functions."""
+        self.reports.append(
+            ReportedFault(
+                fault.key,
+                Level.MEMBER,
+                fault.problem,
+                fault.detail,
+                FaultAction.IGNORED if ignored else FaultAction.FUNCTIONS_DISABLED,
+                () if ignored else MEMBER_SETTINGS.pausable_functions,
+                member_id=member_id,
+            )
+        )
+
+
+def _read_member(
+    member_id: str, settings: PartialSettings, found: _MemberFaults
+) -> None:
+    """Judge every value one member states on its own; keep the sound ones."""
+    require_type(settings, PartialSettings, "the settings of a member")
+    if settings.unreadable:
+        whole = SettingFault(
+            SETTINGS_KEY, _LEVEL_FAULT, SettingProblem.LEVEL_UNREADABLE
+        )
+        found.report(member_id, whole)
+        return
+    for fault in settings.faults:
+        unknown = fault.problem is SettingProblem.UNKNOWN_SETTING
+        found.report(member_id, fault, ignored=unknown)
+    sound = found.stated.setdefault(member_id, {})
+    for key, value in settings.values.items():
+        if key not in MEMBER_SETTINGS.registry.keys:
+            stranger = SettingFault(key, _UNKNOWN_FAULT, SettingProblem.UNKNOWN_SETTING)
+            found.report(member_id, stranger, ignored=True)
+            continue
+        try:
+            single: dict[str, Any] = {key: value}
+            MemberMeasurements(**single)
+        except _REFUSALS as err:
+            detail = str(err) or type(err).__name__
+            found.report(member_id, SettingFault(key, detail, SettingProblem.INVALID))
+            continue
+        sound[key] = value
+
+
+def _fitting_measurements(
+    config: WindowConfig, member_id: str, found: _MemberFaults
+) -> MemberMeasurements:
+    """Return what the member states, without what a rule over several values refuses.
+
+    The refused values are reported (``combination``), and the member
+    inherits in their place, so the configuration builds.
+    """
+    stated = dict(found.stated.get(member_id, {}))
+    while True:
+        measurements = MemberMeasurements(**stated)
+        try:
+            member_glass_for(config.geometry, member_id, measurements)
+        except MemberGlassError as err:
+            for key in err.fields:
+                del stated[key]
+                found.report(
+                    member_id, SettingFault(key, str(err), SettingProblem.COMBINATION)
+                )
+            continue
+        return measurements
+
+
+def _member_values(
+    config: WindowConfig, window: Mapping[str, ResolvedValue[Any]]
+) -> dict[str, dict[str, ResolvedValue[Any]]]:
+    """Return every member-level value with its provenance."""
+    result: dict[str, dict[str, ResolvedValue[Any]]] = {}
+    for member, glass in zip(config.members, config.member_glass, strict=True):
+        applying = dict(
+            zip(
+                MEMBER_MEASUREMENT_FIELDS,
+                (
+                    glass.glass_height,
+                    glass.top_offset,
+                    glass.calibration.seat_position,
+                    glass.calibration.glass_top_position,
+                ),
+                strict=True,
+            )
+        )
+        values: dict[str, ResolvedValue[Any]] = {}
+        for key, value in applying.items():
+            window_key = MEMBER_SETTINGS.inherits_from[key]
+            if key in member.measurements.stated:
+                values[key] = ResolvedValue(
+                    key, value, value, Level.MEMBER, member_id=member.member_id
+                )
+            elif window_key is None:
+                values[key] = ResolvedValue(key, value, value, Level.BUILT_IN)
+            else:
+                source = window[window_key]
+                values[key] = ResolvedValue(
+                    key, value, value, source.level, source.group_id
+                )
+        result[member.member_id] = values
+    return result
+
+
+def _resolve_members(
+    config: WindowConfig,
+    resolved: ResolvedSettings,
+    member_settings: Mapping[str, PartialSettings],
+) -> tuple[WindowConfig, ResolvedSettings]:
+    """Resolve the member level on top of a resolved window.
+
+    Every fault of a member pauses the functions that have member-level
+    settings for the **whole** window: the members are one element with one
+    curtain edge and one status, and a fall-back to the window's value would
+    move a shutter by a number nobody chose for it. Nothing else is touched:
+    no member-level setting belongs to a function that falls back
+    (:class:`MemberSettingsRegistry` refuses one), so protection and whatever
+    restricts movement keep their values.
+
+    While such a function is paused, by a fault of the window's levels or of
+    a member, no member carries measurements of its own in the configuration:
+    nobody acts on them. If the window's levels paused it, their values are
+    stand-ins, so what the members state is judged value by value, but not
+    together with them.
+    """
+    found = _MemberFaults()
+    known = {member.member_id for member in config.members}
+    for member_id, settings in member_settings.items():
+        if member_id in known:
+            _read_member(member_id, settings, found)
+        else:
+            # Stored data that names something the window does not know, like
+            # an unknown key: the same problem code, reported and ignored. The
+            # key is that of the settings as a whole, and ``member_id`` names
+            # the stranger. No problem code of its own: the Home Assistant
+            # side explains every code on every level it knows, and the block
+            # that builds the member forms adds what the member level needs.
+            stranger = SettingFault(
+                SETTINGS_KEY, _UNKNOWN_MEMBER_FAULT, SettingProblem.UNKNOWN_SETTING
+            )
+            found.report(str(member_id), stranger, ignored=True)
+    pausable = frozenset(MEMBER_SETTINGS.pausable_functions)
+    fitting: dict[str, MemberMeasurements] = {}
+    if not pausable & config.disabled_functions:
+        fitting = {
+            member.member_id: _fitting_measurements(config, member.member_id, found)
+            for member in config.members
+        }
+    paused = frozenset(
+        function for fault in found.reports for function in fault.disabled_functions
+    )
+    if paused:
+        fitting = {}
+    config = dataclasses.replace(
+        config,
+        members=tuple(
+            dataclasses.replace(
+                member,
+                measurements=fitting.get(member.member_id, MemberMeasurements()),
+            )
+            for member in config.members
+        ),
+        disabled_functions=config.disabled_functions | paused,
+    )
+    return config, ResolvedSettings(
+        resolved.values,
+        (*resolved.faults, *found.reports),
+        resolved.group_missing,
+        _member_values(config, resolved.values),
+    )
+
+
+_ORIENTATION_KEY: Final = f"{GEOMETRY_PREFIX}orientation"
+_ORIENTATION_KNOWN_KEY: Final = f"{GEOMETRY_PREFIX}orientation_known"
+
+
+def _orientation_as_stated(
+    config: WindowConfig, resolved: ResolvedSettings
+) -> tuple[WindowConfig, ResolvedSettings]:
+    """Let the orientation count as known only if a level really stated it.
+
+    Shading needs the orientation, and nothing is assumed in its place. The
+    switch "orientation known" and the azimuth are two settings that inherit
+    on their own, and the azimuth always has a value. A house or a group that
+    stores only the switch would therefore turn every window below it into a
+    window that faces the built-in azimuth, a number nobody entered. So the
+    configuration carries "known" only if the switch is on **and** a level
+    supplies the azimuth: its provenance is not the built-in level, and no
+    fault in it reached the window (shading is paused then anyway).
+
+    This is no fault: nothing stored is wrong, the configuration is
+    incomplete. The geometry says ``orientation_unknown``, which explains it.
+    ``value`` of the switch stays what the levels yield; ``effective`` says
+    what the configuration carries.
+    """
+    if not config.shading_orientation_known:
+        return config, resolved
+    azimuth = resolved.values[_ORIENTATION_KEY]
+    faulty = any(
+        fault.key == _ORIENTATION_KEY and fault.action is FaultAction.FUNCTIONS_DISABLED
+        for fault in resolved.faults
+    )
+    if azimuth.level is not Level.BUILT_IN and not faulty:
+        return config, resolved
+    switch = resolved.values[_ORIENTATION_KNOWN_KEY]
+    values = dict(resolved.values)
+    values[_ORIENTATION_KNOWN_KEY] = dataclasses.replace(switch, effective=False)
+    return (
+        dataclasses.replace(config, shading_orientation_known=False),
+        ResolvedSettings(
+            values, resolved.faults, resolved.group_missing, resolved.member_values
+        ),
+    )
 
 
 def functions_with_settings(
@@ -1595,13 +1992,14 @@ class WindowResolution:
     settings: ResolvedSettings
 
 
-def resolve_window(  # noqa: PLR0913 - the three levels and the window are the input
+def resolve_window(  # noqa: PLR0913 - the levels of a window are the input
     *,
     window_id: str,
     members: Iterable[MemberConfig],
     global_settings: PartialSettings,
     window_settings: PartialSettings,
     group: GroupLevel | None = None,
+    member_settings: Mapping[str, PartialSettings] | None = None,
     registry: SettingsRegistry = WINDOW_SETTINGS,
 ) -> WindowResolution:
     """Resolve :data:`WINDOW_SETTINGS` and build the configuration of one window.
@@ -1618,9 +2016,28 @@ def resolve_window(  # noqa: PLR0913 - the three levels and the window are the i
     were switched off (``WindowConfig.disabled_functions``), so the arbiter
     can skip them and say so. The function does not raise for anything a user
     could have stored.
+
+    ``member_settings`` holds, per member identifier, what that member states
+    itself (:data:`MEMBER_SETTINGS`). A member inherits the resolved values of
+    the window. A faulty member-level value pauses its function for the whole
+    window and never falls back to the window's value; it is reported with
+    the level ``member`` and the member. ``settings.member_values`` has the
+    value that applies to every member, with its provenance.
     """
     try:
-        identity = WindowConfig(window_id=window_id, members=tuple(members))
+        # The member level is the only input for what a member states itself.
+        # Measurements that arrive on a member are dropped here: a comfort
+        # measurement must never cost the window its configuration, and it
+        # must never make a sound value of the window look invalid.
+        identity = WindowConfig(
+            window_id=window_id,
+            members=tuple(
+                dataclasses.replace(member, measurements=MemberMeasurements())
+                if isinstance(member, MemberConfig)
+                else member
+                for member in members
+            ),
+        )
     except _REFUSALS as err:
         key = (
             "window_id"
@@ -1654,6 +2071,7 @@ def resolve_window(  # noqa: PLR0913 - the three levels and the window are the i
         group=group,
         rules=SettingRules(check_value, build),
     )
-    return WindowResolution(
-        config if isinstance(config, WindowConfig) else None, resolved
-    )
+    if not isinstance(config, WindowConfig):
+        return WindowResolution(None, resolved)
+    config, resolved = _orientation_as_stated(config, resolved)
+    return WindowResolution(*_resolve_members(config, resolved, member_settings or {}))

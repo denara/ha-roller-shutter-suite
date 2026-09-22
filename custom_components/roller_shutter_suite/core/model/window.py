@@ -13,6 +13,16 @@ from ._validation import (
     require_unique,
 )
 from .functions import FaultBehavior, FunctionId
+from .geometry import (
+    GEOMETRY_FIELDS,
+    GEOMETRY_PREFIX,
+    NO_MEASUREMENTS,
+    GeometryRuleError,
+    MemberGlass,
+    MemberMeasurements,
+    ShadingGeometrySettings,
+    member_glass_for,
+)
 from .schedule import (
     TRIGGER_FIELDS,
     DayTriggers,
@@ -61,6 +71,8 @@ _MAX_TOLERANCE: Final = 100
 _DEFAULT_FROST_POSITION: Final = Position(90)
 _DEFAULT_REEVALUATE_AFTER: Final = timedelta(minutes=5)
 _DEFAULT_MIN_INTERVAL: Final = timedelta(minutes=10)
+_GEOMETRY: Final = ShadingGeometrySettings()
+"""The built-in defaults of the measurements of shading stand at the view."""
 
 
 @unique
@@ -390,16 +402,26 @@ class FrostSettings:
 
 @dataclass(frozen=True, slots=True)
 class MemberConfig:
-    """One cover of a window as the core sees it."""
+    """One cover of a window as the core sees it.
+
+    ``measurements`` is what the member states itself for geometric shading
+    (glass height, top offset, glass calibration); by default nothing, and
+    the member inherits the measurements of its window. The inheritance
+    resolver fills it from the member-level settings, with sound values only.
+    """
 
     member_id: str
     capabilities: CapabilityProfile
+    measurements: MemberMeasurements = NO_MEASUREMENTS
 
     def __post_init__(self) -> None:
         """Validate the member identifier."""
         require_identifier(self.member_id, "the identifier of a member")
         require_type(
             self.capabilities, CapabilityProfile, "the capability profile of a member"
+        )
+        require_type(
+            self.measurements, MemberMeasurements, "the measurements of a member"
         )
 
 
@@ -439,6 +461,14 @@ class WindowConfig:
       ``schedule_brightness_threshold`` is **in lux**, the unit the
       brightness source has to report in. The built-in defaults of all of
       them stand in one block at the top of this module.
+    - ``shading_use_measurements`` and the other ``shading_*`` measurements:
+      the window-level measurements of geometric shading, one field per
+      setting; :attr:`geometry` is the view over them and describes them,
+      with units and conventions. Their built-in defaults stand at the view
+      and mean "no measurements": the simple mode with a fixed position.
+      What a member states itself lives with the member
+      (``MemberConfig.measurements``); :attr:`member_glass` is the glass
+      that applies to every member.
     - ``disabled_functions``: the functions that are paused for this window
       because a stored setting of theirs is faulty (the inheritance resolver
       fills it; it is never stored). The arbiter skips the layers of such a
@@ -512,6 +542,21 @@ class WindowConfig:
     schedule_brightness_threshold: float = _BRIGHTNESS_THRESHOLD
     schedule_brightness_delay: timedelta = _BRIGHTNESS_DELAY
     schedule_random_offset: timedelta = _RANDOM_OFFSET
+    shading_use_measurements: bool = _GEOMETRY.use_measurements
+    shading_fixed_position: Position = _GEOMETRY.fixed_position
+    shading_orientation_known: bool = _GEOMETRY.orientation_known
+    shading_orientation: float = _GEOMETRY.orientation
+    shading_view_left: float = _GEOMETRY.view_left
+    shading_view_right: float = _GEOMETRY.view_right
+    shading_min_elevation: float = _GEOMETRY.min_elevation
+    shading_end_elevation: float = _GEOMETRY.end_elevation
+    shading_element_bottom: float = _GEOMETRY.element_bottom
+    shading_element_height: float = _GEOMETRY.element_height
+    shading_depth: float = _GEOMETRY.depth
+    shading_pitch: float = _GEOMETRY.pitch
+    shading_amplification_cap: float = _GEOMETRY.amplification_cap
+    shading_calibration_seat: Position = _GEOMETRY.calibration_seat
+    shading_calibration_glass_top: Position = _GEOMETRY.calibration_glass_top
     disabled_functions: frozenset[FunctionId] = frozenset()
 
     def __post_init__(self) -> None:
@@ -556,14 +601,40 @@ class WindowConfig:
                     f"the function {function.value!r} falls back on a fault; it "
                     "can never be switched off"
                 )
-        # Last, because it ends with rules over several settings: the view
-        # checks every single value of the schedule first, then those rules.
+        # Last, because these views end with rules over several settings.
+        refused = self._refused_combination()
+        if refused is not None:
+            raise refused
+
+    def _refused_combination(self) -> SettingsCombinationError | None:
+        """Build the views that have rules over several settings; return a refusal.
+
+        Each view checks every single value first and only then its rules. A
+        refused rule of the first view waits until the single values of the
+        second are checked too, and those raise from here: a rule must never
+        hide an invalid single value. The first refused rule is returned.
+        """
+        refused: SettingsCombinationError | None = None
+        try:
+            _ = self.geometry
+        except GeometryRuleError as err:
+            refused = SettingsCombinationError(
+                str(err), [f"{GEOMETRY_PREFIX}{field}" for field in err.fields]
+            )
+            refused.__cause__ = err
         try:
             _ = self.schedule
         except ScheduleRuleError as err:
-            raise SettingsCombinationError(
-                str(err), [f"schedule_{field}" for field in err.fields]
-            ) from err
+            if refused is None:
+                refused = SettingsCombinationError(
+                    str(err), [f"schedule_{field}" for field in err.fields]
+                )
+                refused.__cause__ = err
+        if refused is None:
+            # What the members state has to fit the measurements of the
+            # window; a ``MemberGlassError`` names the member and its fields.
+            _ = self.member_glass
+        return refused
 
     def _schedule_trigger(self, day_type: str, edge: str) -> Trigger:
         values = {
@@ -606,6 +677,28 @@ class WindowConfig:
             brightness_threshold=self.schedule_brightness_threshold,
             brightness_delay=self.schedule_brightness_delay,
             random_offset=self.schedule_random_offset,
+        )
+
+    @property
+    def geometry(self) -> ShadingGeometrySettings:
+        """Return the window-level measurements of shading as one value."""
+        values = {
+            name: getattr(self, f"{GEOMETRY_PREFIX}{name}") for name in GEOMETRY_FIELDS
+        }
+        return ShadingGeometrySettings(**values)
+
+    @property
+    def member_glass(self) -> tuple[MemberGlass, ...]:
+        """Return the glass that applies to every member, in their order.
+
+        A member's own measurements, else those of the window: this is what
+        the geometry computes with (``ShadedElement(config.geometry,
+        config.member_glass)``).
+        """
+        window = self.geometry
+        return tuple(
+            member_glass_for(window, member.member_id, member.measurements)
+            for member in self.members
         )
 
     @property
