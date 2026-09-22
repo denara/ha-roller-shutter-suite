@@ -15,7 +15,9 @@ on ``_validation``, ``functions`` and ``values``, ``controls`` on
 ``_validation`` only; ``decision`` also uses ``functions``, and ``snapshot``
 also uses ``controls`` and ``almanac``. ``schedule`` (the settings of the
 schedule as values) depends on ``_validation`` and ``values`` and is used by
-``window``; ``almanac`` depends on ``_validation`` and ``_data``.
+``window``; ``almanac`` depends on ``_validation`` and ``_data``. ``geometry``
+(the measurements of shading as values) depends on ``_validation`` and
+``values`` and is used by ``window``.
 
 Conventions that hold for the whole package:
 
@@ -51,6 +53,23 @@ from .decision import (
     WishKind,
 )
 from .functions import FaultBehavior, FunctionId
+from .geometry import (
+    GEOMETRY_FIELDS,
+    GEOMETRY_PREFIX,
+    MAX_AMPLIFICATION_CAP,
+    MAX_MEASURED_LENGTH,
+    MEMBER_MEASUREMENT_FIELDS,
+    MIN_CALIBRATION_SPAN,
+    NO_CALIBRATION,
+    NO_MEASUREMENTS,
+    GeometryRuleError,
+    GlassCalibration,
+    MemberGlass,
+    MemberGlassError,
+    MemberMeasurements,
+    ShadingGeometrySettings,
+    member_glass_for,
+)
 from .observation import (
     MemberCommand,
     MemberObservation,
@@ -136,9 +155,17 @@ __all__ = [
     "FULLY_CLOSED",
     "FULLY_OPEN",
     "GATE_RULE_REASONS",
+    "GEOMETRY_FIELDS",
+    "GEOMETRY_PREFIX",
+    "MAX_AMPLIFICATION_CAP",
+    "MAX_MEASURED_LENGTH",
     "MAX_RANDOM_OFFSET",
     "MAX_SUN_OFFSET_MINUTES",
+    "MEMBER_MEASUREMENT_FIELDS",
+    "MIN_CALIBRATION_SPAN",
     "MIN_TOLERANCE",
+    "NO_CALIBRATION",
+    "NO_MEASUREMENTS",
     "SCHEDULE_DAY_TYPES",
     "SCHEDULE_EDGES",
     "TRIGGER_FIELDS",
@@ -166,6 +193,8 @@ __all__ = [
     "GateKind",
     "GateOutcome",
     "GateRule",
+    "GeometryRuleError",
+    "GlassCalibration",
     "HeldInput",
     "JsonObject",
     "JsonValue",
@@ -175,6 +204,9 @@ __all__ = [
     "ManualOverrideDam",
     "MemberCommand",
     "MemberConfig",
+    "MemberGlass",
+    "MemberGlassError",
+    "MemberMeasurements",
     "MemberObservation",
     "MemberState",
     "MemberTarget",
@@ -200,6 +232,7 @@ __all__ = [
     "ScheduleTargets",
     "SettingsCombinationError",
     "ShadingEpisodeState",
+    "ShadingGeometrySettings",
     "SimulatedState",
     "SolarHeatingEpisodeState",
     "SourceScalar",
@@ -222,4 +255,5 @@ __all__ = [
     "WishClass",
     "WishKind",
     "WorldSnapshot",
+    "member_glass_for",
 ]
