@@ -231,7 +231,13 @@ def test_every_entry_that_logs_is_narrow_and_every_silent_one_broad() -> None:
         "async_is_composite_device_id",
         "suggested_area",
         *UPDATE_KEYWORDS,
+        *CREATE_KEYWORDS,
     }
+    # The name is an attribute of a device entry and a keyword of the update.
+    assert [e.kind for e in entries if e.name == "suggested_area"] == [
+        "attribute",
+        "keyword",
+    ]
     assert {e.name for e in entries if not e.narrow} == {
         "voluptuous",
         "config_entries",
@@ -248,6 +254,16 @@ UPDATE_KEYWORDS = (
     "remove_config_subentry_id",
     "merge_connections",
     "merge_identifiers",
+    "suggested_area",
+)
+# The parameters of async_get_or_create that Core reports.
+CREATE_KEYWORDS = (
+    "created_at",
+    "modified_at",
+    "default_manufacturer",
+    "default_model",
+    "default_name",
+    "via_device",
 )
 REAL_USE = {
     **{
@@ -257,6 +273,14 @@ REAL_USE = {
             f"dr.async_get(hass).async_update_device(device.id, {keyword}=value)",
         ]
         for keyword in UPDATE_KEYWORDS
+    },
+    **{
+        keyword: [
+            f"device_registry.async_get_or_create(config_entry_id=x, {keyword}=value)",
+            f"self._device_registry.async_get_or_create({keyword}=value, name='x')",
+            f"dr.async_get(hass).async_get_or_create(identifiers=k, {keyword}=value)",
+        ]
+        for keyword in CREATE_KEYWORDS
     },
     "show_advanced_options": [
         "if self.show_advanced_options:\n    pass",
@@ -290,6 +314,9 @@ REAL_USE = {
         "device = registry.async_get(device_id)\narea = device.suggested_area",
         "registry.async_get(device_id).suggested_area",
         "self._device.suggested_area",
+        # And as a keyword of async_update_device, which is a second entry.
+        "device_registry.async_update_device(device.id, suggested_area=area)",
+        "registry.async_update_device(device.id, name='x', suggested_area=area)",
     ],
 }
 # Own names that share the name with an entry that logs; not reported here,
@@ -309,11 +336,18 @@ OWN_USE = [
     "self.async_update_device(window_id, merge_identifiers=keys)",
     "runtime.update(window_id, add_config_entry_id=entry.entry_id)",
     "device_registry.async_get_or_create(config_entry_id=entry.entry_id)",
+    "DeviceInfo(via_device=(DOMAIN, key), default_name='x')",
+    "self.async_get_or_create(created_at=now, via_device=key)",
+    "device_registry.async_update_device(device.id, via_device=key)",
+    "runtime.async_get_or_create(default_model='x', modified_at=now)",
+    "self.form.suggested_area(area)",
     # And the real thing where it is fine.
     "for device in registry.devices:\n    pass",
     "len(registry.devices)",
     "device_registry.async_update_device(device.id, new_config_entry_id=entry_id)",
     "device_registry.async_update_device(device.id, new_identifiers=keys)",
+    "device_registry.async_get_or_create(via_device_id=parent.id, name='x')",
+    "device_registry.async_get_or_create(manufacturer='x', model='y')",
 ]
 
 
@@ -332,9 +366,13 @@ def test_entry_that_logs_is_found_where_home_assistant_exposes_it(
     assert len(findings) == 1, findings
     assert f"'{name}'" in findings[0].message or f".{name}'" in findings[0].message
     assert "logs a report" in findings[0].message
-    if name in UPDATE_KEYWORDS:
-        assert "keyword argument" in findings[0].message
-        assert "'.async_update_device()'" in findings[0].message
+    for method, keywords in (
+        ("async_update_device", UPDATE_KEYWORDS),
+        ("async_get_or_create", CREATE_KEYWORDS),
+    ):
+        if name in keywords and f".{method}(" in source:
+            assert "keyword argument" in findings[0].message
+            assert f"'.{method}()'" in findings[0].message
 
 
 @pytest.mark.parametrize("source", OWN_USE)

@@ -219,3 +219,77 @@ behavior = "logs"
 reason = "merge_identifiers of async_update_device only adds to the existing identifiers; it is deprecated and breaks in Home Assistant 2027.9."
 replacement = "new_identifiers with the full set"
 source = "homeassistant/helpers/device_registry.py, Core 2026.9.2: async_update_device calls report_usage when the keyword is passed"
+
+[[deprecated]]
+kind = "keyword"
+name = "suggested_area"
+method = "async_update_device"
+receivers = ["registry", "_registry", "device_registry", "_device_registry"]
+behavior = "logs"
+reason = "Passing suggested_area to async_update_device is deprecated; removal was announced for Home Assistant 2026.9, the parameter is still accepted and logs."
+replacement = "Nothing; set the device's area through the area registry if it is needed."
+source = "homeassistant/helpers/device_registry.py, Core 2026.9.2: async_update_device calls report_usage when the keyword is passed (breaks_in_ha_version 2026.9.0)"
+
+# The parameters of DeviceRegistry.async_get_or_create that Core 2026.9.2
+# reports, from its table _DEPRECATED_DEVICE_INFO_PARAMETERS. The integration
+# passes none of them today.
+
+[[deprecated]]
+kind = "keyword"
+name = "created_at"
+method = "async_get_or_create"
+receivers = ["registry", "_registry", "device_registry", "_device_registry"]
+behavior = "logs"
+reason = "created_at of async_get_or_create is ignored and deprecated; it breaks in Home Assistant 2027.9."
+replacement = "Nothing; the registry records the time itself."
+source = "homeassistant/helpers/device_registry.py, Core 2026.9.2: _DEPRECATED_DEVICE_INFO_PARAMETERS, async_get_or_create calls report_usage when the parameter is passed"
+
+[[deprecated]]
+kind = "keyword"
+name = "modified_at"
+method = "async_get_or_create"
+receivers = ["registry", "_registry", "device_registry", "_device_registry"]
+behavior = "logs"
+reason = "modified_at of async_get_or_create is ignored and deprecated; it breaks in Home Assistant 2027.9."
+replacement = "Nothing; the registry records the time itself."
+source = "homeassistant/helpers/device_registry.py, Core 2026.9.2: _DEPRECATED_DEVICE_INFO_PARAMETERS, async_get_or_create calls report_usage when the parameter is passed"
+
+[[deprecated]]
+kind = "keyword"
+name = "default_manufacturer"
+method = "async_get_or_create"
+receivers = ["registry", "_registry", "device_registry", "_device_registry"]
+behavior = "logs"
+reason = "default_manufacturer of async_get_or_create is deprecated and breaks in Home Assistant 2027.9."
+replacement = "manufacturer"
+source = "homeassistant/helpers/device_registry.py, Core 2026.9.2: _DEPRECATED_DEVICE_INFO_PARAMETERS, async_get_or_create calls report_usage when the parameter is passed"
+
+[[deprecated]]
+kind = "keyword"
+name = "default_model"
+method = "async_get_or_create"
+receivers = ["registry", "_registry", "device_registry", "_device_registry"]
+behavior = "logs"
+reason = "default_model of async_get_or_create is deprecated and breaks in Home Assistant 2027.9."
+replacement = "model"
+source = "homeassistant/helpers/device_registry.py, Core 2026.9.2: _DEPRECATED_DEVICE_INFO_PARAMETERS, async_get_or_create calls report_usage when the parameter is passed"
+
+[[deprecated]]
+kind = "keyword"
+name = "default_name"
+method = "async_get_or_create"
+receivers = ["registry", "_registry", "device_registry", "_device_registry"]
+behavior = "logs"
+reason = "default_name of async_get_or_create is deprecated and breaks in Home Assistant 2027.9."
+replacement = "name"
+source = "homeassistant/helpers/device_registry.py, Core 2026.9.2: _DEPRECATED_DEVICE_INFO_PARAMETERS, async_get_or_create calls report_usage when the parameter is passed"
+
+[[deprecated]]
+kind = "keyword"
+name = "via_device"
+method = "async_get_or_create"
+receivers = ["registry", "_registry", "device_registry", "_device_registry"]
+behavior = "logs"
+reason = "via_device of async_get_or_create names a device by an identifier, which is no longer unique across config entries; it is deprecated and breaks in Home Assistant 2027.8."
+replacement = "via_device_id"
+source = "homeassistant/helpers/device_registry.py, Core 2026.9.2: _DEPRECATED_DEVICE_INFO_PARAMETERS, async_get_or_create calls report_usage when the parameter is passed"
