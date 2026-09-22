@@ -294,6 +294,32 @@ def _same_command_pending(gate: GateInput) -> GateOutcome | None:
     )
 
 
+def fire_command_pending(gate: GateInput) -> bool:
+    """Return whether a real fire command with these targets is still pending.
+
+    For the safety net of the arbiter: a fire wish that passed a gate rule
+    that raised is not sent again while every target at the gate is the
+    target of an own command of class fire whose expectation window still
+    runs. It reads the **persisted, real** own commands
+    (``WindowState.members``), never the simulated ones and never
+    ``GateInput.own_commands``: what passed a failed rule was really sent,
+    also for a window in dry-run whose dry-run rule failed.
+    """
+    pending: dict[str, OwnCommand] = {}
+    for member in gate.snapshot.state.members:
+        command = member.last_own_command
+        if command is None or command.wish_class is not WishClass.FIRE:
+            continue
+        end = expectation_window_end(gate, member.member_id, command)
+        if end is not None and gate.snapshot.time < end:
+            pending[member.member_id] = command
+    return bool(pending) and all(
+        target.member_id in pending
+        and pending[target.member_id].target == target.position
+        for target in gate.to_send
+    )
+
+
 def _wait_for_rest(gate: GateInput) -> GateOutcome | None:
     """Hold back a comfort wish while another movement is under way.
 

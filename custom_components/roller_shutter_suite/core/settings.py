@@ -28,8 +28,10 @@ The pieces:
 Nothing here raises because of what a user stored, and a fault in stored
 settings never costs a window its configuration. What a fault costs follows
 the fault behavior of the setting's function (``FunctionId.fault_behavior``).
-**Fall back:** whatever protects or restricts movement never fails; the faulty
-value is passed by and the next level supplies it. **Pause:** a function that
+**Fall back:** whatever protects or restricts movement never fails, and a fault
+never loosens it; the faulty value is passed by and another level supplies a
+valid one, or else the cautious fault value of the setting applies, not its
+default. **Pause:** a function that
 creates wishes for convenience is paused for the windows for which the faulty
 value would have been the effective one, so a window never moves unexpectedly
 because of a data fault. **Everything is reported.**
@@ -46,12 +48,14 @@ from types import MappingProxyType
 from typing import Any, Final
 
 from .model import (
+    BLIND_SOURCE,
     GEOMETRY_FIELDS,
     GEOMETRY_PREFIX,
     MEMBER_MEASUREMENT_FIELDS,
     SCHEDULE_DAY_TYPES,
     SCHEDULE_EDGES,
     TRIGGER_FIELDS,
+    BlindSource,
     CapabilityState,
     CoveringType,
     FaultBehavior,
@@ -167,6 +171,21 @@ class CapabilityRequirement[T]:
         require_type(self.capability, Capability, "the required capability")
 
 
+@unique
+class NoFaultValue(Enum):
+    """The type of the marker :data:`NO_FAULT_VALUE`. It has exactly one member."""
+
+    NO_FAULT_VALUE = "no_fault_value"
+
+
+NO_FAULT_VALUE: Final = NoFaultValue.NO_FAULT_VALUE
+"""The setting states no fault value: a fault pauses its function, or it has none.
+
+It is a marker of its own, because ``None``, ``False`` and ``0`` are fault
+values somebody may state.
+"""
+
+
 @dataclass(frozen=True, slots=True)
 class SettingDefinition[T]:
     """Everything the resolver knows about one setting. The single place.
@@ -183,6 +202,18 @@ class SettingDefinition[T]:
       describes the window itself rather than a function (the covering
       type); a fault in such a setting falls back and pauses nothing.
     - ``default``: the built-in default, used when no level sets the value.
+    - ``fault_value``: the **cautious value** of a setting whose function falls
+      back. It is effective when a level tried to set the value and could not
+      (a faulty value), or could have set it and nobody can see whether it did
+      (a level that is unreadable as a whole), and no other level supplies a
+      valid value. A fault must never make a function that restricts movement
+      less restrictive than a valid value would, and a default often means
+      "not configured" or "off". So the fault value is stated on purpose, also
+      where it equals the default: the argument has no silent default, and an
+      entry of a function that falls back does not construct without it. For
+      a setting whose function pauses, and for a setting without a function,
+      it does not exist and is refused: a fault pauses the function, or
+      nothing depends on the setting.
     - ``parse``: reads the value from stored data and raises a ``ValueError``
       if it cannot. It is never called for an absent key, blank text,
       ``null`` or :data:`STORED_NONE`.
@@ -199,6 +230,7 @@ class SettingDefinition[T]:
     parse: Callable[[JsonValue], T]
     inheritable: bool = True
     requires: CapabilityRequirement[T] | None = None
+    fault_value: T | NoFaultValue = NO_FAULT_VALUE
 
     def __post_init__(self) -> None:
         """Validate the description itself."""
@@ -217,6 +249,39 @@ class SettingDefinition[T]:
             require_type(
                 self.requires, CapabilityRequirement, "the capability requirement"
             )
+        if self.function is not None and self.falls_back_cautiously:
+            if not self.has_fault_value:
+                raise ValueError(
+                    f"the setting {self.key!r} belongs to the function "
+                    f"{self.function.value!r}, which falls back on a fault, so it "
+                    "states its fault value: add 'fault_value=<the cautious "
+                    "value>', the value that applies when a stored value is "
+                    "faulty and no level supplies a valid one. It must never make "
+                    "the function less restrictive than a valid value would; if "
+                    "that is the default, state the default"
+                )
+        elif self.has_fault_value:
+            raise ValueError(
+                f"the setting {self.key!r} has no fault value: a fault pauses its "
+                "function, or it belongs to none; remove 'fault_value'"
+            )
+
+    @property
+    def has_fault_value(self) -> bool:
+        """Return whether the setting states a fault value."""
+        return self.fault_value is not NO_FAULT_VALUE
+
+    @property
+    def falls_back_cautiously(self) -> bool:
+        """Return whether a fault ends at the fault value: a function that falls back.
+
+        A setting without a function falls back too, but to its default:
+        nothing depends on it.
+        """
+        return (
+            self.function is not None
+            and self.function.fault_behavior is FaultBehavior.FALL_BACK
+        )
 
     @property
     def fault_behavior(self) -> FaultBehavior:
@@ -373,6 +438,10 @@ _NONE_FAULT: Final = (
 )
 _UNKNOWN_FAULT: Final = "the registry has no setting with this key"
 _NOT_INHERITABLE_FAULT: Final = "only a window can set this; it cannot be inherited"
+_BLIND_FAULT: Final = (
+    "the marker for a source that is configured, but blind, cannot be set; only "
+    "the resolver produces it"
+)
 _LEVEL_FAULT: Final = "the settings of this level are not a mapping of keys to values"
 
 _REFUSALS: Final = (
@@ -515,6 +584,12 @@ class ResolvedValue[T]:
       unmasked and nothing is reported, but it is not confirmed either. A
       member that is merely unreachable is not unknown: its last known
       capabilities are handed in as known, so a mask stays while it is away.
+
+    ``cautious`` is true when ``value`` is the **fault value** of the setting
+    and not its default: a level tried to set the value and could not, or is
+    unreadable as a whole, and no other level supplied a valid one. ``level``
+    is ``built_in`` then, because no level of the installation supplied it;
+    the flag tells the two built-in values apart.
     """
 
     key: str
@@ -524,6 +599,7 @@ class ResolvedValue[T]:
     group_id: str | None = None
     capability: CapabilityState | None = None
     unavailable: MissingCapability | None = None
+    cautious: bool = False
     member_id: str | None = None
     """The member, for a value the member states itself (level ``member``)."""
 
@@ -548,7 +624,14 @@ class FaultAction(StrEnum):
     """What the resolver did about a fault."""
 
     FELL_BACK = "fell_back"
-    """Fall back: the faulty value is passed by; the next level supplies the value."""
+    """Fall back: the faulty value is passed by; another level supplies a valid
+    value. For a setting without a function, the built-in default may supply it."""
+    FELL_BACK_TO_CAUTIOUS_VALUE = "fell_back_to_cautious_value"
+    """Fall back, and no level supplies a valid value: the **fault value** of the
+    setting is effective, not its default, so the function is never less
+    restrictive than a valid value would have made it. The window now runs on
+    a value nobody chose, which is what a repair issue has to say; after
+    ``fell_back`` it runs on a value somebody chose on another level."""
     FUNCTIONS_DISABLED = "functions_disabled"
     """Pause: the functions named by the fault are paused for this window."""
     IGNORED = "ignored"
@@ -672,6 +755,24 @@ class _LevelInput:
         """Return whether the level sets the key, but not soundly."""
         return any(fault.key == key for fault in self.faults)
 
+    @property
+    def unreadable(self) -> bool:
+        """Return whether the settings of the level are unreadable as a whole."""
+        return any(
+            fault.problem is SettingProblem.LEVEL_UNREADABLE for fault in self.faults
+        )
+
+    def could_have_set(self, definition: SettingDefinition[Any]) -> bool:
+        """Return whether an unreadable level may hide a value of the setting.
+
+        Nobody can see what an unreadable level held. It could have held
+        every setting that can be set on it: on the window all of them, on a
+        group or the house the inheritable ones only.
+        """
+        return self.unreadable and (
+            definition.inheritable or self.level is Level.WINDOW
+        )
+
     def blamed(self, fault: SettingFault) -> _LevelInput:
         """Return the level with one of its sound values turned into a fault."""
         kept = {key: value for key, value in self.values.items() if key != fault.key}
@@ -711,6 +812,11 @@ def _read_level(
                 )
             )
             continue
+        if isinstance(value, BlindSource):
+            # "Configured, but blind" is what a fault ends at. No level can
+            # say it: a level that names no source says none.
+            faults.append(SettingFault(key, _BLIND_FAULT, SettingProblem.INVALID))
+            continue
         if rules is not None:
             try:
                 rules.check_value(key, value)
@@ -748,23 +854,35 @@ def _resolve_one(
     """Walk the levels from the window outwards; the first that sets the key decides.
 
     A level whose value for the key is faulty is passed by, and the walk goes
-    on outwards, last to the built-in default. Returned with the value are the
-    levels whose fault was reached that way: for this window the faulty value
-    would have been the effective one. A fault further out than a sound value
-    is never reached.
+    on outwards. Returned with the value are the levels whose fault was
+    reached that way: for this window the faulty value would have been the
+    effective one. A fault further out than a sound value is never reached.
+    A level that is unreadable as a whole is passed by in the same way, for
+    every setting it could have held.
 
-    ``forced_default`` says that the key takes part in a refused combination
-    and belongs to a function that pauses: the walk then ends at the first
-    sound value without taking it, and the built-in default stands in. The
-    function is paused, so nobody acts on the value; taking a value from
-    further out would combine values the user never chose together.
+    If the walk ends without a valid value, what applies depends on how it
+    got there. No level was passed by: nobody tried to set the value, and the
+    built-in default applies. A level was passed by, and the setting belongs
+    to a function that falls back: the **fault value** applies, not the
+    default, because a fault never makes such a function less restrictive
+    than a valid value would (``cautious`` of the result says so). A setting
+    without a function takes its default; nothing depends on it.
+
+    ``forced_default`` says that the key must not take a value of any level.
+    It takes part in a refused combination and belongs to a function that
+    pauses: the walk then ends at the first sound value without taking it,
+    and the built-in default stands in. The function is paused, so nobody
+    acts on the value; taking a value from further out would combine values
+    the user never chose together. Or a refusal of the whole could not be
+    attributed at all, and every setting is forced: one of a function that
+    falls back then takes its fault value.
     """
     value: Any = definition.default
     found: Level = Level.BUILT_IN
     found_group: str | None = None
     reached: list[Level] = []
     for level in levels:
-        if level.is_faulty(definition.key):
+        if level.is_faulty(definition.key) or level.could_have_set(definition):
             reached.append(level.level)
         elif definition.key in level.values:
             if not forced_default:
@@ -774,6 +892,13 @@ def _resolve_one(
                     level.group_id,
                 )
             break
+    cautious = (
+        found is Level.BUILT_IN
+        and definition.falls_back_cautiously
+        and (forced_default or bool(reached))
+    )
+    if cautious:
+        value = definition.fault_value
     effective = value
     state: CapabilityState | None = None
     missing: MissingCapability | None = None
@@ -791,16 +916,48 @@ def _resolve_one(
         group_id=found_group,
         capability=state,
         unavailable=missing,
+        cautious=cautious,
     )
     return resolved, tuple(reached)
+
+
+def _hidden_by(
+    level: _LevelInput,
+    fault: SettingFault,
+    values: Mapping[str, ResolvedValue[Any]],
+    reached: Mapping[str, tuple[Level, ...]],
+) -> list[ReportedFault]:
+    """Name the settings that run on their fault value because a level is unreadable.
+
+    One entry per setting, with the unreadable level and the action
+    ``fell_back_to_cautious_value``, so a repair issue can name each of them.
+    """
+    return [
+        ReportedFault(
+            key,
+            level.level,
+            fault.problem,
+            fault.detail,
+            FaultAction.FELL_BACK_TO_CAUTIOUS_VALUE,
+            (),
+            level.group_id,
+        )
+        for key, item in values.items()
+        if item.cautious and level.level in reached[key]
+    ]
 
 
 def _report(
     registry: SettingsRegistry,
     levels: tuple[_LevelInput, ...],
+    values: Mapping[str, ResolvedValue[Any]],
     reached: Mapping[str, tuple[Level, ...]],
 ) -> tuple[ReportedFault, ...]:
-    """List every fault of every level once, with what it costs this window."""
+    """List every fault of every level once, with what it costs this window.
+
+    A level that is unreadable as a whole is listed once as a whole and once
+    more for every setting that runs on its fault value because of it.
+    """
     definitions = {definition.key: definition for definition in registry.definitions}
     reports: list[ReportedFault] = []
     for level in levels:
@@ -825,6 +982,8 @@ def _report(
             ):
                 action = FaultAction.FUNCTIONS_DISABLED
                 disabled = (definition.function,)
+            elif values[fault.key].cautious:
+                action = FaultAction.FELL_BACK_TO_CAUTIOUS_VALUE
             else:
                 action = FaultAction.FELL_BACK
             reports.append(
@@ -838,6 +997,8 @@ def _report(
                     level.group_id,
                 )
             )
+            if fault.problem is SettingProblem.LEVEL_UNREADABLE:
+                reports.extend(_hidden_by(level, fault, values, reached))
     return tuple(reports)
 
 
@@ -855,7 +1016,7 @@ def _resolve_levels(
         values[definition.key], reached[definition.key] = _resolve_one(
             definition, levels, capabilities, members, definition.key in forced
         )
-    return values, _report(registry, levels, reached)
+    return values, _report(registry, levels, values, reached)
 
 
 def _pauses(definition: SettingDefinition[Any]) -> bool:
@@ -934,9 +1095,10 @@ def _refused_without_keys(
     stored data. Protection has to keep running all the same, so the window
     is not given up at once: first every function that pauses is paused and
     its settings take their defaults; if the whole is still refused, the
-    settings of the functions that fall back take their defaults as well;
-    only if even the built-in defaults are refused is the configuration
-    withheld.
+    settings of the functions that fall back take their fault values (a
+    setting without a function its default): what they restrict stays
+    restricted; only if even these built-in values are refused is the
+    configuration withheld.
     """
     detail = str(error) or type(error).__name__
     state.unattributed += 1
@@ -947,7 +1109,7 @@ def _refused_without_keys(
         action, disabled = FaultAction.FUNCTIONS_DISABLED, registry.pausable_functions
     elif state.unattributed == 2:  # noqa: PLR2004 - the second of three steps
         state.forced.update(registry.keys)
-        action, disabled = FaultAction.FELL_BACK, ()
+        action, disabled = FaultAction.FELL_BACK_TO_CAUTIOUS_VALUE, ()
     else:
         action, disabled = FaultAction.CONFIGURATION_WITHHELD, ()
     state.reports.append(
@@ -1049,8 +1211,12 @@ def resolve_settings(  # noqa: PLR0913 - the three levels and the window are the
     what that costs depends on the fault behavior of the setting's function:
 
     - **fall back:** the faulty value is passed by and the walk goes on
-      outwards, last to the built-in default; ``level`` of the resolved value
-      says which level finally supplied it. Nothing is paused.
+      outwards; ``level`` of the resolved value says which level finally
+      supplied it (``fell_back``). If no level supplies a valid value, the
+      **fault value** of the setting applies, not its default
+      (``fell_back_to_cautious_value``, and ``cautious`` of the resolved
+      value): a fault never makes a function that restricts movement less
+      restrictive than a valid value would. Nothing is paused.
     - **pause:** the **function** of the setting is paused for this window,
       so it never moves unexpectedly because of a data fault. The value is
       resolved in the same way, but the arbiter does not act on it.
@@ -1059,7 +1225,12 @@ def resolve_settings(  # noqa: PLR0913 - the three levels and the window are the
     - **a level that is unreadable as a whole** counts as not present: every
       function that a fault pauses is paused for the windows in whose chain
       the level lies, and the functions that fall back take the values of the
-      other levels.
+      other levels. Nobody can see whether the unreadable level had set a
+      value, so a setting of a function that falls back **that the level
+      could have held** and that no other level supplies takes its fault
+      value, and the result names each such setting with the level. A
+      setting that cannot be inherited is touched by an unreadable window
+      only, never by an unreadable group or house.
 
     **A rule that spans several settings** refuses the whole with a
     ``SettingsCombinationError`` that names the keys it concerns. Only those
@@ -1071,8 +1242,8 @@ def resolve_settings(  # noqa: PLR0913 - the three levels and the window are the
     sound value of a setting the rule does not concern is never touched,
     reported or blamed. A refusal that names no keys cannot be attributed
     (``rule_without_keys``): every function that pauses is paused, then the
-    settings that fall back take their defaults, and only if the defaults
-    are refused too is the configuration withheld.
+    settings that fall back take their fault values, and only if these
+    built-in values are refused too is the configuration withheld.
 
     Everything is reported in ``faults``. The function does not raise for
     anything a user could have stored.
@@ -1344,11 +1515,23 @@ WINDOW_SETTINGS: Final = SettingsRegistry(
             default=ScheduleProfile.DEFAULT,
             parse=as_enum(ScheduleProfile),
         ),
-        SettingDefinition[str | None](
+        # The fault values of the settings that fall back were confirmed by the
+        # project owner. Each entry says why its value is the cautious one. Two
+        # rules decide: a fault value never makes the function less restrictive
+        # for a comfort wish than a valid value would, and a fault ON ITS OWN
+        # never restricts a PROTECTION wish more than the default does. (Where
+        # a person validly switched "frost applies to protection" on, the
+        # cautious values reach protection wishes as valid restrictive values
+        # would. Fire is untouched in every case.)
+        SettingDefinition[str | BlindSource | None](
             key="frost_source",
             kind=SettingKind.OPTIONAL_REFERENCE,
             function=FunctionId.FROST,
             default=None,
+            # "None" means "not configured" and would lift the frost limit.
+            # Configured, but blind: the limit stays until somebody repairs
+            # the setting or waives frost protection.
+            fault_value=BLIND_SOURCE,
             parse=as_str,
         ),
         SettingDefinition(
@@ -1356,6 +1539,10 @@ WINDOW_SETTINGS: Final = SettingsRegistry(
             kind=SettingKind.NUMBER,
             function=FunctionId.FROST,
             default=0.0,
+            # The default, stated on purpose. A higher threshold engages
+            # earlier, but a number has no most restrictive value; the
+            # freezing point never engages later than the approved default.
+            fault_value=0.0,
             parse=_as_number,
         ),
         SettingDefinition(
@@ -1363,6 +1550,9 @@ WINDOW_SETTINGS: Final = SettingsRegistry(
             kind=SettingKind.NUMBER,
             function=FunctionId.FROST,
             default=1.0,
+            # The default, stated on purpose: frost never ends earlier than
+            # with the approved band.
+            fault_value=1.0,
             parse=_as_number,
         ),
         SettingDefinition(
@@ -1370,6 +1560,9 @@ WINDOW_SETTINGS: Final = SettingsRegistry(
             kind=SettingKind.NUMBER,
             function=FunctionId.FROST,
             default=Position(90),
+            # The default, stated on purpose. Lower would open less, and its
+            # extreme, no opening at all in frost, was rejected (decision 13).
+            fault_value=Position(90),
             parse=_as_position,
         ),
         SettingDefinition(
@@ -1377,6 +1570,11 @@ WINDOW_SETTINGS: Final = SettingsRegistry(
             kind=SettingKind.BOOLEAN,
             function=FunctionId.FROST,
             default=False,
+            # The default, although "on" restricts more: the switch restricts
+            # protection wishes only, and a fault value never restricts a
+            # protection wish more than the default does. A hail opening must
+            # not stop short because of a data fault.
+            fault_value=False,
             parse=as_bool,
         ),
         SettingDefinition(
@@ -1384,6 +1582,11 @@ WINDOW_SETTINGS: Final = SettingsRegistry(
             kind=SettingKind.BOOLEAN,
             function=FunctionId.FROST,
             default=False,
+            # The more restrictive of the two: a closed shutter is not raised
+            # at all in frost. It reaches comfort wishes only, because with
+            # the fault value of "applies to protection" the constraint never
+            # touches a protection wish.
+            fault_value=True,
             parse=as_bool,
         ),
         SettingDefinition(
@@ -1391,6 +1594,9 @@ WINDOW_SETTINGS: Final = SettingsRegistry(
             kind=SettingKind.NUMBER,
             function=FunctionId.MOTOR_PROTECTION,
             default=5,
+            # The default, stated on purpose: never smaller than approved;
+            # zero would switch the minimum change off.
+            fault_value=5,
             parse=as_int,
         ),
         SettingDefinition(
@@ -1398,6 +1604,8 @@ WINDOW_SETTINGS: Final = SettingsRegistry(
             kind=SettingKind.DURATION,
             function=FunctionId.MOTOR_PROTECTION,
             default=timedelta(minutes=10),
+            # The default, stated on purpose: never shorter than approved.
+            fault_value=timedelta(minutes=10),
             parse=as_duration,
         ),
         # The upper bound of a deferral that waits for a report of a member (a
@@ -1409,6 +1617,10 @@ WINDOW_SETTINGS: Final = SettingsRegistry(
             kind=SettingKind.DURATION,
             function=FunctionId.COMMAND_VERIFICATION,
             default=timedelta(minutes=5),
+            # The default, stated on purpose. Neither direction is "more
+            # restrictive": the bound never lets a command through, it only
+            # says when a deferred window is evaluated again at the latest.
+            fault_value=timedelta(minutes=5),
             parse=as_duration,
         ),
         *_schedule_settings(),
@@ -1788,8 +2000,13 @@ def resolve_window(  # noqa: PLR0913 - the levels of a window are the input
     window_settings: PartialSettings,
     group: GroupLevel | None = None,
     member_settings: Mapping[str, PartialSettings] | None = None,
+    registry: SettingsRegistry = WINDOW_SETTINGS,
 ) -> WindowResolution:
     """Resolve :data:`WINDOW_SETTINGS` and build the configuration of one window.
+
+    ``registry`` is for tests that judge a changed registry of the window (a
+    fault value that was made less cautious, for example); the integration
+    never passes it.
 
     The window configuration validates itself, and it is the only place with
     value rules: every set value of every level is handed to it on its own,
@@ -1846,7 +2063,7 @@ def resolve_window(  # noqa: PLR0913 - the levels of a window are the input
         return dataclasses.replace(identity, **effective, disabled_functions=disabled)
 
     resolved, config = _resolve(
-        WINDOW_SETTINGS,
+        registry,
         capabilities=identity.capability_states,
         members=identity.members,
         global_settings=global_settings,

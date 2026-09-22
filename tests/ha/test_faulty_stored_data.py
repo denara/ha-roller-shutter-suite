@@ -118,11 +118,16 @@ async def test_entry_loads_and_only_the_window_without_readable_covers_is_not_se
     assert comfort.config is not None
     assert comfort.config.disabled_functions == {FunctionId.SCHEDULE}
     # A faulty setting of a function that protects falls back and never fails.
+    # No other level supplies a valid value, so its cautious fault value
+    # applies, which for the frost position is the default, stated on purpose.
     protection = windows["protection"].resolution.settings
     assert protection.disabled_functions == frozenset()
     assert protection.values["frost_position"].value.value == FROST_DEFAULT
+    assert protection.values["frost_position"].cautious
     own_faults = [fault for fault in protection.faults if fault.level is Level.WINDOW]
-    assert [fault.action for fault in own_faults] == [FaultAction.FELL_BACK]
+    assert [fault.action for fault in own_faults] == [
+        FaultAction.FELL_BACK_TO_CAUTIOUS_VALUE
+    ]
     # An unknown key is reported and harmless.
     assert windows["unknown"].resolution.settings.disabled_functions == frozenset()
     # A group that is unreadable as a whole counts as not present: comfort pauses.
@@ -130,6 +135,16 @@ async def test_entry_loads_and_only_the_window_without_readable_covers_is_not_se
         windows["grouped"].resolution.settings.disabled_functions
         == PAUSED_BY_AN_UNREADABLE_LEVEL
     )
+    # Nobody can see what the group had set, so what protects runs on its
+    # cautious values. The core names the group once more for each of them;
+    # the one issue of the group stands for all (checked below).
+    hidden = [
+        fault
+        for fault in windows["grouped"].resolution.settings.faults
+        if fault.action is FaultAction.FELL_BACK_TO_CAUTIOUS_VALUE
+    ]
+    assert "frost_source" in {fault.key for fault in hidden}
+    assert {fault.level for fault in hidden} == {Level.GROUP}
 
     issues = _issues(hass)
     expected = {

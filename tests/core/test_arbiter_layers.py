@@ -231,10 +231,16 @@ def test_a_wish_per_member_keeps_its_positions() -> None:
 
     assert decision.targets == per_member
     assert decision.target is None
-    with pytest.raises(ValueError, match="names the members of the window"):
-        arbiter.recompute(
-            window(RIGHT, LEFT), snapshot(observation=observed(right=100, left=100))
-        )
+    # A wish for other members, or in another order, is no answer of the layer.
+    swapped = arbiter.recompute(
+        window(RIGHT, LEFT), snapshot(observation=observed(right=100, left=100))
+    )
+    assert swapped.winning_wish is None
+    assert LayerReason(Layer.SHADING, ReasonCode.LAYER_FAILED, FunctionId.SHADING) in (
+        swapped.other_layers
+    )
+    (fault,) = swapped.faults
+    assert "names the members of the window" in str(fault.exception)
 
 
 def test_the_snapshot_has_to_observe_the_members_of_the_window() -> None:
@@ -271,8 +277,12 @@ def test_a_layer_is_registered_once_and_answers_for_itself() -> None:
 
     with pytest.raises(ValueError, match="'sleep' is registered twice"):
         build_arbiter([inactive, inactive])
-    with pytest.raises(ValueError, match="answered with a wish of the layer 'sleep'"):
-        build_arbiter([impostor]).recompute(window(), snapshot())
+    decision = build_arbiter([impostor]).recompute(window(), snapshot())
+    assert LayerReason(Layer.FIRE, ReasonCode.LAYER_FAILED, FunctionId.FIRE) in (
+        decision.other_layers
+    )
+    (fault,) = decision.faults
+    assert "answered with a wish of the layer 'sleep'" in str(fault.exception)
     with pytest.raises(TypeError, match="member of 'Layer'"):
         registered(bad, inactive.evaluate)
 

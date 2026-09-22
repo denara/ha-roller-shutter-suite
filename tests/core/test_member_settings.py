@@ -327,7 +327,8 @@ def test_a_member_setting_of_a_function_that_falls_back_is_refused(
     and would need a cautious value per member. So the fault values of
     decision 15 are not needed on this level, and the registry keeps it so.
     """
-    registry = SettingsRegistry((_definition(function=function),))
+    # An entry of such a function states a fault value, so it constructs.
+    registry = SettingsRegistry((_definition(function=function, fault_value=0),))
 
     with pytest.raises(ValueError, match="falls back"):
         MemberSettingsRegistry(registry, {"example": None})

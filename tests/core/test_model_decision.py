@@ -15,6 +15,8 @@ from custom_components.roller_shutter_suite.core.model import (
     ConstraintResult,
     Decision,
     Direction,
+    EvaluationFault,
+    EvaluationStage,
     FunctionId,
     GateKind,
     GateOutcome,
@@ -1077,13 +1079,18 @@ def test_constraint_result_takes_only_constraint_codes(reason: ReasonCode) -> No
 
 
 def test_every_constraint_code_belongs_to_exactly_one_constraint() -> None:
-    """Sections 2.2 and 5: the pairing of constraint and reason is fixed."""
+    """Sections 2.2 and 5: the pairing of constraint and reason is fixed.
+
+    One code belongs to no constraint and fits every one: ``constraint_failed``,
+    which the arbiter writes for a constraint that raised an exception.
+    """
     paired = [code for codes in CONSTRAINT_REASONS.values() for code in codes]
+    failed = ReasonCode.CONSTRAINT_FAILED
 
     assert set(CONSTRAINT_REASONS) == set(Constraint)
-    assert sorted(paired) == sorted(codes_of(ReasonCategory.CONSTRAINT))
+    assert sorted([*paired, failed]) == sorted(codes_of(ReasonCategory.CONSTRAINT))
     for constraint, codes in CONSTRAINT_REASONS.items():
-        for code in codes:
+        for code in (*codes, failed):
             assert ConstraintResult(constraint, code, _targets(50)).reason is code
     with pytest.raises(ValueError, match="does not report the reason 'frost_limit'"):
         ConstraintResult(
@@ -1108,19 +1115,48 @@ def test_gate_outcome_takes_only_gate_codes_and_the_capability_reason(
 
 
 def test_every_gate_code_belongs_to_exactly_one_rule() -> None:
-    """Sections 2.3 and 5: the pairing of rule and reason is fixed."""
+    """Sections 2.3 and 5: the pairing of rule and reason is fixed.
+
+    One code belongs to no rule and fits every one: ``gate_rule_failed``, which
+    the arbiter writes for a rule that raised an exception. It is part of no
+    rule's own reasons, so it never touches the fire bypass.
+    """
     paired = [code for codes in GATE_RULE_REASONS.values() for code in codes]
+    failed = ReasonCode.GATE_RULE_FAILED
     expected = [
-        code for code in codes_of(ReasonCategory.GATE) if code is not ReasonCode.SENT
+        code
+        for code in codes_of(ReasonCategory.GATE)
+        if code not in (ReasonCode.SENT, failed)
     ] + [ReasonCode.CAPABILITY_MISSING]
 
     assert set(GATE_RULE_REASONS) == set(GateRule)
     assert sorted(paired) == sorted(expected)
     for rule, codes in GATE_RULE_REASONS.items():
+        assert GateOutcome.suppress(rule, failed).reason is failed
         if rule is GateRule.DRY_RUN:
             continue
         for code in codes:
             assert GateOutcome.suppress(rule, code).reason is code
+
+
+def test_failed_dry_run_rule_records_no_would_be_command() -> None:
+    """It holds the wish back like every failed rule; nobody knows what it would send."""
+    failed = GateOutcome.defer(
+        GateRule.DRY_RUN,
+        ReasonCode.GATE_RULE_FAILED,
+        reevaluate_no_later_than=LATER,
+        dry_run=True,
+    )
+
+    assert (failed.kind, failed.would_send) == (GateKind.DEFER, ())
+    with pytest.raises(ValueError, match="only it, records the would-be command"):
+        GateOutcome(
+            GateKind.SUPPRESS,
+            ReasonCode.GATE_RULE_FAILED,
+            GateRule.DRY_RUN,
+            dry_run=True,
+            would_send=_targets(50),
+        )
 
 
 def test_gate_rule_and_reason_have_to_fit() -> None:
@@ -1195,3 +1231,71 @@ def test_decision_names_the_same_members_everywhere(
     """Wish, constraint results and targets speak about one set of members."""
     with pytest.raises(ValueError, match=message):
         Decision(**arguments)
+
+
+# --- Faults of an evaluation ----------------------------------------------------------
+
+
+def test_evaluation_fault_names_stage_place_function_and_error() -> None:
+    """A fact for the caller: where a registered function raised, and what."""
+    error = KeyError("sensor")
+
+    fault = EvaluationFault.of(Constraint.FROST_PROTECTION, FunctionId.FROST, error)
+
+    assert fault == EvaluationFault(
+        EvaluationStage.CONSTRAINT,
+        Constraint.FROST_PROTECTION,
+        "KeyError",
+        FunctionId.FROST,
+    )
+    assert fault.exception is error
+    assert EvaluationFault.of(Layer.FIRE, None, error).stage is EvaluationStage.LAYER
+    assert (
+        EvaluationFault.of(GateRule.DRY_RUN, None, error).stage
+        is EvaluationStage.GATE_RULE
+    )
+
+
+def test_exception_of_a_fault_takes_no_part_in_comparing() -> None:
+    """Two recomputes of one snapshot raise two exception objects and are equal."""
+    first = EvaluationFault.of(Layer.SLEEP, FunctionId.SLEEP, ValueError("one"))
+    second = EvaluationFault.of(Layer.SLEEP, FunctionId.SLEEP, ValueError("two"))
+
+    assert first == second
+    assert hash(first) == hash(second)
+    assert "one" not in repr(first)
+    assert first != EvaluationFault.of(Layer.SLEEP, FunctionId.SLEEP, TypeError())
+
+
+@pytest.mark.parametrize(
+    ("arguments", "message"),
+    [
+        ((EvaluationStage.LAYER, Constraint.DIRECTION, "ValueError"), "type Layer"),
+        ((EvaluationStage.GATE_RULE, Layer.FIRE, "ValueError"), "type GateRule"),
+        (("layer", Layer.FIRE, "ValueError"), "type EvaluationStage"),
+        ((EvaluationStage.LAYER, Layer.FIRE, ""), "must not be empty"),
+        ((EvaluationStage.LAYER, Layer.FIRE, "ValueError", "fire"), "type FunctionId"),
+        (
+            (EvaluationStage.LAYER, Layer.FIRE, "ValueError", None, "text"),
+            "type Exception",
+        ),
+    ],
+)
+def test_evaluation_fault_validates_itself(
+    arguments: tuple[Any, ...], message: str
+) -> None:
+    """The place belongs to the stage, and the error is a name, never free text."""
+    with pytest.raises((TypeError, ValueError), match=message):
+        EvaluationFault(*arguments)
+
+
+def test_decision_carries_the_faults_of_its_recompute() -> None:
+    """Empty in a sound installation; otherwise facts, in the order of evaluation."""
+    fault = EvaluationFault.of(Layer.SLEEP, FunctionId.SLEEP, ValueError("broken"))
+
+    assert Decision(winning_wish=None).faults == ()
+    as_list: Any = [fault]
+    assert Decision(winning_wish=None, faults=as_list).faults == (fault,)
+    bad: Any = ["layer_failed"]
+    with pytest.raises(TypeError, match="a fault of a decision"):
+        Decision(winning_wish=None, faults=bad)
