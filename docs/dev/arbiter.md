@@ -18,7 +18,8 @@ world snapshot ─► layers (first opinion wins) ─► constraints ─► gate
 | `arbiter/capabilities.py` | the one place where the gate asks what a member can do |
 | `arbiter/layers.py` | help for layers: what a missing input means |
 | `constraints/` | one module per constraint; so far `direction` and `frost` |
-| `engine.py` | the façade: `recompute(snapshot) → decision`, the state after a decision, arming |
+| `arbiter/sent.py` | what a real send leaves behind in the state |
+| `engine.py` | the façade: `recompute(snapshot) → decision`, the state after a decision, the state after a send, arming |
 
 ## No state, no clock
 
@@ -105,6 +106,8 @@ A deferral never waits forever. It states exactly one of two times, and the mode
 ## Dry-run
 
 Dry-run is the last gate rule on purpose: whatever reaches it would have been sent. The decision of a window in dry-run therefore shows the complete hypothetical outcome. `GateOutcome.dry_run` is true, and either the rule `dry_run` decided and `would_send` lists the command, or an earlier rule decided and its reason says what would have held the wish back. No rule except the last one knows about dry-run; the arbiter marks the outcome.
+
+**What a real send leaves behind.** When the gate says `send`, the caller (the runtime, or the runner of the time-lapse simulation) hands every target to the actuator under a command identifier and then calls `Engine.state_after_send(snapshot, decision, command_ids)`. It records, per commanded member, the last own command (target, direction from the reported position or by the halfway rule, time, wish class, reason) with one attempt at the time of the send, sets the owner of the position to the integration, and for a comfort wish sets the motor protection clock to the time of the send. Without this record the next recompute would send the same command again while the cover is still travelling: the rules "movement in flight" and motor protection read exactly these facts. It knows nothing about tracking; the tracker of a later block evaluates the movement and consumes the expectation. A decision that did not send leaves the state as it is.
 
 Rules that depend on own commands must not read them from `snapshot.state`. They read `GateInput.own_commands` and `GateInput.last_comfort_movement`. For an armed window these are the real commands and the real motor protection clock. For a window in dry-run they are the **simulated** ones from `WindowState.simulated`, and never the real ones. `Engine.state_after(snapshot, decision)` returns the state with a would-be send remembered as simulated commands (and, for a comfort wish, the simulated clock); for a window in dry-run it never touches a real command, the real clock, a dam or the owner of the position. `Engine.arm(state)` discards the simulated state and starts the window clean: no dam, owner unknown.
 

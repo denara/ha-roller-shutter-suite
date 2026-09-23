@@ -67,7 +67,13 @@ def is_standing(
     )
 
 
-def _direction(target: Position, reported: Position | None) -> TravelDirection:
+def direction_of(target: Position, reported: Position | None) -> TravelDirection:
+    """Return the direction of a command: from the reported position to the target.
+
+    Without a reported position, or when the two are equal, a target from 50
+    upwards counts as upwards and a lower one as downwards, the halfway rule
+    of members without position feedback.
+    """
     if reported is not None and reported != target:
         return TravelDirection.UP if target > reported else TravelDirection.DOWN
     return TravelDirection.UP if target.value >= _HALFWAY else TravelDirection.DOWN
@@ -107,7 +113,7 @@ def remember_would_be_send(snapshot: WorldSnapshot, decision: Decision) -> Windo
             OwnCommand(
                 command_id=f"dry-run:{member_id}:{snapshot.time.isoformat()}",
                 target=position,
-                direction=_direction(position, reported.get(member_id)),
+                direction=direction_of(position, reported.get(member_id)),
                 time=snapshot.time,
                 wish_class=wish_class,
                 reason=decision.winning_wish.reason,

@@ -1,15 +1,16 @@
 """The engine: the façade the Home Assistant layer talks to.
 
 So far it offers what the arbiter needs: ``recompute(snapshot) → decision``,
-the state a decision leaves behind for a window in dry-run, and arming a
-window. Observing members and command results are added by later blocks.
+the state a decision leaves behind for a window in dry-run, the state a real
+send leaves behind, and arming a window. Observing members and command
+results are added by later blocks.
 
 Every method is a pure function of its arguments. The engine keeps the window
 configuration and the arbiter, both immutable, and nothing else: no state, no
 clock.
 """
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 
 from .arbiter import (
@@ -20,6 +21,7 @@ from .arbiter import (
     LayerRegistration,
     apply_take_over,
     arm,
+    record_sent_commands,
     remember_would_be_send,
 )
 from .constraints import DIRECTION_CONSTRAINT, FROST_CONSTRAINT
@@ -87,6 +89,21 @@ class Engine:
         ):
             return apply_take_over(snapshot, decision)
         return remember_would_be_send(snapshot, decision)
+
+    @staticmethod
+    def state_after_send(
+        snapshot: WorldSnapshot, decision: Decision, command_ids: Mapping[str, str]
+    ) -> WindowState:
+        """Return the window state after the targets of the decision were sent.
+
+        The caller hands every target to the actuator under a command
+        identifier and then records the send here: per commanded member the
+        last own command (target, direction, time, wish class, reason) with
+        one attempt, the owner of the position (the integration), and for a
+        comfort wish the motor protection clock. A decision that did not
+        send leaves the state as it is.
+        """
+        return record_sent_commands(snapshot, decision, command_ids)
 
     @staticmethod
     def arm(state: WindowState) -> WindowState:
