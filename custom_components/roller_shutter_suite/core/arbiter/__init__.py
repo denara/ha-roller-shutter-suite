@@ -10,7 +10,13 @@ Import from the package: ``from ...core.arbiter import Arbiter``.
 
 from .arbiter import Arbiter
 from .controls import MODE_TABLE, EffectiveControls, ModeEntry, effective_controls
-from .dry_run import arm, is_standing, remember_would_be_send, simulated_state
+from .dry_run import (
+    arm,
+    direction_of,
+    is_standing,
+    remember_would_be_send,
+    simulated_state,
+)
 from .fire_bypass import FIRE_BYPASS, NEVER_BYPASSED, bypassed_rules, skips
 from .gate import (
     BUILT_IN_GATE_RULES,
@@ -19,6 +25,7 @@ from .gate import (
     ArmedDam,
     Dam,
     expectation_window_end,
+    member_expectation_end,
 )
 from .layers import disabled_functions, wish_for_missing_input
 from .registry import (
@@ -35,6 +42,7 @@ from .registry import (
     outranks,
     reported_positions,
 )
+from .sent import record_sent_commands
 from .take_over import apply_take_over
 
 __all__ = [
@@ -62,11 +70,14 @@ __all__ = [
     "apply_take_over",
     "arm",
     "bypassed_rules",
+    "direction_of",
     "disabled_functions",
     "effective_controls",
     "expectation_window_end",
     "is_standing",
+    "member_expectation_end",
     "outranks",
+    "record_sent_commands",
     "remember_would_be_send",
     "reported_positions",
     "simulated_state",

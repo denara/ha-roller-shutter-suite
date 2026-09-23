@@ -238,25 +238,35 @@ passed) is the decision of the protection layer.
 #   the members have come to rest. Protection and fire retarget at once.
 
 
+def member_expectation_end(member: MemberConfig, command: OwnCommand) -> datetime:
+    """Return until when an own command to a member counts as pending.
+
+    It is the time of the command plus the full travel time of its direction
+    plus the report delay of the member; an upper bound. The tracker knows
+    more about a movement than the gate; this is the one place to change when
+    it does. The gate reads it through ``expectation_window_end``, and so does
+    everything outside the gate that waits for the same instant.
+    """
+    profile = member.capabilities
+    travel_time = (
+        profile.travel_time_up
+        if command.direction is TravelDirection.UP
+        else profile.travel_time_down
+    )
+    return command.time + travel_time + profile.report_delay
+
+
 def expectation_window_end(
     gate: GateInput, member_id: str, command: OwnCommand
 ) -> datetime | None:
     """Return until when an own command counts as pending; an upper bound.
 
-    It is the time of the command plus the full travel time of its direction
-    plus the report delay of the member. The tracker knows more about a
-    movement than the gate; this is the one place to change when it does. A
-    command to a member the window no longer has is ignored.
+    See ``member_expectation_end``. A command to a member the window no
+    longer has is ignored.
     """
     for member in gate.config.members:
         if member.member_id == member_id:
-            profile = member.capabilities
-            travel_time = (
-                profile.travel_time_up
-                if command.direction is TravelDirection.UP
-                else profile.travel_time_down
-            )
-            return command.time + travel_time + profile.report_delay
+            return member_expectation_end(member, command)
     return None
 
 
