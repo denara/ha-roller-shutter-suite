@@ -28,6 +28,7 @@ from ._validation import (
     require_type,
     require_unique,
     to_utc,
+    to_utc_or_none,
 )
 from .decision import WishClass
 from .values import Position, _as_position, _position_data
@@ -343,7 +344,10 @@ class OwnCommand:
             wish_class=read(content, "wish_class", as_enum(WishClass)),
             reason=read(content, "reason", as_enum(ReasonCode)),
             context_id=read(content, "context_id", optional(as_str)),
-            failed=read(content, "failed", as_bool),
+            # Optional within schema version 1: data written before the key
+            # existed has no failed command. The schema step, with a
+            # migration, belongs to the persistence block (C12).
+            failed=(read(content, "failed", as_bool) if "failed" in content else False),
         )
 
 
@@ -360,19 +364,30 @@ class CommandResult:
     - ``failed``: the call itself raised (``command_failed``). Nothing is
       claimed about the cover when it did not: a call that returned says
       only that the actuator accepted the command.
+    - ``called_at``: the instant the call to the actuator was made, or
+      ``None`` if none was made. It can lie after the hand-over, when a
+      collective movement is staggered; for an accepted command the
+      expectation window starts there (``Engine.on_command_result``). Kept in
+      UTC; a naive time is refused.
     """
 
     command_id: str
     member_id: str
     context_id: str | None
     failed: bool
+    called_at: datetime | None = None
 
     def __post_init__(self) -> None:
-        """Validate the identifiers and the flag."""
+        """Validate the identifiers, the flag and the time."""
         require_identifier(self.command_id, "the identifier of a command")
         require_identifier(self.member_id, "the member of a command result")
         require_optional_type(self.context_id, str, "the context of a command")
         require_type(self.failed, bool, "the flag 'failed' of a command result")
+        object.__setattr__(
+            self,
+            "called_at",
+            to_utc_or_none(self.called_at, "the time of the call"),
+        )
 
 
 @dataclass(frozen=True, slots=True)

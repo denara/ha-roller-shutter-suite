@@ -24,8 +24,10 @@ port of the core for one window, together with the decision. The adapter
    below 50 (section 8.1). It never calls an action the cover does not
    support;
 4. calls the action under a context of its own, waits for the call to
-   return, and reports the result to the controller with the context ID:
-   accepted, or ``command_failed`` if the call raised. A failure is logged
+   return, and reports the result to the controller with the context ID and
+   the instant of the call (``called_at``, where a staggered command's
+   expectation window starts): accepted, or ``command_failed`` if the call
+   raised, could not be made, or a dry-run check refused it. A failure is logged
    once per member with the window's name, until a call to it works again.
    Nothing here retries; command verification and backoff are a later block.
 
@@ -251,8 +253,16 @@ class CoverActuator:
 
     @callback
     def submit(self, binding: WindowActuator, command: _Command) -> None:
-        """Check dry-run, give the command its slot, and start or queue it."""
+        """Check dry-run, give the command its slot, and start or queue it.
+
+        A refusal is reported like the refusal right before the call: as a
+        failed command, after the caller has returned (a result never
+        arrives before the caller recorded the command).
+        """
         if not _may_send(binding, command):
+            self.hass.loop.call_soon(
+                self._deliver, binding.window_id, _result(command, None, failed=True)
+            )
             return
         previous = self._queued.pop(command.member_id, None)
         if previous is not None:
@@ -304,10 +314,12 @@ class CoverActuator:
             self._deliver(window_id, _result(command, None, failed=True))
             return
         context = Context()
+        called_at: datetime | None = None
         try:
             service, data = cover_action(
                 self.hass.states.get(command.member_id), command.target
             )
+            called_at = dt_util.utcnow()
             await self.hass.services.async_call(
                 COVER_DOMAIN,
                 service,
@@ -317,7 +329,9 @@ class CoverActuator:
             )
         except Exception as error:  # noqa: BLE001 - every error of the call is command_failed
             self._log_failure(binding.title, command.member_id, error)
-            self._deliver(window_id, _result(command, context.id, failed=True))
+            self._deliver(
+                window_id, _result(command, context.id, failed=True, at=called_at)
+            )
             return
         if command.member_id in self._failing:
             self._failing.discard(command.member_id)
@@ -326,7 +340,9 @@ class CoverActuator:
                 binding.title,
                 command.member_id,
             )
-        self._deliver(window_id, _result(command, context.id, failed=False))
+        self._deliver(
+            window_id, _result(command, context.id, failed=False, at=called_at)
+        )
 
     def _log_failure(self, title: str, member_id: str, error: Exception) -> None:
         """Log a failed call once per member, until a call works again."""
@@ -363,9 +379,15 @@ class CoverActuator:
 
 
 def _result(
-    command: _Command, context_id: str | None, *, failed: bool
+    command: _Command,
+    context_id: str | None,
+    *,
+    failed: bool,
+    at: datetime | None = None,
 ) -> CommandResult:
-    return CommandResult(command.command_id, command.member_id, context_id, failed)
+    return CommandResult(
+        command.command_id, command.member_id, context_id, failed, called_at=at
+    )
 
 
 def _may_send(binding: WindowActuator, command: _Command) -> bool:

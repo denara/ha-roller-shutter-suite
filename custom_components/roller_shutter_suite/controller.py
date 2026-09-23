@@ -542,17 +542,31 @@ class WindowController:
 
         The core writes it into the member's last own command
         (``Engine.on_command_result``) and ignores a late result of an older
-        command. Nothing is retried here; a failed command stays pending
-        until its expectation window has closed, and "target reached" does
-        not count it.
+        command. An accepted command's time moves to the instant of the call,
+        so its expectation window starts there; the wake-up at the end of
+        that window is armed again from ``member_expectation_end``, the one
+        deadline source. Nothing is retried here; a failed command stays
+        pending until its expectation window has closed, and "target
+        reached" does not count it.
         """
         state = Engine.on_command_result(self.state, result)
         if state is self.state:
             return
         self._store(state)
+        wake_up = self.status.wake_up
+        now = self.clock.now()
+        if self.active and self.status.decision is not None:
+            candidate = _next_wake_up(
+                self.status.decision, self.status.schedule, self._expectation_ends(now)
+            )
+            # A time of the last decision that has passed meanwhile is left
+            # to the timer that is armed; nothing is re-armed for it.
+            if candidate is not None and candidate.at > now:
+                wake_up = self._schedule_wake_up(candidate, now)
         commands = {m.member_id: m.last_own_command for m in state.members}
         self.status = replace(
             self.status,
+            wake_up=wake_up,
             commands=tuple(
                 MemberCommand(item.member_id, command)
                 if (command := commands.get(item.member_id)) is not None

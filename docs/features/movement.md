@@ -22,7 +22,8 @@ Example: shading closes a shutter to 40 % at 13:00. At 13:04 the sun wanders and
 
 When many shutters move at the same moment, for example at the evening, their motors start one after the other, with this gap between two motors. That spares the supply of the house and makes the movement quieter. It applies between windows and between the covers of one window that has several.
 
-- A window with a gap of 0 does not stagger its own covers: they start together, when the window's turn comes.
+- The gap is reserved **after** each motor, and it is the gap of the window that motor belongs to. The next motor, of the same window or of another one, starts when that gap has passed.
+- A window with a gap of 0 does not stagger its own covers: they start together, when the window's turn comes. Because it reserves no time after its motors, the motor of the next window may start right after them too. Example: window A has a gap of 0, window B the default of 2 seconds, and both close at the evening. If A's turn comes first, A's covers start together, B's first cover starts at the same moment, and B's second cover 2 seconds later. If B's turn comes first, B's covers start 2 seconds apart, and A's covers start together 2 seconds after B's second one.
 - The largest gap is 10 seconds. With 20 shutters and the default of 2 seconds, the last one starts 38 seconds after the first.
 - **A fire alarm is never staggered.** Every shutter opens at once.
 

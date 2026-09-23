@@ -93,8 +93,16 @@ def record_command_result(state: WindowState, result: CommandResult) -> WindowSt
     without a record changes nothing. It adds the context ID under which the
     command was executed and, for ``command_failed``, marks the command as
     failed, so that "target reached" does not count a target the actuator
-    never received. Nothing else changes: the attempt, the time and the
-    expectation window stay as they were, and retrying is not decided here.
+    never received.
+
+    For an accepted command whose result names the instant of the call
+    (``called_at``), the time of the command and the time of its attempt
+    move to that instant: a staggered command is called after the hand-over,
+    and its expectation window (``member_expectation_end``, which reads the
+    time of the command) must start when the cover was really commanded.
+    The motor protection clock stays at the hand-over, so motor protection
+    judges exactly as before. A failed command keeps its times, and
+    retrying is not decided here.
     """
     changed = False
     members: list[MemberState] = []
@@ -108,6 +116,16 @@ def record_command_result(state: WindowState, result: CommandResult) -> WindowSt
             members.append(member)
             continue
         updated = replace(command, context_id=result.context_id, failed=result.failed)
-        changed = changed or updated != command
-        members.append(replace(member, last_own_command=updated))
+        attempt_at = member.last_attempt_at
+        if not result.failed and result.called_at is not None:
+            updated = replace(updated, time=result.called_at)
+            if member.command_attempts > 0:
+                attempt_at = result.called_at
+        if updated == command and attempt_at == member.last_attempt_at:
+            members.append(member)
+            continue
+        changed = True
+        members.append(
+            replace(member, last_own_command=updated, last_attempt_at=attempt_at)
+        )
     return replace(state, members=tuple(members)) if changed else state

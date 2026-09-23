@@ -23,6 +23,7 @@ from homeassistant.const import (
 )
 from homeassistant.core import HomeAssistant, ServiceCall, State
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
     async_fire_time_changed,
@@ -163,6 +164,15 @@ def controllers(entry: MockConfigEntry) -> list[WindowController]:
     return list(runtime_of(entry).windows.values())
 
 
+def _controller_of_cover(entry: MockConfigEntry, cover: str) -> WindowController:
+    """Return the controller whose window has this cover."""
+    return next(
+        controller
+        for controller in controllers(entry)
+        if controller.config.members[0].member_id == cover
+    )
+
+
 def decision(
     layer: Layer = Layer.SCHEDULE,
     reason: ReasonCode = ReasonCode.SCHEDULE_DAY,
@@ -286,7 +296,8 @@ async def test_a_forged_send_for_a_window_in_dry_run_sends_nothing(
     await hass.async_block_till_done()
 
     assert cover_calls(hass) == []
-    assert window.results == []
+    # Refused as right before the call: a failed command, nothing was called.
+    assert window.results == [CommandResult("command-1", COVER, None, failed=True)]
     assert [r for r in caplog.records if "nothing is sent" in r.getMessage()]
 
 
@@ -512,6 +523,79 @@ async def test_a_window_with_a_gap_of_zero_does_not_stagger_its_members(
     )
 
     assert _gaps(cover_calls(hass)) == [timedelta(0)]
+
+
+async def test_a_staggered_protection_command_is_not_repeated_while_it_travels(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """Two windows, gap 10 s, storm: the expectation starts when the call was made.
+
+    The second cover is called 10 s after the hand-over. Its command counts as
+    pending until call time plus travel time plus report delay, so while it
+    still travels 60 s after the hand-over it gets no second command.
+    """
+    entry, covers = await setup_windows(hass, 2, gap=10)
+    await settle(hass, freezer)
+    for controller in controllers(entry):
+        script(controller, storm())
+    await settle(hass, freezer)
+    handed_over = dt_util.utcnow()
+    await tick(hass, freezer, 1, 12)
+
+    first, second = cover_calls(hass)
+    assert {first.member_id, second.member_id} == set(covers)
+    assert second.at - first.at == timedelta(seconds=10)
+    later = _controller_of_cover(entry, second.member_id)
+    own = later.state.members[0].last_own_command
+    assert own is not None
+    assert own.time == second.at
+    member = later.config.members[0]
+    deadline = member_expectation_end(member, own)
+    assert deadline == (
+        second.at
+        + member.capabilities.travel_time_down
+        + member.capabilities.report_delay
+    )
+    # The controller waits for the deadline of the call, not of the hand-over.
+    assert later.status.wake_up is not None
+    assert later.status.wake_up.at == deadline
+
+    # The first cover has arrived where it was sent; the second one is
+    # still travelling 60 s after the hand-over: no second command.
+    set_cover(hass, first.member_id, position=0, state="closed")
+    set_cover(hass, second.member_id, position=40, state="closing")
+    await settle(hass, freezer)
+    freezer.move_to(handed_over + timedelta(seconds=62))
+    async_fire_time_changed(hass)
+    await hass.async_block_till_done()
+    set_cover(hass, second.member_id, position=20, state="closing")
+    await settle(hass, freezer)
+
+    assert sorted(c.member_id for c in cover_calls(hass)) == sorted(covers)
+    decision_now = later.status.decision
+    assert decision_now is not None
+    assert decision_now.gate is not None
+    assert decision_now.gate.reason is ReasonCode.DUPLICATE_COMMAND
+
+
+async def test_the_motor_protection_clock_stays_at_the_hand_over(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """Only the expectation moves to the call; motor protection judges as before."""
+    entry, _covers = await setup_windows(hass, 2, gap=10)
+    await settle(hass, freezer)
+    for controller in controllers(entry):
+        script(controller, day())
+    await settle(hass, freezer)
+    handed_over = controllers(entry)[0].state.last_comfort_movement
+    await tick(hass, freezer, 1, 12)
+
+    later = _controller_of_cover(entry, cover_calls(hass)[1].member_id)
+    own = later.state.members[0].last_own_command
+    assert own is not None
+    assert handed_over is not None
+    assert own.time == handed_over + timedelta(seconds=10)
+    assert later.state.last_comfort_movement == handed_over
 
 
 async def test_a_newer_command_replaces_a_queued_one(

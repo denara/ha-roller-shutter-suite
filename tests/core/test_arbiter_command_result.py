@@ -8,11 +8,13 @@ command: the available ones that do not stand at their target within
 tolerance.
 """
 
+from dataclasses import replace
 from datetime import timedelta
 from typing import Any
 
 import pytest
 
+from custom_components.roller_shutter_suite.core.arbiter import member_expectation_end
 from custom_components.roller_shutter_suite.core.engine import Engine
 from custom_components.roller_shutter_suite.core.model import (
     CommandResult,
@@ -133,15 +135,98 @@ def test_the_same_result_twice_changes_nothing_the_second_time() -> None:
 
 
 def test_the_mark_survives_plain_data() -> None:
-    """``failed`` is persisted with the command; data without it is refused."""
+    """``failed`` is persisted with the command; a faulty value is refused."""
     command = _command(context_id="context-1", failed=True)
     data = command.to_data()
 
     assert data["failed"] is True
     assert OwnCommand.from_data(data) == command
-    del data["failed"]
     with pytest.raises(ValueError, match="failed"):
-        OwnCommand.from_data(data)
+        OwnCommand.from_data(data | {"failed": "yes"})
+
+
+def test_version_one_data_written_before_the_mark_loads_as_not_failed() -> None:
+    """Within schema version 1 the key is optional; C12 brings the schema step."""
+    state = _state((LEFT, _command(context_id="context-1")))
+    data = state.to_data()
+    members = data["members"]
+    assert isinstance(members, list)
+    member = members[0]
+    assert isinstance(member, dict)
+    command = member["last_own_command"]
+    assert isinstance(command, dict)
+    del command["failed"]
+
+    loaded = WindowState.from_data(data)
+
+    assert data["schema_version"] == 1
+    assert loaded == state
+    assert loaded.members[0].last_own_command is not None
+    assert not loaded.members[0].last_own_command.failed
+
+
+# --- The time of the call starts the expectation window -----------------------------
+
+
+def test_an_accepted_result_moves_the_command_to_the_time_of_the_call() -> None:
+    """A staggered call: command time and attempt move, the comfort clock stays."""
+    handed_over = NOW - timedelta(seconds=30)
+    called = NOW - timedelta(seconds=20)
+    before = replace(
+        _state((LEFT, _command(at=handed_over))), last_comfort_movement=handed_over
+    )
+
+    after = Engine.on_command_result(
+        before, CommandResult("command-1", LEFT, "context-1", False, called_at=called)
+    )
+
+    (member,) = after.members
+    assert member.last_own_command is not None
+    assert member.last_own_command.time == called
+    assert member.last_attempt_at == called
+    assert member.command_attempts == 1
+    assert after.last_comfort_movement == handed_over
+    end = member_expectation_end(window().members[0], member.last_own_command)
+    assert end == called + profile().travel_time_up
+
+
+def test_a_failed_result_keeps_the_times_of_the_command() -> None:
+    """Only an accepted command was really given at the time of the call."""
+    handed_over = NOW - timedelta(seconds=30)
+    before = _state((LEFT, _command(at=handed_over)))
+
+    after = Engine.on_command_result(
+        before,
+        CommandResult("command-1", LEFT, "context-1", True, called_at=NOW),
+    )
+
+    assert after.members[0].last_own_command is not None
+    assert after.members[0].last_own_command.time == handed_over
+    assert after.members[0].last_attempt_at == handed_over
+
+
+def test_a_command_without_an_attempt_gets_no_attempt_time() -> None:
+    """The two facts of the backoff belong together; a result adds no attempt."""
+    before = WindowState(members=(MemberState(LEFT, last_own_command=_command()),))
+
+    after = Engine.on_command_result(
+        before, CommandResult("command-1", LEFT, None, False, called_at=NOW)
+    )
+
+    assert after.members[0].last_attempt_at is None
+    assert after.members[0].last_own_command is not None
+    assert after.members[0].last_own_command.time == NOW
+
+
+def test_the_time_of_the_call_is_kept_in_utc_and_must_be_aware() -> None:
+    """A naive time is refused at the boundary."""
+    result = CommandResult("c", LEFT, None, False, called_at=NOW)
+
+    assert result.called_at == NOW
+    assert result.called_at is not None
+    assert result.called_at.utcoffset() == timedelta(0)
+    with pytest.raises(ValueError, match="time"):
+        CommandResult("c", LEFT, None, False, called_at=NOW.replace(tzinfo=None))
 
 
 @pytest.mark.parametrize(
