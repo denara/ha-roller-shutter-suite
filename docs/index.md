@@ -11,7 +11,8 @@ Roller Shutter Suite is a custom integration for Home Assistant that controls ro
 - [Concepts](concepts.md): how settings are inherited from the house to groups to windows, and how the integration decides where a shutter goes, each with worked examples
 - [The daily routine](features/daily-routine.md): morning and evening, workdays, weekends and public holidays, sun times with "not before" and "not after", and what happens after a restart
 - [Shading by geometry](features/shading-geometry.md): what to measure at a window, at several shutters side by side and at a roof element of two rows; how the shutter follows the sun; the two calibration values and how to find them
-- Actions and events for your own automations: to be written
+- [Status, reason events and diagnostics](features/status-and-events.md): the entities of a window, every reason in plain words, the event for your own automations with an example notification, the logbook, and how to download diagnostics
+- Actions for your own automations: to be written
 - Troubleshooting: to be written
 
 ## For contributors

@@ -13,6 +13,11 @@ Assistant calls the listener after a subentry was added, changed, renamed or
 removed and after the data of the entry changed, and only if something really
 changed. The runtime state of every window survives the reload through the
 storage port.
+
+**Status.** Every window has status entities on its device (the platforms
+``sensor`` and ``binary_sensor``), fires reason events (``events.py``) that the
+logbook describes (``logbook.py``), and has a diagnostics download
+(``diagnostics.py``); see ``docs/features/status-and-events.md``.
 """
 
 from collections.abc import Mapping
@@ -20,18 +25,26 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryError
 from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers.translation import async_get_translations
 
 from .actuator import RecordingActuator
 from .const import CONF_SETTINGS, CONFIG_MINOR_VERSION, CONFIG_VERSION, DOMAIN
+from .events import ReasonEvents, WindowHistory, forget_history, history_of
 from .features import get_catalog
 from .issues import async_sync_issues
 from .location import HomeAssistantClock, local_zone, sun_port
 from .runtime import SuiteRuntime
 from .storage import forget_storage, storage_of
 from .windows import WindowRuntime, resolve_entry
+
+PLATFORMS = (Platform.BINARY_SENSOR, Platform.SENSOR)
+
+TRANSLATIONS_FOR_THE_LOGBOOK = ("entity", "common")
+"""The categories the logbook reads from the cache of translations; see logbook.py."""
 
 
 @dataclass(slots=True)
@@ -84,15 +97,30 @@ async def async_setup_entry(
     # One device per window, tied to the window's subentry and to nothing
     # else. Removing the subentry removes the device without code of ours.
     device_registry = dr.async_get(hass)
+    history = history_of(hass)
+    for stale in set(history) - set(resolved.windows):
+        del history[stale]
     for window in resolved.windows.values():
-        device_registry.async_get_or_create(
+        device = device_registry.async_get_or_create(
             config_entry_id=entry.entry_id,
             config_subentry_id=window.subentry_id,
             identifiers={(DOMAIN, window.subentry_id)},
             name=window.title,
         )
+        events = ReasonEvents(
+            hass,
+            runtime,
+            window.subentry_id,
+            window.title,
+            device.id,
+            history.setdefault(window.subentry_id, WindowHistory()),
+        )
+        entry.async_on_unload(events.async_start())
 
+    for category in TRANSLATIONS_FOR_THE_LOGBOOK:
+        await async_get_translations(hass, hass.config.language, category, {DOMAIN})
     async_sync_issues(hass, resolved.issues.values())
+    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     runtime.async_start(resolved.windows)
     entry.async_on_unload(entry.add_update_listener(_async_reload_on_update))
     return True
@@ -106,8 +134,9 @@ async def async_unload_entry(
     The state of every window stays in the storage, so a reload continues
     where the windows were.
     """
+    unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     entry.runtime_data.runtime.async_stop()
-    return True
+    return unloaded
 
 
 async def async_remove_entry(
@@ -116,6 +145,7 @@ async def async_remove_entry(
     """Delete the repair issues and the stored state of an entry that is removed."""
     async_sync_issues(hass, ())
     forget_storage(hass)
+    forget_history(hass)
 
 
 def _with_settings(data: Mapping[str, Any]) -> dict[str, Any]:

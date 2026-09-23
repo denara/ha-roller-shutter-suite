@@ -22,7 +22,14 @@ and of which kind they are comes from the catalog of the integration
 (``features/`` and the registry of the core), never from a second list here.
 On the levels that inherit, the script appends the shared inheritance hint to
 the helper text of a field, with the placeholders of that field. It also fans
-out the repair issues about stored settings: one per level and problem.
+out the repair issues about stored settings: one per level and problem, and
+the words for the reason codes (``_templates.reason_codes``) to the states of
+the reason sensor and to the attribute ``reason`` of the next planned action.
+
+**Languages** are the ``base.<language>.json`` files that exist. English is
+written to ``strings.json`` and ``translations/en.json``, every other language
+to ``translations/<language>.json``. A language is added by adding its
+fragments, nothing else.
 
 Usage::
 
@@ -51,10 +58,40 @@ INTEGRATION = ROOT / "custom_components" / "roller_shutter_suite"
 SOURCES = ROOT / "translations_src"
 PACKAGE = "custom_components.roller_shutter_suite"
 
-LANGUAGES: dict[str, tuple[str, ...]] = {
-    "en": ("strings.json", "translations/en.json"),
-    "de": ("translations/de.json",),
-}
+# The language of ``strings.json``, which every other language is compared with.
+SOURCE_LANGUAGE = "en"
+
+
+def languages() -> dict[str, tuple[str, ...]]:
+    """Return every language that has a base file, with the files it is written to.
+
+    English comes first; the others follow in the order of their codes. The
+    folder is listed with ``iterdir``, which raises for a folder that cannot be
+    read instead of passing over it.
+    """
+    try:
+        names = [path.name for path in SOURCES.iterdir()]
+    except OSError as error:
+        raise SourceError(
+            f"translations_src cannot be listed ({type(error).__name__})"
+        ) from error
+    found = sorted(
+        name.removeprefix("base.").removesuffix(".json")
+        for name in names
+        if name.startswith("base.") and name.endswith(".json")
+    )
+    if SOURCE_LANGUAGE not in found:
+        raise SourceError(f"base.{SOURCE_LANGUAGE}.json is missing")
+    ordered = sorted(found, key=lambda language: language != SOURCE_LANGUAGE)
+    return {
+        language: (
+            ("strings.json", f"translations/{language}.json")
+            if language == SOURCE_LANGUAGE
+            else (f"translations/{language}.json",)
+        )
+        for language in ordered
+    }
+
 
 # (path of the flow in the translation file, level, does the level inherit?)
 LEVELS: tuple[tuple[tuple[str, ...], str, bool], ...] = (
@@ -296,6 +333,16 @@ def _fault_issues(templates: dict[str, Any]) -> dict[str, Any]:
     return issues
 
 
+def _reason_texts(result: dict[str, Any], templates: dict[str, Any]) -> None:
+    """Write the words for the reason codes where the entities show them."""
+    reasons = dict(templates["reason_codes"])
+    sensors = result.setdefault("entity", {}).setdefault("sensor", {})
+    sensors.setdefault("active_reason", {})["state"] = reasons
+    next_action = sensors.setdefault("next_action", {})
+    attributes = next_action.setdefault("state_attributes", {})
+    attributes.setdefault("reason", {})["state"] = dict(reasons)
+
+
 def build(language: str, catalog: Any | None = None) -> dict[str, Any]:
     """Return the complete translation of one language."""
     catalog = load_catalog() if catalog is None else catalog
@@ -333,6 +380,7 @@ def build(language: str, catalog: Any | None = None) -> dict[str, Any]:
                     }
                 }
         result.setdefault("issues", {}).update(_fault_issues(templates))
+        _reason_texts(result, templates)
     except KeyError as error:
         raise SourceError(
             f"language {language!r}: the key {error} is missing"
@@ -349,7 +397,7 @@ def outdated() -> list[str]:
     """Return the generated files that differ from what the sources yield."""
     catalog = load_catalog()
     found: list[str] = []
-    for language, targets in LANGUAGES.items():
+    for language, targets in languages().items():
         content = render(language, catalog)
         for target in targets:
             try:
@@ -379,12 +427,12 @@ def main(arguments: list[str] | None = None) -> int:
                 )
                 return 1
             sys.stdout.write(
-                f"translations: ok; compared {sum(map(len, LANGUAGES.values()))} "
+                f"translations: ok; compared {sum(map(len, languages().values()))} "
                 "generated file(s)\n"
             )
             return 0
         catalog = load_catalog()
-        for language, targets in LANGUAGES.items():
+        for language, targets in languages().items():
             content = render(language, catalog)
             for target in targets:
                 (INTEGRATION / target).write_text(

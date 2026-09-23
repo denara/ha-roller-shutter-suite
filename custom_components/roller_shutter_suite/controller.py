@@ -59,6 +59,7 @@ from homeassistant.core import (
     callback,
 )
 from homeassistant.helpers.debounce import Debouncer
+from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.event import (
     async_track_point_in_utc_time,
     async_track_state_change_event,
@@ -66,7 +67,13 @@ from homeassistant.helpers.event import (
 )
 
 from .capabilities import member_config
-from .const import COALESCE_SECONDS, MIN_WAKE_UP_DISTANCE, SAFETY_TICK, STARTUP_GRACE
+from .const import (
+    COALESCE_SECONDS,
+    MIN_WAKE_UP_DISTANCE,
+    SAFETY_TICK,
+    STARTUP_GRACE,
+    status_signal,
+)
 from .core.arbiter import member_expectation_end
 from .core.engine import Engine, build_arbiter
 from .core.model import (
@@ -246,6 +253,7 @@ class WindowController:
             )
         )
         self.status = WindowStatus(Phase.WAITING_FOR_MEMBERS)
+        self._publish_status()
         self.async_request_recompute()
 
     @callback
@@ -260,6 +268,7 @@ class WindowController:
             # Never write a fresh state over a stored one that was not read.
             self.storage.save_window_state(self.window_id, self.state.to_data())
         self.status = replace(self.status, phase=Phase.STOPPED, wake_up=None)
+        self._publish_status()
 
     @callback
     def async_request_recompute(self) -> None:
@@ -347,6 +356,17 @@ class WindowController:
             self.status = replace(
                 self.status, error=type(error).__name__, last_recompute=now
             )
+        self._publish_status()
+
+    @callback
+    def _publish_status(self) -> None:
+        """Tell the readers of the status that it may have changed.
+
+        A read-only hook for the status entities and the reason events: the
+        signal carries nothing, the readers read ``status`` themselves. It is
+        sent after every recompute and when the phase changes.
+        """
+        async_dispatcher_send(self.hass, status_signal(self.window_id))
 
     def _members_ready(self, observation: WindowObservation, now: datetime) -> bool:
         """Say whether the first decision may be made.

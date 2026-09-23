@@ -1,0 +1,42 @@
+{
+  "entity": {
+    "sensor": {
+      "active_reason": {
+        "default": "mdi:information-outline",
+        "state": {
+          "fire_alarm": "mdi:fire",
+          "fire_unacknowledged": "mdi:fire-alert",
+          "protection_event": "mdi:weather-lightning-rainy",
+          "sleep_mode": "mdi:sleep",
+          "schedule_day": "mdi:weather-sunny",
+          "schedule_night": "mdi:weather-night",
+          "maintenance_lock": "mdi:wrench-clock",
+          "dry_run": "mdi:test-tube",
+          "paused": "mdi:pause-circle-outline",
+          "manual_override": "mdi:hand-back-right",
+          "cover_unavailable": "mdi:lan-disconnect"
+        }
+      },
+      "target_position": {
+        "default": "mdi:window-shutter-settings"
+      },
+      "next_action": {
+        "default": "mdi:calendar-clock"
+      }
+    },
+    "binary_sensor": {
+      "override_active": {
+        "default": "mdi:hand-back-right-off",
+        "state": {
+          "on": "mdi:hand-back-right"
+        }
+      },
+      "dry_run": {
+        "default": "mdi:test-tube-off",
+        "state": {
+          "on": "mdi:test-tube"
+        }
+      }
+    }
+  }
+}

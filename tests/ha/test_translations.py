@@ -45,7 +45,7 @@ from tests.ha.helpers import EXAMPLE_CATALOG, EXAMPLE_FEATURE
 INTEGRATION_DIR = (
     Path(__file__).parents[2] / "custom_components" / "roller_shutter_suite"
 )
-FILES = ["strings.json", "translations/en.json", "translations/de.json"]
+FILES = [name for names in build_translations.languages().values() for name in names]
 FLOWS = {
     Level.GLOBAL: ("config",),
     Level.GROUP: ("config_subentries", "group"),
@@ -278,7 +278,7 @@ def test_settings_are_translated_by_adding_them_to_a_fragment() -> None:
 
 def test_texts_of_generated_settings_are_generated_from_the_same_lists() -> None:
     """Day type, edge, field: one text per field of a trigger, not thirty-six."""
-    for language in ("en", "de"):
+    for language in build_translations.languages():
         fragment = json.loads(
             (
                 build_translations.SOURCES
