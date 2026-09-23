@@ -5,9 +5,14 @@ fill their sun almanac (``build_sun_almanac`` of the core's schedule) through
 :class:`AstralSun`, so a year scenario of the simulation runs with the same sun
 times as the operation. It lives outside ``core/`` on purpose: the domain core
 stays plain Python without a single third-party import, and this module is
-the adapter between the core's port and the ``astral`` library. It imports
-nothing from Home Assistant and takes plain values: latitude, longitude,
-elevation above sea level, and the name of the local zone.
+the adapter between the core's port and the ``astral`` library. The module
+itself imports nothing from Home Assistant and takes plain values: latitude,
+longitude, elevation above sea level, and the name of the local zone. Note
+that importing it **through the integration package** executes the package's
+``__init__``, which belongs to the Home Assistant layer and imports Home
+Assistant; an importer that must stay free of Home Assistant (the core tests,
+the time-lapse simulation) registers an empty stand-in for the package first,
+as ``tests/core/conftest.py`` does.
 
 ``astral`` is not listed as a requirement of the integration: Home Assistant
 Core ships it as one of its own dependencies, and the version Home Assistant
@@ -24,12 +29,22 @@ refused. Times come back in the local zone. A day without the event (the polar
 night, the polar day, an elevation the sun never passes on that date) yields
 ``None``, which is an answer and not an error.
 
-Refraction is included on both sides: the elevation of
-:meth:`AstralSun.position` and the passages of
-:meth:`AstralSun.elevation_reached` use the same correction of ``astral``, so
-"the sun passes 10 degrees at 08:12" and "the elevation at 08:12 is 10
-degrees" agree. Sunrise and sunset are the moments at which the upper limb of
-the sun touches the horizon, as ``astral`` defines them.
+**Positions and passages agree; the height of the observer counts for sunrise
+and sunset only.** The elevation of :meth:`AstralSun.position` and the
+passages of :meth:`AstralSun.elevation_reached` use the same refraction
+correction of ``astral``, so "the sun passes 10 degrees at 08:12" and "the
+elevation at 08:12 is 10 degrees" agree. ``astral`` lowers the horizon for an
+observer above sea level (the dip of the horizon) when it computes a transit,
+but not when it computes a position; the elevation of the sun above the
+horizontal does not depend on the height of the observer. The passages are
+therefore computed for an observer at sea level, at the same latitude and
+longitude, so that they agree with the positions at any height; the dip is
+applied to sunrise and sunset alone, where it is the intended effect: the
+moments at which the upper limb of the sun touches the visible horizon, as
+``astral`` defines them. At the horizon itself the agreement between a passage
+of 0 degrees and the position is looser (about a tenth of a degree), because
+``astral`` applies its refraction regimes differently in the two functions;
+above the horizon it is within a few hundredths of a degree.
 """
 
 import math
@@ -123,13 +138,25 @@ class AstralSun:
 
     @property
     def _observer(self) -> Observer:
+        """Return the observer at its real height: for sunrise and sunset."""
         return Observer(self.latitude, self.longitude, self.elevation)
+
+    @property
+    def _observer_at_sea_level(self) -> Observer:
+        """Return the observer without the dip of the horizon: for passages.
+
+        ``astral`` lowers the threshold of a transit by the dip of the horizon
+        of an elevated observer, but computes positions without it. A passage
+        of an elevation has to agree with the position at that instant, so it
+        is computed at sea level.
+        """
+        return Observer(self.latitude, self.longitude, 0.0)
 
     def position(self, at: datetime) -> SunPosition:
         """Return azimuth and elevation of the sun at an instant.
 
         The elevation includes the atmospheric refraction, as the passages of
-        :meth:`elevation_reached` do.
+        :meth:`elevation_reached` do; the height of the observer plays no part.
         """
         instant = _require_aware(at, "the time of a sun position").astimezone(UTC)
         zenith, azimuth = zenith_and_azimuth(self._observer, instant)
@@ -137,14 +164,22 @@ class AstralSun:
         return SunPosition(azimuth=azimuth % _FULL_CIRCLE, elevation=elevation)
 
     def sunrise(self, on: date) -> datetime | None:
-        """Return the sunrise that falls on the local date, or ``None``."""
+        """Return the sunrise that falls on the local date, or ``None``.
+
+        The upper limb of the sun touches the visible horizon, which an
+        observer above sea level sees a little lower.
+        """
         on = _require_date(on, "the date of a sunrise")
-        return self._transit_on(on, _HORIZON_ZENITH, SunDirection.RISING)
+        return self._transit_on(
+            on, _HORIZON_ZENITH, SunDirection.RISING, self._observer
+        )
 
     def sunset(self, on: date) -> datetime | None:
         """Return the sunset that falls on the local date, or ``None``."""
         on = _require_date(on, "the date of a sunset")
-        return self._transit_on(on, _HORIZON_ZENITH, SunDirection.SETTING)
+        return self._transit_on(
+            on, _HORIZON_ZENITH, SunDirection.SETTING, self._observer
+        )
 
     def elevation_reached(
         self, on: date, elevation: float, *, rising: bool
@@ -153,17 +188,25 @@ class AstralSun:
 
         ``rising`` selects the passage upwards (morning) or downwards
         (evening). ``None`` means that the sun does not pass the elevation on
-        that date: it stays below it, or above it, all day.
+        that date: it stays below it, or above it, all day. The passage is
+        computed for an observer at sea level, so that it agrees with
+        :meth:`position` at any height of the installation.
         """
         on = _require_date(on, "the date of a passage")
         elevation = _require_finite(elevation, "the elevation of a passage")
         if not isinstance(rising, bool):
             raise TypeError("'rising' must be a boolean")
         direction = SunDirection.RISING if rising else SunDirection.SETTING
-        return self._transit_on(on, _ZENITH - elevation, direction)
+        return self._transit_on(
+            on, _ZENITH - elevation, direction, self._observer_at_sea_level
+        )
 
     def _transit_utc(
-        self, utc_day: date, zenith: float, direction: SunDirection
+        self,
+        utc_day: date,
+        zenith: float,
+        direction: SunDirection,
+        observer: Observer,
     ) -> datetime | None:
         """Return the transit of a zenith angle for a calendar date in UTC.
 
@@ -171,13 +214,13 @@ class AstralSun:
         does not reach the angle on that date; that is the answer "none".
         """
         try:
-            transit = time_of_transit(self._observer, utc_day, zenith, direction)
+            transit = time_of_transit(observer, utc_day, zenith, direction)
         except ValueError:
             return None
         return transit.astimezone(self.zone)
 
     def _transit_on(
-        self, on: date, zenith: float, direction: SunDirection
+        self, on: date, zenith: float, direction: SunDirection, observer: Observer
     ) -> datetime | None:
         """Return the transit that falls on the local date ``on``.
 
@@ -186,15 +229,14 @@ class AstralSun:
         it, depending on the zone and the longitude, so up to three UTC dates
         are tried: the date itself first, because that is the usual case and
         its transit is then the answer, and the two neighbours only if it
-        does not fit; of those the earlier one that fits is the answer.
+        does not fit. At most one of the neighbours can fit, because two
+        transits of one kind are about a day apart.
         """
-        found = self._transit_utc(on, zenith, direction)
+        found = self._transit_utc(on, zenith, direction, observer)
         if found is not None and found.date() == on:
             return found
-        candidates = [
-            transit
-            for utc_day in (on - _ONE_DAY, on + _ONE_DAY)
-            if (transit := self._transit_utc(utc_day, zenith, direction)) is not None
-            and transit.date() == on
-        ]
-        return min(candidates, default=None)
+        for utc_day in (on - _ONE_DAY, on + _ONE_DAY):
+            transit = self._transit_utc(utc_day, zenith, direction, observer)
+            if transit is not None and transit.date() == on:
+                return transit
+        return None
