@@ -34,6 +34,7 @@ from custom_components.roller_shutter_suite.core.model import (
     GateKind,
     GateOutcome,
     GateRule,
+    JsonObject,
     Layer,
     MemberTarget,
     Position,
@@ -42,6 +43,7 @@ from custom_components.roller_shutter_suite.core.model import (
     WorldSnapshot,
 )
 from custom_components.roller_shutter_suite.core.reasons import ReasonCode
+from custom_components.roller_shutter_suite.storage import MemoryStorage, storage_of
 from tests.ha.helpers import set_cover, setup_entry
 from tests.ha.runtime_kit import (
     COVER,
@@ -433,6 +435,40 @@ async def test_one_faulty_window_does_not_stop_the_others(
     assert len(logged) == 1
     assert "RuntimeError" in logged[0].getMessage()
     assert "cannot be built" not in logged[0].getMessage()
+
+
+async def test_a_start_that_raises_after_registering_leaks_no_listener(
+    hass: HomeAssistant, freezer: Any, registered: Registered
+) -> None:
+    """Whatever the start registered before it raised is released again."""
+    entry = await setup_window(hass, freezer=freezer)
+    runtime = runtime_of(entry)
+    window = replace(entry.runtime_data.windows["w1"], subentry_id="w2", title="Second")
+    alive_before = set(registered.alive)
+
+    class StartsThenRaises(controller_module.WindowController):
+        def async_start(self) -> None:
+            super().async_start()
+            raise RuntimeError("after the listeners were registered")
+
+    with patch.object(runtime_module, "WindowController", StartsThenRaises):
+        assert not runtime.async_add_window(window)
+
+    assert runtime.failed == {"w2": "RuntimeError"}
+    assert set(runtime.windows) == {"w1"}
+    assert registered.alive == alive_before
+
+    # A start that fails before the state was read writes nothing back.
+    stored: JsonObject = {"schema_version": 999}
+    storage_of(hass).save_window_state("w2", stored)
+
+    def refusing(storage: MemoryStorage, window_id: str) -> Any:
+        raise OSError("the storage cannot be read")
+
+    with patch.object(MemoryStorage, "load_window_state", refusing):
+        assert not runtime.async_add_window(window)
+    assert runtime.failed == {"w2": "OSError"}
+    assert storage_of(hass).windows["w2"] == stored
 
 
 async def test_window_whose_configuration_is_withheld_is_left_out(

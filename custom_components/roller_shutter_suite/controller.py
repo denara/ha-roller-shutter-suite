@@ -25,6 +25,13 @@ that come from wake-ups are at least that far apart.
 availability is normal and not an error: the window waits, and when the
 cover appears it starts working without a reload.
 
+**Capabilities are never re-read**, with one exception: a member about
+which nothing was known at set-up (no usable state and no entity-registry
+entry, so its profile says ``capabilities_known=False``) has its
+capabilities read from the entity once, the first time it is available.
+A known profile is never read again, so nothing flaps while an entity is
+away.
+
 **Faults of the arbiter's safety net** (``Decision.faults``) are logged
 once per change, with the window's name, the stage, the place and the type
 of the exception, never its message, and they are part of the status.
@@ -37,6 +44,7 @@ from datetime import UTC, date, datetime
 from enum import StrEnum, unique
 from typing import Final
 
+from homeassistant.const import STATE_UNAVAILABLE
 from homeassistant.core import (
     CALLBACK_TYPE,
     Event,
@@ -51,6 +59,7 @@ from homeassistant.helpers.event import (
     async_track_time_interval,
 )
 
+from .capabilities import member_config
 from .commands import commands_of, state_with_commands
 from .const import COALESCE_SECONDS, MIN_WAKE_UP_DISTANCE, SAFETY_TICK, STARTUP_GRACE
 from .core.engine import Engine, build_arbiter
@@ -187,6 +196,7 @@ class WindowController:
         self._logged_faults: frozenset[EvaluationFault] = frozenset()
         self._refusal_logged = False
         self._started_at: datetime | None = None
+        self._loaded = False
         self._last_wake_up: datetime | None = None
         self._woken = False
         self._debouncer = Debouncer(
@@ -236,7 +246,9 @@ class WindowController:
         self._subscriptions.clear()
         self._cancel_wake_up()
         self._debouncer.async_shutdown()
-        self.storage.save_window_state(self.window_id, self.state.to_data())
+        if self._loaded:
+            # Never write a fresh state over a stored one that was not read.
+            self.storage.save_window_state(self.window_id, self.state.to_data())
         self.status = replace(self.status, phase=Phase.STOPPED, wake_up=None)
 
     @callback
@@ -313,6 +325,9 @@ class WindowController:
             self._decide(now)
         except Exception as error:
             if self.status.error != type(error).__name__:
+                # A programming error: the traceback, which carries the text
+                # of the exception, belongs in the log. The message line
+                # itself names only the type; nothing here becomes an issue.
                 _LOGGER.exception(
                     "Window %s: the recompute raised %s; the window keeps its state "
                     "and is evaluated again at the next trigger",
@@ -339,7 +354,33 @@ class WindowController:
             return False
         return now >= self._started_at + STARTUP_GRACE
 
+    def _learn_unknown_capabilities(self) -> None:
+        """Read the capabilities of a member that was unknown, once it is available.
+
+        The one exception to "capabilities are never re-read": a member with
+        ``capabilities_known=False`` is read from its entity the first time
+        it is available, and the configuration and the engine are replaced
+        with the learned profile. A known profile is never read again.
+        """
+        members = list(self.config.members)
+        changed = False
+        for index, member in enumerate(members):
+            if member.capabilities.capabilities_known:
+                continue
+            state = self.hass.states.get(member.member_id)
+            if state is None or state.state == STATE_UNAVAILABLE:
+                continue
+            learned = member_config(self.hass, member.member_id)
+            if not learned.capabilities.capabilities_known:
+                continue
+            members[index] = replace(member, capabilities=learned.capabilities)
+            changed = True
+        if changed:
+            self.config = replace(self.config, members=tuple(members))
+            self.engine = Engine(self.config, self.engine.arbiter)
+
     def _decide(self, now: datetime) -> None:
+        self._learn_unknown_capabilities()
         observation = observe_window(self.hass, self.config)
         if not self._members_ready(observation, now):
             wake_up = None
@@ -373,8 +414,8 @@ class WindowController:
         schedule = self._schedule(replace(snapshot, state=state))
         if schedule is not None:
             state = schedule.state
+        self._store(state)
         commands = self._send(snapshot, decision, now)
-        self._store(state_with_commands(state, commands))
         wake_up = self._schedule_wake_up(_next_wake_up(decision, schedule), now)
         self.status = WindowStatus(
             phase=Phase.RUNNING,
@@ -428,7 +469,13 @@ class WindowController:
     def _send(
         self, snapshot: WorldSnapshot, decision: Decision, now: datetime
     ) -> tuple[MemberCommand, ...]:
-        """Hand a "send" outcome to the actuator port, after the second dry-run check."""
+        """Hand a "send" outcome to the actuator port, after the second dry-run check.
+
+        Every command is written down as the member's own command right after
+        its call returned, member by member: if the actuator raises for a
+        later member, the commands that were given stay recorded and are not
+        sent a second time by the next recompute.
+        """
         commands = commands_of(snapshot, decision, now)
         if not commands:
             return ()
@@ -443,6 +490,7 @@ class WindowController:
             self.actuator.move_to(
                 command.command.command_id, command.member_id, command.command.target
             )
+            self._store(state_with_commands(self.state, (command,)))
         return commands
 
     # ------------------------------------------------------------------
@@ -465,6 +513,7 @@ class WindowController:
         if not self.controls().dry_run and state.simulated is not None:
             state = Engine.arm(state)
         self.state = state
+        self._loaded = True
 
     def _store(self, state: WindowState) -> None:
         if state == self.state:

@@ -8,10 +8,13 @@ reports one. This module reads both from the state of a cover entity:
 - ``opening`` and ``closing``: the member is **moving**; anything else,
   including ``unknown`` (a cover without feedback often stays there), is
   **resting**;
-- the position is ``current_position`` if the capability profile says that
-  the member reports one and the attribute holds a whole number from 0 to
-  100; otherwise the member reports none. A value outside that range is not
-  a position and is never rounded into one.
+- the position is ``current_position`` if the attribute holds a whole number
+  from 0 to 100 and the capability profile does not say that the member
+  definitely reports none (``capability_state("reports_position")`` is
+  ``MISSING``). A profile whose capabilities are not known yet keeps the
+  position: unknown is never taken for missing. A value outside that range,
+  a boolean, text or a float (some platforms write ``50.0``) is not a
+  position and is never rounded into one.
 
 This is the input side only. Reducing reports to observations that carry new
 information (dropping duplicate writes), the tracker per member and manual
@@ -25,6 +28,7 @@ from homeassistant.core import HomeAssistant, State
 from .core.model import (
     FULLY_CLOSED,
     FULLY_OPEN,
+    CapabilityState,
     MemberConfig,
     MemberObservation,
     MovementState,
@@ -57,7 +61,8 @@ def observe_member(hass: HomeAssistant, member: MemberConfig) -> MemberObservati
         movement = MovementState.MOVING_DOWN
     else:
         movement = MovementState.RESTING
-    position = _position_of(state) if member.capabilities.reports_position else None
+    feedback = member.capabilities.capability_state("reports_position")
+    position = None if feedback is CapabilityState.MISSING else _position_of(state)
     return MemberObservation(member.member_id, Observation(movement, position))
 
 

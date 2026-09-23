@@ -27,6 +27,7 @@ from custom_components.roller_shutter_suite.core.engine import Engine, build_arb
 from custom_components.roller_shutter_suite.core.model import (
     Constraint,
     ConstraintResult,
+    Controls,
     Decision,
     EvaluationFault,
     GateKind,
@@ -34,12 +35,17 @@ from custom_components.roller_shutter_suite.core.model import (
     GateRule,
     Layer,
     ManualOverrideDam,
+    MemberCommand,
     MemberTarget,
     OverrideEndRule,
+    OwnCommand,
     Position,
     PositionOwner,
+    SimulatedState,
+    TravelDirection,
     WindowState,
     Wish,
+    WishClass,
     WorldSnapshot,
 )
 from custom_components.roller_shutter_suite.core.reasons import ReasonCode
@@ -417,6 +423,160 @@ async def test_a_cover_that_is_away_for_minutes_changes_no_capability(
     assert phase_of(controller) is Phase.RUNNING
     assert _reason(entry) is ReasonCode.TARGET_REACHED
     assert _issues(hass) == set()
+
+
+async def test_a_cover_that_was_never_seen_is_read_once_when_it_appears(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """No registry entry, cover late: its capabilities are learned once, its position counts."""
+    entry = await setup_window(hass, covers_present=False, freezer=freezer)
+    controller = controller_of(entry)
+    unknown = controller.config.members[0].capabilities
+    assert not unknown.capabilities_known
+    assert phase_of(controller) is Phase.WAITING_FOR_MEMBERS
+
+    freezer.tick(timedelta(minutes=3))
+    set_cover(hass, COVER, NO_STOP, position=50)
+    await settle(hass, freezer)
+
+    learned = controller.config.members[0].capabilities
+    assert learned.capabilities_known
+    assert not learned.supports_stop
+    assert learned.reports_position
+    assert _reason(entry) is ReasonCode.SENT
+    assert [c.target.value for c in commands_sent(entry)] == [100]
+    assert _issues(hass) == set()
+
+    # The cover reports the target: reached, and the command is not repeated,
+    # also after the expectation window has closed.
+    freezer.tick(timedelta(seconds=30))
+    set_cover(hass, COVER, NO_STOP, position=100)
+    await settle(hass, freezer)
+    assert _reason(entry) is ReasonCode.TARGET_REACHED
+    await advance(hass, freezer, local(10, 30))
+    assert _reason(entry) is ReasonCode.TARGET_REACHED
+    assert len(commands_sent(entry)) == 1
+
+    # The learned profile is never read again: a change of the entity's
+    # features does not reach the configuration.
+    set_cover(hass, COVER, position=100)
+    await settle(hass, freezer)
+    assert controller.config.members[0].capabilities == learned
+
+
+async def test_a_window_switched_from_dry_run_to_armed_starts_clean(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The simulated state and the dams of the dry-run time are discarded when armed."""
+    would_be = MemberCommand(
+        COVER,
+        OwnCommand(
+            "simulated",
+            Position(100),
+            TravelDirection.UP,
+            local(9, 0),
+            WishClass.COMFORT,
+            ReasonCode.SCHEDULE_DAY,
+        ),
+    )
+    stored = WindowState(
+        owner=PositionOwner.USER,
+        simulated=SimulatedState(
+            commands=(would_be,), last_comfort_movement=local(9, 0)
+        ),
+        manual_override=ManualOverrideDam(
+            armed_at=local(9, 30),
+            end_rule=OverrideEndRule.FIXED_MINUTES,
+            ends_at=local(11, 0),
+        ),
+    )
+    storage_of(hass).save_window_state(WINDOW_ID, stored.to_data())
+    set_cover(hass, COVER, position=50)
+
+    entry = await setup_window(hass, covers_present=False, freezer=freezer)
+
+    state = controller_of(entry).state
+    assert state.simulated is None
+    assert state.manual_override is None
+    assert state.owner is PositionOwner.UNKNOWN
+    # Armed and clean: the real command is given, not judged against the would-be one.
+    assert _reason(entry) is ReasonCode.SENT
+    assert [c.target.value for c in commands_sent(entry)] == [100]
+
+
+async def test_a_window_in_dry_run_keeps_its_simulated_state(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """Arming happens only for an armed window; dry-run keeps the would-be commands."""
+    would_be = MemberCommand(
+        COVER,
+        OwnCommand(
+            "simulated",
+            Position(100),
+            TravelDirection.UP,
+            local(9, 0),
+            WishClass.COMFORT,
+            ReasonCode.SCHEDULE_DAY,
+        ),
+    )
+    stored = WindowState(simulated=SimulatedState(commands=(would_be,)))
+    storage_of(hass).save_window_state(WINDOW_ID, stored.to_data())
+    set_cover(hass, COVER, position=50)
+
+    entry = await setup_window(
+        hass, window_data(dry_run=True), covers_present=False, freezer=freezer
+    )
+
+    state = controller_of(entry).state
+    assert state.simulated is not None
+    assert state.simulated.commands == (would_be,)
+    assert commands_sent(entry) == []
+
+
+class RaisingActuator:
+    """An actuator that raises for the second member it is asked to move."""
+
+    def __init__(self) -> None:
+        """Start with nothing moved."""
+        self.moved: list[str] = []
+
+    def move_to(self, command_id: str, member_id: str, target: Position) -> None:
+        """Record the first member and raise for the second."""
+        del command_id, target
+        if self.moved:
+            raise OSError("the platform is gone")
+        self.moved.append(member_id)
+
+
+async def test_a_command_is_recorded_per_member_when_the_actuator_raises(
+    hass: HomeAssistant, freezer: Any, caplog: pytest.LogCaptureFixture
+) -> None:
+    """The member that was commanded keeps its own command; the other has none."""
+    set_cover(hass, "cover.example_left", position=50)
+    set_cover(hass, "cover.example_right", position=50)
+    entry = await setup_window(
+        hass,
+        window_data(["cover.example_left", "cover.example_right"], dry_run=True),
+        covers_present=False,
+        freezer=freezer,
+    )
+    controller = controller_of(entry)
+    actuator = RaisingActuator()
+    controller.actuator = actuator
+    controller.controls = lambda: Controls(dry_run=False)
+
+    controller.async_request_recompute()
+    await settle(hass, freezer)
+
+    assert actuator.moved == ["cover.example_left"]
+    assert controller.status.error == "OSError"
+    commanded = controller.state.commanded_targets
+    assert commanded == {"cover.example_left": Position(100)}
+    stored = WindowState.from_data(storage_of(hass).load_window_state(WINDOW_ID))
+    assert stored.commanded_targets == commanded
+    assert [
+        r for r in caplog.records if "the recompute raised OSError" in r.getMessage()
+    ]
 
 
 # ---------------------------------------------------------------------------

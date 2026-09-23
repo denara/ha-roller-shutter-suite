@@ -78,6 +78,7 @@ class SuiteRuntime:
             )
             self.failed[window.subentry_id] = CONFIGURATION_WITHHELD
             return False
+        controller: WindowController | None = None
         try:
             controller = WindowController(
                 self.hass,
@@ -92,6 +93,8 @@ class SuiteRuntime:
             )
             controller.async_start()
         except Exception as error:
+            # A programming error: the traceback belongs in the log; the
+            # message line names only the type of the exception.
             _LOGGER.exception(
                 "Window %s could not be set up (%s) and is not controlled; the "
                 "other windows run",
@@ -99,6 +102,9 @@ class SuiteRuntime:
                 type(error).__name__,
             )
             self.failed[window.subentry_id] = type(error).__name__
+            if controller is not None:
+                # Whatever the start registered before it raised is released.
+                controller.async_stop()
             return False
         self.windows[window.subentry_id] = controller
         return True

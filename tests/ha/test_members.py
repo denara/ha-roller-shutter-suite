@@ -66,11 +66,31 @@ async def test_cover_states_become_observations(
 
 
 async def test_a_position_that_is_no_whole_number_is_none(hass: HomeAssistant) -> None:
-    """A boolean or text where the position belongs is not a position."""
-    hass.states.async_set(COVER, "open", {"current_position": True})
-    assert observe_member(hass, _member()).observation.position is None
-    hass.states.async_set(COVER, "open", {"current_position": "50"})
-    assert observe_member(hass, _member()).observation.position is None
+    """A boolean, text or a float where the position belongs is not a position."""
+    for raw in (True, "50", 50.0):
+        hass.states.async_set(COVER, "open", {"current_position": raw})
+        assert observe_member(hass, _member()).observation.position is None
+
+
+async def test_a_member_with_unknown_capabilities_keeps_its_position(
+    hass: HomeAssistant,
+) -> None:
+    """Unknown is never taken for missing: the reported position counts."""
+    set_cover(hass, COVER, position=50)
+    unknown = MemberConfig(
+        COVER,
+        CapabilityProfile(
+            supports_open_close=False,
+            supports_set_position=False,
+            supports_stop=False,
+            reports_position=False,
+            travel_time_up=timedelta(seconds=30),
+            travel_time_down=timedelta(seconds=30),
+            capabilities_known=False,
+        ),
+    )
+
+    assert observe_member(hass, unknown).observation.position == Position(50)
 
 
 async def test_a_member_without_position_feedback_reports_none(
