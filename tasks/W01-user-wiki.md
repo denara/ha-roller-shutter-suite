@@ -46,7 +46,7 @@ A detached house with two floors and a converted loft, one adult bedroom, one ch
 | Living room display ("Display Wohnzimmer" / "Living-room display") | a dashboard with the status entities | Status and diagnostics; notifications | reading the status, an example automation |
 | The old automations of the house | two existing automations that move the kitchen and the bedroom shutters | Migration with dry-run | running the integration next to the old control, comparing, arming one window at a time |
 
-The four-part roof window element is described as a common product of that kind, with the Velux "Lichtlösung QUARTETT" named as an example of the product family and clearly marked as a product name of Velux with no connection to this project.
+The four-part roof window element is described as one common arrangement of that kind. Where the manual names a real product as an example, the Velux "Lichtlösung QUARTETT", it says in the same breath that this is only one example from the real world with no connection to this project, a product name of Velux, and that many products with other arrangements and configurations exist; the manual describes the arrangement, not the product.
 
 The house is a data set in the repository, not only prose: a description per language and a template that fills a throw-away Home Assistant instance reproducibly with demo covers, sensors and contacts under these names, so that every screenshot can be taken again for every version. The data set takes the normal pull-request path; if a made-up name trips the instance data guard, the name changes, never the guard.
 
@@ -76,6 +76,12 @@ Every page exists per language, with a fixed naming convention (a language suffi
 20. **Release notes and getting help** — what changes between versions in user terms (including the note that the house stores its values, so a later change of a built-in default does not reach an existing installation), where to ask, what to include in a report.
 
 Additions the orchestrator proposes because manuals of comparable integrations have them: **Uninstalling without traces** (as a section of "Installation"); **Privacy: what the integration stores and sends** (nothing leaves the house; a section of "Status and diagnostics"); **Limits: what the integration cannot know** (calculated positions, a curtain stuck in frost; a section of "Basic ideas"); **A quick reference card** (the three switches pause, maintenance lock, operating mode and what each stops; a section of "Basic ideas").
+
+## Versioning of the manual
+
+The sources of the wiki live in the main repository and are therefore versioned with the code through the release tags. Every page carries at its top the version it applies to ("Applies to version x.y"); the published wiki always matches the last approved release, and `main` carries the edition for the next version. In the first step this marking is enough. The release block R01 publishes the wiki as a step of its checklist (the state of `main` at the tag goes to the wiki, the version lines updated) and answers a question this block only records: whether several versions must stay visible side by side, which the GitHub wiki cannot do; GitHub Pages with versioned states would then be the alternative.
+
+From this block on, a block with a change a user can see (a new option, a changed behavior, a new precondition, a new message) is done only when the pages of the manual it concerns are brought up to date in both languages, in the same pull request or in a named follow-up pull request before the release; `tasks/README.md` states that rule in the definition of done.
 
 ## Pictures and worked examples
 
@@ -117,6 +123,4 @@ No tests of the integration. A small check in the repository that every page und
 
 ## Open questions that block this block
 
-- Approval of the example house (the draft above) by the project owner before the start.
-- The wiki of the repository has to be enabled by the project owner, and the publishing path decided: a synchronizing workflow (the block proposes it; the owner approves its permissions) or publishing by hand.
-- Confirmation that the house is one house with translated names per language (the orchestrator's recommendation), not a different house per language.
+None. Decided by the project owner on 2026-09-24: the example house above is approved; the wiki of the repository is enabled; publishing is done by hand by the project owner at first, and a synchronizing workflow comes only once the pages are stable, as a proposal of its own with an exact list of the rights it needs; the house is one house with translated names per language.

@@ -90,7 +90,7 @@ Files are written after D00, S1 and S2 are approved. IDs and cuts may still chan
 | H14 | Wall buttons | F5 | S3, C07, H07, H12 |
 | H15 | Command verification: detects that an actuator did not react, never that a curtain arrived; deadline from the report delay | N1 | C06, H03 |
 | H16 | Wiring: sleep mode, privacy, frost source and frost waiver; brings the forms for all frost settings | A9, F2, A12 | C11, H06 |
-| R01 | Release audit (quality scale checklist, translation parity, documentation consistency, HACS) | G7, G8 | all |
+| R01 | Release audit (quality scale checklist, translation parity, documentation consistency, HACS). Publishing the wiki is a step of the release checklist (the state of `main` at the tag goes to the wiki, the version lines of the pages updated). Open question to decide there, not now: whether several versions of the manual must stay visible side by side, which the GitHub wiki cannot do; GitHub Pages with versioned states would be the alternative | G7, G8 | all, W01 |
 
 Milestones after M1: **M2** protection and manual override armed on the pilot window (C06, C07, C12, H05–H08, H10, H15) · **M3** window interaction and shading (C08–C11, H09, H11, H16) · **M4** capabilities, roof windows, buttons, release (H12–H14, R01).
 
