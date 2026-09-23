@@ -21,6 +21,7 @@ from collections.abc import Mapping
 from dataclasses import replace
 
 from custom_components.roller_shutter_suite.core.model import (
+    CommandResult,
     Decision,
     GateKind,
     MemberState,
@@ -81,3 +82,32 @@ def record_sent_commands(
         owner=PositionOwner.ENGINE,
         last_comfort_movement=clock,
     )
+
+
+def record_command_result(state: WindowState, result: CommandResult) -> WindowState:
+    """Return the state after the actuator reported the result of a command.
+
+    The result is written into the member's last own command, and only if
+    that command has the identifier of the result: a late result of an older
+    command is never attributed to a newer one, and a result for a member
+    without a record changes nothing. It adds the context ID under which the
+    command was executed and, for ``command_failed``, marks the command as
+    failed, so that "target reached" does not count a target the actuator
+    never received. Nothing else changes: the attempt, the time and the
+    expectation window stay as they were, and retrying is not decided here.
+    """
+    changed = False
+    members: list[MemberState] = []
+    for member in state.members:
+        command = member.last_own_command
+        if (
+            member.member_id != result.member_id
+            or command is None
+            or command.command_id != result.command_id
+        ):
+            members.append(member)
+            continue
+        updated = replace(command, context_id=result.context_id, failed=result.failed)
+        changed = changed or updated != command
+        members.append(replace(member, last_own_command=updated))
+    return replace(state, members=tuple(members)) if changed else state

@@ -14,6 +14,7 @@ from custom_components.roller_shutter_suite.core.reasons import (
 from ._data import (
     JsonObject,
     JsonValue,
+    as_bool,
     as_datetime,
     as_enum,
     as_object,
@@ -271,6 +272,12 @@ class OwnCommand:
       the command (in Home Assistant the context of the service call). It is
       known only once the result has come back, and it is a hint for
       diagnostics, never a decision.
+    - ``failed``: the result of the command came back as ``command_failed``:
+      the call to the actuator itself raised, so the actuator never got the
+      command. The record stays (it is still the last own command, with its
+      attempt and its expectation window), but "target reached" never
+      counts it: a member without position feedback whose command failed is
+      not taken to stand at its target.
 
     The time is an instant and is kept in UTC.
     """
@@ -282,6 +289,7 @@ class OwnCommand:
     wish_class: WishClass
     reason: ReasonCode
     context_id: str | None = None
+    failed: bool = False
 
     def __post_init__(self) -> None:
         """Validate the types, reject a naive time and keep the instant in UTC."""
@@ -298,6 +306,7 @@ class OwnCommand:
                 f"{self.reason.category.value!r}"
             )
         require_optional_type(self.context_id, str, "the context of a command")
+        require_type(self.failed, bool, "the flag 'failed' of a command")
 
     def to_data(self) -> JsonObject:
         """Return plain data for persistence."""
@@ -309,6 +318,7 @@ class OwnCommand:
             "wish_class": self.wish_class.value,
             "reason": self.reason.value,
             "context_id": self.context_id,
+            "failed": self.failed,
         }
 
     @classmethod
@@ -323,6 +333,7 @@ class OwnCommand:
             "wish_class",
             "reason",
             "context_id",
+            "failed",
         )
         return cls(
             command_id=read(content, "command_id", as_str),
@@ -332,7 +343,36 @@ class OwnCommand:
             wish_class=read(content, "wish_class", as_enum(WishClass)),
             reason=read(content, "reason", as_enum(ReasonCode)),
             context_id=read(content, "context_id", optional(as_str)),
+            failed=read(content, "failed", as_bool),
         )
+
+
+@dataclass(frozen=True, slots=True)
+class CommandResult:
+    """What the actuator reports back about one own command.
+
+    - ``command_id`` and ``member_id``: the command it answers. A result is
+      applied only to the member's last own command with this identifier, so
+      a late result of an older command is never attributed to a newer one.
+    - ``context_id``: the identifier under which the outside world executed
+      the command (in Home Assistant the context of the service call), or
+      ``None`` if nothing was executed.
+    - ``failed``: the call itself raised (``command_failed``). Nothing is
+      claimed about the cover when it did not: a call that returned says
+      only that the actuator accepted the command.
+    """
+
+    command_id: str
+    member_id: str
+    context_id: str | None
+    failed: bool
+
+    def __post_init__(self) -> None:
+        """Validate the identifiers and the flag."""
+        require_identifier(self.command_id, "the identifier of a command")
+        require_identifier(self.member_id, "the member of a command result")
+        require_optional_type(self.context_id, str, "the context of a command")
+        require_type(self.failed, bool, "the flag 'failed' of a command result")
 
 
 @dataclass(frozen=True, slots=True)

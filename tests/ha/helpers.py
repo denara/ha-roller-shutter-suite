@@ -19,6 +19,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
+from custom_components.roller_shutter_suite import features
 from custom_components.roller_shutter_suite.const import (
     CONF_SETTINGS,
     CONFIG_MINOR_VERSION,
@@ -186,14 +187,29 @@ def day_inherit(day_type: str, **changes: Any) -> dict[str, Any]:
     } | changes
 
 
+# The page "Movement" follows the daily routine: nothing but the section of
+# expert values is required there, on every level.
+MOVEMENT_INHERIT: dict[str, Any] = {"expert": {}}
+MOVEMENT_HOUSE: dict[str, Any] = {"expert": {}}
+
+
 def routine_inherit(
-    general: dict[str, Any] | None = None, **days: dict[str, Any]
+    general: dict[str, Any] | None = None,
+    **days: dict[str, Any],
 ) -> list[dict[str, Any]]:
-    """Return the inputs of all pages of the daily routine, with the given changes."""
+    """Return the inputs of all feature pages, with changes to the daily routine.
+
+    The page "Movement" is part of it only while the catalog in effect has
+    it; the catalog of made-up settings (fixture `example_catalog`) has not.
+    """
+    movement = any(
+        feature.feature_id == "movement" for feature in features.get_catalog().features
+    )
     return [
         SWITCHES_INHERIT,
         GENERAL_INHERIT | (general or {}),
         *(day_inherit(day_type, **days.get(day_type, {})) for day_type in DAY_TYPES),
+        *([MOVEMENT_INHERIT] if movement else []),
     ]
 
 
@@ -203,7 +219,9 @@ ROUTINE_HOUSE: list[dict[str, Any]] = [
     DAY_HOUSE,
     DAY_HOUSE,
     DAY_HOUSE,
+    MOVEMENT_HOUSE,
 ]
+"""The inputs of all feature pages of the house, as a browser sends them."""
 
 
 def set_cover(

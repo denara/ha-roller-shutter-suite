@@ -71,6 +71,9 @@ _MAX_TOLERANCE: Final = 100
 _DEFAULT_FROST_POSITION: Final = Position(90)
 _DEFAULT_REEVALUATE_AFTER: Final = timedelta(minutes=5)
 _DEFAULT_MIN_INTERVAL: Final = timedelta(minutes=10)
+DEFAULT_STAGGER_GAP: Final = timedelta(seconds=2)
+MAX_STAGGER_GAP: Final = timedelta(seconds=10)
+"""Staggering between motors (E13): default gap and its upper end (section 6.5)."""
 _GEOMETRY: Final = ShadingGeometrySettings()
 """The built-in defaults of the measurements of shading stand at the view."""
 
@@ -454,6 +457,12 @@ class WindowConfig:
     - ``reevaluate_after``: the upper bound of a deferral whose end is not
       known: that long after the recompute, at the latest, the window is
       evaluated again.
+    - ``stagger_gap``: staggering between motors (E13). After each motor of
+      this window a collective movement waits this long before the next
+      motor starts, across windows and between the members of this window
+      (0 to 10 seconds; zero switches staggering off for the motors of this
+      window). Fire is never staggered. The core only carries it; the
+      actuator adapter of the Home Assistant layer applies it.
     - ``schedule_enabled`` and the other ``schedule_*`` fields: the settings of
       the schedule, one field per setting; :attr:`schedule` is the view over
       them and describes them. Per day type (workday, weekend, holiday) and
@@ -492,6 +501,7 @@ class WindowConfig:
     motor_min_change: int = 5
     motor_min_interval: timedelta = _DEFAULT_MIN_INTERVAL
     reevaluate_after: timedelta = _DEFAULT_REEVALUATE_AFTER
+    stagger_gap: timedelta = DEFAULT_STAGGER_GAP
     schedule_enabled: bool = _SCHEDULE_ENABLED
     schedule_workday_morning_kind: TriggerKind = _MORNING_KIND
     schedule_workday_morning_time: time = _MORNING_TIME_WORKDAY
@@ -588,6 +598,9 @@ class WindowConfig:
         require_type(self.reevaluate_after, timedelta, "the re-evaluation bound")
         if self.reevaluate_after <= timedelta(0):
             raise ValueError("the re-evaluation bound must be longer than zero")
+        require_type(self.stagger_gap, timedelta, "the staggering gap")
+        if not timedelta(0) <= self.stagger_gap <= MAX_STAGGER_GAP:
+            raise ValueError("the staggering gap must be within 0 and 10 seconds")
         given: object = self.disabled_functions
         if isinstance(given, str):
             raise TypeError("the disabled functions must be a set of identifiers")

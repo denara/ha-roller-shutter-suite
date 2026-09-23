@@ -18,8 +18,9 @@ from custom_components.roller_shutter_suite.core.settings import (
 from custom_components.roller_shutter_suite.flow.model import Catalog, FeatureForm
 
 from .daily_routine import DAILY_ROUTINE
+from .movement import MOVEMENT
 
-FEATURES: Final[tuple[FeatureForm, ...]] = (DAILY_ROUTINE,)
+FEATURES: Final[tuple[FeatureForm, ...]] = (DAILY_ROUTINE, MOVEMENT)
 
 CATALOG: Catalog = Catalog(
     registry=WINDOW_SETTINGS, features=FEATURES, resolve=resolve_window

@@ -24,7 +24,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryError
 from homeassistant.helpers import device_registry as dr
 
-from .actuator import RecordingActuator
+from .actuator import actuator_of, forget_actuator
 from .const import CONF_SETTINGS, CONFIG_MINOR_VERSION, CONFIG_VERSION, DOMAIN
 from .features import get_catalog
 from .issues import async_sync_issues
@@ -72,7 +72,7 @@ async def async_setup_entry(
         clock=HomeAssistantClock(local_zone(hass)),
         sun=sun_port(hass),
         storage=storage_of(hass),
-        actuator=RecordingActuator(),
+        actuator=actuator_of(hass),
     )
     resolved = resolve_entry(hass, entry, get_catalog())
     entry.runtime_data = RollerShutterSuiteData(
@@ -113,8 +113,9 @@ async def async_unload_entry(
 async def async_remove_entry(
     hass: HomeAssistant, entry: RollerShutterSuiteConfigEntry
 ) -> None:
-    """Delete the repair issues and the stored state of an entry that is removed."""
+    """Delete the repair issues, queued commands and the state of a removed entry."""
     async_sync_issues(hass, ())
+    forget_actuator(hass)
     forget_storage(hass)
 
 

@@ -14,16 +14,22 @@ from datetime import date, datetime, time, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from homeassistant.core import HomeAssistant
+from homeassistant.components.cover import ATTR_POSITION
+from homeassistant.components.cover import DOMAIN as COVER_DOMAIN
+from homeassistant.const import (
+    ATTR_ENTITY_ID,
+    SERVICE_CLOSE_COVER,
+    SERVICE_OPEN_COVER,
+    SERVICE_SET_COVER_POSITION,
+)
+from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.util import dt as dt_util
+from homeassistant.util.hass_dict import HassKey
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
     async_fire_time_changed,
 )
 
-from custom_components.roller_shutter_suite.actuator import (
-    RecordedCommand,
-    RecordingActuator,
-)
 from custom_components.roller_shutter_suite.const import (
     CONF_COVERS,
     CONF_DRY_RUN,
@@ -31,7 +37,7 @@ from custom_components.roller_shutter_suite.const import (
     SUBENTRY_WINDOW,
 )
 from custom_components.roller_shutter_suite.controller import Phase, WindowController
-from custom_components.roller_shutter_suite.core.model import SunPosition
+from custom_components.roller_shutter_suite.core.model import Position, SunPosition
 from custom_components.roller_shutter_suite.core.schedule import ScheduleResult
 from custom_components.roller_shutter_suite.runtime import SuiteRuntime
 from tests.ha.helpers import set_cover, setup_entry, subentry_data
@@ -74,6 +80,9 @@ FIXED_ROUTINE: dict[str, Any] = {
     "schedule_weekend_evening_time": "21:00",
     "schedule_holiday_morning_time": "09:00",
     "schedule_holiday_evening_time": "21:30",
+    # No staggering, so every member of a send is called at once; the tests
+    # of the actuator adapter set a gap of their own.
+    "stagger_gap": 0,
 }
 
 
@@ -177,6 +186,7 @@ async def setup_window(
     ``freezer`` the first recompute has run when this returns.
     """
     data = window_data() if data is None else data
+    register_cover_services(hass)
     if covers_present:
         for cover in data[CONF_COVERS]:
             set_cover(hass, cover)
@@ -220,11 +230,67 @@ def is_active(controller: WindowController) -> bool:
     return controller.active
 
 
-def commands_sent(entry: MockConfigEntry) -> list[RecordedCommand]:
-    """Return the commands the runtime handed to the recording actuator."""
-    actuator = runtime_of(entry).actuator
-    assert isinstance(actuator, RecordingActuator)
-    return actuator.commands
+@dataclass(frozen=True)
+class CoverCall:
+    """One call of a cover action, as the stand-in services received it.
+
+    ``target`` is the position of ``set_cover_position``, 100 for
+    ``open_cover`` and 0 for ``close_cover``; ``at`` is the time of the call.
+    """
+
+    member_id: str
+    service: str
+    target: Position
+    context_id: str
+    at: datetime
+
+
+COVER_CALLS: HassKey[list[CoverCall]] = HassKey("test_cover_calls")
+
+_TARGET_OF: dict[str, int | None] = {
+    SERVICE_SET_COVER_POSITION: None,
+    SERVICE_OPEN_COVER: 100,
+    SERVICE_CLOSE_COVER: 0,
+}
+
+
+def register_cover_services(hass: HomeAssistant) -> list[CoverCall]:
+    """Register stand-ins for the three cover actions that record every call.
+
+    No cover platform is loaded and no real cover moves: the stand-ins only
+    write down what the actuator adapter called. A test that wants a call
+    to fail registers its own handler under the same name afterwards.
+    """
+    calls = hass.data.setdefault(COVER_CALLS, [])
+
+    async def record(call: ServiceCall) -> None:
+        fixed = _TARGET_OF[call.service]
+        target = call.data[ATTR_POSITION] if fixed is None else fixed
+        entity_ids = call.data[ATTR_ENTITY_ID]
+        for member_id in [entity_ids] if isinstance(entity_ids, str) else entity_ids:
+            calls.append(
+                CoverCall(
+                    member_id,
+                    call.service,
+                    Position(target),
+                    call.context.id,
+                    dt_util.utcnow(),
+                )
+            )
+
+    for service in _TARGET_OF:
+        hass.services.async_register(COVER_DOMAIN, service, record)
+    return calls
+
+
+def cover_calls(hass: HomeAssistant) -> list[CoverCall]:
+    """Return the calls the stand-in services recorded so far."""
+    return hass.data.setdefault(COVER_CALLS, [])
+
+
+def commands_sent(entry: MockConfigEntry) -> list[CoverCall]:
+    """Return the cover actions called for the windows of the installation."""
+    return cover_calls(runtime_of(entry).hass)
 
 
 async def settle(hass: HomeAssistant, freezer: Any, seconds: float = 1.5) -> None:

@@ -192,6 +192,32 @@
             }
           }
         }
+      },
+      "feature_movement_general": {
+        "title": "Bewegung",
+        "description": "Wie die Integration die Motoren schont: Sie lässt Bewegungen aus, die sich nicht lohnen, wartet zwischen zwei Komfortbewegungen und startet bei einer gemeinsamen Bewegung nicht alle Motoren im selben Augenblick. Die Mindeständerung und der Mindestabstand halten Schutzbewegungen nie zurück, und einen Feueralarm hält keine dieser Einstellungen zurück.",
+        "data": {
+          "motor_min_change": "Mindeständerung",
+          "motor_min_interval": "Mindestabstand",
+          "stagger_gap": "Abstand zwischen Motoren"
+        },
+        "data_description": {
+          "motor_min_change": "Eine Komfortbewegung, die kleiner ist, wird ausgelassen. 0 schaltet das ab. Ganz auf oder ganz zu fährt ein Rollladen trotzdem, auch wenn der Rest klein ist. Beurteilen lässt sich das nur bei Rollläden, die ihre Position melden; ein Rollladen, der keine meldet, wird immer bewegt.",
+          "motor_min_interval": "Die kürzeste Zeit zwischen zwei Komfortbewegungen des Fensters, gegen Hin und Her, während die Beschattung der Sonne folgt. 0 schaltet das ab. Etwas Neues, etwa der Morgen oder der Abend, eingeschalteter Schlafmodus oder der Beginn der Beschattung, bewegt trotzdem sofort.",
+          "stagger_gap": "Wenn viele Rollläden zugleich fahren, startet der nächste Motor so viele Sekunden nach dem vorigen, zwischen Fenstern und zwischen den Rollläden eines Fensters. 0 schaltet das für die Rollläden dieses Fensters ab. Ein Feueralarm wird nie gestaffelt. Der Abstand zwischen den Rollläden eines Fensters zählt nur bei einem Fenster mit mehreren Rollläden."
+        },
+        "sections": {
+          "expert": {
+            "name": "Expertenwerte",
+            "description": "Es gelten sinnvolle Voreinstellungen. Ändere sie nur, wenn du weißt, warum.",
+            "data": {
+              "reevaluate_after": "Spätestens erneut prüfen nach"
+            },
+            "data_description": {
+              "reevaluate_after": "Wartet eine Bewegung auf etwas, dessen Ende niemand kennt, zum Beispiel darauf, dass ein Rollladen wieder erreichbar ist, wird das Fenster spätestens nach dieser Zeit erneut geprüft."
+            }
+          }
+        }
       }
     },
     "abort": {
@@ -405,6 +431,32 @@
                 "schedule_holiday_evening_elevation": "Zählt mit dem Auslöser „Höhe der Sonne“. Grad über dem Horizont; eine negative Zahl bedeutet darunter. Leer lassen, um zu erben. Geerbt wird derzeit: {schedule_holiday_evening_elevation_inherited} (von {schedule_holiday_evening_elevation_source}).",
                 "schedule_holiday_evening_not_before": "Die früheste Zeit für einen Auslöser, der der Sonne folgt. An einem Tag, an dem die Sonne keine Zeit liefert, steht diese Zeit oder „nicht nach“ dafür ein. Leer lassen, um zu erben. Geerbt wird derzeit: {schedule_holiday_evening_not_before_inherited} (von {schedule_holiday_evening_not_before_source}).",
                 "schedule_holiday_evening_not_after": "Die späteste Zeit für einen Auslöser, der der Sonne folgt. Leer lassen, um zu erben. Geerbt wird derzeit: {schedule_holiday_evening_not_after_inherited} (von {schedule_holiday_evening_not_after_source})."
+              }
+            }
+          }
+        },
+        "feature_movement_general": {
+          "title": "Bewegung",
+          "description": "Wie die Integration die Motoren schont: Sie lässt Bewegungen aus, die sich nicht lohnen, wartet zwischen zwei Komfortbewegungen und startet bei einer gemeinsamen Bewegung nicht alle Motoren im selben Augenblick. Die Mindeständerung und der Mindestabstand halten Schutzbewegungen nie zurück, und einen Feueralarm hält keine dieser Einstellungen zurück.",
+          "data": {
+            "motor_min_change": "Mindeständerung",
+            "motor_min_interval": "Mindestabstand",
+            "stagger_gap": "Abstand zwischen Motoren"
+          },
+          "data_description": {
+            "motor_min_change": "Eine Komfortbewegung, die kleiner ist, wird ausgelassen. 0 schaltet das ab. Ganz auf oder ganz zu fährt ein Rollladen trotzdem, auch wenn der Rest klein ist. Beurteilen lässt sich das nur bei Rollläden, die ihre Position melden; ein Rollladen, der keine meldet, wird immer bewegt. Leer lassen, um zu erben. Geerbt wird derzeit: {motor_min_change_inherited} (von {motor_min_change_source}).",
+            "motor_min_interval": "Die kürzeste Zeit zwischen zwei Komfortbewegungen des Fensters, gegen Hin und Her, während die Beschattung der Sonne folgt. 0 schaltet das ab. Etwas Neues, etwa der Morgen oder der Abend, eingeschalteter Schlafmodus oder der Beginn der Beschattung, bewegt trotzdem sofort. Leer lassen, um zu erben. Geerbt wird derzeit: {motor_min_interval_inherited} (von {motor_min_interval_source}).",
+            "stagger_gap": "Wenn viele Rollläden zugleich fahren, startet der nächste Motor so viele Sekunden nach dem vorigen, zwischen Fenstern und zwischen den Rollläden eines Fensters. 0 schaltet das für die Rollläden dieses Fensters ab. Ein Feueralarm wird nie gestaffelt. Der Abstand zwischen den Rollläden eines Fensters zählt nur bei einem Fenster mit mehreren Rollläden. Leer lassen, um zu erben. Geerbt wird derzeit: {stagger_gap_inherited} (von {stagger_gap_source})."
+          },
+          "sections": {
+            "expert": {
+              "name": "Expertenwerte",
+              "description": "Es gelten sinnvolle Voreinstellungen. Ändere sie nur, wenn du weißt, warum.",
+              "data": {
+                "reevaluate_after": "Spätestens erneut prüfen nach"
+              },
+              "data_description": {
+                "reevaluate_after": "Wartet eine Bewegung auf etwas, dessen Ende niemand kennt, zum Beispiel darauf, dass ein Rollladen wieder erreichbar ist, wird das Fenster spätestens nach dieser Zeit erneut geprüft. Leer lassen, um zu erben. Geerbt wird derzeit: {reevaluate_after_inherited} (von {reevaluate_after_source})."
               }
             }
           }
@@ -644,6 +696,32 @@
                 "schedule_holiday_evening_elevation": "Zählt mit dem Auslöser „Höhe der Sonne“. Grad über dem Horizont; eine negative Zahl bedeutet darunter. Leer lassen, um zu erben. Geerbt wird derzeit: {schedule_holiday_evening_elevation_inherited} (von {schedule_holiday_evening_elevation_source}).",
                 "schedule_holiday_evening_not_before": "Die früheste Zeit für einen Auslöser, der der Sonne folgt. An einem Tag, an dem die Sonne keine Zeit liefert, steht diese Zeit oder „nicht nach“ dafür ein. Leer lassen, um zu erben. Geerbt wird derzeit: {schedule_holiday_evening_not_before_inherited} (von {schedule_holiday_evening_not_before_source}).",
                 "schedule_holiday_evening_not_after": "Die späteste Zeit für einen Auslöser, der der Sonne folgt. Leer lassen, um zu erben. Geerbt wird derzeit: {schedule_holiday_evening_not_after_inherited} (von {schedule_holiday_evening_not_after_source})."
+              }
+            }
+          }
+        },
+        "feature_movement_general": {
+          "title": "Bewegung",
+          "description": "Wie die Integration die Motoren schont: Sie lässt Bewegungen aus, die sich nicht lohnen, wartet zwischen zwei Komfortbewegungen und startet bei einer gemeinsamen Bewegung nicht alle Motoren im selben Augenblick. Die Mindeständerung und der Mindestabstand halten Schutzbewegungen nie zurück, und einen Feueralarm hält keine dieser Einstellungen zurück.",
+          "data": {
+            "motor_min_change": "Mindeständerung",
+            "motor_min_interval": "Mindestabstand",
+            "stagger_gap": "Abstand zwischen Motoren"
+          },
+          "data_description": {
+            "motor_min_change": "Eine Komfortbewegung, die kleiner ist, wird ausgelassen. 0 schaltet das ab. Ganz auf oder ganz zu fährt ein Rollladen trotzdem, auch wenn der Rest klein ist. Beurteilen lässt sich das nur bei Rollläden, die ihre Position melden; ein Rollladen, der keine meldet, wird immer bewegt. Leer lassen, um zu erben. Geerbt wird derzeit: {motor_min_change_inherited} (von {motor_min_change_source}).",
+            "motor_min_interval": "Die kürzeste Zeit zwischen zwei Komfortbewegungen des Fensters, gegen Hin und Her, während die Beschattung der Sonne folgt. 0 schaltet das ab. Etwas Neues, etwa der Morgen oder der Abend, eingeschalteter Schlafmodus oder der Beginn der Beschattung, bewegt trotzdem sofort. Leer lassen, um zu erben. Geerbt wird derzeit: {motor_min_interval_inherited} (von {motor_min_interval_source}).",
+            "stagger_gap": "Wenn viele Rollläden zugleich fahren, startet der nächste Motor so viele Sekunden nach dem vorigen, zwischen Fenstern und zwischen den Rollläden eines Fensters. 0 schaltet das für die Rollläden dieses Fensters ab. Ein Feueralarm wird nie gestaffelt. Der Abstand zwischen den Rollläden eines Fensters zählt nur bei einem Fenster mit mehreren Rollläden. Leer lassen, um zu erben. Geerbt wird derzeit: {stagger_gap_inherited} (von {stagger_gap_source})."
+          },
+          "sections": {
+            "expert": {
+              "name": "Expertenwerte",
+              "description": "Es gelten sinnvolle Voreinstellungen. Ändere sie nur, wenn du weißt, warum.",
+              "data": {
+                "reevaluate_after": "Spätestens erneut prüfen nach"
+              },
+              "data_description": {
+                "reevaluate_after": "Wartet eine Bewegung auf etwas, dessen Ende niemand kennt, zum Beispiel darauf, dass ein Rollladen wieder erreichbar ist, wird das Fenster spätestens nach dieser Zeit erneut geprüft. Leer lassen, um zu erben. Geerbt wird derzeit: {reevaluate_after_inherited} (von {reevaluate_after_source})."
               }
             }
           }

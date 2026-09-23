@@ -48,32 +48,81 @@ def test_loading_the_catalog_leaves_no_stand_in_behind() -> None:
 
     catalog = build_translations.load_catalog()
 
-    assert [feature.feature_id for feature in catalog.features] == ["daily_routine"]
+    assert [feature.feature_id for feature in catalog.features] == [
+        "daily_routine",
+        "movement",
+    ]
     assert (build_translations.PACKAGE in sys.modules) is before
 
 
-def test_english_and_german_have_the_same_keys_and_placeholders() -> None:
+def test_every_language_has_the_keys_and_placeholders_of_english() -> None:
     """A key or a placeholder that one language lacks would show up as raw text."""
+    codes = list(build_translations.languages())
     english = _flatten(build_translations.build("en"))
-    german = _flatten(build_translations.build("de"))
 
-    assert sorted(english) == sorted(german)
-    for path, text in english.items():
-        assert sorted(_PLACEHOLDER.findall(text)) == sorted(
-            _PLACEHOLDER.findall(german[path])
-        ), path
-        assert text.strip()
-        assert german[path].strip()
+    assert codes[0] == "en"
+    assert {"en", "de"} <= set(codes)
+    for code in codes[1:]:
+        other = _flatten(build_translations.build(code))
+        assert sorted(english) == sorted(other), code
+        for path, text in english.items():
+            assert sorted(_PLACEHOLDER.findall(text)) == sorted(
+                _PLACEHOLDER.findall(other[path])
+            ), (code, path)
+            assert text.strip()
+            assert other[path].strip(), (code, path)
+
+
+def test_a_language_is_added_by_adding_its_sources_only(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A base file and one fragment per feature; nothing in the script changes."""
+    sources = build_translations.SOURCES
+    (tmp_path / "features").mkdir()
+    for path in [*sources.glob("*.json"), *sources.glob("features/*.json")]:
+        target = tmp_path / path.relative_to(sources)
+        target.write_text(path.read_text(encoding="utf-8"), encoding="utf-8")
+    for path in [tmp_path / "base.de.json", *tmp_path.glob("features/*.de.json")]:
+        path.with_name(path.name.replace(".de.", ".xx.")).write_text(
+            path.read_text(encoding="utf-8"), encoding="utf-8"
+        )
+    monkeypatch.setattr(build_translations, "SOURCES", tmp_path)
+
+    found = build_translations.languages()
+
+    assert found["xx"] == ("translations/xx.json",)
+    assert found["en"] == ("strings.json", "translations/en.json")
+    assert build_translations.build("xx") == build_translations.build("de")
+
+
+def test_a_language_without_a_fragment_of_a_feature_cannot_be_checked(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A missing fragment is never skipped silently."""
+    sources = build_translations.SOURCES
+    (tmp_path / "features").mkdir()
+    for path in [*sources.glob("*.json"), *sources.glob("features/*.json")]:
+        target = tmp_path / path.relative_to(sources)
+        target.write_text(path.read_text(encoding="utf-8"), encoding="utf-8")
+    (tmp_path / "base.xx.json").write_text(
+        (tmp_path / "base.de.json").read_text(encoding="utf-8"), encoding="utf-8"
+    )
+    monkeypatch.setattr(build_translations, "SOURCES", tmp_path)
+    monkeypatch.setattr(build_translations, "ROOT", tmp_path)
+
+    with pytest.raises(build_translations.SourceError, match=r"daily_routine.xx"):
+        build_translations.build("xx")
 
 
 def test_shipped_files_have_the_keys_of_strings_json() -> None:
-    """``strings.json`` and both translations carry exactly the same keys."""
+    """``strings.json`` and every translation carry exactly the same keys."""
     files = [
         _flatten(json.loads((build_translations.INTEGRATION / name).read_text("utf-8")))
-        for names in build_translations.LANGUAGES.values()
+        for names in build_translations.languages().values()
         for name in names
     ]
 
+    assert len(files) >= 3  # noqa: PLR2004 - strings.json, English, German
     assert all(sorted(item) == sorted(files[0]) for item in files)
     assert "_templates" not in json.dumps(sorted(files[0]))
 
@@ -82,7 +131,12 @@ def test_sources_live_outside_the_shipped_integration() -> None:
     """Nothing but what Home Assistant needs is shipped."""
     assert build_translations.INTEGRATION not in build_translations.SOURCES.parents
     shipped = {path.name for path in build_translations.INTEGRATION.rglob("*.json")}
-    assert shipped == {"manifest.json", "strings.json", "en.json", "de.json"}
+    expected = {
+        Path(name).name
+        for names in build_translations.languages().values()
+        for name in names
+    }
+    assert shipped == {"manifest.json", *expected}
 
 
 def test_outdated_file_fails_the_check(
