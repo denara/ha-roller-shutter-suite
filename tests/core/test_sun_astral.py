@@ -2,9 +2,11 @@
 
 The implementation lives outside the domain core
 (``custom_components/roller_shutter_suite/sun_astral.py``), because the core
-imports no third-party library. Its tests still stand here: the module needs
-no Home Assistant, so they run on every platform, and the purity proof of this
-folder shows that nothing of Home Assistant is pulled in by it.
+imports no third-party library. Its tests still stand here: the module itself
+needs nothing of Home Assistant, so they run on every platform; and because
+the conftest of this folder registers a stand-in for the integration package
+(whose ``__init__`` would otherwise import Home Assistant), the purity proof
+shows that the module and what it imports pull in nothing of Home Assistant.
 
 Where the expected numbers come from:
 
@@ -62,6 +64,7 @@ DECLINATION_AT_SOLSTICE = 23.44
 HALF_A_DEGREE = 0.5
 TWO_DEGREES = 2.0
 A_TWENTIETH_OF_A_DEGREE = 0.05
+A_TENTH_OF_A_DEGREE = 0.1
 EAST = (60.0, 120.0)
 WEST = (240.0, 300.0)
 FULL_CIRCLE = 360.0
@@ -155,22 +158,57 @@ def test_length_of_the_day_on_the_solstices(day: date, day_length: timedelta) ->
     assert sunrise.tzinfo == BERLIN_ZONE
 
 
-def test_a_passage_agrees_with_the_position() -> None:
-    """When the port says the sun passes 10 degrees, its elevation is 10 degrees."""
+@pytest.mark.parametrize("height", [0.0, 500.0, 1000.0])
+@pytest.mark.parametrize("elevation", [10.0, 30.0])
+def test_a_passage_agrees_with_the_position(height: float, elevation: float) -> None:
+    """When the port says the sun passes 10 degrees, its elevation is 10 degrees.
+
+    Also for an observer above sea level: the dip of the horizon counts for
+    sunrise and sunset only, never for a passage.
+    """
+    sun = AstralSun(50.0, 10.0, height, "Europe/Berlin")
     for rising in (True, False):
-        passage = ROUND_POINT.elevation_reached(JUNE_SOLSTICE, 10.0, rising=rising)
+        passage = sun.elevation_reached(JUNE_SOLSTICE, elevation, rising=rising)
 
         assert passage is not None
         assert passage.date() == JUNE_SOLSTICE
         assert (
-            abs(ROUND_POINT.position(passage).elevation - 10.0)
-            < A_TWENTIETH_OF_A_DEGREE
+            abs(sun.position(passage).elevation - elevation) < A_TWENTIETH_OF_A_DEGREE
         )
-    upwards = ROUND_POINT.elevation_reached(JUNE_SOLSTICE, 10.0, rising=True)
-    downwards = ROUND_POINT.elevation_reached(JUNE_SOLSTICE, 10.0, rising=False)
+    upwards = sun.elevation_reached(JUNE_SOLSTICE, elevation, rising=True)
+    downwards = sun.elevation_reached(JUNE_SOLSTICE, elevation, rising=False)
     assert upwards is not None
     assert downwards is not None
     assert upwards < downwards
+
+
+def test_a_passage_of_the_horizon_agrees_within_a_tenth_of_a_degree() -> None:
+    """At 0 degrees ``astral`` applies its refraction regimes differently.
+
+    The two functions of the library agree within about a tenth of a degree
+    there, at every height of the observer; above the horizon they agree
+    within a few hundredths (the test above).
+    """
+    for height in (0.0, 1000.0):
+        sun = AstralSun(50.0, 10.0, height, "Europe/Berlin")
+        passage = sun.elevation_reached(JUNE_SOLSTICE, 0.0, rising=True)
+
+        assert passage is not None
+        assert abs(sun.position(passage).elevation) < A_TENTH_OF_A_DEGREE
+
+
+def test_the_height_of_the_observer_moves_sunrise_but_not_a_passage() -> None:
+    """The dip of the horizon: an earlier sunrise, the same passage."""
+    at_sea = ROUND_POINT
+    on_the_hill = AstralSun(50.0, 10.0, 1000.0, "Europe/Berlin")
+
+    assert on_the_hill.sunrise(JUNE_SOLSTICE) != at_sea.sunrise(JUNE_SOLSTICE)
+    assert on_the_hill.elevation_reached(
+        JUNE_SOLSTICE, 10.0, rising=True
+    ) == at_sea.elevation_reached(JUNE_SOLSTICE, 10.0, rising=True)
+    assert on_the_hill.position(local(JUNE_SOLSTICE, 12)) == at_sea.position(
+        local(JUNE_SOLSTICE, 12)
+    )
 
 
 def test_a_passage_the_sun_never_makes_is_none() -> None:
@@ -249,6 +287,27 @@ def test_a_date_is_a_local_date_and_not_a_date_in_utc() -> None:
     assert sunrise_east.astimezone(UTC).date() == day - timedelta(days=1)
     assert sunset_west.date() == day
     assert sunset_west.astimezone(UTC).date() == day + timedelta(days=1)
+
+
+def test_a_zone_a_day_ahead_of_its_sun_still_gets_the_event_of_its_date() -> None:
+    """A made-up point at 170 west in a zone at UTC+14: the clock runs a day ahead.
+
+    ``astral`` computes a transit for a calendar date in UTC around the solar
+    day of that date; here every event falls on the next local date, so the
+    port has to look at the neighbouring UTC date to serve the local one.
+    """
+    ahead = AstralSun(0.0, -170.0, 0.0, "Etc/GMT-14")
+    day = date(2026, 1, 10)
+    sunrise = ahead.sunrise(day)
+    sunset = ahead.sunset(day)
+    passage = ahead.elevation_reached(day, 30.0, rising=False)
+
+    assert sunrise is not None
+    assert sunset is not None
+    assert passage is not None
+    assert sunrise.date() == sunset.date() == passage.date() == day
+    assert sunrise < passage < sunset
+    assert sunrise.astimezone(UTC).date() == day - timedelta(days=1)
 
 
 def test_an_elevated_observer_sees_the_sun_earlier() -> None:
