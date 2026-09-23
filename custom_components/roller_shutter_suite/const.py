@@ -67,5 +67,8 @@ SAFETY_TICK: Final = timedelta(minutes=5)
 # After a start, a window waits for its members before the first decision.
 # Late availability is normal. Once one member is available and this much
 # time has passed since the start, the window decides with the members it
-# has; the others are handled by the gate and reported in the status.
+# has; the others are handled by the gate and reported in the status. Two
+# minutes because polled covers report with a delay of up to 60 seconds (the
+# S1 measurement). A deviation from the letter of section 11; see
+# docs/dev/runtime.md, "Deviations".
 STARTUP_GRACE: Final = timedelta(minutes=2)

@@ -11,7 +11,9 @@ describes its life cycle.
 **Triggers of a recompute:** a state change of an entity the window uses
 (its members and its sources), a point in time the core asked for (the end
 of a deferral, the upper bound of a re-evaluation, the next planned action
-of the schedule, its recheck), the periodic safety tick, and an explicit
+of the schedule, its recheck), the end of the expectation window of a
+pending own command (``member_expectation_end`` of the core, the same
+deadline the gate reads), the periodic safety tick, and an explicit
 request. Every trigger goes through one debouncer per window, so a burst of
 changes is coalesced into one recompute and two recomputes of the same
 window never run at the same time.
@@ -23,7 +25,10 @@ that come from wake-ups are at least that far apart.
 
 **Start-up:** no decision before the members are available. Late
 availability is normal and not an error: the window waits, and when the
-cover appears it starts working without a reload.
+cover appears it starts working without a reload. With several members and
+at least one available, the window decides with what is known once
+``STARTUP_GRACE`` has passed; a member that has not reported by then stays
+unknown and is the gate's business (``docs/dev/runtime.md``, "Deviations").
 
 **Capabilities are never re-read**, with one exception: a member about
 which nothing was known at set-up (no usable state and no entity-registry
@@ -43,6 +48,7 @@ from dataclasses import dataclass, field, replace
 from datetime import UTC, date, datetime
 from enum import StrEnum, unique
 from typing import Final
+from uuid import uuid4
 
 from homeassistant.const import STATE_UNAVAILABLE
 from homeassistant.core import (
@@ -60,8 +66,8 @@ from homeassistant.helpers.event import (
 )
 
 from .capabilities import member_config
-from .commands import commands_of, state_with_commands
 from .const import COALESCE_SECONDS, MIN_WAKE_UP_DISTANCE, SAFETY_TICK, STARTUP_GRACE
+from .core.arbiter import member_expectation_end
 from .core.engine import Engine, build_arbiter
 from .core.model import (
     AnySourceValue,
@@ -69,8 +75,11 @@ from .core.model import (
     Decision,
     EvaluationFault,
     FunctionId,
+    GateKind,
     GateRule,
     MemberCommand,
+    OwnCommand,
+    Position,
     ScheduleSettings,
     SunAlmanac,
     WindowConfig,
@@ -97,6 +106,7 @@ WAKE_UP_REEVALUATE: Final = "reevaluate_no_later_than"
 WAKE_UP_NEXT_ACTION: Final = "next_planned_action"
 WAKE_UP_RECHECK: Final = "schedule_recheck"
 WAKE_UP_STARTUP_GRACE: Final = "startup_grace"
+WAKE_UP_EXPECTATION_END: Final = "expectation_window_end"
 
 
 @unique
@@ -415,8 +425,11 @@ class WindowController:
         if schedule is not None:
             state = schedule.state
         self._store(state)
-        commands = self._send(snapshot, decision, now)
-        wake_up = self._schedule_wake_up(_next_wake_up(decision, schedule), now)
+        # The send is recorded on top of the state the decision left behind.
+        commands = self._send(replace(snapshot, state=self.state), decision)
+        wake_up = self._schedule_wake_up(
+            _next_wake_up(decision, schedule, self._expectation_ends(now)), now
+        )
         self.status = WindowStatus(
             phase=Phase.RUNNING,
             observation=observation,
@@ -467,17 +480,20 @@ class WindowController:
             return None
 
     def _send(
-        self, snapshot: WorldSnapshot, decision: Decision, now: datetime
+        self, snapshot: WorldSnapshot, decision: Decision
     ) -> tuple[MemberCommand, ...]:
         """Hand a "send" outcome to the actuator port, after the second dry-run check.
 
-        Every command is written down as the member's own command right after
-        its call returned, member by member: if the actuator raises for a
+        ``snapshot.state`` is the state the decision left behind. Every member
+        with a target gets a fresh command identifier. The core records the
+        send (``Engine.state_after_send``, the one recorder of own commands),
+        and it is called right after each member's call returned, with the
+        identifiers of every member sent so far: if the actuator raises for a
         later member, the commands that were given stay recorded and are not
         sent a second time by the next recompute.
         """
-        commands = commands_of(snapshot, decision, now)
-        if not commands:
+        targets = _targets_to_send(snapshot, decision)
+        if not targets:
             return ()
         if snapshot.controls.dry_run and not _fire_passed_failed_dry_run(decision):
             _LOGGER.error(
@@ -486,12 +502,42 @@ class WindowController:
                 self.title,
             )
             return ()
-        for command in commands:
-            self.actuator.move_to(
-                command.command.command_id, command.member_id, command.command.target
-            )
-            self._store(state_with_commands(self.state, (command,)))
-        return commands
+        command_ids: dict[str, str] = {}
+        for member_id, position in targets:
+            command_id = uuid4().hex
+            self.actuator.move_to(command_id, member_id, position)
+            command_ids[member_id] = command_id
+            self._store(Engine.state_after_send(snapshot, decision, command_ids))
+        return tuple(
+            MemberCommand(member.member_id, member.last_own_command)
+            for member in self.state.members
+            if member.member_id in command_ids and member.last_own_command is not None
+        )
+
+    def _expectation_ends(self, now: datetime) -> tuple[datetime, ...]:
+        """Return the ends of the expectation windows that still lie ahead.
+
+        One per pending own command of a member of the window (the simulated
+        ones for a window in dry-run), each computed by the core's
+        ``member_expectation_end``, the deadline the gate reads. The window
+        is woken at each, so a command the cover did not answer is judged
+        again at the instant the gate stops counting it as pending.
+        """
+        commands: dict[str, OwnCommand] = (
+            {c.member_id: c.command for c in self.state.simulated.commands}
+            if self.controls().dry_run and self.state.simulated is not None
+            else {
+                m.member_id: m.last_own_command
+                for m in self.state.members
+                if m.last_own_command is not None
+            }
+        )
+        ends = (
+            member_expectation_end(member, commands[member.member_id])
+            for member in self.config.members
+            if member.member_id in commands
+        )
+        return tuple(end for end in ends if end > now)
 
     # ------------------------------------------------------------------
     # State and faults
@@ -555,9 +601,43 @@ def _fire_passed_failed_dry_run(decision: Decision) -> bool:
     )
 
 
-def _next_wake_up(decision: Decision, schedule: ScheduleResult | None) -> WakeUp | None:
+def _targets_to_send(
+    snapshot: WorldSnapshot, decision: Decision
+) -> tuple[tuple[str, Position], ...]:
+    """Return the member targets of a "send" outcome; none for any other outcome.
+
+    Only members that are available are commanded (section 9 of the
+    specification: the others are commanded, the unavailable one is not).
+    A member that is away gets no command and therefore no record; the core
+    leaves a member without a command identifier alone.
+    """
+    if (
+        decision.gate is None
+        or decision.gate.kind is not GateKind.SEND
+        or decision.winning_wish is None
+    ):
+        return ()
+    available = {
+        member.member_id
+        for member in snapshot.observation.members
+        if member.observation.available
+    }
+    return tuple(
+        (target.member_id, target.position)
+        for target in decision.targets
+        if target.position is not None and target.member_id in available
+    )
+
+
+def _next_wake_up(
+    decision: Decision,
+    schedule: ScheduleResult | None,
+    expectation_ends: tuple[datetime, ...],
+) -> WakeUp | None:
     """Return the earliest time the core asked for, with its reason."""
-    candidates: list[WakeUp] = []
+    candidates: list[WakeUp] = [
+        WakeUp(end, WAKE_UP_EXPECTATION_END) for end in expectation_ends
+    ]
     if decision.gate is not None:
         if decision.gate.until is not None:
             candidates.append(WakeUp(decision.gate.until, WAKE_UP_DEFERRED))

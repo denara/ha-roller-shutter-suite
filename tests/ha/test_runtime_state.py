@@ -20,9 +20,12 @@ from custom_components.roller_shutter_suite.capabilities import member_configs
 from custom_components.roller_shutter_suite.const import DOMAIN
 from custom_components.roller_shutter_suite.controller import (
     WAKE_UP_DEFERRED,
+    WAKE_UP_EXPECTATION_END,
     WAKE_UP_RECHECK,
     Phase,
+    WakeUp,
 )
+from custom_components.roller_shutter_suite.core.arbiter import member_expectation_end
 from custom_components.roller_shutter_suite.core.engine import Engine, build_arbiter
 from custom_components.roller_shutter_suite.core.model import (
     Constraint,
@@ -138,6 +141,11 @@ async def test_reload_during_a_movement_sends_no_duplicate_and_detects_no_manual
     assert commands_sent(entry) == []
     assert controller.state.owner is owner_before
     assert controller.state.manual_override is None
+    # The reloaded window waits for the same deadline the gate reads.
+    assert controller.status.wake_up == WakeUp(
+        member_expectation_end(controller.config.members[0], commanded),
+        WAKE_UP_EXPECTATION_END,
+    )
 
     # The end report arrives long after the reload, inside the report delay.
     freezer.tick(timedelta(seconds=70))
@@ -147,6 +155,76 @@ async def test_reload_during_a_movement_sends_no_duplicate_and_detects_no_manual
     assert _reason(entry) is ReasonCode.TARGET_REACHED
     assert commands_sent(entry) == []
     assert controller.state.manual_override is None
+
+
+@pytest.mark.usefixtures("slow_reports")
+async def test_the_wake_up_after_a_send_is_the_deadline_of_the_core(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """With a report delay, the runtime wakes the window at ``member_expectation_end``."""
+    set_cover(hass, COVER, position=50)
+    entry = await setup_window(hass, covers_present=False, freezer=freezer)
+    controller = controller_of(entry)
+    member = controller.config.members[0]
+    command = controller.state.members[0].last_own_command
+    assert command is not None
+    deadline = member_expectation_end(member, command)
+    without_delay = replace(
+        member, capabilities=replace(member.capabilities, report_delay=timedelta(0))
+    )
+    assert deadline == member_expectation_end(without_delay, command) + REPORT_DELAY
+
+    assert controller.status.wake_up == WakeUp(deadline, WAKE_UP_EXPECTATION_END)
+
+    # The timer fires at the deadline: the window is recomputed then, long
+    # before the safety tick, and the expired command no longer sets a wake-up.
+    recomputes = controller.status.recomputes
+    await advance(hass, freezer, deadline)
+    assert controller.status.recomputes == recomputes + 1
+    last = controller.status.last_recompute
+    assert last is not None
+    assert last >= deadline
+    wake_up = controller.status.wake_up
+    assert wake_up is None or wake_up.reason != WAKE_UP_EXPECTATION_END
+
+
+async def test_a_send_is_recorded_as_the_core_records_it(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """``Engine.state_after_send``: one attempt, the integration owns the position."""
+    left, right = "cover.example_left", "cover.example_right"
+    set_cover(hass, left, position=50)
+    set_cover(hass, right, position=50)
+    entry = await setup_window(
+        hass, window_data([left, right]), covers_present=False, freezer=freezer
+    )
+    controller = controller_of(entry)
+    sent = commands_sent(entry)
+    assert sorted(c.member_id for c in sent) == [left, right]
+    assert len({c.command_id for c in sent}) == len(sent)
+
+    state = controller.state
+    by_member = {member.member_id: member for member in state.members}
+    for recorded in sent:
+        member = by_member[recorded.member_id]
+        own = member.last_own_command
+        assert own is not None
+        assert own.command_id == recorded.command_id
+        assert own.target == recorded.target
+        assert own.direction is TravelDirection.UP
+        assert own.wish_class is WishClass.COMFORT
+        assert own.reason is ReasonCode.SCHEDULE_DAY
+        assert own.context_id is None
+        assert member.command_attempts == 1
+        assert member.last_attempt_at == own.time
+        assert state.last_comfort_movement == own.time
+    assert state.owner is PositionOwner.ENGINE
+    assert WindowState.from_data(storage_of(hass).load_window_state(WINDOW_ID)) == state
+    assert controller.status.commands == tuple(
+        MemberCommand(m.member_id, m.last_own_command)
+        for m in state.members
+        if m.last_own_command is not None
+    )
 
 
 async def test_a_dam_and_a_deferral_survive_the_reload(
@@ -302,6 +380,15 @@ async def test_fixed_times_stay_on_the_clock_across_a_clock_change(
 
     await advance(hass, freezer, local(21, 0, saturday))
     assert schedule_of(controller).part_of_day is PartOfDay.NIGHT
+    # The evening command is sent and the cover reports its target; the
+    # window is looked at again when the expectation window ends, and then
+    # waits for the morning.
+    wake_up = controller.status.wake_up
+    assert wake_up is not None
+    assert wake_up.reason == WAKE_UP_EXPECTATION_END
+    set_cover(hass, COVER, position=commands_sent(entry)[-1].target.value)
+    await settle(hass, freezer)
+    await advance(hass, freezer, wake_up.at)
     wake_up = controller.status.wake_up
     assert wake_up is not None
     assert wake_up.at == local(8, 30, sunday)
@@ -498,7 +585,9 @@ async def test_a_window_switched_from_dry_run_to_armed_starts_clean(
     state = controller_of(entry).state
     assert state.simulated is None
     assert state.manual_override is None
-    assert state.owner is PositionOwner.UNKNOWN
+    # The owner of the dry-run time is gone; the real send made the
+    # integration the owner, as the core records a send.
+    assert state.owner is PositionOwner.ENGINE
     # Armed and clean: the real command is given, not judged against the would-be one.
     assert _reason(entry) is ReasonCode.SENT
     assert [c.target.value for c in commands_sent(entry)] == [100]

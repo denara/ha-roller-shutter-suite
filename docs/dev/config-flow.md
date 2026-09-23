@@ -32,7 +32,7 @@ custom_components/roller_shutter_suite/
   windows.py         stored entry -> resolved windows and repair issues
   issues.py          creating and deleting repair issues
   runtime.py, controller.py, sources.py, members.py, location.py,
-  storage.py, commands.py, actuator.py
+  storage.py, actuator.py, sun_astral.py
                      the runtime that feeds the core and calls it; see runtime.md
   flow/
     model.py         FieldForm, FeatureForm, Catalog, LevelContext (no Home Assistant import)

@@ -125,12 +125,13 @@ def fake_sun(monkeypatch: pytest.MonkeyPatch) -> SunFactory:
     """Replace the astral-backed sun port with the invented sun of ``runtime_kit``.
 
     The runtime builds its sun port from the observer of the installation
-    through ``location.astral_sun_port``; every test gets a sun whose times
-    are known by heart. The factory remembers the ports it built, with the
-    plain values the runtime handed in.
+    with ``AstralSun`` as ``location`` imports it; this fixture puts the
+    factory in that place, so every test gets a sun whose times are known by
+    heart. The factory remembers the ports it built, with the plain values
+    the runtime handed in.
     """
     factory = SunFactory()
-    monkeypatch.setattr(location, "astral_sun_port", lambda: factory)
+    monkeypatch.setattr(location, "AstralSun", factory)
     return factory
 
 

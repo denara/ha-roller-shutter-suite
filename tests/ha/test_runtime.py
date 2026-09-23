@@ -215,6 +215,65 @@ async def test_window_with_two_members_waits_for_both_until_the_grace_has_passed
     assert controller.status.decision is not None
 
 
+async def test_after_the_grace_a_silent_member_stays_unknown_and_the_gate_handles_it(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """Three members, one never reports: after the grace the window decides with what is known.
+
+    The silent member gets no assumed position and no assumed capability;
+    only the members that are there are commanded (section 9). When none of
+    the addressed members is available any more, the gate defers with
+    ``cover_unavailable``.
+    """
+    left, middle, silent = (
+        "cover.example_left",
+        "cover.example_middle",
+        "cover.example_silent",
+    )
+    set_cover(hass, left, position=50)
+    set_cover(hass, middle, position=50)
+    entry = await setup_window(
+        hass,
+        window_data([left, middle, silent]),
+        covers_present=False,
+        freezer=freezer,
+    )
+    controller = controller_of(entry)
+    assert phase_of(controller) is Phase.WAITING_FOR_MEMBERS
+    assert commands_sent(entry) == []
+
+    await advance(hass, freezer, local(10, 0) + STARTUP_GRACE)
+
+    assert phase_of(controller) is Phase.RUNNING
+    profiles = {m.member_id: m.capabilities for m in controller.config.members}
+    assert not profiles[silent].capabilities_known
+    assert profiles[left].capabilities_known
+    observation = controller.status.observation
+    assert observation is not None
+    observed = {m.member_id: m.observation for m in observation.members}
+    assert not observed[silent].available
+    assert observed[silent].position is None
+    assert observed[left].available
+    decision = controller.status.decision
+    assert decision is not None
+    assert decision.gate is not None
+    assert decision.gate.kind is GateKind.SEND
+    assert sorted(c.member_id for c in commands_sent(entry)) == [left, middle]
+    assert silent not in controller.state.commanded_targets
+
+    # The members that were there go away: no addressed member can execute.
+    hass.states.async_set(left, "unavailable")
+    hass.states.async_set(middle, "unavailable")
+    await settle(hass, freezer)
+
+    decision = controller.status.decision
+    assert decision is not None
+    assert decision.gate is not None
+    assert decision.gate.reason is ReasonCode.COVER_UNAVAILABLE
+    assert sorted(c.member_id for c in commands_sent(entry)) == [left, middle]
+    assert not controller.config.members[2].capabilities.capabilities_known
+
+
 async def test_windows_start_in_dry_run_and_nothing_is_sent(
     hass: HomeAssistant, freezer: Any
 ) -> None:
