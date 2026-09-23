@@ -20,6 +20,7 @@ from homeassistant.helpers.integration_platform import (
 )
 from homeassistant.helpers.json import json_dumps
 from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant_custom_component.syrupy import HomeAssistantSnapshotExtension
 from syrupy.assertion import SnapshotAssertion
 
 from custom_components.roller_shutter_suite import diagnostics as platform
@@ -149,7 +150,9 @@ async def test_diagnostics_of_the_entry_match_the_snapshot(
     )
 
     diagnostics = await get_diagnostics_for_config_entry(hass, entry)
-    assert diagnostics == snapshot
+    # The extension is named here, so the snapshot lives in ``snapshots/``
+    # whichever ``snapshot`` fixture pytest resolves first.
+    assert diagnostics == snapshot.use_extension(HomeAssistantSnapshotExtension)
 
 
 async def test_diagnostics_of_a_device_show_its_window(
