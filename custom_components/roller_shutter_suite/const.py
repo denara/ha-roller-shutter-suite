@@ -41,5 +41,31 @@ CONF_NAME: Final = "name"
 
 # The core's capability profile needs travel times, which are configuration
 # values of a later block (per-member values). Until that block exists, every
-# member carries this provisional value; nothing acts on it yet.
+# member carries this provisional value. It lives in memory only: it is never
+# stored, never shown as a value the user set, and it disappears with the
+# block that introduces per-member values.
 PROVISIONAL_TRAVEL_TIME: Final = timedelta(seconds=60)
+
+# The runtime (``docs/dev/runtime.md``).
+#
+# A burst of state changes is coalesced: a recompute runs this long after the
+# last trigger, and never while another recompute of the same window runs.
+COALESCE_SECONDS: Final = 1.0
+
+# Wake-up times that the core asks for ("defer until", "re-evaluate no later
+# than", the next planned action of the schedule, its recheck) are accepted
+# only if they lie strictly in the future, and two recomputes that come from
+# wake-ups are at least this far apart. A layer that keeps asking for "now"
+# therefore cannot spin; the one constant is the only place that says how far.
+MIN_WAKE_UP_DISTANCE: Final = timedelta(seconds=5)
+
+# The periodic safety tick: a recompute that needs no trigger, so that a missed
+# event or a timer that never fired cannot leave a window in the wrong state
+# for longer than this.
+SAFETY_TICK: Final = timedelta(minutes=5)
+
+# After a start, a window waits for its members before the first decision.
+# Late availability is normal. Once one member is available and this much
+# time has passed since the start, the window decides with the members it
+# has; the others are handled by the gate and reported in the status.
+STARTUP_GRACE: Final = timedelta(minutes=2)

@@ -19,9 +19,10 @@ import pytest
 # this file before any test of this folder is set up, so the repository's
 # folder wins. An empty ``custom_components/__init__.py`` would not change the
 # outcome; ``test_harness.py`` guards the result.
-from custom_components.roller_shutter_suite import features
+from custom_components.roller_shutter_suite import features, location
 from custom_components.roller_shutter_suite.const import DOMAIN
 from tests.ha.helpers import EXAMPLE_CATALOG
+from tests.ha.runtime_kit import SunFactory
 
 # Home Assistant 2026.9 never raises a Python warning for deprecated usage; it
 # writes log records, which ``filterwarnings = error`` cannot see. The formats
@@ -117,6 +118,20 @@ def example_catalog(monkeypatch: pytest.MonkeyPatch) -> None:
     this is all it takes; no flow class is touched.
     """
     monkeypatch.setattr(features, "CATALOG", EXAMPLE_CATALOG)
+
+
+@pytest.fixture(autouse=True)
+def fake_sun(monkeypatch: pytest.MonkeyPatch) -> SunFactory:
+    """Replace the astral-backed sun port with the invented sun of ``runtime_kit``.
+
+    The runtime builds its sun port from the observer of the installation
+    through ``location.astral_sun_port``; every test gets a sun whose times
+    are known by heart. The factory remembers the ports it built, with the
+    plain values the runtime handed in.
+    """
+    factory = SunFactory()
+    monkeypatch.setattr(location, "astral_sun_port", lambda: factory)
+    return factory
 
 
 _DEPRECATION_LOGGER = "homeassistant.helpers.deprecation"
