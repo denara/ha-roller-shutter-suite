@@ -6,6 +6,7 @@ is Monday 10:00 in a named zone; the daily routine has fixed times (07:00 and
 20:00 on workdays).
 """
 
+from datetime import timedelta
 from typing import Any
 
 import pytest
@@ -18,6 +19,7 @@ from homeassistant.helpers.event import async_track_state_change_event
 from custom_components.roller_shutter_suite.const import DOMAIN
 from custom_components.roller_shutter_suite.core.model import Layer
 from custom_components.roller_shutter_suite.core.reasons import ReasonCode
+from custom_components.roller_shutter_suite.events import history_of
 from custom_components.roller_shutter_suite.record import REASON_OPTIONS
 from tests.ha.helpers import set_cover
 from tests.ha.runtime_kit import (
@@ -136,6 +138,68 @@ async def test_the_reason_sensor_changes_when_and_only_when_the_decision_changes
     assert state.attributes["target"] == 0
 
 
+def _count_writes(hass: HomeAssistant, entity_id: str) -> list[str]:
+    """Return a list that gets one entry per state written for the entity."""
+    writes: list[str] = []
+
+    @callback
+    def _written(event: Event[EventStateChangedData]) -> None:
+        new = event.data["new_state"]
+        assert new is not None
+        writes.append(new.state)
+
+    async_track_state_change_event(hass, [entity_id], _written)
+    return writes
+
+
+async def test_a_deferral_without_a_known_end_writes_one_state(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A foreign movement at the evening: many recomputes, one write, one decision kept.
+
+    The core re-evaluates such a deferral no later than a few minutes after
+    each recompute; that instant moves with the clock and is no attribute.
+    """
+    entry = await setup_window(hass, freezer=freezer)
+    set_cover(hass, COVER, position=100, state="closing")
+    await settle(hass, freezer)
+    writes = _count_writes(hass, REASON)
+    recent = history_of(hass)[WINDOW_ID].recent
+
+    await advance(hass, freezer, local(20, 0, second=1))
+    assert writes == [ReasonCode.MOVEMENT_IN_FLIGHT]
+    kept = len(recent)
+    for _ in range(6):
+        freezer.tick(timedelta(minutes=5))
+        await settle(hass, freezer)
+
+    assert controller_of(entry).status.recomputes >= 6  # noqa: PLR2004 - six ticks
+    assert writes == [ReasonCode.MOVEMENT_IN_FLIGHT]
+    assert len(recent) == kept
+    assert "reevaluated_no_later_than" not in state_of(hass, REASON).attributes
+
+
+async def test_the_wish_stays_the_reason_while_its_command_is_under_way(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The evening closing: the reason stays "Daily routine: night" until the cover is there."""
+    await setup_window(hass, freezer=freezer)
+    writes = _count_writes(hass, REASON)
+
+    await advance(hass, freezer, local(20, 0, second=1))
+    # The cover starts moving: the window is looked at again, the command is
+    # still under way.
+    set_cover(hass, COVER, position=100, state="closing")
+    await settle(hass, freezer)
+    state = state_of(hass, REASON)
+    assert state.attributes["gate_reason"] == ReasonCode.DUPLICATE_COMMAND
+    assert state.state == ReasonCode.SCHEDULE_NIGHT
+    set_cover(hass, COVER, position=0, state="closed")
+    await settle(hass, freezer)
+
+    assert set(writes) == {ReasonCode.SCHEDULE_NIGHT}
+
+
 async def test_the_attributes_say_why_the_other_layers_did_not_win(
     hass: HomeAssistant, freezer: Any
 ) -> None:
@@ -204,7 +268,8 @@ async def test_entities_become_unavailable_with_the_cover_and_recover_without_re
 ) -> None:
     """Unavailable while no cover is; back with the next recompute that sees it."""
     entry = await setup_window(hass, freezer=freezer)
-    setups = entry.state
+    runtime = runtime_of(entry)
+    controller = controller_of(entry)
 
     hass.states.async_set(COVER, STATE_UNAVAILABLE)
     await settle(hass, freezer)
@@ -215,7 +280,9 @@ async def test_entities_become_unavailable_with_the_cover_and_recover_without_re
     await settle(hass, freezer)
     for entity_id in ENTITIES:
         assert state_of(hass, entity_id).state != STATE_UNAVAILABLE, entity_id
-    assert entry.state is setups
+    # The same runtime and controller: nothing was reloaded.
+    assert runtime_of(entry) is runtime
+    assert controller_of(entry) is controller
 
 
 async def test_entities_of_a_window_without_a_controller_are_unavailable(

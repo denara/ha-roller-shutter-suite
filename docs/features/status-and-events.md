@@ -24,14 +24,14 @@ The entities update whenever the window is looked at again: when a cover or an e
 
 The reason is chosen like this:
 
-- If the window got the position it wanted, or is already there, the reason is **why it wanted it**: "Daily routine: night", "Fire alarm".
+- If the window got the position it wanted, its command is still under way, or it is already there, the reason is **why it wanted it**: "Daily routine: night", "Fire alarm". That the command is under way is in the attributes (`gate_reason` is `duplicate_command`).
 - If something held the movement back, the reason is **what held it back**: "Paused", "Maintenance lock", "Waiting for the minimum time between two movements".
 - If a limit left no movement at all, the reason is **the limit**: "Not lowered while the door is open".
 - In dry-run, the reason is "Dry-run: nothing moves" whenever a command would have been sent. What would have been sent, or what would have held it back, is in the attributes.
 
 ### The attributes of the reason
 
-The entity "Reason" carries the complete explanation as attributes. They change only when the decision changes, so the history of the entity is the history of the decisions.
+The entity "Reason" carries the complete explanation as attributes. They change only when the decision changes, so the history of the entity is the history of the decisions. While the window waits for something whose end is not known (a cover to become available, a movement it did not start to end), the window is looked at again at least every few minutes; that time is not an attribute, because it moves on with every look while nothing else changes.
 
 | Attribute | Meaning |
 |---|---|
@@ -39,7 +39,7 @@ The entity "Reason" carries the complete explanation as attributes. They change 
 | `target` | The position after all limits, if all covers share one. |
 | `constraints` | Every limit that applied, in order, each with its reason and the position after it; for example the ventilation position in front of an open window. |
 | `gate_outcome`, `gate_reason`, `gate_rule` | Whether the movement was sent (`send`), deferred (`defer`) or held back (`suppress`), with the reason and the rule that decided. |
-| `deferred_until`, `reevaluated_no_later_than` | For a deferral: when it ends, or, if that is not known, the latest time at which the window is looked at again. |
+| `deferred_until` | For a deferral with a known end: when it ends, for example the end of the minimum time between two movements. Empty when the end is not known. |
 | `dry_run`, `would_send` | Whether the window is in dry-run, and the position that would have been sent. |
 | `other_layers` | For every other part of the logic (fire, protection, sleep mode, requests, privacy, shading, the daily routine) the reason why it did not decide: not set up, not active, an entity without a value, paused because of a faulty setting, and so on. |
 | `faults` | Parts that failed with an internal error during this decision, each with where it happened and its reason (`layer_failed`, `constraint_failed`, `gate_rule_failed`). Empty in a sound installation. Protection never stops because of such an error; the error text itself is written to the log, not here. |

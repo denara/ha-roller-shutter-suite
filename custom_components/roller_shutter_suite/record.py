@@ -51,8 +51,14 @@ FAULT_REASONS: Final = MappingProxyType(
 REASON_OPTIONS: Final = tuple(code.value for code in ReasonCode)
 """Every reason code, in the order of the core: the options of the reason sensor."""
 
-_NOT_HELD_BACK: Final = frozenset({ReasonCode.SENT, ReasonCode.TARGET_REACHED})
-"""Gate reasons after which the wish itself explains where the window is."""
+_NOT_HELD_BACK: Final = frozenset(
+    {ReasonCode.SENT, ReasonCode.DUPLICATE_COMMAND, ReasonCode.TARGET_REACHED}
+)
+"""Gate reasons after which the wish itself explains where the window is.
+
+A duplicate is the window's own command that is still under way: the wish
+that sent it is still the reason, and the gate attributes say the rest.
+"""
 
 _NEUTRAL: Final = frozenset({ReasonCode.DUPLICATE_COMMAND})
 """Gate reasons that neither are an event nor end the outcome of the last one.
@@ -94,8 +100,8 @@ def active_reason(decision: Decision) -> ReasonCode:
 
     - Nothing wanted anything: the reason of the lowest layer, which always has
       an opinion once it is configured (``not_configured``, for example).
-    - The wish went through, or its target is reached: the reason of the wish
-      (``schedule_night``).
+    - The wish went through, its command is still under way, or its target
+      is reached: the reason of the wish (``schedule_night``).
     - The gate held it back: the reason of the rule (``paused``, ``dry_run``).
     - A constraint left no target: the reason of that constraint.
     - The wish holds the window where it is: the reason of the wish.
@@ -122,7 +128,6 @@ def _gate_attributes(gate: GateOutcome | None) -> dict[str, Any]:
             "gate_reason": None,
             "gate_rule": None,
             "deferred_until": None,
-            "reevaluated_no_later_than": None,
             "would_send": None,
         }
     return {
@@ -130,7 +135,6 @@ def _gate_attributes(gate: GateOutcome | None) -> dict[str, Any]:
         "gate_reason": gate.reason.value,
         "gate_rule": None if gate.rule is None else gate.rule.value,
         "deferred_until": _iso(gate.until),
-        "reevaluated_no_later_than": _iso(gate.reevaluate_no_later_than),
         "would_send": common_position(gate.would_send) if gate.would_send else None,
     }
 
@@ -150,7 +154,13 @@ def decision_attributes(decision: Decision, *, dry_run: bool) -> dict[str, Any]:
 
     The same decision always gives the same data, and nothing in it depends
     on the time of the recompute, so a state that is written again unchanged
-    is not a change. The keys are always present; a part that the decision
+    is not a change. That is why the upper bound of a deferral whose end is
+    not known (``reevaluate_no_later_than``) is left out: the core sets it to
+    the time of the recompute plus a setting, so it moves with every
+    recompute while the decision stays the same. The diagnostics show it as
+    the next wake-up. ``deferred_until`` is kept: a deferral with a known end
+    names an instant that the persisted state fixes (the end of a dam, the
+    end of the minimum interval), not one that moves with the clock. The keys are always present; a part that the decision
     does not have is ``None`` or an empty list.
     """
     wish = decision.winning_wish

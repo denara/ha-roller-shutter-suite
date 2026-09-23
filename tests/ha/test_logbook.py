@@ -27,7 +27,7 @@ from tests.ha.status_kit import REASON, collect_reason_events, controls
 
 _monday_morning = pytest.fixture(autouse=True)(monday_morning)
 
-type Describe = Callable[[Event], dict[str, Any]]
+type Describe = Callable[[logbook.LogbookEvent], dict[str, Any]]
 
 
 def _describer(hass: HomeAssistant) -> Describe:

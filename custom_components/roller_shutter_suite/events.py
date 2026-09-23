@@ -26,7 +26,12 @@ from homeassistant.util.hass_dict import HassKey
 from .const import DOMAIN, EVENT_REASON, RECENT_DECISIONS, status_signal
 from .controller import Phase
 from .core.model import Decision
-from .record import ReasonOutcome, reason_outcome
+from .record import (
+    ReasonOutcome,
+    decision_attributes,
+    member_targets,
+    reason_outcome,
+)
 from .runtime import SuiteRuntime
 
 ATTR_SUBENTRY_ID = "subentry_id"
@@ -41,6 +46,14 @@ class RecordedDecision:
     at: datetime | None
     decision: Decision
     dry_run: bool
+
+
+def _same_record(kept: RecordedDecision, decision: Decision, dry_run: bool) -> bool:
+    return decision_attributes(
+        kept.decision, dry_run=kept.dry_run
+    ) == decision_attributes(decision, dry_run=dry_run) and member_targets(
+        kept.decision.targets
+    ) == member_targets(decision.targets)
 
 
 def _recent() -> deque[RecordedDecision]:
@@ -111,8 +124,15 @@ class ReasonEvents:
             self._fire(outcome)
 
     def _remember(self, decision: Decision, dry_run: bool, at: datetime | None) -> None:
+        """Keep the decision if its record differs from the newest one kept.
+
+        Two decisions are compared by their record (``decision_attributes``
+        and the targets of the members), not by equality: the upper bound of
+        a deferral with an unknown end moves with every recompute, and a
+        copy of the same decision must not push the others out.
+        """
         recent = self.history.recent
-        if recent and recent[0].decision == decision and recent[0].dry_run is dry_run:
+        if recent and _same_record(recent[0], decision, dry_run):
             return
         recent.appendleft(RecordedDecision(at, decision, dry_run))
 

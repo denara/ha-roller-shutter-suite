@@ -18,7 +18,7 @@ instead of failing.
 """
 
 from collections.abc import Callable, Mapping
-from typing import Any
+from typing import Any, Protocol
 
 from homeassistant.components.logbook.const import (
     LOGBOOK_ENTRY_ENTITY_ID,
@@ -26,7 +26,7 @@ from homeassistant.components.logbook.const import (
     LOGBOOK_ENTRY_NAME,
 )
 from homeassistant.const import Platform
-from homeassistant.core import Event, HomeAssistant, callback
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.translation import async_get_cached_translations
 
@@ -43,6 +43,19 @@ MESSAGE_DRY_RUN = "logbook_dry_run"
 MESSAGE_HELD_BACK = "logbook_held_back"
 NO_TARGET = "_no_target"
 """The suffix of the message for a decision without one common target."""
+
+
+class LogbookEvent(Protocol):
+    """What the logbook hands to a describe function: an event with its data.
+
+    Core passes a ``LazyEventPartialState`` (``components/logbook/models.py``),
+    built from a row of the database; only ``data`` is read here.
+    """
+
+    @property
+    def data(self) -> Mapping[str, Any]:
+        """Return the data of the event."""
+        ...
 
 
 def _reason_text(texts: Mapping[str, str], code: str) -> str:
@@ -81,12 +94,14 @@ def describe(
 @callback
 def async_describe_events(
     hass: HomeAssistant,
-    async_describe_event: Callable[[str, str, Callable[[Event], dict[str, Any]]], None],
+    async_describe_event: Callable[
+        [str, str, Callable[[LogbookEvent], dict[str, Any]]], None
+    ],
 ) -> None:
     """Describe the reason events of the integration to the logbook."""
 
     @callback
-    def async_describe_reason_event(event: Event) -> dict[str, Any]:
+    def async_describe_reason_event(event: LogbookEvent) -> dict[str, Any]:
         language = hass.config.language
         data = event.data
         entry: dict[str, Any] = {

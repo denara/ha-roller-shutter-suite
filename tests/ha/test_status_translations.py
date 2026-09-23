@@ -22,8 +22,13 @@ INTEGRATION_DIR = (
     Path(__file__).parents[2] / "custom_components" / "roller_shutter_suite"
 )
 FILES = [name for names in build_translations.languages().values() for name in names]
-WORDS_FOR_INSIDERS = re.compile(r"\b(layer|constraint|gate|arbiter)s?\b", re.IGNORECASE)
-"""Words of the design that a user does not need to know."""
+WORDS_FOR_INSIDERS = re.compile(
+    r"\b(layers?|constraints?|gates?|arbiters?"
+    r"|schicht|schichten|nebenbedingung|nebenbedingungen|gatter"
+    r"|schiedsrichter|arbiter)\b",
+    re.IGNORECASE,
+)
+"""Words of the design that a user does not need to know, in English and German."""
 
 
 def _load(relative_path: str) -> dict[str, Any]:

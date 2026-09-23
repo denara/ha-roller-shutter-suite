@@ -96,6 +96,7 @@ def test_the_outcome_of_the_gate() -> None:
         GateOutcome.suppress(GateRule.MOVEMENT_IN_FLIGHT, ReasonCode.DUPLICATE_COMMAND)
     )
     assert reason_outcome(duplicate, sent=False, dry_run=False) is UNCHANGED
+    assert active_reason(duplicate) is ReasonCode.SCHEDULE_NIGHT
     reached = _night(
         GateOutcome.suppress(GateRule.TARGET_REACHED, ReasonCode.TARGET_REACHED)
     )
@@ -110,6 +111,25 @@ def test_the_outcome_of_the_gate() -> None:
     assert (
         decision_attributes(deferred, dry_run=False)["deferred_until"] == AT.isoformat()
     )
+
+
+def test_the_upper_bound_of_a_deferral_is_no_attribute() -> None:
+    """It is the time of the recompute plus a setting; two recomputes give one record."""
+    first, second = (
+        _night(
+            GateOutcome.defer(
+                GateRule.NO_MEMBER_CAN_EXECUTE,
+                ReasonCode.COVER_UNAVAILABLE,
+                reevaluate_no_later_than=AT + timedelta(minutes=minutes),
+            )
+        )
+        for minutes in (5, 10)
+    )
+    assert first != second
+    assert decision_attributes(first, dry_run=False) == decision_attributes(
+        second, dry_run=False
+    )
+    assert "reevaluated_no_later_than" not in decision_attributes(first, dry_run=False)
 
 
 def test_members_with_different_targets_have_no_common_target() -> None:
