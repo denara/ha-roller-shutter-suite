@@ -1,16 +1,18 @@
 """The Roller Shutter Suite integration.
 
 One config entry represents the house; groups and windows are config
-subentries. At this stage the set-up reads the stored configuration, resolves
-the settings of every window with the resolver of the core, creates one device
-per window and reports what is wrong with stored data as repair issues.
-Nothing moves yet; the runtime follows in later work blocks.
+subentries. The set-up reads the stored configuration, resolves the settings
+of every window with the resolver of the core, creates one device per window,
+reports what is wrong with stored data as repair issues, and starts the
+runtime: one controller per window that feeds the core and calls it
+(``docs/dev/runtime.md``).
 
 **Every change reloads the whole config entry.** An update listener schedules
 the reload; the flows only create or update and never reload themselves. Home
 Assistant calls the listener after a subentry was added, changed, renamed or
 removed and after the data of the entry changed, and only if something really
-changed.
+changed. The runtime state of every window survives the reload through the
+storage port.
 """
 
 from collections.abc import Mapping
@@ -22,9 +24,13 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryError
 from homeassistant.helpers import device_registry as dr
 
+from .actuator import RecordingActuator
 from .const import CONF_SETTINGS, CONFIG_MINOR_VERSION, CONFIG_VERSION, DOMAIN
 from .features import get_catalog
 from .issues import async_sync_issues
+from .location import HomeAssistantClock, local_zone, sun_port
+from .runtime import SuiteRuntime
+from .storage import forget_storage, storage_of
 from .windows import WindowRuntime, resolve_entry
 
 
@@ -34,9 +40,10 @@ class RollerShutterSuiteData:
 
     ``windows`` holds the windows that are set up, by subentry ID, each with
     its resolved settings. ``not_set_up`` names the windows whose covers could
-    not be read.
+    not be read. ``runtime`` holds the controllers of the windows.
     """
 
+    runtime: SuiteRuntime
     windows: dict[str, WindowRuntime] = field(default_factory=dict)
     not_set_up: tuple[str, ...] = ()
 
@@ -54,10 +61,24 @@ async def _async_reload_on_update(
 async def async_setup_entry(
     hass: HomeAssistant, entry: RollerShutterSuiteConfigEntry
 ) -> bool:
-    """Set up Roller Shutter Suite from its config entry."""
+    """Set up Roller Shutter Suite from its config entry.
+
+    The ports of the core come first: a zone that is not a named one or a
+    missing sun port fails the set-up closed, before any window is looked
+    at. After that nothing raises for a single window.
+    """
+    runtime = SuiteRuntime(
+        hass,
+        clock=HomeAssistantClock(local_zone(hass)),
+        sun=sun_port(hass),
+        storage=storage_of(hass),
+        actuator=RecordingActuator(),
+    )
     resolved = resolve_entry(hass, entry, get_catalog())
     entry.runtime_data = RollerShutterSuiteData(
-        windows=resolved.windows, not_set_up=tuple(resolved.not_set_up)
+        runtime=runtime,
+        windows=resolved.windows,
+        not_set_up=tuple(resolved.not_set_up),
     )
 
     # One device per window, tied to the window's subentry and to nothing
@@ -72,6 +93,7 @@ async def async_setup_entry(
         )
 
     async_sync_issues(hass, resolved.issues.values())
+    runtime.async_start(resolved.windows)
     entry.async_on_unload(entry.add_update_listener(_async_reload_on_update))
     return True
 
@@ -79,19 +101,21 @@ async def async_setup_entry(
 async def async_unload_entry(
     hass: HomeAssistant, entry: RollerShutterSuiteConfigEntry
 ) -> bool:
-    """Unload the config entry.
+    """Unload the config entry: stop every controller, cancel every listener and timer.
 
-    Nothing was set up outside of ``entry.runtime_data``, which Home Assistant
-    discards itself, so there is nothing to tear down yet.
+    The state of every window stays in the storage, so a reload continues
+    where the windows were.
     """
+    entry.runtime_data.runtime.async_stop()
     return True
 
 
 async def async_remove_entry(
     hass: HomeAssistant, entry: RollerShutterSuiteConfigEntry
 ) -> None:
-    """Delete the repair issues of an entry that is removed."""
+    """Delete the repair issues and the stored state of an entry that is removed."""
     async_sync_issues(hass, ())
+    forget_storage(hass)
 
 
 def _with_settings(data: Mapping[str, Any]) -> dict[str, Any]:

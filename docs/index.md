@@ -22,6 +22,7 @@ Roller Shutter Suite is a custom integration for Home Assistant that controls ro
 - [The arbiter](dev/arbiter.md): layers, constraints and the gate; the evaluation order, the fire bypass, dams, deferrals and dry-run; how to add a layer, a constraint or a gate rule
 - [The schedule](dev/schedule.md): parts of the day, triggers and clamps, day types and their latch, the rule for clock changes, random offsets, and how the schedule plugs into the arbiter
 - [Sun geometry and glass calibration](dev/geometry.md): conventions, the formulas for vertical and tilted glass, one curtain edge for several members, calibration in both directions, the result type, and how the shading layer calls it
+- [The runtime](dev/runtime.md): the life cycle of a window controller, the triggers of a recompute, how entities, time and the sun become a world snapshot, and how to add a source
 - [Testing](dev/testing.md): the two test folders, how to run them, how to add a scenario, and how to run the Home Assistant tests on Windows
 - [Contributing](dev/contributing.md): every check that CI runs and how to run it locally, the guards, the workflows and the recommended repository settings
 - [The configuration flows](dev/config-flow.md): what is stored, how forms are built from the settings registry of the core, how a block adds settings or a feature, the generated translations, repair issues about stored data

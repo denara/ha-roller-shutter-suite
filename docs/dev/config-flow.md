@@ -31,6 +31,9 @@ custom_components/roller_shutter_suite/
   capabilities.py    what a cover can do -> capability profile of the core
   windows.py         stored entry -> resolved windows and repair issues
   issues.py          creating and deleting repair issues
+  runtime.py, controller.py, sources.py, members.py, location.py,
+  storage.py, actuator.py, sun_astral.py
+                     the runtime that feeds the core and calls it; see runtime.md
   flow/
     model.py         FieldForm, FeatureForm, Catalog, LevelContext (no Home Assistant import)
     inheritance.py   the pattern of the forms: schema, placeholders, reading input, the typing bridge
