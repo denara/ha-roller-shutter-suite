@@ -39,8 +39,8 @@ Plain Python under `custom_components/roller_shutter_suite/core/`, tested withou
 |---|---|---|---|---|
 | [H01](tasks/H01-config-entry-and-subentries.md) | Config entry, group and window subentries | E12, F4, F7 (part), N2, N3, N4 (part), N5 (part) | S2, C02, T03 | done |
 | [H02](tasks/H02-runtime-and-source-adapters.md) | Runtime and source adapters | guardrails 4 and 8, G3, G5 | C03, C04, H01 | done |
-| [H03](tasks/H03-cover-actuator-adapter.md) | Cover actuator adapter; brings the forms for the motor protection settings and the re-evaluation time | E11, E13, E10 (settings), N2 | H01, H02 | ready |
-| [H04](tasks/H04-status-entities-events-diagnostics.md) | Status entities, reason events, logbook, diagnostics | E7, E8 | H02 | ready |
+| [H03](tasks/H03-cover-actuator-adapter.md) | Cover actuator adapter; brings the forms for the motor protection settings and the re-evaluation time | E11, E13, E10 (settings), N2 | H01, H02 | in progress |
+| [H04](tasks/H04-status-entities-events-diagnostics.md) | Status entities, reason events, logbook, diagnostics | E7, E8 | H02 | in progress |
 | [M1](tasks/M1-walking-skeleton.md) | **Milestone: walking skeleton** — one window, dry-run, schedule only, status entities | — | all of the above except S1, S3 | planned |
 
 ## Maintenance
@@ -56,6 +56,14 @@ Work outside the block plan. Done items are listed so the history of the tooling
 | X03 | A pre-push hook (`.githooks/pre-push`) that runs the instance data guard and refuses the push when it fails or cannot check; activated once per clone by a human with `core.hooksPath`, never by an agent | done |
 | X04 | The pre-push hook also judges what is actually pushed: the added lines and the path texts of every commit in the ranges git hands to the hook, not only the checkout. Reason: a private value that was committed by mistake and corrected in the next commit passes the hook and CI, but leaves with the branch history and stays retrievable through the pull request reference, even after a squash merge and the deletion of the branch. Fails closed like the rest (a range that cannot be read refuses the push). Also: the identity of every pushed commit (author, committer, tagger) must equal the address configured for the clone, links to a session of an assistant tool are flagged, and the hook makes the guard prove that it knows the mode | done |
 
+
+## Documentation
+
+Blocks that produce documentation for users rather than code. They follow the same rules as every other block (pull requests, guards, hook, reviewer) and take no test slot.
+
+| ID | Block | Depends on | Status |
+|---|---|---|---|
+| W01 | User manual in the GitHub wiki of the repository, for users only: no code, no module, class or reason-code names, no architecture terms. English and German first, matching the languages of the user interface; French and Spanish as a later extension of wiki and interface alike. Built along one made-up example house that grows chapter by chapter; screenshots only from a throw-away instance filled from a data set in the repository. The pages are maintained under `docs/` and published to the wiki from there (a workflow on merge, or the owner by hand); no agent writes to the wiki repository. Preparation that the H blocks carry now: the translation structure and the parity check are not pinned to two languages, and options name their preconditions in the user interface (F7) so that the wiki reuses those texts. The block file with the page structure and the example house is written before the start | M1 and a stable state: installation through HACS and set-up through the user interface work; before the first public release | planned |
 
 ## After M1 — listed only
 
