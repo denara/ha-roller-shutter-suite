@@ -32,7 +32,7 @@ The command prints the timeline of the run and one line of numbers: recomputes, 
 
 ## How the runner drives the core
 
-The runner does what the runtime will do, and nothing on a fixed grid. A window is recomputed when something it looks at changes or at an instant the core named: a report of one of its members, a change of a source, the next planned action of the schedule, the recheck time of the brightness trigger, the end of a deferral (`until` or `reevaluate_no_later_than` of the gate outcome), and the end of the expectation window of a pending own command. Time jumps from one due instant to the next, which is why a year runs in seconds.
+The runner does what the runtime will do, and nothing on a fixed grid. A window is recomputed when something it looks at changes or at an instant the core named: a report of one of its members, a change of a source, the next planned action of the schedule, the recheck time of the brightness trigger, the end of a deferral (`until` or `reevaluate_no_later_than` of the gate outcome), and the end of the expectation window of a pending own command (`member_expectation_end` of the core, the same deadline the gate reads, so the two cannot drift apart when the deadline changes). Time jumps from one due instant to the next, which is why a year runs in seconds.
 
 One recompute:
 
@@ -42,7 +42,7 @@ One recompute:
 4. The state is persisted if it changed. The storage keeps JSON text, so every save is a real round trip.
 5. The next wake-ups are planned.
 
-**Normalizing reports.** A cover writes raw reports (a state, a position or none, an instant). The runner reduces every report to an observation of the core and drops a report that changes nothing, as the tracker of the runtime will (section 8.2 of the architecture): a repeated write, a rewrite with a new change time, a return from a dropout in the same state. `Record.dropped_reports` counts them.
+**Normalizing reports.** A cover writes raw reports (a state, a position or none, an instant). The runner reduces every report to an observation of the core and drops a report whose observation equals the last one, as the tracker of the runtime will (section 8.2 of the architecture): a repeated write, a rewrite with a new change time. `Record.dropped_reports` counts them. A return from a dropout is recorded, even in the state the cover had before the dropout, because it changes the observation from unavailable; that such a return brings nothing new about the movement is the tracker's judgement (section 8.3), not a report the runner drops.
 
 **Restart.** `Simulation.restart()` throws the engines away, reads every window state back from the storage, reads the covers once, and recomputes every window whose members are available. The covers keep their state, as real covers do. The scenario `restarts` does this at four points of a day, and a test shows that the commands after every restart equal those of the uninterrupted run.
 
@@ -101,7 +101,7 @@ Add the scenario to `SCENARIOS` in `scenarios.py` with a description and its len
 | `live` | transit states, a position every two seconds during the travel, the resting state at the target |
 | `end_only` | keeps the old position during the travel and jumps to the target at the end |
 | `polled` | reports only on a grid of 60 seconds, no transit state, no report at the real end of the movement |
-| `settles_off` | a measured position that settles 2 short upwards and 1 beyond downwards; the start report is 3 percent into the travel; a movement into an end stop takes 3 seconds longer |
+| `settles_off` | a measured position that settles 2 short upwards and 1 short downwards; the start report is 3 percent into the travel; a movement into an end stop takes 3 seconds longer |
 | `no_stop` | ignores a stop |
 | `no_position` | reports no position and knows only open and close (a target below 50 closes) |
 | `late_report` | the last report arrives 8 seconds late, as a position write 20 milliseconds before the resting state, and is repeated 10 milliseconds later |
@@ -111,7 +111,7 @@ Add the scenario to `SCENARIOS` in `scenarios.py` with a description and its len
 
 The fields behind them: `travel_time_up`, `travel_time_down`, `end_stop_extra` (not linear in percent), `supports_set_position`, `supports_stop`, `reports_position`, `position_source` (`calculated` or `measured`), `transit_states`, `reporting` (`live`, `end_only`, `grid`), `live_interval`, `grid_interval`, `start_latency`, `start_offset_percent`, `settle_offset_up`, `settle_offset_down`, `report_delay`, `position_before_rest`, `repeat_last_write`, `rewrite_unchanged_every`, `blocked_at`. `CoverProfile.capability_profile()` is what the user would state for the cover; a polled platform states its grid as the report delay.
 
-**The real position and the reported one.** Every cover keeps where the curtain really is apart from what the actuator reports (`real_position(at)`, `reported_position(at)`). With a calculated position the report at the end is the commanded target whatever happened; with a measured one it is where the curtain is. The `blocked` profile shows the drift: the report says 100, the curtain stands at 60, the core reads "target reached" and does not fight it, which is the honest outcome, because a calculated position cannot know more (section 8.4).
+**The real position and the reported one.** Every cover keeps where the curtain really is apart from what the actuator reports (`real_position(at)`, `reported_position(at)`). With a calculated position the report at the end is the commanded target whatever happened; with a measured one it is where the curtain is. The `blocked` profile shows the drift: the report says 100, the curtain stands at 60, the core reads "target reached" and does not fight it, which is the honest outcome, because a calculated position cannot know more (section 8.4). The drift persists: the motor runs in the direction and for the time the count asks for, so a later movement moves the curtain by the counted distance (after the block, a command to 80 lowers the curtain from 60 to 40). Only a movement into an end position runs the curtain into the end stop and references it again; a curtain that is still blocked on the way stops at the block once more.
 
 **What the harness shows today.** A measured cover that settles beyond its tolerance is sent again every minimum interval, because "target reached" never holds and command verification with its backoff (N1) is not built yet; `test_a_cover_that_settles_beyond_its_tolerance_is_sent_every_interval` pins that and shows how the assertion on the movements per day finds it. A member without position feedback is commanded once when a run starts, because nobody knows where it stands.
 

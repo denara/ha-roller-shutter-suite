@@ -19,6 +19,8 @@ LATER = T0 + timedelta(minutes=5)
 OPEN = 100
 HALF = 50
 BLOCKED = 60
+DRIFTED_TARGET = 80
+DRIFTED_REAL = 40
 A_FEW_PERCENT = 10
 OFFSET = 8
 SETTLED_UP = 48
@@ -136,7 +138,7 @@ def test_a_polled_platform_reports_on_its_grid_only() -> None:
 
 
 def test_a_measured_cover_settles_a_few_percent_off_asymmetrically() -> None:
-    """Up ends 2 short, down 1 beyond; the report is what the drive measures."""
+    """Up ends 2 short, down 1 short; the report is what the drive measures."""
     subject = cover(
         profile(
             position_source=PositionSource.MEASURED,
@@ -172,6 +174,37 @@ def test_a_calculated_position_reports_the_target_although_the_curtain_is_blocke
     assert written[-1] == RawReport(T0 + UP, "open", 100)
     assert subject.real_position(LATER) == BLOCKED
     assert subject.reported_position(LATER) == OPEN
+
+
+def test_the_drift_after_a_block_persists_on_the_next_partial_movement() -> None:
+    """The motor runs the counted distance down; the curtain goes down by as much."""
+    subject = cover(profile(blocked_at=BLOCKED))
+    reports(subject)
+    subject.move_to(100, T0)
+    reports(subject)
+    subject.move_to(80, LATER)
+    # The count runs 20 down in 2 s; half way the curtain is 10 lower, not higher.
+    assert subject.real_position(LATER + timedelta(seconds=1)) == pytest.approx(50)
+    written = reports(subject, LATER + timedelta(minutes=1))
+
+    assert written[-1].position == DRIFTED_TARGET
+    assert subject.real_position(LATER + timedelta(minutes=1)) == DRIFTED_REAL
+
+
+def test_a_movement_into_an_end_position_references_the_curtain_again() -> None:
+    """Closed is closed for curtain and count; afterwards they move as one."""
+    subject = cover(profile(blocked_at=BLOCKED))
+    reports(subject)
+    subject.move_to(100, T0)
+    subject.move_to(80, LATER)
+    subject.move_to(0, LATER + timedelta(minutes=1))
+    referenced = LATER + timedelta(minutes=2)
+
+    assert subject.real_position(referenced) == 0
+    assert subject.reported_position(referenced) == 0
+    subject.move_to(HALF, referenced)
+    assert subject.real_position(referenced + timedelta(minutes=1)) == HALF
+    assert subject.reported_position(referenced + timedelta(minutes=1)) == HALF
 
 
 def test_a_measured_cover_that_is_blocked_reports_where_it_stopped() -> None:
@@ -261,7 +294,12 @@ def test_a_dropout_swallows_the_writes_and_returns_with_the_state_of_that_moment
 
 
 def test_returning_from_a_dropout_with_the_same_state_is_nothing_new() -> None:
-    """The observation after the gap equals the one before; the runner drops it."""
+    """The observation after the gap equals the one before the gap.
+
+    The runner records the return, since it changes the observation from
+    unavailable; that it brings nothing new is the tracker's judgement
+    (section 8.3), not a report the runner drops.
+    """
     subject = cover(profile(), position=100)
     before = reports(subject)[-1].observation()
     subject.disconnect(T0 + timedelta(seconds=5), T0 + timedelta(seconds=40))

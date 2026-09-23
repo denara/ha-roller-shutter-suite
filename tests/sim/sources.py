@@ -56,6 +56,9 @@ def as_source_value(scripted: Scripted) -> AnySourceValue:
         return SourceValue.unknown()
     if scripted is Missing.UNAVAILABLE:
         return SourceValue.unavailable()
+    # One call per type on purpose: the type checker infers SourceValue[bool],
+    # SourceValue[int] and so on only from a narrowed value; a single call
+    # would be SourceValue[int | float | str], which AnySourceValue is not.
     if isinstance(scripted, bool):
         return SourceValue.of(scripted)
     if isinstance(scripted, int):

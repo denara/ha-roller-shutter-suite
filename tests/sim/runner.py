@@ -28,9 +28,11 @@ scripted second controller) are actions the scenario schedules at instants.
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime, timedelta
-from typing import Final
 
-from custom_components.roller_shutter_suite.core.arbiter import LayerRegistration
+from custom_components.roller_shutter_suite.core.arbiter import (
+    LayerRegistration,
+    member_expectation_end,
+)
 from custom_components.roller_shutter_suite.core.engine import Engine, build_arbiter
 from custom_components.roller_shutter_suite.core.model import (
     Controls,
@@ -41,7 +43,6 @@ from custom_components.roller_shutter_suite.core.model import (
     Observation,
     OwnCommand,
     SunAlmanac,
-    TravelDirection,
     WindowConfig,
     WindowObservation,
     WindowState,
@@ -59,8 +60,6 @@ from .stubs import DEFAULT_LAYERS
 from .world import World
 
 type Action = Callable[["Simulation"], None]
-
-_SAME_INSTANT_GUARD: Final = timedelta(milliseconds=1)
 
 
 @dataclass(frozen=True, slots=True)
@@ -460,11 +459,12 @@ class Simulation:
     def _expectation_ends(self, window: SimWindow) -> set[datetime]:
         """Return the ends of the expectation windows of the pending commands.
 
-        The gate reads them from the state; the runner wakes the window up a
-        moment after each, so a command that the cover did not answer is
-        judged again. For a window in dry-run the simulated commands count.
-        The rule of the gate says how long a command is pending; the runner
-        uses the same rule and adds nothing of its own.
+        The gate reads them from the state; the runner wakes the window up at
+        each, so a command that the cover did not answer is judged again. For
+        a window in dry-run the simulated commands count. The end is the one
+        the gate computes, ``member_expectation_end`` of the core, and the
+        runner adds nothing of its own: the gate counts a command as pending
+        while the time is before the end, so at the end itself it is closed.
         """
         state = window.state
         commands: dict[str, OwnCommand] = (
@@ -481,13 +481,7 @@ class Simulation:
             command = commands.get(member.member_id)
             if command is None:
                 continue
-            profile = member.capabilities
-            travel = (
-                profile.travel_time_up
-                if command.direction is TravelDirection.UP
-                else profile.travel_time_down
-            )
-            ends.add(command.time + travel + profile.report_delay + _SAME_INSTANT_GUARD)
+            ends.add(member_expectation_end(member, command))
         return ends
 
     # --- Recording ---------------------------------------------------------------------

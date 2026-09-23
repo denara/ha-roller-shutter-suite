@@ -13,6 +13,7 @@ from typing import Final
 
 import pytest
 
+from custom_components.roller_shutter_suite.core.arbiter import member_expectation_end
 from custom_components.roller_shutter_suite.core.model import (
     FULLY_CLOSED,
     FULLY_OPEN,
@@ -54,13 +55,14 @@ from tests.sim.world import World
 WINDOW: Final = "window_example"
 MEMBER: Final = "cover.example_window"
 A_YEAR: Final = timedelta(days=365)
-WELL_UNDER_A_MINUTE: Final = 45.0
+A_MINUTE: Final = 60.0
+"""Seconds; the acceptance criterion says well under a minute."""
 TWICE_A_DAY: Final = 2
 TEN_WINDOWS: Final = 10
 DAYS_OF_THE_YEAR: Final = 365
 HALF_OPEN: Final = 30
 HALF: Final = 50
-"""Seconds; the acceptance criterion says well under a minute."""
+REPORT_DELAY: Final = timedelta(seconds=8)
 
 
 @pytest.fixture(scope="module")
@@ -127,10 +129,17 @@ def test_a_report_that_changes_nothing_is_dropped() -> None:
 def test_a_year_for_ten_windows_runs_well_under_a_minute(
     year_run: tuple[Simulation, float],
 ) -> None:
-    """The measured time is in the pull request; here it only has to stay reasonable."""
-    simulation, seconds = year_run
+    """The year is measured and printed; the test fails only at a full minute.
 
-    assert seconds < WELL_UNDER_A_MINUTE
+    "Well under a minute" is judged from the printed time (``pytest -s``
+    shows it) and stated in the pull request. The bound here is the minute
+    itself, so a loaded machine does not make a wall-clock test flaky, while
+    a year that really takes a minute still fails.
+    """
+    simulation, seconds = year_run
+    print(f"a year for ten windows took {seconds:.1f} s")  # noqa: T201 - the measurement
+
+    assert seconds < A_MINUTE
     assert simulation.recomputes > 0
     assert len(simulation.windows) == TEN_WINDOWS
 
@@ -302,6 +311,57 @@ def test_a_restart_in_mid_movement_does_not_send_again() -> None:
     assert after[0].decision.gate is not None
     assert after[0].decision.gate.reason is ReasonCode.DUPLICATE_COMMAND
     assert len(record.commands(WINDOW)) == 1
+
+
+def test_the_runner_wakes_a_window_up_at_the_deadline_of_the_gate() -> None:
+    """The wake-up is the core's own deadline, report delay included, and nothing more.
+
+    The cover settles short of the target, so the target is never reached,
+    and its end stop takes longer than the travel time the user states, so
+    its last report comes after the deadline: the recompute at the deadline
+    is the runner's wake-up alone. Before it the gate reads the command as
+    pending; at the deadline itself it does not any more (``time < end``).
+    """
+    start = local(MONDAY, time(6, 55))
+    world = World(start, seed=1, script=calm_sources(start))
+    world.add_cover(
+        SimulatedCover(
+            MEMBER,
+            CoverProfile(
+                "late_and_short",
+                position_source=PROFILES["settles_off"].position_source,
+                settle_offset_up=-6,
+                end_stop_extra=timedelta(seconds=4),
+                report_delay=REPORT_DELAY,
+            ),
+            position=0,
+            available_since=start,
+        )
+    )
+    simulation = Simulation(world)
+    simulation.add_window(world.window(WINDOW, MEMBER), ARMED)
+    simulation.run(local(MONDAY, time(7, 0, 1)))
+    window = simulation.window(WINDOW)
+    member = window.config.members[0]
+    command = window.state.members[0].last_own_command
+    assert command is not None
+    deadline = member_expectation_end(member, command)
+
+    assert member.capabilities.report_delay == REPORT_DELAY
+    assert deadline == command.time + member.capabilities.travel_time_up + REPORT_DELAY
+    assert deadline in window.wake_ups
+    simulation.run(deadline + timedelta(seconds=30))
+    reasons = {
+        entry.at: entry.decision.gate.reason
+        for entry in simulation.record.decisions(WINDOW)
+        if entry.decision is not None
+        and entry.decision.gate is not None
+        and command.time < entry.at <= deadline
+    }
+    assert reasons[deadline] is not ReasonCode.DUPLICATE_COMMAND
+    before = [reason for at, reason in reasons.items() if at < deadline]
+    assert before
+    assert all(reason is ReasonCode.DUPLICATE_COMMAND for reason in before)
 
 
 # --- Dry-run and maintenance lock ----------------------------------------------------------

@@ -22,7 +22,10 @@ the taxonomy of pitfalls in the brief's section 7:
 - **a calculated position that reports the commanded target although the
   curtain was blocked**: the actuator counts run time and the motor cut out at
   ``blocked_at``. The real position is kept separately, so a scenario can
-  show the drift between what is reported and where the curtain is.
+  show the drift between what is reported and where the curtain is. Later
+  movements run the curtain by the distance the motor runs, so the drift
+  persists until a movement into an end position references it again
+  (section 8.4).
 
 The cover produces **raw reports**, what a cover entity would write: a state
 (``open``, ``closed``, ``opening``, ``closing``, ``unavailable``), a position
@@ -186,8 +189,14 @@ class _Motion:
     """A movement under way: where it started, where it goes, how long it takes.
 
     ``real_from`` is where the curtain really was, ``reported_from`` what the
-    actuator counted. ``real_end`` is where the curtain really ends: the
-    target, plus a settle offset, unless the motor cut out at ``blocked_at``.
+    actuator counted. The motor runs in the direction and for the time the
+    count asks for, so the curtain covers the same distance as the count:
+    ``real_course`` is ``real_from`` moved by ``target - reported_from``,
+    within the scale. A drift between the two therefore persists. Only a
+    movement into an end position runs the curtain into the end stop, which
+    references it: then ``real_course`` is the end position itself.
+    ``real_end`` is where the curtain really ends: ``real_course``, plus a
+    settle offset, unless the motor cut out at ``blocked_at`` on the way.
     ``reported_end`` is what the actuator reports at the end: with a
     calculated position the target, with a measured one the real end.
     """
@@ -197,6 +206,7 @@ class _Motion:
     real_from: float
     reported_from: float
     target: int
+    real_course: float
     real_end: float
     reported_end: int
     up: bool
@@ -223,19 +233,20 @@ class _Motion:
     def real_at(self, at: datetime) -> float:
         """Return where the curtain really is at an instant.
 
-        The curtain follows the count until it arrives, or until it reaches
-        the place where the motor cut out (``real_end`` short of the target);
-        a settle offset beyond the target appears at the end.
+        The curtain runs along its course as the motor runs, until it
+        arrives, or until it reaches the place where the motor cut out
+        (``real_end`` short of the course); a settle offset beyond the course
+        appears at the end.
         """
         share = self.share(at)
         if share >= 1.0:
             return self.real_end
-        counted = self.real_from + (self.target - self.real_from) * share
-        if self.up and self.real_end < self.target:
-            return min(counted, self.real_end)
-        if not self.up and self.real_end > self.target:
-            return max(counted, self.real_end)
-        return counted
+        running = self.real_from + (self.real_course - self.real_from) * share
+        if self.up and self.real_end < self.real_course:
+            return min(running, self.real_end)
+        if not self.up and self.real_end > self.real_course:
+            return max(running, self.real_end)
+        return running
 
 
 class SimulatedCover:
@@ -317,11 +328,16 @@ class SimulatedCover:
         offset = (
             self.profile.settle_offset_up if up else self.profile.settle_offset_down
         )
-        real_end = float(_clamp(target + offset))
+        if target in (0, FULL_TRAVEL):
+            real_course = float(target)
+        else:
+            moved = real_from + (target - reported_from)
+            real_course = max(0.0, min(float(FULL_TRAVEL), moved))
+        real_end = float(_clamp(real_course + offset))
         blocked = self.profile.blocked_at
         if blocked is not None and (
-            (up and real_from < blocked < target)
-            or (not up and target < blocked < real_from)
+            (up and real_from < blocked < real_course)
+            or (not up and real_course < blocked < real_from)
         ):
             real_end = float(blocked)
         reported_end = (
@@ -335,6 +351,7 @@ class SimulatedCover:
             real_from=real_from,
             reported_from=reported_from,
             target=target,
+            real_course=real_course,
             real_end=real_end,
             reported_end=reported_end,
             up=up,

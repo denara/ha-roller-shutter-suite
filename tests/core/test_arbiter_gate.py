@@ -20,6 +20,7 @@ from custom_components.roller_shutter_suite.core.arbiter import (
     GateRuleRegistration,
     apply_take_over,
     effective_controls,
+    member_expectation_end,
 )
 from custom_components.roller_shutter_suite.core.engine import (
     BUILT_IN_CONSTRAINTS,
@@ -541,6 +542,21 @@ def test_the_same_target_as_the_pending_own_command_is_a_duplicate() -> None:
     assert gate == GateOutcome.suppress(
         GateRule.MOVEMENT_IN_FLIGHT, ReasonCode.DUPLICATE_COMMAND
     )
+
+
+def test_the_deadline_is_the_travel_time_of_the_direction_plus_the_report_delay() -> (
+    None
+):
+    """One formula for the gate and for everything that waits for the same instant."""
+    config = window(profiles={LEFT: profile(report_delay=timedelta(seconds=60))})
+    member = next(m for m in config.members if m.member_id == LEFT)
+    down = _commanded(30, 5).last_own_command
+    up = _commanded(80, 5, direction=TravelDirection.UP).last_own_command
+    assert down is not None
+    assert up is not None
+
+    assert member_expectation_end(member, down) == NOW + timedelta(seconds=-5 + 18 + 60)
+    assert member_expectation_end(member, up) == NOW + timedelta(seconds=-5 + 20 + 60)
 
 
 def test_another_target_waits_until_the_members_have_come_to_rest() -> None:

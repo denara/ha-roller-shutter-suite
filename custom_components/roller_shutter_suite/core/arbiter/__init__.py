@@ -25,6 +25,7 @@ from .gate import (
     ArmedDam,
     Dam,
     expectation_window_end,
+    member_expectation_end,
 )
 from .layers import disabled_functions, wish_for_missing_input
 from .registry import (
@@ -74,6 +75,7 @@ __all__ = [
     "effective_controls",
     "expectation_window_end",
     "is_standing",
+    "member_expectation_end",
     "outranks",
     "record_sent_commands",
     "remember_would_be_send",
