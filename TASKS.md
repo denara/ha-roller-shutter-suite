@@ -41,7 +41,7 @@ Plain Python under `custom_components/roller_shutter_suite/core/`, tested withou
 | [H02](tasks/H02-runtime-and-source-adapters.md) | Runtime and source adapters | guardrails 4 and 8, G3, G5 | C03, C04, H01 | done |
 | [H03](tasks/H03-cover-actuator-adapter.md) | Cover actuator adapter; brings the forms for the motor protection settings and the re-evaluation time | E11, E13, E10 (settings), N2 | H01, H02 | done |
 | [H04](tasks/H04-status-entities-events-diagnostics.md) | Status entities, reason events, logbook, diagnostics | E7, E8 | H02 | done |
-| [M1](tasks/M1-walking-skeleton.md) | **Milestone: walking skeleton** — one window, dry-run, schedule only, status entities | — | all of the above except S1, S3 | in progress |
+| [M1](tasks/M1-walking-skeleton.md) | **Milestone: walking skeleton** — one window, dry-run, schedule only, status entities | — | all of the above except S1, S3 | in review (pull request 61) |
 
 ## Maintenance
 
