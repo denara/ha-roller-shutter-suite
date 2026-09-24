@@ -20,14 +20,14 @@ The entities update whenever the window is looked at again: when a cover or an e
 
 **When a cover is unavailable**, the entities of its window are unavailable too, and they come back by themselves with the cover; no reload is needed. A window with several covers stays available as long as at least one of them is.
 
-**A cover that reports its position as a decimal number**, such as `100.0` instead of `100`, is treated as a cover without position feedback: this version reads a position only as a whole number. The template cover and the cover group of Home Assistant report it that way. For such a cover the reason never reads "Already at the position it should have", and the diagnostics show `position: null`. The [pilot guide](../pilot.md#5-compare-with-your-existing-control) explains how to check a cover.
+**A cover that reports its position as a decimal number**, such as `100.0` instead of `100`, is treated as a cover without position feedback: this version reads a position only as a whole number. The template cover and the cover group of Home Assistant report it that way. For such a cover the reason never reads "Already where it should be", and the diagnostics show `position: null`. The [pilot guide](../pilot.md#5-compare-with-your-existing-control) explains how to check a cover.
 
 ### What the reason tells you
 
 The reason is chosen like this:
 
 - If the window got the position it wanted, its command is still under way, or it is already there, the reason is **why it wanted it**: "Daily routine: night", "Fire alarm". That the command is under way is in the attributes (`gate_reason` is `duplicate_command`).
-- If something held the movement back, the reason is **what held it back**: "Paused", "Maintenance lock", "Waiting for the minimum time between two movements".
+- If something held the movement back, the reason is **what held it back**: "Paused", "Maintenance lock", "Waiting for the minimum interval between two movements".
 - If a limit left no movement at all, the reason is **the limit**: "Not lowered while the door is open".
 - In dry-run, the reason is "Dry-run: nothing moves" whenever a command would have been sent. What would have been sent, or what would have held it back, is in the attributes.
 
@@ -41,12 +41,12 @@ The entity "Reason" carries the complete explanation as attributes. They change 
 | `target` | The position after all limits, if all covers share one. |
 | `constraints` | Every limit that applied, in order, each with its reason and the position after it; for example the ventilation position in front of an open window. |
 | `gate_outcome`, `gate_reason`, `gate_rule` | Whether the movement was sent (`send`), deferred (`defer`) or held back (`suppress`), with the reason and the rule that decided. |
-| `deferred_until` | For a deferral with a known end: when it ends, for example the end of the minimum time between two movements. Empty when the end is not known. |
+| `deferred_until` | For a deferral with a known end: when it ends, for example the end of the minimum interval between two movements. Empty when the end is not known. |
 | `dry_run`, `would_send` | Whether the window is in dry-run, and the position that would have been sent. |
-| `other_layers` | For every other part of the logic (fire, protection, sleep mode, requests, privacy, shading, the daily routine) the reason why it did not decide: not set up, not active, an entity without a value, paused because of a faulty setting, and so on. |
+| `other_layers` | For every other part of the logic (fire, protection, sleep mode, requests, privacy, shading, the daily routine) the reason why it did not decide: not set up, not active, a required entity that is unavailable or unknown, suspended because of a faulty setting, and so on. |
 | `faults` | Parts that failed with an internal error during this decision, each with where it happened and its reason (`layer_failed`, `constraint_failed`, `gate_rule_failed`). Empty in a sound installation. Protection never stops because of such an error; the error text itself is written to the log, not here. |
 
-**In dry-run** the attributes show the outcome as if the window were armed: either `would_send` with the position, or `gate_rule` with the rule that would have held it back. "Already at the position it should have" (`target_reached`) is especially useful while another controller still moves the window: it means that the other controller put the window where this integration wanted it.
+**In dry-run** the attributes show the outcome as if the window were armed: either `would_send` with the position, or `gate_rule` with the rule that would have held it back. "Already where it should be" (`target_reached`) is especially useful while another controller still moves the window: it means that the other controller put the window where this integration wanted it.
 
 ## Reason events
 
@@ -54,7 +54,7 @@ The integration fires one event type, `roller_shutter_suite_reason`, when:
 
 - a position is wanted and a command is sent;
 - a window in dry-run would have sent a command;
-- a wanted movement is deferred or held back, for example by the pause, the maintenance lock, the minimum time between two movements, or an open door.
+- a wanted movement is deferred or held back, for example by the pause, the maintenance lock, the minimum interval between two movements, or an open door.
 
 **The fire alarm is always reported at once**, also when the maintenance lock or dry-run keeps the shutter where it is; the event then names the reason why nothing moved.
 
@@ -116,7 +116,7 @@ The diagnostics help when something does not behave as you expect, and when you 
 - **For all windows:** Settings → Devices & services → Roller Shutter Suite → the menu (three dots) → **Download diagnostics**.
 - **For one window:** open the device of the window → the menu (three dots) → **Download diagnostics**.
 
-The file contains, per window: every setting with the level it comes from (the house, a group, the window, or the built-in default) and whether it runs on a cautious value because a stored value is faulty; what each cover can do; the state of the window (the entities it reads, the daily routine of today, the next planned time); the last ten decisions with the time each was first made; and what the window remembers between two decisions.
+The file contains, per window: every setting with where it comes from (the house, a group, the window, or the built-in default) and whether a cautious choice stands in for it because its saved setting is faulty; what each cover can do; the state of the window (the entities it reads, the daily routine of today, the next planned time); the last ten decisions with the time each was first made; and what the window remembers between two decisions.
 
 **Before you share the file**, know what it contains and what it leaves out. Like the diagnostics of other integrations, it keeps the names of your windows and groups, the IDs of your entities and the values those entities report, because a problem can only be traced with them. Removed, and replaced by `**REDACTED**` wherever they would appear, are the location of your home (latitude, longitude, elevation) and anything secret, such as passwords, tokens and API keys; none of these is part of a window today. The message of an error inside the integration is never included, only where it happened and its reason code. If a name of a window or an entity says more than you want to share, replace it in the file before you attach it. The covers of a window appear in the order of its configuration, so the same place in each list means the same cover.
 
@@ -132,8 +132,8 @@ The reason entity and the events use these codes. The column "Shown as" is the E
 |---|---|
 | `fire_alarm` | Fire alarm |
 | `fire_unacknowledged` | Fire alarm over, waiting for acknowledgement |
-| `protection_event` | Protection event, such as storm or hail |
-| `protection_return_manual` | Back to the position chosen by hand before the protection event |
+| `protection_event` | Protection from storm, hail or similar |
+| `protection_return_manual` | Back to the position set by hand before the protection |
 | `sleep_mode` | Sleep mode |
 | `external_request` | Request from an automation |
 | `privacy_lights_on` | Privacy while the lights are on |
@@ -148,25 +148,25 @@ The reason entity and the events use these codes. The column "Shown as" is the E
 | Code | Shown as |
 |---|---|
 | `not_configured` | Not set up |
-| `inactive` | Not active at present |
-| `input_unavailable` | An entity it needs is unavailable |
-| `input_unknown` | An entity it needs has no known value |
-| `input_held_last_known` | The last known value of an entity is used |
-| `waiting_for_delay` | Waiting until the delay has passed |
-| `outside_episode` | Its conditions are not met at present |
-| `episode_locked` | Locked for the rest of the present phase |
-| `watchdog_released` | Released because it lasted implausibly long |
+| `inactive` | Not active right now |
+| `input_unavailable` | A required entity is unavailable |
+| `input_unknown` | The state of a required entity is unknown |
+| `input_held_last_known` | Using the last known state of an entity |
+| `waiting_for_delay` | Waiting for the set delay |
+| `outside_episode` | Conditions not met right now |
+| `episode_locked` | Stays off until its conditions are no longer met |
+| `watchdog_released` | Ended because it lasted implausibly long |
 | `capability_missing` | The cover cannot do this |
-| `day_type_fallback` | Day of the week used, because the kind of day is not known |
-| `function_disabled_by_fault` | Paused because a stored setting is faulty |
+| `day_type_fallback` | Kind of day unknown, the day of the week is used |
+| `function_disabled_by_fault` | Suspended because a saved setting is faulty |
 | `layer_failed` | Skipped because of an internal error |
 
 ### What limits a movement
 
 | Code | Shown as |
 |---|---|
-| `only_raise` | Only raised at this time |
-| `only_lower` | Only lowered at this time |
+| `only_raise` | Only raised at this time of day |
+| `only_lower` | Only lowered at this time of day |
 | `sleep_exception_no_open` | Not opened while someone is sleeping |
 | `lockout_door_open` | Not lowered while the door is open |
 | `lockout_void_tamper` | Lowered despite the open door: the tamper contact is active |
@@ -174,10 +174,10 @@ The reason entity and the events use these codes. The column "Shown as" is the E
 | `ventilation_floor` | Stops at the ventilation position because the window is open |
 | `rain_ventilation_floor` | Lowered to the rain position while the window is open |
 | `frost_limit` | Opens only up to the frost position because of frost |
-| `frost_limit_source_blind` | Opens only up to the frost position, because no temperature is known |
+| `frost_limit_source_blind` | Opens only up to the frost position, because the temperature is unknown |
 | `frost_hold` | Not raised during frost |
-| `no_intermediate_position` | No position in between during a protection event |
-| `constraint_failed` | Restriction kept because of an internal error |
+| `no_intermediate_position` | No position in between while protection is active |
+| `constraint_failed` | Limit kept because of an internal error |
 
 ### Whether it may move now
 
@@ -187,18 +187,18 @@ The reason entity and the events use these codes. The column "Shown as" is the E
 | `maintenance_lock` | Maintenance lock |
 | `dry_run` | Dry-run: nothing moves |
 | `cover_unavailable` | The cover is unavailable |
-| `target_reached` | Already at the position it should have |
+| `target_reached` | Already where it should be |
 | `mode_off` | Operating mode: off |
 | `mode_protection_only` | Operating mode: protection only |
 | `paused` | Paused |
 | `person_at_window` | Someone is at the window |
 | `manual_override` | Moved by hand; automatic movements wait |
-| `movement_in_flight` | Waiting until the running movement has ended |
+| `movement_in_flight` | Waiting for the current movement to end |
 | `duplicate_command` | Command already under way |
-| `movement_taken_over` | Running movement taken over |
-| `min_change` | Change too small for a movement |
-| `min_interval` | Waiting for the minimum time between two movements |
-| `trigger_time_missing` | Held back: it is not known when the wish began |
+| `movement_taken_over` | Carries on with the movement already running |
+| `min_change` | Change too small to be worth a movement |
+| `min_interval` | Waiting for the minimum interval between two movements |
+| `trigger_time_missing` | Held back: it is not known since when the movement has been wanted |
 | `command_backoff` | Waiting before the next attempt |
 | `staggered` | Waiting for its turn |
 | `gate_rule_failed` | Held back because of an internal error |
@@ -211,26 +211,26 @@ These codes belong to functions that are not built yet. They will appear in even
 |---|---|
 | `manual_detected` | Moved by hand |
 | `manual_detected_member` | One cover of the window was moved by hand |
-| `external_movement_observed` | Moved by something else during dry-run |
+| `external_movement_observed` | Moved by something else during the dry-run |
 | `moved_during_downtime` | Moved while Home Assistant was not running |
 | `person_at_window_started` | Someone came to the window |
 | `person_at_window_ended` | Nobody at the window any more |
 | `override_started` | Manual override started |
 | `override_ended` | Manual override ended |
-| `protection_started` | Protection event started |
-| `protection_ended` | Protection event ended |
-| `protection_source_blind` | The entity of a protection event has no value |
-| `lockout_contact_blind` | The door contact has no value |
+| `protection_started` | Protection started |
+| `protection_ended` | Protection ended |
+| `protection_source_blind` | An entity used for protection is unavailable or unknown |
+| `lockout_contact_blind` | The door contact is unavailable or unknown |
 | `fire_acknowledged` | Fire alarm acknowledged |
 | `frost_protection_waived` | Frost protection lifted until the next morning |
 | `frost_waiver_ended` | Frost protection applies again |
 | `frost_released_by_sun` | Frost protection lifted by the sun |
-| `frost_source_blind` | The frost entity has no value |
+| `frost_source_blind` | The entity used for frost is unavailable or unknown |
 | `position_may_be_inaccurate` | The position may be inaccurate |
 | `command_failed` | Command failed |
 | `actuator_no_reaction` | The cover did not react |
-| `movement_not_finished` | No end of the movement was reported in time |
+| `movement_not_finished` | The end of the movement was not reported in time |
 | `member_unavailable` | One cover of the window is unavailable |
-| `button_refused_maintenance_lock` | Button refused because of the maintenance lock |
+| `button_refused_maintenance_lock` | Button press ignored because of the maintenance lock |
 
 No reason says that a shutter has arrived at a position. Many covers report a calculated position, not a measured one; the integration can only know whether a cover reacted.

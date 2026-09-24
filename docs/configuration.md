@@ -58,8 +58,8 @@ If you choose a **cover group** of Home Assistant, the integration takes it apar
 
 ```text
 Members of the cover group
-cover.example_bay is a cover group. A group reports only the mean of its
-members, so the window stores and moves the members themselves:
+cover.example_bay is a cover group. A cover group only reports an average
+position of its covers, so this window uses the individual covers instead:
 
 cover.example_bay_left, cover.example_bay_right
 
@@ -85,13 +85,12 @@ This also holds for the members of a cover group: the message names the member, 
 Some covers can only be opened and closed, or do not report where they are. Such a cover is accepted. An extra page tells you what this means:
 
 ```text
-Cover without positions
-These covers cannot be driven to a position, or do not report one:
+Covers that only open and close
+These covers cannot be moved to a position, or do not report one:
 cover.example_garage
 
-They are accepted and are only opened and closed. For them shading
-positions, other positions in between and the detection of manual
-operation are inactive.
+You can still use them. They are only ever opened or closed fully,
+never moved to a position in between.
 ```
 
 If a cover is merely unavailable while you configure the window, that is no problem: the integration uses what Home Assistant last knew about it.
@@ -112,8 +111,8 @@ On the pages of a group and of a window every value can be inherited. What "inhe
 
 ```text
 Evening position           [            ] %
-  Where the shutter goes in the evening. ... Leave empty to inherit.
-  Inherited at present: 0 % (from Roller Shutter Suite).
+  How far the shutter closes in the evening. ... Leave empty to inherit.
+  Currently inherited: 0 % from Roller Shutter Suite.
 ```
 
 Type a value and the window has its own. **Zero is a value**: an evening position of 0 % is something you set, and it wins like any other value. To go back to inheriting, empty the field again.
@@ -123,7 +122,7 @@ A day of the year, such as the first day of summer, is entered as month and day 
 **A switch: choose "Inherit" in the list.** A switch on these pages is a list with three entries, because a plain on/off switch could not say "inherit":
 
 ```text
-Summer by date             [ Inherit (at present: off)  v ]
+Summer by date             [ Inherit (currently off)  v ]
                              On
                              Off
 ```
@@ -133,11 +132,11 @@ The first entry tells you what inheriting means right now. Choose **On** or **Of
 **An entity that may be absent: inherit, none, or an own selection.** Such a setting has a list and an entity field below it:
 
 ```text
-Workday entity             [ Inherit (at present: the entity named below) v ]
-  ... Inherited at present: binary_sensor.example_workday (from Roller Shutter Suite).
+Workday entity             [ Inherit (currently the entity named below) v ]
+  ... Currently inherited: binary_sensor.example_workday from Roller Shutter Suite.
 
 Entity for workdays        [                                   ]
-  Counts only with "Own selection" above.
+  Used only with "Own selection" above.
 ```
 
 - **Inherit** follows the level above.
@@ -150,7 +149,7 @@ Entity for workdays        [                                   ]
 2. Enter 15 in **Evening position** and save the pages. The kitchen now has a value of its own and closes to 15 %.
 3. Later you change your mind. Open the same page, empty the field and save. The kitchen follows the house again, as if it had never had a value of its own.
 
-**Expert values** sit in a section that is folded shut at the bottom of a page. Sensible defaults apply, and you only open the section if you know why. For the daily routine these are the offset to sunrise or sunset, the elevation of the sun, "not before" and "not after", the delay of the brightness and the random offset. All fields of a trigger are always shown; which of them count depends on the trigger you chose, and the text below each field says so.
+**Advanced settings** sit in a section that is folded shut at the bottom of a page. Sensible defaults apply, and you only open the section if you know why. For the daily routine these are the offset to sunrise or sunset, the elevation of the sun, "not before" and "not after", the duration of darkness and the random offset. All fields of a trigger are always shown; which of them count depends on the trigger you chose, and the text below each field says so.
 
 **Feature switches.** The first page after the name lists the feature switches, and only the features that are switched on get pages of their own. A feature switch is inherited like any other switch: the house can switch the daily routine on, a group can switch it off for its windows, and one window of that group can switch it on again. What you had entered for a feature stays stored while it is switched off.
 
