@@ -42,7 +42,7 @@ from .registry import (
     outranks,
     reported_positions,
 )
-from .sent import record_sent_commands
+from .sent import record_command_result, record_sent_commands
 from .take_over import apply_take_over
 
 __all__ = [
@@ -77,6 +77,7 @@ __all__ = [
     "is_standing",
     "member_expectation_end",
     "outranks",
+    "record_command_result",
     "record_sent_commands",
     "remember_would_be_send",
     "reported_positions",

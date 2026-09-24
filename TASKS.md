@@ -39,8 +39,8 @@ Plain Python under `custom_components/roller_shutter_suite/core/`, tested withou
 |---|---|---|---|---|
 | [H01](tasks/H01-config-entry-and-subentries.md) | Config entry, group and window subentries | E12, F4, F7 (part), N2, N3, N4 (part), N5 (part) | S2, C02, T03 | done |
 | [H02](tasks/H02-runtime-and-source-adapters.md) | Runtime and source adapters | guardrails 4 and 8, G3, G5 | C03, C04, H01 | done |
-| [H03](tasks/H03-cover-actuator-adapter.md) | Cover actuator adapter; brings the forms for the motor protection settings and the re-evaluation time | E11, E13, E10 (settings), N2 | H01, H02 | in progress |
-| [H04](tasks/H04-status-entities-events-diagnostics.md) | Status entities, reason events, logbook, diagnostics | E7, E8 | H02 | in progress |
+| [H03](tasks/H03-cover-actuator-adapter.md) | Cover actuator adapter; brings the forms for the motor protection settings and the re-evaluation time | E11, E13, E10 (settings), N2 | H01, H02 | in review (pull request 56) |
+| [H04](tasks/H04-status-entities-events-diagnostics.md) | Status entities, reason events, logbook, diagnostics | E7, E8 | H02 | in review (pull request 55) |
 | [M1](tasks/M1-walking-skeleton.md) | **Milestone: walking skeleton** — one window, dry-run, schedule only, status entities | — | all of the above except S1, S3 | planned |
 
 ## Maintenance
@@ -63,7 +63,7 @@ Blocks that produce documentation for users rather than code. They follow the sa
 
 | ID | Block | Depends on | Status |
 |---|---|---|---|
-| W01 | User manual in the GitHub wiki of the repository, for users only: no code, no module, class or reason-code names, no architecture terms. English and German first, matching the languages of the user interface; French and Spanish as a later extension of wiki and interface alike. Built along one made-up example house that grows chapter by chapter; screenshots only from a throw-away instance filled from a data set in the repository. The pages are maintained under `docs/` and published to the wiki from there (a workflow on merge, or the owner by hand); no agent writes to the wiki repository. Preparation that the H blocks carry now: the translation structure and the parity check are not pinned to two languages, and options name their preconditions in the user interface (F7) so that the wiki reuses those texts. The block file with the page structure and the example house is written before the start | M1 and a stable state: installation through HACS and set-up through the user interface work; before the first public release | planned |
+| [W01](tasks/W01-user-wiki.md) | User manual in the GitHub wiki of the repository, for users only: no code, no module, class or reason-code names, no architecture terms. English and German first, matching the languages of the user interface; French and Spanish as a later extension of wiki and interface alike. Built along one made-up example house that grows chapter by chapter; screenshots only from a throw-away instance filled from a data set in the repository. The pages are maintained under `docs/` and published to the wiki from there (a workflow on merge, or the owner by hand); no agent writes to the wiki repository. Preparation that the H blocks carry now: the translation structure and the parity check are not pinned to two languages, and options name their preconditions in the user interface (F7) so that the wiki reuses those texts. The block file with the page structure and the example house is written before the start | M1 and a stable state: installation through HACS and set-up through the user interface work; before the first public release | planned |
 
 ## After M1 — listed only
 
@@ -90,7 +90,7 @@ Files are written after D00, S1 and S2 are approved. IDs and cuts may still chan
 | H14 | Wall buttons | F5 | S3, C07, H07, H12 |
 | H15 | Command verification: detects that an actuator did not react, never that a curtain arrived; deadline from the report delay | N1 | C06, H03 |
 | H16 | Wiring: sleep mode, privacy, frost source and frost waiver; brings the forms for all frost settings | A9, F2, A12 | C11, H06 |
-| R01 | Release audit (quality scale checklist, translation parity, documentation consistency, HACS) | G7, G8 | all |
+| R01 | Release audit (quality scale checklist, translation parity, documentation consistency, HACS). Publishing the wiki is a step of the release checklist (the state of `main` at the tag goes to the wiki, the version lines of the pages updated). Open question to decide there, not now: whether several versions of the manual must stay visible side by side, which the GitHub wiki cannot do; GitHub Pages with versioned states would be the alternative | G7, G8 | all, W01 |
 
 Milestones after M1: **M2** protection and manual override armed on the pilot window (C06, C07, C12, H05–H08, H10, H15) · **M3** window interaction and shading (C08–C11, H09, H11, H16) · **M4** capabilities, roof windows, buttons, release (H12–H14, R01).
 

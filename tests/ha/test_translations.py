@@ -1,6 +1,6 @@
-"""Every string a user sees has a translation key, in English and in German.
+"""Every string a user sees has a translation key, in every language of the sources.
 
-The key parity of the three generated files, and that they are current, is
+The key parity of the generated files, and that they are current, is
 checked in ``tests/scripts/test_build_translations.py``, which also runs where
 Home Assistant does not. Here the forms themselves are asked what they show.
 """
@@ -46,6 +46,7 @@ INTEGRATION_DIR = (
     Path(__file__).parents[2] / "custom_components" / "roller_shutter_suite"
 )
 FILES = [name for names in build_translations.languages().values() for name in names]
+"""Every generated file: ``strings.json`` and one file per language of the sources."""
 FLOWS = {
     Level.GLOBAL: ("config",),
     Level.GROUP: ("config_subentries", "group"),

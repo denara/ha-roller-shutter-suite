@@ -66,6 +66,12 @@ from homeassistant.helpers.event import (
     async_track_time_interval,
 )
 
+from .actuator import (
+    CoverActuator,
+    MemberActuator,
+    WindowActuator,
+    fire_passed_failed_dry_run,
+)
 from .capabilities import member_config
 from .const import (
     COALESCE_SECONDS,
@@ -78,12 +84,12 @@ from .core.arbiter import member_expectation_end
 from .core.engine import Engine, build_arbiter
 from .core.model import (
     AnySourceValue,
+    CommandResult,
     Controls,
     Decision,
     EvaluationFault,
     FunctionId,
     GateKind,
-    GateRule,
     MemberCommand,
     OwnCommand,
     Position,
@@ -92,10 +98,9 @@ from .core.model import (
     WindowConfig,
     WindowObservation,
     WindowState,
-    WishClass,
     WorldSnapshot,
 )
-from .core.ports import Actuator, Clock, Storage, Sun
+from .core.ports import Clock, Storage, Sun
 from .core.schedule import (
     ScheduleInputMissingError,
     ScheduleResult,
@@ -188,7 +193,7 @@ class WindowController:
         clock: Clock,
         sun: Sun,
         storage: Storage,
-        actuator: Actuator,
+        actuator: CoverActuator,
         controls: Callable[[], Controls],
         engine: Engine | None = None,
     ) -> None:
@@ -200,7 +205,9 @@ class WindowController:
         self.clock = clock
         self.sun = sun
         self.storage = storage
-        self.actuator = actuator
+        self.hub = actuator
+        self.actuator: MemberActuator | None = None
+        """The actuator port of this window, bound while the controller runs."""
         self.controls = controls
         self.engine = Engine(config, build_arbiter()) if engine is None else engine
         self.state = WindowState()
@@ -216,6 +223,7 @@ class WindowController:
         self._loaded = False
         self._last_wake_up: datetime | None = None
         self._woken = False
+        self._binding: WindowActuator | None = None
         self._debouncer = Debouncer(
             hass,
             _LOGGER,
@@ -237,6 +245,16 @@ class WindowController:
     def async_start(self) -> None:
         """Load the state, listen to the entities of the window, start the tick."""
         self._load_state()
+        # Bound after the state is loaded: results that arrived while the
+        # window had no controller are handed over at once.
+        self._binding = self.hub.bind(
+            self.window_id,
+            title=self.title,
+            controls=self.controls,
+            gap=self.config.stagger_gap,
+            on_result=self._on_command_result,
+        )
+        self.actuator = self._binding
         self._started_at = self.clock.now()
         entity_ids = [member.member_id for member in self.config.members]
         entity_ids.extend(
@@ -264,6 +282,10 @@ class WindowController:
         self._subscriptions.clear()
         self._cancel_wake_up()
         self._debouncer.async_shutdown()
+        if self._binding is not None:
+            self._binding.release()
+            self._binding = None
+        self.actuator = None
         if self._loaded:
             # Never write a fresh state over a stored one that was not read.
             self.storage.save_window_state(self.window_id, self.state.to_data())
@@ -364,7 +386,8 @@ class WindowController:
 
         A read-only hook for the status entities and the reason events: the
         signal carries nothing, the readers read ``status`` themselves. It is
-        sent after every recompute and when the phase changes.
+        sent after every recompute, after a command result has been recorded,
+        and when the phase changes.
         """
         async_dispatcher_send(self.hass, status_signal(self.window_id))
 
@@ -512,10 +535,10 @@ class WindowController:
         later member, the commands that were given stay recorded and are not
         sent a second time by the next recompute.
         """
-        targets = _targets_to_send(snapshot, decision)
-        if not targets:
+        targets = _targets_to_send(self.config, snapshot, decision)
+        if not targets or self.actuator is None:
             return ()
-        if snapshot.controls.dry_run and not _fire_passed_failed_dry_run(decision):
+        if snapshot.controls.dry_run and not fire_passed_failed_dry_run(decision):
             _LOGGER.error(
                 "Window %s is in dry-run and its decision reached the actuator; "
                 "nothing is sent",
@@ -525,7 +548,7 @@ class WindowController:
         command_ids: dict[str, str] = {}
         for member_id, position in targets:
             command_id = uuid4().hex
-            self.actuator.move_to(command_id, member_id, position)
+            self.actuator.move_to(command_id, member_id, position, decision=decision)
             command_ids[member_id] = command_id
             self._store(Engine.state_after_send(snapshot, decision, command_ids))
         return tuple(
@@ -533,6 +556,47 @@ class WindowController:
             for member in self.state.members
             if member.member_id in command_ids and member.last_own_command is not None
         )
+
+    @callback
+    def _on_command_result(self, result: CommandResult) -> None:
+        """Record what the actuator reported: the context ID, or ``command_failed``.
+
+        The core writes it into the member's last own command
+        (``Engine.on_command_result``) and ignores a late result of an older
+        command. An accepted command's time moves to the instant of the call,
+        so its expectation window starts there; the wake-up at the end of
+        that window is armed again from ``member_expectation_end``, the one
+        deadline source. Nothing is retried here; a failed command stays
+        pending until its expectation window has closed, and "target
+        reached" does not count it.
+        """
+        state = Engine.on_command_result(self.state, result)
+        if state is self.state:
+            return
+        self._store(state)
+        wake_up = self.status.wake_up
+        now = self.clock.now()
+        if self.active and self.status.decision is not None:
+            candidate = _next_wake_up(
+                self.status.decision, self.status.schedule, self._expectation_ends(now)
+            )
+            # A time of the last decision that has passed meanwhile is left
+            # to the timer that is armed; nothing is re-armed for it.
+            if candidate is not None and candidate.at > now:
+                wake_up = self._schedule_wake_up(candidate, now)
+        commands = {m.member_id: m.last_own_command for m in state.members}
+        self.status = replace(
+            self.status,
+            wake_up=wake_up,
+            commands=tuple(
+                MemberCommand(item.member_id, command)
+                if (command := commands.get(item.member_id)) is not None
+                and command.command_id == item.command.command_id
+                else item
+                for item in self.status.commands
+            ),
+        )
+        self._publish_status()
 
     def _expectation_ends(self, now: datetime) -> tuple[datetime, ...]:
         """Return the ends of the expectation windows that still lie ahead.
@@ -608,28 +672,21 @@ class WindowController:
         self._logged_faults = current
 
 
-def _fire_passed_failed_dry_run(decision: Decision) -> bool:
-    """Say whether a fire wish was sent because the dry-run rule itself raised.
-
-    The project owner decided that an escape route that stays closed in a
-    fire is the greater evil; the second dry-run check follows that ruling.
-    """
-    return (
-        decision.winning_wish is not None
-        and decision.winning_wish.wish_class is WishClass.FIRE
-        and any(fault.place is GateRule.DRY_RUN for fault in decision.faults)
-    )
-
-
 def _targets_to_send(
-    snapshot: WorldSnapshot, decision: Decision
+    config: WindowConfig, snapshot: WorldSnapshot, decision: Decision
 ) -> tuple[tuple[str, Position], ...]:
     """Return the member targets of a "send" outcome; none for any other outcome.
 
-    Only members that are available are commanded (section 9 of the
-    specification: the others are commanded, the unavailable one is not).
-    A member that is away gets no command and therefore no record; the core
-    leaves a member without a command identifier alone.
+    A send commands only the members that are available (section 9 of the
+    specification: the others are commanded, the unavailable one is not)
+    and that do not stand at their target within their tolerance. A member
+    that reports no position cannot be judged and is commanded. A member
+    that is not commanded gets no record; the core leaves a member without a
+    command identifier alone. The duplicate part of the gate rule "movement
+    in flight" judges the same members, so a member that already stands
+    where it should does not make a pending command look like a new one.
+    Until the core names the commanded members itself (block C06), this
+    filter lives here.
     """
     if (
         decision.gate is None
@@ -637,16 +694,29 @@ def _targets_to_send(
         or decision.winning_wish is None
     ):
         return ()
-    available = {
-        member.member_id
+    reported = {
+        member.member_id: member.observation.position
         for member in snapshot.observation.members
         if member.observation.available
+    }
+    tolerances = {
+        member.member_id: member.capabilities.tolerance for member in config.members
     }
     return tuple(
         (target.member_id, target.position)
         for target in decision.targets
-        if target.position is not None and target.member_id in available
+        if target.position is not None
+        and target.member_id in reported
+        and not _stands_at(
+            reported[target.member_id],
+            target.position,
+            tolerances.get(target.member_id, 0),
+        )
     )
+
+
+def _stands_at(position: Position | None, target: Position, tolerance: int) -> bool:
+    return position is not None and abs(position.value - target.value) <= tolerance
 
 
 def _next_wake_up(

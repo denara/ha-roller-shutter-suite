@@ -34,6 +34,7 @@ A block is done when all of this holds:
 - the required tests exist and pass; the whole test suite passes with warnings treated as errors;
 - `ruff check`, `ruff format --check` and `mypy` pass (from block T01 on), and the CI workflows pass (from block T03 on);
 - the public documentation named in the block is written: plain language, worked examples, no knowledge assumed beyond operating Home Assistant;
+- from block W01 on: if the block changes anything a user can see (a new option, a changed behavior, a new precondition, a new message), the pages of the user manual under `docs/wiki/` that it concerns are brought up to date in both languages, in the same pull request or in a named follow-up pull request before the release; until W01 exists, the user documentation under `docs/` takes that role;
 - `TASKS.md` is **not** edited by you; the orchestrator keeps the status.
 
 ## Git workflow

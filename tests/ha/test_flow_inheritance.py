@@ -43,6 +43,7 @@ from custom_components.roller_shutter_suite.flow.model import (
 from tests.ha.helpers import (
     DAY_TYPES,
     GENERAL_INHERIT,
+    MOVEMENT_INHERIT,
     NO_STOP,
     SWITCHES_INHERIT,
     add_group,
@@ -652,7 +653,10 @@ async def test_only_features_that_are_switched_on_get_their_pages(
 
     # Switched off by the group itself: the flow ends after the switches.
     result = await run_subentry_flow(
-        hass, entry, SUBENTRY_GROUP, [{"name": "North"}, {"schedule_enabled": "off"}]
+        hass,
+        entry,
+        SUBENTRY_GROUP,
+        [{"name": "North"}, {"schedule_enabled": "off"}, MOVEMENT_INHERIT],
     )
     assert result["type"] is FlowResultType.CREATE_ENTRY
     group_id = next(iter(entry.subentries))
@@ -668,6 +672,7 @@ async def test_only_features_that_are_switched_on_get_their_pages(
         [
             {"name": "Kitchen", "covers": [COVER], "group_id": group_id},
             {"schedule_enabled": "inherit_off"},
+            MOVEMENT_INHERIT,
         ],
     )
     assert result["type"] is FlowResultType.CREATE_ENTRY
@@ -703,7 +708,11 @@ async def test_values_of_pages_that_are_not_shown_stay_stored(
         hass,
         entry,
         SUBENTRY_WINDOW,
-        [{"name": "Kitchen", "covers": [COVER]}, {"schedule_enabled": "off"}],
+        [
+            {"name": "Kitchen", "covers": [COVER]},
+            {"schedule_enabled": "off"},
+            MOVEMENT_INHERIT,
+        ],
         reconfigure=window.subentry_id,
     )
 
@@ -756,7 +765,11 @@ async def test_option_the_covers_cannot_do_is_replaced_by_a_read_only_reason(
     entry = await _house(hass)
     # The own value was stored while the cover could still stop.
     window = await add_window(
-        hass, entry, "Kitchen", [COVER], *routine_inherit({"example_hold": "on"})
+        hass,
+        entry,
+        "Kitchen",
+        [COVER],
+        *routine_inherit({"example_hold": "on"}),
     )
 
     result = await run_subentry_flow(

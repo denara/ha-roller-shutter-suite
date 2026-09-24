@@ -20,6 +20,7 @@ from custom_components.roller_shutter_suite.stored import level_settings
 from tests.ha.helpers import (
     DAY_HOUSE,
     GENERAL_HOUSE,
+    MOVEMENT_HOUSE,
     ROUTINE_HOUSE,
     SWITCHES_HOUSE,
     marker_of,
@@ -81,6 +82,7 @@ async def test_user_flow_creates_entry_that_sets_up(hass: HomeAssistant) -> None
         "feature_daily_routine_workday",
         "feature_daily_routine_weekend",
         "feature_daily_routine_holiday",
+        "feature_movement_general",
     ]
     assert result["type"] is FlowResultType.CREATE_ENTRY
     assert result["title"] == ENTRY_TITLE
@@ -113,7 +115,9 @@ async def test_house_is_changed_through_reconfigure(hass: HomeAssistant) -> None
         "schedule_evening_position": 0.0,
     }
     result = await _submit(
-        hass, result, [SWITCHES_HOUSE, general, DAY_HOUSE, DAY_HOUSE, DAY_HOUSE]
+        hass,
+        result,
+        [SWITCHES_HOUSE, general, DAY_HOUSE, DAY_HOUSE, DAY_HOUSE, MOVEMENT_HOUSE],
     )
 
     assert result["type"] is FlowResultType.ABORT
@@ -135,14 +139,23 @@ async def test_house_is_changed_through_reconfigure(hass: HomeAssistant) -> None
 async def test_daily_routine_switched_off_for_the_house_has_no_pages(
     hass: HomeAssistant,
 ) -> None:
-    """Only the features that are switched on get their pages."""
+    """Only the features that are switched on get their pages; movement has no switch."""
     entry = await setup_entry(hass)
 
     result = await entry.start_reconfigure_flow(hass)
     result = await _submit(hass, result, [{"schedule_enabled": False}])
+    assert result["step_id"] == "feature_movement_general"
+    result = await _submit(hass, result, [MOVEMENT_HOUSE])
 
     assert result["reason"] == "reconfigure_successful"
-    assert entry.data[CONF_SETTINGS] == {"schedule_enabled": False}
+    settings = entry.data[CONF_SETTINGS]
+    assert settings == {
+        "schedule_enabled": False,
+        "motor_min_change": 5,
+        "motor_min_interval": 600,
+        "stagger_gap": 2,
+        "reevaluate_after": 300,
+    }
 
 
 async def test_integration_has_no_options_flow(hass: HomeAssistant) -> None:

@@ -1623,6 +1623,24 @@ WINDOW_SETTINGS: Final = SettingsRegistry(
             fault_value=timedelta(minutes=5),
             parse=as_duration,
         ),
+        # Staggering between motors (E13) spares the motors and the supply of
+        # a house from starting all at once: it protects hardware and restricts
+        # movement, so it belongs to motor protection and falls back on a
+        # fault. The gap is the time reserved after each motor of the window,
+        # also between its own members; zero switches staggering off for the
+        # motors of this window.
+        SettingDefinition(
+            key="stagger_gap",
+            kind=SettingKind.DURATION,
+            function=FunctionId.MOTOR_PROTECTION,
+            default=timedelta(seconds=2),
+            # The default, stated on purpose. Staggering applies to protection
+            # movements too (never to fire), and a longer gap would delay them
+            # more than the approved default: a fault on its own never
+            # restricts a protection wish more than the default does.
+            fault_value=timedelta(seconds=2),
+            parse=as_duration,
+        ),
         *_schedule_settings(),
         *_shading_geometry_settings(),
     )

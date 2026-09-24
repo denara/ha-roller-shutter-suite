@@ -13,6 +13,16 @@ import json
 from typing import Any
 
 import pytest
+from homeassistant.components.diagnostics import REDACTED
+from homeassistant.const import (
+    CONF_ACCESS_TOKEN,
+    CONF_API_KEY,
+    CONF_ELEVATION,
+    CONF_LATITUDE,
+    CONF_LONGITUDE,
+    CONF_PASSWORD,
+    CONF_TOKEN,
+)
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.integration_platform import (
@@ -40,7 +50,6 @@ from custom_components.roller_shutter_suite.core.model import (
     WorldSnapshot,
 )
 from custom_components.roller_shutter_suite.core.reasons import ReasonCode
-from custom_components.roller_shutter_suite.diagnostics import REDACTED
 from tests.ha.helpers import set_cover, setup_entry
 from tests.ha.runtime_kit import (
     COVER,
@@ -184,10 +193,10 @@ async def test_diagnostics_of_a_device_show_its_window(
 
 
 @pytest.mark.parametrize("dry_run", [False, True])
-async def test_names_and_entity_ids_are_redacted(
+async def test_names_and_entity_ids_stay_in_the_download(
     hass: HomeAssistant, freezer: Any, dry_run: bool
 ) -> None:
-    """Nothing in the download names a room, a cover or another entity."""
+    """A bug report is matched with the installation by its IDs and names."""
     set_cover(hass, COVER, position=50)
     entry = await setup_window(
         hass,
@@ -198,16 +207,54 @@ async def test_names_and_entity_ids_are_redacted(
         covers_present=False,
         freezer=freezer,
     )
-    # A text that an entity reports can name anything; it is not shown.
     hass.states.async_set("binary_sensor.example_workday", "example text")
     await settle(hass, freezer)
 
+    diagnostics = await get_diagnostics_for_config_entry(hass, entry)
+    (window,) = diagnostics["windows"]
+    assert window["name"] == "Example window"
+    assert [m["member_id"] for m in window["configuration"]["members"]] == [COVER]
+    settings = {item["key"]: item for item in window["configuration"]["settings"]}
+    assert settings["schedule_workday_source"]["effective"] == (
+        "binary_sensor.example_workday"
+    )
+    (source,) = window["status"]["sources"]
+    assert source["entity_id"] == "binary_sensor.example_workday"
+    assert source["value"] == "example text"
+    commands = window["status"]["commands"]
+    if dry_run:
+        # A simulated command names its member in its identifier; it stays.
+        assert commands == []
+        (simulated,) = window["persisted_state"]["simulated"]["commands"]
+        assert simulated["member_id"] == COVER
+        assert simulated["command"]["command_id"].startswith(f"dry-run:{COVER}:")
+    assert REDACTED not in json.dumps(diagnostics)
+
+
+def test_coordinates_elevation_and_secrets_are_the_keys_that_are_redacted() -> None:
+    """Home Assistant's convention: location and secrets, never IDs or names."""
+    expected = {
+        CONF_LATITUDE,
+        CONF_LONGITUDE,
+        CONF_ELEVATION,
+        CONF_PASSWORD,
+        CONF_TOKEN,
+        CONF_ACCESS_TOKEN,
+        CONF_API_KEY,
+    }
+    assert set(platform.TO_REDACT) == expected
+
+
+async def test_the_location_of_the_installation_is_never_written_out(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The sun is computed from the location; the download does not carry it."""
+    entry = await setup_window(hass, freezer=freezer)
+
     text = json.dumps(await get_diagnostics_for_config_entry(hass, entry))
-    assert "example_window" not in text
-    assert "example_workday" not in text
-    assert "Example window" not in text
-    assert "example text" not in text
-    assert REDACTED in text
+    # The test instance has the made-up location of the test framework.
+    assert str(hass.config.latitude) not in text
+    assert str(hass.config.longitude) not in text
 
 
 async def test_a_fault_is_shown_by_stage_and_code_never_by_its_exception(

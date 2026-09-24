@@ -32,7 +32,7 @@
       "level_unreadable": "The stored settings cannot be read as a whole.",
       "other": "Something is wrong with the stored setting \"{key}\" that this version of the integration cannot describe more precisely."
     },
-    "fault_consequence": "Functions that protect people or hardware or that restrict movement keep running with the value of the next level. Comfort functions that depend on a faulty value pause for the windows concerned, so that no shutter moves unexpectedly.",
+    "fault_consequence": "Functions that protect people or hardware or that restrict movement keep running. They use the value of the next level; where no level sets one, they use a cautious value, which may restrict movements more than usual until the setting is repaired. Comfort functions that depend on a faulty value pause for the windows concerned, so that no shutter moves unexpectedly.",
     "fault_repairs": {
       "global": "To repair this, open the integration, choose \"Reconfigure\" and save the values of the house.",
       "group": "To repair this, open the group, check its values and save it, or remove the group.",

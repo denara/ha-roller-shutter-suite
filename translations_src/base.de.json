@@ -32,7 +32,7 @@
       "level_unreadable": "Die gespeicherten Einstellungen können insgesamt nicht gelesen werden.",
       "other": "Mit der gespeicherten Einstellung „{key}“ stimmt etwas nicht, das diese Version der Integration nicht genauer beschreiben kann."
     },
-    "fault_consequence": "Funktionen, die Menschen oder Technik schützen oder Bewegungen einschränken, laufen mit dem Wert der nächsten Ebene weiter. Komfortfunktionen, die von einem fehlerhaften Wert abhängen, pausieren für die betroffenen Fenster, damit sich kein Rollladen unerwartet bewegt.",
+    "fault_consequence": "Funktionen, die Menschen oder Technik schützen oder Bewegungen einschränken, laufen weiter. Sie verwenden den Wert der nächsten Ebene; wo keine Ebene einen setzt, verwenden sie einen vorsichtigen Wert, der Bewegungen bis zur Reparatur stärker einschränken kann als gewohnt. Komfortfunktionen, die von einem fehlerhaften Wert abhängen, pausieren für die betroffenen Fenster, damit sich kein Rollladen unerwartet bewegt.",
     "fault_repairs": {
       "global": "Zum Beheben: Öffne die Integration, wähle „Neu konfigurieren“ und speichere die Werte des Hauses.",
       "group": "Zum Beheben: Öffne die Gruppe, prüfe ihre Werte und speichere sie, oder entferne die Gruppe.",

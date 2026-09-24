@@ -45,6 +45,7 @@ traceback, which may name a local path.
 
 import importlib
 import json
+import os
 import sys
 from collections.abc import Callable
 from importlib.machinery import ModuleSpec
@@ -58,19 +59,22 @@ INTEGRATION = ROOT / "custom_components" / "roller_shutter_suite"
 SOURCES = ROOT / "translations_src"
 PACKAGE = "custom_components.roller_shutter_suite"
 
-# The language of ``strings.json``, which every other language is compared with.
+# The language of `strings.json`; every other language is compared with it.
 SOURCE_LANGUAGE = "en"
 
 
 def languages() -> dict[str, tuple[str, ...]]:
-    """Return every language that has a base file, with the files it is written to.
+    """Return every language that has a base source, with the files it writes.
 
-    English comes first; the others follow in the order of their codes. The
-    folder is listed with ``iterdir``, which raises for a folder that cannot be
-    read instead of passing over it.
+    A language is there when ``translations_src/base.<language>.json`` is:
+    a new language is added with that file and one fragment per feature, and
+    nothing here changes. The source language comes first and also writes
+    ``strings.json``. A folder of sources that cannot be listed is a
+    ``SourceError``, never "no languages".
     """
     try:
-        names = [path.name for path in SOURCES.iterdir()]
+        with os.scandir(SOURCES) as entries:
+            names = [entry.name for entry in entries]
     except OSError as error:
         raise SourceError(
             f"translations_src cannot be listed ({type(error).__name__})"
@@ -81,15 +85,12 @@ def languages() -> dict[str, tuple[str, ...]]:
         if name.startswith("base.") and name.endswith(".json")
     )
     if SOURCE_LANGUAGE not in found:
-        raise SourceError(f"base.{SOURCE_LANGUAGE}.json is missing")
-    ordered = sorted(found, key=lambda language: language != SOURCE_LANGUAGE)
+        raise SourceError(f"translations_src/base.{SOURCE_LANGUAGE}.json is missing")
+    ordered = [SOURCE_LANGUAGE, *(code for code in found if code != SOURCE_LANGUAGE)]
     return {
-        language: (
-            ("strings.json", f"translations/{language}.json")
-            if language == SOURCE_LANGUAGE
-            else (f"translations/{language}.json",)
-        )
-        for language in ordered
+        code: (("strings.json",) if code == SOURCE_LANGUAGE else ())
+        + (f"translations/{code}.json",)
+        for code in ordered
     }
 
 
@@ -426,9 +427,9 @@ def main(arguments: list[str] | None = None) -> int:
                     "run `uv run python scripts/build_translations.py` and commit\n"
                 )
                 return 1
+            compared = sum(map(len, languages().values()))
             sys.stdout.write(
-                f"translations: ok; compared {sum(map(len, languages().values()))} "
-                "generated file(s)\n"
+                f"translations: ok; compared {compared} generated file(s)\n"
             )
             return 0
         catalog = load_catalog()

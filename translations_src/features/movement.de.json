@@ -1,0 +1,26 @@
+{
+  "steps": {
+    "general": {
+      "title": "Bewegung",
+      "description": "Wie die Integration die Motoren schont: Sie lässt Bewegungen aus, die sich nicht lohnen, wartet zwischen zwei Komfortbewegungen und startet bei einer gemeinsamen Bewegung nicht alle Motoren im selben Augenblick. Die Mindeständerung und der Mindestabstand halten Schutzbewegungen nie zurück, und einen Feueralarm hält keine dieser Einstellungen zurück."
+    }
+  },
+  "fields": {
+    "motor_min_change": {
+      "label": "Mindeständerung",
+      "description": "Eine Komfortbewegung, die kleiner ist, wird ausgelassen. 0 schaltet das ab. Ganz auf oder ganz zu fährt ein Rollladen trotzdem, auch wenn der Rest klein ist. Beurteilen lässt sich das nur bei Rollläden, die ihre Position melden; ein Rollladen, der keine meldet, wird immer bewegt."
+    },
+    "motor_min_interval": {
+      "label": "Mindestabstand",
+      "description": "Die kürzeste Zeit zwischen zwei Komfortbewegungen des Fensters, gegen Hin und Her, während die Beschattung der Sonne folgt. 0 schaltet das ab. Etwas Neues, etwa der Morgen oder der Abend, eingeschalteter Schlafmodus oder der Beginn der Beschattung, bewegt trotzdem sofort."
+    },
+    "stagger_gap": {
+      "label": "Abstand zwischen Motoren",
+      "description": "Wenn viele Rollläden zugleich fahren, starten ihre Motoren nacheinander. Dieser Abstand in Sekunden wird nach jedem Motor dieses Fensters freigehalten: Der nächste Motor, dieses oder eines anderen Fensters, startet, wenn er vergangen ist. Der Wert 0 schaltet die Staffelung für dieses Fenster ab; seine Rollläden starten gemeinsam, wenn es an der Reihe ist. Ein Feueralarm wird nie gestaffelt. Der Abstand zwischen den Rollläden eines Fensters zählt nur bei einem Fenster mit mehreren Rollläden."
+    },
+    "reevaluate_after": {
+      "label": "Spätestens erneut prüfen nach",
+      "description": "Wartet eine Bewegung auf etwas, dessen Ende niemand kennt, zum Beispiel darauf, dass ein Rollladen wieder erreichbar ist, wird das Fenster spätestens nach dieser Zeit erneut geprüft."
+    }
+  }
+}

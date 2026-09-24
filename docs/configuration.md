@@ -2,7 +2,7 @@
 
 This page shows how to set up Roller Shutter Suite, how to add groups and windows, how to change and remove them, and how values that are inherited look in the forms. Everything happens in the user interface of Home Assistant. Nothing needs a restart.
 
-**Status.** The integration is in development. The forms described here exist and store what you enter, but the integration does not move any shutter yet. At present the forms hold the settings of [the daily routine](features/daily-routine.md); that page explains what each of them means. More settings arrive with the features they belong to, and they will look and behave exactly as described here.
+**Status.** The integration is in development. The forms described here exist and store what you enter, but the integration does not move any shutter yet: every window is in [dry-run](features/dry-run.md), and it cannot be armed yet. At present the forms hold the settings of [the daily routine](features/daily-routine.md) and of [movement](features/movement.md); those pages explain what each of them means. More settings arrive with the features they belong to, and they will look and behave exactly as described here.
 
 If you have not read [Concepts](concepts.md) yet: settings live on three levels, the **house**, a **group** and a **window**. A window states only what is different about it. Everything else comes from its group, and what the group does not set comes from the house.
 

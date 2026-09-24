@@ -15,7 +15,7 @@
           'group_missing': False,
           'member_settings': list([
             dict({
-              'member_id': '**REDACTED**',
+              'member_id': 'cover.example_window',
               'settings': list([
                 dict({
                   'capability': None,
@@ -76,7 +76,7 @@
                 'travel_time_down': 60.0,
                 'travel_time_up': 60.0,
               }),
-              'member_id': '**REDACTED**',
+              'member_id': 'cover.example_window',
             }),
           ]),
           'settings': list([
@@ -211,6 +211,16 @@
               'level': 'built_in',
               'unavailable': None,
               'value': 300.0,
+            }),
+            dict({
+              'capability': None,
+              'cautious': False,
+              'effective': 0.0,
+              'group_id': None,
+              'key': 'stagger_gap',
+              'level': 'global',
+              'unavailable': None,
+              'value': 0.0,
             }),
             dict({
               'capability': None,
@@ -615,12 +625,12 @@
             dict({
               'capability': None,
               'cautious': False,
-              'effective': '**REDACTED**',
+              'effective': 'binary_sensor.example_workday',
               'group_id': None,
               'key': 'schedule_workday_source',
               'level': 'window',
               'unavailable': None,
-              'value': '**REDACTED**',
+              'value': 'binary_sensor.example_workday',
             }),
             dict({
               'capability': None,
@@ -877,7 +887,7 @@
           ]),
         }),
         'dry_run': True,
-        'name': '**REDACTED**',
+        'name': 'Example window',
         'not_controlled': None,
         'persisted_state': dict({
           'brightness_below_since': None,
@@ -908,15 +918,16 @@
             'commands': list([
               dict({
                 'command': dict({
-                  'command_id': '**REDACTED**',
+                  'command_id': 'dry-run:cover.example_window:2026-09-21T10:00:01.500000+02:00',
                   'context_id': None,
                   'direction': 'up',
+                  'failed': False,
                   'reason': 'schedule_day',
                   'target': 100,
                   'time': '2026-09-21T08:00:01.500000+00:00',
                   'wish_class': 'comfort',
                 }),
-                'member_id': '**REDACTED**',
+                'member_id': 'cover.example_window',
               }),
             ]),
             'last_comfort_movement': '2026-09-21T08:00:01.500000+00:00',
@@ -939,7 +950,7 @@
             'layer': 'schedule',
             'member_targets': list([
               dict({
-                'member_id': '**REDACTED**',
+                'member_id': 'cover.example_window',
                 'position': 100,
               }),
             ]),
@@ -999,7 +1010,7 @@
             'layer': 'schedule',
             'member_targets': list([
               dict({
-                'member_id': '**REDACTED**',
+                'member_id': 'cover.example_window',
                 'position': 100,
               }),
             ]),
@@ -1046,7 +1057,7 @@
           'last_recompute': '2026-09-21T10:00:01.500000+02:00',
           'observation': list([
             dict({
-              'member_id': '**REDACTED**',
+              'member_id': 'cover.example_window',
               'observation': dict({
                 'position': 50,
                 'state': 'resting',
@@ -1078,7 +1089,7 @@
           'sources': list([
             dict({
               'attribute': None,
-              'entity_id': '**REDACTED**',
+              'entity_id': 'binary_sensor.example_workday',
               'seen_unchanged_since': '2026-09-21T08:00:01.500000+00:00',
               'state': 'unavailable',
               'value': None,

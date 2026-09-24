@@ -48,7 +48,10 @@ def test_loading_the_catalog_leaves_no_stand_in_behind() -> None:
 
     catalog = build_translations.load_catalog()
 
-    assert [feature.feature_id for feature in catalog.features] == ["daily_routine"]
+    assert [feature.feature_id for feature in catalog.features] == [
+        "daily_routine",
+        "movement",
+    ]
     assert (build_translations.PACKAGE in sys.modules) is before
 
 
@@ -85,7 +88,7 @@ def test_the_languages_are_the_base_files_that_exist() -> None:
     assert found["de"] == ("translations/de.json",)
 
 
-def test_a_language_is_added_by_adding_its_fragments(
+def test_a_language_added_by_its_fragments_is_written_and_checked(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A third language needs its base file and its feature fragments, nothing else."""
@@ -122,14 +125,56 @@ def test_reason_codes_become_the_states_of_the_reason_sensor() -> None:
         assert sensors["next_action"]["state_attributes"]["reason"]["state"] == states
 
 
+def test_a_language_is_added_by_adding_its_sources_only(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A base file and one fragment per feature; nothing in the script changes."""
+    sources = build_translations.SOURCES
+    (tmp_path / "features").mkdir()
+    for path in [*sources.glob("*.json"), *sources.glob("features/*.json")]:
+        target = tmp_path / path.relative_to(sources)
+        target.write_text(path.read_text(encoding="utf-8"), encoding="utf-8")
+    for path in [tmp_path / "base.de.json", *tmp_path.glob("features/*.de.json")]:
+        path.with_name(path.name.replace(".de.", ".xx.")).write_text(
+            path.read_text(encoding="utf-8"), encoding="utf-8"
+        )
+    monkeypatch.setattr(build_translations, "SOURCES", tmp_path)
+
+    found = build_translations.languages()
+
+    assert found["xx"] == ("translations/xx.json",)
+    assert found["en"] == ("strings.json", "translations/en.json")
+    assert build_translations.build("xx") == build_translations.build("de")
+
+
+def test_a_language_without_a_fragment_of_a_feature_cannot_be_checked(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A missing fragment is never skipped silently."""
+    sources = build_translations.SOURCES
+    (tmp_path / "features").mkdir()
+    for path in [*sources.glob("*.json"), *sources.glob("features/*.json")]:
+        target = tmp_path / path.relative_to(sources)
+        target.write_text(path.read_text(encoding="utf-8"), encoding="utf-8")
+    (tmp_path / "base.xx.json").write_text(
+        (tmp_path / "base.de.json").read_text(encoding="utf-8"), encoding="utf-8"
+    )
+    monkeypatch.setattr(build_translations, "SOURCES", tmp_path)
+    monkeypatch.setattr(build_translations, "ROOT", tmp_path)
+
+    with pytest.raises(build_translations.SourceError, match=r"daily_routine.xx"):
+        build_translations.build("xx")
+
+
 def test_shipped_files_have_the_keys_of_strings_json() -> None:
-    """``strings.json`` and both translations carry exactly the same keys."""
+    """``strings.json`` and every translation carry exactly the same keys."""
     files = [
         _flatten(json.loads((build_translations.INTEGRATION / name).read_text("utf-8")))
         for names in build_translations.languages().values()
         for name in names
     ]
 
+    assert len(files) >= 3  # noqa: PLR2004 - strings.json, English, German
     assert all(sorted(item) == sorted(files[0]) for item in files)
     assert "_templates" not in json.dumps(sorted(files[0]))
 
@@ -138,9 +183,12 @@ def test_sources_live_outside_the_shipped_integration() -> None:
     """Nothing but what Home Assistant needs is shipped."""
     assert build_translations.INTEGRATION not in build_translations.SOURCES.parents
     shipped = {path.name for path in build_translations.INTEGRATION.rglob("*.json")}
-    assert shipped == {"manifest.json", "strings.json", "icons.json"} | {
-        f"{language}.json" for language in build_translations.languages()
+    expected = {
+        Path(name).name
+        for names in build_translations.languages().values()
+        for name in names
     }
+    assert shipped == {"manifest.json", "icons.json", *expected}
 
 
 def test_outdated_file_fails_the_check(

@@ -5,14 +5,20 @@ comes from, the capability profile of every member, the status of its
 controller (phase, sources, schedule, commands, next wake-up), the last
 decisions with the time each was first made, and its persisted state.
 
-**Redaction.** A download is meant to be attached to a bug report, so what
-names the installation is removed with Home Assistant's
-``async_redact_data``: the names of windows and groups (``name``), and every
-entity ID (``member_id``, ``entity_id``, the identifier of a command, which
-names the member for a simulated command in dry-run, and the value of every
-setting that refers to an entity). A source that holds text shows its state but not the
-text. Members appear in the order of the configuration, so the targets and
-observations of the same member stand at the same place in every list.
+**Redaction** follows the convention of Home Assistant: a download is meant
+to be attached to a bug report, and a report can only be matched with the
+installation by its entity IDs and names. They stay: the names of windows and
+groups, the member IDs, the entity IDs of sources and of settings that refer
+to an entity, and the identifier of a simulated command in dry-run, which
+names its member. Removed with Home Assistant's ``async_redact_data`` are the
+coordinates and the elevation of a location (``latitude``, ``longitude``,
+``elevation``) and anything secret-like (``password``, ``token``,
+``access_token``, ``api_key``), by their key wherever they would appear. None
+of them is part of a window today; the list keeps a later addition from
+writing one out. A sun elevation of the schedule is a setting value under its
+own setting key, so it is shown. Members appear in the order of the
+configuration, so the targets and observations of the same member stand at
+the same place in every list.
 
 **Faults of the arbiter** appear with their stage, place, function and
 reason code, never with the exception or its message
@@ -28,6 +34,15 @@ from collections.abc import Mapping
 from typing import Any, Final
 
 from homeassistant.components.diagnostics import async_redact_data
+from homeassistant.const import (
+    CONF_ACCESS_TOKEN,
+    CONF_API_KEY,
+    CONF_ELEVATION,
+    CONF_LATITUDE,
+    CONF_LONGITUDE,
+    CONF_PASSWORD,
+    CONF_TOKEN,
+)
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceEntry
 
@@ -35,15 +50,23 @@ from . import RollerShutterSuiteConfigEntry
 from .const import DOMAIN
 from .controller import SourceReading, WindowController
 from .core.model import SourceState
-from .core.settings import ResolvedValue, SettingKind
+from .core.settings import ResolvedValue
 from .events import WindowHistory, history_of
-from .features import get_catalog
 from .record import decision_attributes, member_targets, plain
 from .sources import SourceReference
 from .windows import WindowRuntime
 
-REDACTED: Final = "**REDACTED**"
-TO_REDACT: Final = frozenset({"name", "member_id", "entity_id", "command_id"})
+TO_REDACT: Final = frozenset(
+    {
+        CONF_LATITUDE,
+        CONF_LONGITUDE,
+        CONF_ELEVATION,
+        CONF_PASSWORD,
+        CONF_TOKEN,
+        CONF_ACCESS_TOKEN,
+        CONF_API_KEY,
+    }
+)
 
 _SCHEDULE_FACTS: Final = (
     "evaluated_at",
@@ -63,14 +86,11 @@ _SCHEDULE_FACTS: Final = (
 )
 
 
-def _setting(item: ResolvedValue[Any], reference: bool) -> dict[str, Any]:
-    def shown(value: object) -> object:
-        return REDACTED if reference and value is not None else plain(value)
-
+def _setting(item: ResolvedValue[Any]) -> dict[str, Any]:
     return {
         "key": item.key,
-        "value": shown(item.value),
-        "effective": shown(item.effective),
+        "value": plain(item.value),
+        "effective": plain(item.effective),
         "level": item.level.value,
         "group_id": item.group_id,
         "cautious": item.cautious,
@@ -82,26 +102,14 @@ def _setting(item: ResolvedValue[Any], reference: bool) -> dict[str, Any]:
 
 
 def _configuration(window: WindowRuntime) -> dict[str, Any]:
-    definitions = get_catalog().definitions
     settings = window.resolution.settings
-
-    def is_reference(key: str) -> bool:
-        definition = definitions.get(key)
-        return (
-            definition is not None and definition.kind is SettingKind.OPTIONAL_REFERENCE
-        )
-
     config = window.resolution.config
     return {
-        "settings": [
-            _setting(item, is_reference(key)) for key, item in settings.values.items()
-        ],
+        "settings": [_setting(item) for item in settings.values.values()],
         "member_settings": [
             {
                 "member_id": member_id,
-                "settings": [
-                    _setting(item, is_reference(key)) for key, item in values.items()
-                ],
+                "settings": [_setting(item) for item in values.values()],
             }
             for member_id, values in settings.member_values.items()
         ],
@@ -136,14 +144,11 @@ def _source(
     reference: SourceReference | None, reading: SourceReading
 ) -> dict[str, Any]:
     value = reading.value
-    shown: object = None
-    if value.state is SourceState.VALUE:
-        shown = REDACTED if isinstance(value.value, str) else plain(value.value)
     return {
         "entity_id": None if reference is None else reference.entity_id,
         "attribute": None if reference is None else reference.attribute,
         "state": value.state.value,
-        "value": shown,
+        "value": plain(value.value) if value.state is SourceState.VALUE else None,
         "seen_unchanged_since": reading.since.isoformat(),
     }
 

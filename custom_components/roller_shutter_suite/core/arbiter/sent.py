@@ -21,6 +21,7 @@ from collections.abc import Mapping
 from dataclasses import replace
 
 from custom_components.roller_shutter_suite.core.model import (
+    CommandResult,
     Decision,
     GateKind,
     MemberState,
@@ -81,3 +82,50 @@ def record_sent_commands(
         owner=PositionOwner.ENGINE,
         last_comfort_movement=clock,
     )
+
+
+def record_command_result(state: WindowState, result: CommandResult) -> WindowState:
+    """Return the state after the actuator reported the result of a command.
+
+    The result is written into the member's last own command, and only if
+    that command has the identifier of the result: a late result of an older
+    command is never attributed to a newer one, and a result for a member
+    without a record changes nothing. It adds the context ID under which the
+    command was executed and, for ``command_failed``, marks the command as
+    failed, so that "target reached" does not count a target the actuator
+    never received.
+
+    For an accepted command whose result names the instant of the call
+    (``called_at``), the time of the command and the time of its attempt
+    move to that instant: a staggered command is called after the hand-over,
+    and its expectation window (``member_expectation_end``, which reads the
+    time of the command) must start when the cover was really commanded.
+    The motor protection clock stays at the hand-over, so motor protection
+    judges exactly as before. A failed command keeps its times, and
+    retrying is not decided here.
+    """
+    changed = False
+    members: list[MemberState] = []
+    for member in state.members:
+        command = member.last_own_command
+        if (
+            member.member_id != result.member_id
+            or command is None
+            or command.command_id != result.command_id
+        ):
+            members.append(member)
+            continue
+        updated = replace(command, context_id=result.context_id, failed=result.failed)
+        attempt_at = member.last_attempt_at
+        if not result.failed and result.called_at is not None:
+            updated = replace(updated, time=result.called_at)
+            if member.command_attempts > 0:
+                attempt_at = result.called_at
+        if updated == command and attempt_at == member.last_attempt_at:
+            members.append(member)
+            continue
+        changed = True
+        members.append(
+            replace(member, last_own_command=updated, last_attempt_at=attempt_at)
+        )
+    return replace(state, members=tuple(members)) if changed else state
