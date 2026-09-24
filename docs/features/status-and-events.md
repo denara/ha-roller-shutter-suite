@@ -2,7 +2,7 @@
 
 Every window explains itself: why it is where it is, where it should be, and what happens next. This page describes the entities that show it, the event the integration fires when it moves a shutter or holds a movement back, the entries in the logbook, and the diagnostics download.
 
-**Status: in development.** The entities, the event and the diagnostics exist. The integration does not send commands to your covers yet: a window that is not in dry-run records the command it would give, and shows it as sent. Manual operation is not detected yet, so the entity "Manual override" is always off.
+**Status: in development.** The entities, the event and the diagnostics exist, and an armed window does send commands to its covers; but no window can be armed in the forms yet, so every window is in dry-run and records the command it would give. Manual operation is not detected yet, so the entity "Manual override" is always off.
 
 ## The entities of a window
 

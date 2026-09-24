@@ -29,7 +29,7 @@ For every decision a window in dry-run records the complete outcome, with its re
 
 The integration also remembers the last command it would have sent, with its target and its reason, and judges the next decision against it as if it had been sent: the minimum interval between two comfort movements, for example, runs from that would-be command. So the record shows the movements the integration would really have made, not one on every change of a sensor.
 
-The status of each window and its diagnostics, which show these records in Home Assistant, arrive with a later version.
+The status of each window and its diagnostics show these records in Home Assistant; [Status and events](status-and-events.md) explains what you see.
 
 ## Arming a window
 
