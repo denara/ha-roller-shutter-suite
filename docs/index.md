@@ -2,10 +2,11 @@
 
 Roller Shutter Suite is a custom integration for Home Assistant that controls roller shutters: daily schedules, sun shading, reactions to open windows and doors, protection during storm, hail or fire, and a manual override that respects the person at the window.
 
-**Status: in development, not usable yet.** The pages below are written together with the features they describe. A page that is not linked does not exist yet.
+**Status: pilot, dry-run only recommended.** Version 0.1.0 decides and records, and moves no shutter: every window is in dry-run and cannot be armed yet. The pages below are written together with the features they describe. A page that is not linked does not exist yet.
 
 ## For users
 
+- [Pilot guide](pilot.md): install the pilot version, add one window in dry-run, compare its decisions with your existing control, and remove everything again
 - Installation: see the [README](../README.md#installation)
 - [Configuration](configuration.md): first set-up, adding, changing and removing groups and windows, and how inherited values look in the forms
 - [Concepts](concepts.md): how settings are inherited from the house to groups to windows, and how the integration decides where a shutter goes, each with worked examples

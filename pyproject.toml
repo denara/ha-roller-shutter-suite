@@ -1,6 +1,6 @@
 [project]
 name = "ha-roller-shutter-suite"
-version = "0.0.1"
+version = "0.1.0"
 description = "Home Assistant custom integration that is the single authority over roller shutters"
 readme = "README.md"
 license = "MIT"

@@ -2,7 +2,7 @@
 
 The daily routine opens your shutters in the morning and closes them in the evening. It is the basis of everything else: whenever nothing more important applies (no storm, no shading, no sleep mode), the daily routine decides where a shutter belongs.
 
-**Status: in development.** This page describes the rules the integration follows. The forms in which you enter the settings are being built; their names may differ slightly from the names used here.
+**Status: pilot.** The forms for these settings exist; [Configuration](../configuration.md) shows them. Every window is in [dry-run](dry-run.md) and cannot be armed yet, so the routine decides and records and moves no shutter.
 
 ## Day and night
 
@@ -86,7 +86,7 @@ School holidays are not part of the first version.
 
 ## A little randomness
 
-With a random offset of, say, 15 minutes, each trigger is moved by a random amount of up to 15 minutes earlier or later. Every window gets its own amount, and a new one every day, so the house does not close like clockwork at exactly the same minute. The amount does not change during the day and survives a restart. The offset is applied before the two limits: a trigger never leaves "not before" and "not after". The default is 0, which switches the randomness off.
+With a random offset of, say, 15 minutes, each trigger is moved by a random amount of up to 15 minutes earlier or later. Every window gets its own amount, and a new one every day, so the house does not close like clockwork at exactly the same minute. The amount does not change during the day. It is meant to survive a restart as well; this version keeps the seed it is drawn from in memory only, so a restart draws new amounts until the state of a window is stored on disk (see the [pilot guide](../pilot.md#7-after-a-restart-of-home-assistant)). The offset is applied before the two limits: a trigger never leaves "not before" and "not after". The default is 0, which switches the randomness off.
 
 ## Summer and winter
 

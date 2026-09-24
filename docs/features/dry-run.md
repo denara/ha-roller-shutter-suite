@@ -17,7 +17,7 @@ Two separate checks see to it. The decision itself ends in "dry-run: would have 
 
 **The one exception.** Suppose the check of dry-run in the decision itself fails with a programming error during a fire alarm. Then the integration cannot tell whether the window is in dry-run, and it opens the shutter: a closed escape route in a fire is the greater danger than a test window that opens once when it should not have. This is the only case in which a window in dry-run moves. It needs a fire alarm and a fault of the integration at the same moment, and the fault is written to the log.
 
-Movements that you or another controller make are still observed in dry-run. They are logged, but they do not count as a manual override: next to another controller that is still active, every one of its movements would otherwise look like a person at the window.
+Movements that you or another controller make are still observed in dry-run. They do not count as a manual override: next to another controller that is still active, every one of its movements would otherwise look like a person at the window. At present such a movement shows in the history and logbook of the cover and in the next decision of the window; a logbook line of the window itself for it arrives with the detection of movements by hand.
 
 ## Comparing its decisions with reality
 
