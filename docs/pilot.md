@@ -6,7 +6,7 @@ This guide takes you from nothing to one window that Roller Shutter Suite watche
 
 - **It works:** the forms for the house, groups and windows; the daily routine (morning and evening, workdays, weekends and public holidays, sunrise and sunset with "not before" and "not after"); the settings of movement; the status entities of every window, the reason event, the logbook entries and the diagnostics download.
 - **It does not exist yet:** shading, storm and hail, the fire alarm, sleep mode, reactions to open windows and doors, the detection of a movement by hand, switches for pause and maintenance, and a way to arm a window. The last one matters most: **in this version no window can be armed at all**, so nothing you do in the forms makes the integration move a shutter.
-- **It does not remember across a restart:** see [After a restart of Home Assistant](#after-a-restart-of-home-assistant).
+- **It does not remember across a restart:** see [After a restart of Home Assistant](#7-after-a-restart-of-home-assistant).
 
 Try it on a test instance of Home Assistant first if you have one. Nothing moves in either case, but a test instance lets you look at every form without any doubt.
 
@@ -24,7 +24,7 @@ These steps follow the HACS documentation on [custom repositories](https://www.h
 2. Select the three dots in the top right corner and choose **Custom repositories**.
 3. Enter `https://github.com/denara/ha-roller-shutter-suite` as the repository, choose **Integration** as the type, and select **Add**.
 4. Search for **Roller Shutter Suite** in HACS and open it.
-5. Select **Download**. In the dialog, choose the version **v0.1.0** and confirm. HACS offers the newest release by default and lets you pick a specific version in the same dialog.
+5. Select **Download**. HACS downloads the newest release by default. To pick a version, open **Need a different version?** in the same dialog, choose **v0.1.0** and confirm.
 6. Restart Home Assistant: HACS marks the repository as "pending restart" until you do.
 
 ## 2. Add the house
@@ -40,7 +40,7 @@ The built-in values are in [The daily routine](features/daily-routine.md#what-ap
 ## 3. Add one window
 
 1. Open the integration and choose **Add window**.
-2. Enter a name, for example "Example window", and choose the cover of the window in **Covers**. Leave **Group** empty; groups are not needed for one window.
+2. Enter a name, for example "Example window", and choose the cover of the window in **Covers**. If a **Group** field is shown, leave it empty; groups are not needed for one window. As long as the house has no group, the form does not show the field at all.
 3. Go through the pages and change only what is different for this window. Save the last page.
 
 Every new window starts in dry-run. The form does not ask for it and cannot change it. Check it: the window's device has a diagnostic entity **Dry-run**, and it must be **on**.
@@ -86,6 +86,8 @@ Movements of your existing control never count as a movement by hand here: the i
 
 Remember the direction rules of the daily routine: the morning only ever raises a shutter and the evening only ever lowers it. A shutter your control closed completely in the afternoon is "already where it should be" at an evening position of 30 %.
 
+**If `target_reached` never appears.** Suppose the reason keeps reading "Dry-run: nothing moves" with `would_send` equal to the position the shutter already stands at, and nothing changes when your control moves it. Then check how your cover reports its position: open **Developer tools** > **States**, select the cover, and look at its attribute `current_position`. This version reads a position only if it is a whole number such as `100`. Some covers, among them the template cover and the cover group of Home Assistant, report a decimal number such as `100.0`; this version cannot read that position and treats the cover as one without position feedback. The diagnostics of the window then show `position: null` for that cover. For the pilot this means that such a window can never show "already where it should be", so the comparison with your control only works through the times of the logbook. It is not a safety matter: the window still moves nothing. Whether a decimal number without a fraction will be read as a position is a decision of the project owner for a later version.
+
 **Diagnostics** help when a decision surprises you: the window's device > the three dots > **Download diagnostics** contains the last ten decisions with their times and every setting with the level it comes from. Read [what the file contains](features/status-and-events.md#diagnostics) before you share it.
 
 ## 6. How long to observe
@@ -123,6 +125,6 @@ What does not change: the decision itself. It is worked out from the present tim
 2. Open **HACS**, open **Roller Shutter Suite**, select the three dots and choose **Remove**. HACS says itself that removing a repository does not remove the related data, which is why step 1 comes first.
 3. Restart Home Assistant.
 
-What the tests of this version prove about step 1: after the integration is deleted, no entity, no device and no repair issue of it is left, and it leaves no storage file behind; this version never writes one. Your cover and its history are not touched: they belong to the cover's own integration.
+What the tests of this version prove about step 1: after the integration is deleted, no entity, no device and no repair issue of it is left, and it leaves no storage file behind; this version never writes one. Home Assistant itself keeps a record of the deleted entities and devices in its own registry files for a while, as it does for every integration that is removed, so that they get their old names back if the integration is added again; that record belongs to Home Assistant, not to Roller Shutter Suite. Your cover and its history are not touched: they belong to the cover's own integration.
 
 Automations of your own that use the reason event or the entities of a window are yours; delete them yourself if you made any.

@@ -20,6 +20,8 @@ The entities update whenever the window is looked at again: when a cover or an e
 
 **When a cover is unavailable**, the entities of its window are unavailable too, and they come back by themselves with the cover; no reload is needed. A window with several covers stays available as long as at least one of them is.
 
+**A cover that reports its position as a decimal number**, such as `100.0` instead of `100`, is treated as a cover without position feedback: this version reads a position only as a whole number. The template cover and the cover group of Home Assistant report it that way. For such a cover the reason never reads "Already at the position it should have", and the diagnostics show `position: null`. The [pilot guide](../pilot.md#5-compare-with-your-existing-control) explains how to check a cover.
+
 ### What the reason tells you
 
 The reason is chosen like this:
