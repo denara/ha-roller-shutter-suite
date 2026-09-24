@@ -16,7 +16,7 @@
     },
     "stagger_gap": {
       "label": "Abstand zwischen Motoren",
-      "description": "Wenn viele Rollläden zugleich fahren, startet der nächste Motor so viele Sekunden nach dem vorigen, zwischen Fenstern und zwischen den Rollläden eines Fensters. 0 schaltet das für die Rollläden dieses Fensters ab. Ein Feueralarm wird nie gestaffelt. Der Abstand zwischen den Rollläden eines Fensters zählt nur bei einem Fenster mit mehreren Rollläden."
+      "description": "Wenn viele Rollläden zugleich fahren, starten ihre Motoren nacheinander. Dieser Abstand in Sekunden wird nach jedem Motor dieses Fensters freigehalten: Der nächste Motor, dieses oder eines anderen Fensters, startet, wenn er vergangen ist. Der Wert 0 schaltet die Staffelung für dieses Fenster ab; seine Rollläden starten gemeinsam, wenn es an der Reihe ist. Ein Feueralarm wird nie gestaffelt. Der Abstand zwischen den Rollläden eines Fensters zählt nur bei einem Fenster mit mehreren Rollläden."
     },
     "reevaluate_after": {
       "label": "Spätestens erneut prüfen nach",

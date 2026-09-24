@@ -32,11 +32,93 @@
       "level_unreadable": "The stored settings cannot be read as a whole.",
       "other": "Something is wrong with the stored setting \"{key}\" that this version of the integration cannot describe more precisely."
     },
-    "fault_consequence": "Functions that protect people or hardware or that restrict movement keep running with the value of the next level. Comfort functions that depend on a faulty value pause for the windows concerned, so that no shutter moves unexpectedly.",
+    "fault_consequence": "Functions that protect people or hardware or that restrict movement keep running. They use the value of the next level; where no level sets one, they use a cautious value, which may restrict movements more than usual until the setting is repaired. Comfort functions that depend on a faulty value pause for the windows concerned, so that no shutter moves unexpectedly.",
     "fault_repairs": {
       "global": "To repair this, open the integration, choose \"Reconfigure\" and save the values of the house.",
       "group": "To repair this, open the group, check its values and save it, or remove the group.",
       "window": "To repair this, open the window, check its values and save it, or remove the window."
+    },
+    "reason_codes": {
+      "fire_alarm": "Fire alarm",
+      "fire_unacknowledged": "Fire alarm over, waiting for acknowledgement",
+      "protection_event": "Protection event, such as storm or hail",
+      "protection_return_manual": "Back to the position chosen by hand before the protection event",
+      "sleep_mode": "Sleep mode",
+      "external_request": "Request from an automation",
+      "privacy_lights_on": "Privacy while the lights are on",
+      "shading_geometric": "Shading that follows the sun",
+      "shading_fixed": "Shading at a fixed position",
+      "solar_heating": "Letting the sun warm the room",
+      "schedule_day": "Daily routine: day",
+      "schedule_night": "Daily routine: night",
+      "not_configured": "Not set up",
+      "inactive": "Not active at present",
+      "input_unavailable": "An entity it needs is unavailable",
+      "input_unknown": "An entity it needs has no known value",
+      "input_held_last_known": "The last known value of an entity is used",
+      "waiting_for_delay": "Waiting until the delay has passed",
+      "outside_episode": "Its conditions are not met at present",
+      "episode_locked": "Locked for the rest of the present phase",
+      "watchdog_released": "Released because it lasted implausibly long",
+      "capability_missing": "The cover cannot do this",
+      "day_type_fallback": "Day of the week used, because the kind of day is not known",
+      "function_disabled_by_fault": "Paused because a stored setting is faulty",
+      "layer_failed": "Skipped because of an internal error",
+      "only_raise": "Only raised at this time",
+      "only_lower": "Only lowered at this time",
+      "sleep_exception_no_open": "Not opened while someone is sleeping",
+      "lockout_door_open": "Not lowered while the door is open",
+      "lockout_void_tamper": "Lowered despite the open door: the tamper contact is active",
+      "lockout_contact_unavailable": "Not lowered: the door contact is unavailable",
+      "ventilation_floor": "Stops at the ventilation position because the window is open",
+      "rain_ventilation_floor": "Lowered to the rain position while the window is open",
+      "frost_limit": "Opens only up to the frost position because of frost",
+      "frost_limit_source_blind": "Opens only up to the frost position, because no temperature is known",
+      "frost_hold": "Not raised during frost",
+      "no_intermediate_position": "No position in between during a protection event",
+      "constraint_failed": "Restriction kept because of an internal error",
+      "sent": "Command sent",
+      "maintenance_lock": "Maintenance lock",
+      "dry_run": "Dry-run: nothing moves",
+      "cover_unavailable": "The cover is unavailable",
+      "target_reached": "Already at the position it should have",
+      "mode_off": "Operating mode: off",
+      "mode_protection_only": "Operating mode: protection only",
+      "paused": "Paused",
+      "person_at_window": "Someone is at the window",
+      "manual_override": "Moved by hand; automatic movements wait",
+      "movement_in_flight": "Waiting until the running movement has ended",
+      "duplicate_command": "Command already under way",
+      "movement_taken_over": "Running movement taken over",
+      "min_change": "Change too small for a movement",
+      "min_interval": "Waiting for the minimum time between two movements",
+      "trigger_time_missing": "Held back: it is not known when the wish began",
+      "command_backoff": "Waiting before the next attempt",
+      "staggered": "Waiting for its turn",
+      "gate_rule_failed": "Held back because of an internal error",
+      "manual_detected": "Moved by hand",
+      "manual_detected_member": "One cover of the window was moved by hand",
+      "external_movement_observed": "Moved by something else during dry-run",
+      "moved_during_downtime": "Moved while Home Assistant was not running",
+      "person_at_window_started": "Someone came to the window",
+      "person_at_window_ended": "Nobody at the window any more",
+      "override_started": "Manual override started",
+      "override_ended": "Manual override ended",
+      "protection_started": "Protection event started",
+      "protection_ended": "Protection event ended",
+      "protection_source_blind": "The entity of a protection event has no value",
+      "lockout_contact_blind": "The door contact has no value",
+      "fire_acknowledged": "Fire alarm acknowledged",
+      "frost_protection_waived": "Frost protection lifted until the next morning",
+      "frost_waiver_ended": "Frost protection applies again",
+      "frost_released_by_sun": "Frost protection lifted by the sun",
+      "frost_source_blind": "The frost entity has no value",
+      "position_may_be_inaccurate": "The position may be inaccurate",
+      "command_failed": "Command failed",
+      "actuator_no_reaction": "The cover did not react",
+      "movement_not_finished": "No end of the movement was reported in time",
+      "member_unavailable": "One cover of the window is unavailable",
+      "button_refused_maintenance_lock": "Button refused because of the maintenance lock"
     }
   },
   "config": {
@@ -170,5 +252,42 @@
       "title": "Stored settings were refused without a reason that can be named",
       "description": "The settings of at least one window were refused as a whole, and the integration could not tell which values are concerned. This is an error in the integration, not in your data. Protection keeps running; comfort functions pause. Please report it to the author of the integration."
     }
+  },
+  "entity": {
+    "sensor": {
+      "active_reason": {
+        "name": "Reason"
+      },
+      "target_position": {
+        "name": "Computed position"
+      },
+      "next_action": {
+        "name": "Next planned action",
+        "state_attributes": {
+          "target": {
+            "name": "Position"
+          },
+          "reason": {
+            "name": "Reason"
+          }
+        }
+      }
+    },
+    "binary_sensor": {
+      "override_active": {
+        "name": "Manual override"
+      },
+      "dry_run": {
+        "name": "Dry-run"
+      }
+    }
+  },
+  "common": {
+    "logbook_sent": "command sent: move to {target} %. Reason: {cause}.",
+    "logbook_sent_no_target": "command sent. Reason: {cause}.",
+    "logbook_dry_run": "dry-run, nothing moved: it would have moved to {target} %. Reason: {cause}.",
+    "logbook_dry_run_no_target": "dry-run, nothing moved: it would have moved. Reason: {cause}.",
+    "logbook_held_back": "movement to {target} % held back: {held}. Wanted because of: {cause}.",
+    "logbook_held_back_no_target": "movement held back: {held}. Wanted because of: {cause}."
   }
 }

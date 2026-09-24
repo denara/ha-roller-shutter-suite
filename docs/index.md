@@ -13,7 +13,8 @@ Roller Shutter Suite is a custom integration for Home Assistant that controls ro
 - [Shading by geometry](features/shading-geometry.md): what to measure at a window, at several shutters side by side and at a roof element of two rows; how the shutter follows the sun; the two calibration values and how to find them
 - [Movement](features/movement.md): minimum change and minimum interval of the motors, the gap between motors when many shutters move together, and why a fire alarm is never held back by them
 - [Dry-run](features/dry-run.md): what it is for, that it never moves anything, not even at a fire alarm, the one exception, and how to compare its decisions with reality
-- Actions and events for your own automations: to be written
+- [Status, reason events and diagnostics](features/status-and-events.md): the entities of a window, every reason in plain words, the event for your own automations with an example notification, the logbook, and how to download diagnostics
+- Actions for your own automations: to be written
 - Troubleshooting: to be written
 
 ## For contributors

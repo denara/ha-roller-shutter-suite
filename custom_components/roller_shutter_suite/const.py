@@ -72,3 +72,18 @@ SAFETY_TICK: Final = timedelta(minutes=5)
 # S1 measurement). A deviation from the letter of section 11; see
 # docs/dev/runtime.md, "Deviations".
 STARTUP_GRACE: Final = timedelta(minutes=2)
+
+# The status of a window (``docs/features/status-and-events.md``).
+#
+# The one event type of the integration on the bus: fired when a wanted
+# movement is held back or deferred, and when a command is sent or would have
+# been sent in dry-run.
+EVENT_REASON: Final = f"{DOMAIN}_reason"
+
+# How many decisions the diagnostics keep per window, the newest first.
+RECENT_DECISIONS: Final = 10
+
+
+def status_signal(window_id: str) -> str:
+    """Return the dispatcher signal that says the status of a window changed."""
+    return f"{DOMAIN}_status_{window_id}"

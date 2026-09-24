@@ -32,11 +32,93 @@
       "level_unreadable": "Die gespeicherten Einstellungen können insgesamt nicht gelesen werden.",
       "other": "Mit der gespeicherten Einstellung „{key}“ stimmt etwas nicht, das diese Version der Integration nicht genauer beschreiben kann."
     },
-    "fault_consequence": "Funktionen, die Menschen oder Technik schützen oder Bewegungen einschränken, laufen mit dem Wert der nächsten Ebene weiter. Komfortfunktionen, die von einem fehlerhaften Wert abhängen, pausieren für die betroffenen Fenster, damit sich kein Rollladen unerwartet bewegt.",
+    "fault_consequence": "Funktionen, die Menschen oder Technik schützen oder Bewegungen einschränken, laufen weiter. Sie verwenden den Wert der nächsten Ebene; wo keine Ebene einen setzt, verwenden sie einen vorsichtigen Wert, der Bewegungen bis zur Reparatur stärker einschränken kann als gewohnt. Komfortfunktionen, die von einem fehlerhaften Wert abhängen, pausieren für die betroffenen Fenster, damit sich kein Rollladen unerwartet bewegt.",
     "fault_repairs": {
       "global": "Zum Beheben: Öffne die Integration, wähle „Neu konfigurieren“ und speichere die Werte des Hauses.",
       "group": "Zum Beheben: Öffne die Gruppe, prüfe ihre Werte und speichere sie, oder entferne die Gruppe.",
       "window": "Zum Beheben: Öffne das Fenster, prüfe seine Werte und speichere es, oder entferne das Fenster."
+    },
+    "reason_codes": {
+      "fire_alarm": "Feueralarm",
+      "fire_unacknowledged": "Feueralarm vorbei, wartet auf Bestätigung",
+      "protection_event": "Schutzereignis, etwa Sturm oder Hagel",
+      "protection_return_manual": "Zurück auf die Position, die vor dem Schutzereignis von Hand gewählt war",
+      "sleep_mode": "Schlafmodus",
+      "external_request": "Anforderung einer Automation",
+      "privacy_lights_on": "Sichtschutz bei eingeschaltetem Licht",
+      "shading_geometric": "Beschattung nach dem Sonnenstand",
+      "shading_fixed": "Beschattung auf fester Position",
+      "solar_heating": "Die Sonne wärmt den Raum",
+      "schedule_day": "Tagesablauf: Tag",
+      "schedule_night": "Tagesablauf: Nacht",
+      "not_configured": "Nicht eingerichtet",
+      "inactive": "Derzeit nicht aktiv",
+      "input_unavailable": "Eine benötigte Entität ist nicht verfügbar",
+      "input_unknown": "Eine benötigte Entität hat keinen bekannten Wert",
+      "input_held_last_known": "Der letzte bekannte Wert einer Entität gilt",
+      "waiting_for_delay": "Wartet, bis die Verzögerung abgelaufen ist",
+      "outside_episode": "Die Bedingungen sind derzeit nicht erfüllt",
+      "episode_locked": "Für den Rest der laufenden Phase gesperrt",
+      "watchdog_released": "Freigegeben, weil es unplausibel lange dauerte",
+      "capability_missing": "Der Rollladen kann das nicht",
+      "day_type_fallback": "Wochentag verwendet, weil die Art des Tages nicht bekannt ist",
+      "function_disabled_by_fault": "Pausiert, weil eine gespeicherte Einstellung fehlerhaft ist",
+      "layer_failed": "Wegen eines internen Fehlers übersprungen",
+      "only_raise": "Wird zu dieser Zeit nur angehoben",
+      "only_lower": "Wird zu dieser Zeit nur gesenkt",
+      "sleep_exception_no_open": "Wird nicht geöffnet, solange jemand schläft",
+      "lockout_door_open": "Wird nicht gesenkt, solange die Tür offen ist",
+      "lockout_void_tamper": "Trotz offener Tür gesenkt: der Sabotagekontakt ist aktiv",
+      "lockout_contact_unavailable": "Wird nicht gesenkt: der Türkontakt ist nicht verfügbar",
+      "ventilation_floor": "Hält an der Lüftungsposition, weil das Fenster offen ist",
+      "rain_ventilation_floor": "Bei offenem Fenster auf die Regenposition gesenkt",
+      "frost_limit": "Öffnet wegen Frost nur bis zur Frostposition",
+      "frost_limit_source_blind": "Öffnet nur bis zur Frostposition, weil keine Temperatur bekannt ist",
+      "frost_hold": "Wird bei Frost nicht angehoben",
+      "no_intermediate_position": "Keine Zwischenposition während eines Schutzereignisses",
+      "constraint_failed": "Einschränkung wegen eines internen Fehlers beibehalten",
+      "sent": "Befehl gesendet",
+      "maintenance_lock": "Wartungssperre",
+      "dry_run": "Probelauf: nichts bewegt sich",
+      "cover_unavailable": "Der Rollladen ist nicht verfügbar",
+      "target_reached": "Steht bereits auf der gewünschten Position",
+      "mode_off": "Betriebsart: aus",
+      "mode_protection_only": "Betriebsart: nur Schutz",
+      "paused": "Pausiert",
+      "person_at_window": "Jemand ist am Fenster",
+      "manual_override": "Von Hand bewegt; automatische Bewegungen warten",
+      "movement_in_flight": "Wartet, bis die laufende Bewegung beendet ist",
+      "duplicate_command": "Befehl bereits unterwegs",
+      "movement_taken_over": "Laufende Bewegung übernommen",
+      "min_change": "Änderung zu klein für eine Bewegung",
+      "min_interval": "Wartet auf den Mindestabstand zwischen zwei Bewegungen",
+      "trigger_time_missing": "Zurückgehalten: es ist nicht bekannt, wann der Wunsch begann",
+      "command_backoff": "Wartet vor dem nächsten Versuch",
+      "staggered": "Wartet, bis es an der Reihe ist",
+      "gate_rule_failed": "Wegen eines internen Fehlers zurückgehalten",
+      "manual_detected": "Von Hand bewegt",
+      "manual_detected_member": "Ein Rollladen des Fensters wurde von Hand bewegt",
+      "external_movement_observed": "Im Probelauf von anderer Seite bewegt",
+      "moved_during_downtime": "Bewegt, während Home Assistant nicht lief",
+      "person_at_window_started": "Jemand ist ans Fenster gekommen",
+      "person_at_window_ended": "Niemand mehr am Fenster",
+      "override_started": "Handbetrieb begonnen",
+      "override_ended": "Handbetrieb beendet",
+      "protection_started": "Schutzereignis begonnen",
+      "protection_ended": "Schutzereignis beendet",
+      "protection_source_blind": "Die Entität eines Schutzereignisses hat keinen Wert",
+      "lockout_contact_blind": "Der Türkontakt hat keinen Wert",
+      "fire_acknowledged": "Feueralarm bestätigt",
+      "frost_protection_waived": "Frostschutz bis zum nächsten Morgen aufgehoben",
+      "frost_waiver_ended": "Frostschutz gilt wieder",
+      "frost_released_by_sun": "Frostschutz durch die Sonne aufgehoben",
+      "frost_source_blind": "Die Frost-Entität hat keinen Wert",
+      "position_may_be_inaccurate": "Die Position kann ungenau sein",
+      "command_failed": "Befehl fehlgeschlagen",
+      "actuator_no_reaction": "Der Rollladen hat nicht reagiert",
+      "movement_not_finished": "Kein Ende der Bewegung rechtzeitig gemeldet",
+      "member_unavailable": "Ein Rollladen des Fensters ist nicht verfügbar",
+      "button_refused_maintenance_lock": "Taster wegen der Wartungssperre abgewiesen"
     }
   },
   "config": {
@@ -170,5 +252,42 @@
       "title": "Gespeicherte Einstellungen wurden ohne benennbaren Grund abgelehnt",
       "description": "Die Einstellungen mindestens eines Fensters wurden als Ganzes abgelehnt, und die Integration konnte nicht sagen, welche Werte betroffen sind. Das ist ein Fehler in der Integration, nicht in deinen Daten. Der Schutz läuft weiter; Komfortfunktionen pausieren. Bitte melde es dem Autor der Integration."
     }
+  },
+  "entity": {
+    "sensor": {
+      "active_reason": {
+        "name": "Grund"
+      },
+      "target_position": {
+        "name": "Berechnete Position"
+      },
+      "next_action": {
+        "name": "Nächste geplante Aktion",
+        "state_attributes": {
+          "target": {
+            "name": "Position"
+          },
+          "reason": {
+            "name": "Grund"
+          }
+        }
+      }
+    },
+    "binary_sensor": {
+      "override_active": {
+        "name": "Handbetrieb"
+      },
+      "dry_run": {
+        "name": "Probelauf"
+      }
+    }
+  },
+  "common": {
+    "logbook_sent": "Befehl gesendet: auf {target} % fahren. Grund: {cause}.",
+    "logbook_sent_no_target": "Befehl gesendet. Grund: {cause}.",
+    "logbook_dry_run": "Probelauf, nichts bewegt: wäre auf {target} % gefahren. Grund: {cause}.",
+    "logbook_dry_run_no_target": "Probelauf, nichts bewegt: wäre gefahren. Grund: {cause}.",
+    "logbook_held_back": "Bewegung auf {target} % zurückgehalten: {held}. Gewünscht wegen: {cause}.",
+    "logbook_held_back_no_target": "Bewegung zurückgehalten: {held}. Gewünscht wegen: {cause}."
   }
 }

@@ -204,7 +204,7 @@
         "data_description": {
           "motor_min_change": "Eine Komfortbewegung, die kleiner ist, wird ausgelassen. 0 schaltet das ab. Ganz auf oder ganz zu fährt ein Rollladen trotzdem, auch wenn der Rest klein ist. Beurteilen lässt sich das nur bei Rollläden, die ihre Position melden; ein Rollladen, der keine meldet, wird immer bewegt.",
           "motor_min_interval": "Die kürzeste Zeit zwischen zwei Komfortbewegungen des Fensters, gegen Hin und Her, während die Beschattung der Sonne folgt. 0 schaltet das ab. Etwas Neues, etwa der Morgen oder der Abend, eingeschalteter Schlafmodus oder der Beginn der Beschattung, bewegt trotzdem sofort.",
-          "stagger_gap": "Wenn viele Rollläden zugleich fahren, startet der nächste Motor so viele Sekunden nach dem vorigen, zwischen Fenstern und zwischen den Rollläden eines Fensters. 0 schaltet das für die Rollläden dieses Fensters ab. Ein Feueralarm wird nie gestaffelt. Der Abstand zwischen den Rollläden eines Fensters zählt nur bei einem Fenster mit mehreren Rollläden."
+          "stagger_gap": "Wenn viele Rollläden zugleich fahren, starten ihre Motoren nacheinander. Dieser Abstand in Sekunden wird nach jedem Motor dieses Fensters freigehalten: Der nächste Motor, dieses oder eines anderen Fensters, startet, wenn er vergangen ist. Der Wert 0 schaltet die Staffelung für dieses Fenster ab; seine Rollläden starten gemeinsam, wenn es an der Reihe ist. Ein Feueralarm wird nie gestaffelt. Der Abstand zwischen den Rollläden eines Fensters zählt nur bei einem Fenster mit mehreren Rollläden."
         },
         "sections": {
           "expert": {
@@ -446,7 +446,7 @@
           "data_description": {
             "motor_min_change": "Eine Komfortbewegung, die kleiner ist, wird ausgelassen. 0 schaltet das ab. Ganz auf oder ganz zu fährt ein Rollladen trotzdem, auch wenn der Rest klein ist. Beurteilen lässt sich das nur bei Rollläden, die ihre Position melden; ein Rollladen, der keine meldet, wird immer bewegt. Leer lassen, um zu erben. Geerbt wird derzeit: {motor_min_change_inherited} (von {motor_min_change_source}).",
             "motor_min_interval": "Die kürzeste Zeit zwischen zwei Komfortbewegungen des Fensters, gegen Hin und Her, während die Beschattung der Sonne folgt. 0 schaltet das ab. Etwas Neues, etwa der Morgen oder der Abend, eingeschalteter Schlafmodus oder der Beginn der Beschattung, bewegt trotzdem sofort. Leer lassen, um zu erben. Geerbt wird derzeit: {motor_min_interval_inherited} (von {motor_min_interval_source}).",
-            "stagger_gap": "Wenn viele Rollläden zugleich fahren, startet der nächste Motor so viele Sekunden nach dem vorigen, zwischen Fenstern und zwischen den Rollläden eines Fensters. 0 schaltet das für die Rollläden dieses Fensters ab. Ein Feueralarm wird nie gestaffelt. Der Abstand zwischen den Rollläden eines Fensters zählt nur bei einem Fenster mit mehreren Rollläden. Leer lassen, um zu erben. Geerbt wird derzeit: {stagger_gap_inherited} (von {stagger_gap_source})."
+            "stagger_gap": "Wenn viele Rollläden zugleich fahren, starten ihre Motoren nacheinander. Dieser Abstand in Sekunden wird nach jedem Motor dieses Fensters freigehalten: Der nächste Motor, dieses oder eines anderen Fensters, startet, wenn er vergangen ist. Der Wert 0 schaltet die Staffelung für dieses Fenster ab; seine Rollläden starten gemeinsam, wenn es an der Reihe ist. Ein Feueralarm wird nie gestaffelt. Der Abstand zwischen den Rollläden eines Fensters zählt nur bei einem Fenster mit mehreren Rollläden. Leer lassen, um zu erben. Geerbt wird derzeit: {stagger_gap_inherited} (von {stagger_gap_source})."
           },
           "sections": {
             "expert": {
@@ -711,7 +711,7 @@
           "data_description": {
             "motor_min_change": "Eine Komfortbewegung, die kleiner ist, wird ausgelassen. 0 schaltet das ab. Ganz auf oder ganz zu fährt ein Rollladen trotzdem, auch wenn der Rest klein ist. Beurteilen lässt sich das nur bei Rollläden, die ihre Position melden; ein Rollladen, der keine meldet, wird immer bewegt. Leer lassen, um zu erben. Geerbt wird derzeit: {motor_min_change_inherited} (von {motor_min_change_source}).",
             "motor_min_interval": "Die kürzeste Zeit zwischen zwei Komfortbewegungen des Fensters, gegen Hin und Her, während die Beschattung der Sonne folgt. 0 schaltet das ab. Etwas Neues, etwa der Morgen oder der Abend, eingeschalteter Schlafmodus oder der Beginn der Beschattung, bewegt trotzdem sofort. Leer lassen, um zu erben. Geerbt wird derzeit: {motor_min_interval_inherited} (von {motor_min_interval_source}).",
-            "stagger_gap": "Wenn viele Rollläden zugleich fahren, startet der nächste Motor so viele Sekunden nach dem vorigen, zwischen Fenstern und zwischen den Rollläden eines Fensters. 0 schaltet das für die Rollläden dieses Fensters ab. Ein Feueralarm wird nie gestaffelt. Der Abstand zwischen den Rollläden eines Fensters zählt nur bei einem Fenster mit mehreren Rollläden. Leer lassen, um zu erben. Geerbt wird derzeit: {stagger_gap_inherited} (von {stagger_gap_source})."
+            "stagger_gap": "Wenn viele Rollläden zugleich fahren, starten ihre Motoren nacheinander. Dieser Abstand in Sekunden wird nach jedem Motor dieses Fensters freigehalten: Der nächste Motor, dieses oder eines anderen Fensters, startet, wenn er vergangen ist. Der Wert 0 schaltet die Staffelung für dieses Fenster ab; seine Rollläden starten gemeinsam, wenn es an der Reihe ist. Ein Feueralarm wird nie gestaffelt. Der Abstand zwischen den Rollläden eines Fensters zählt nur bei einem Fenster mit mehreren Rollläden. Leer lassen, um zu erben. Geerbt wird derzeit: {stagger_gap_inherited} (von {stagger_gap_source})."
           },
           "sections": {
             "expert": {
@@ -802,87 +802,288 @@
     },
     "setting_fault_global_unreadable": {
       "title": "Eine gespeicherte Einstellung ist nicht verwendbar: Haus",
-      "description": "Der gespeicherte Wert der Einstellung „{key}“ kann nicht gelesen werden. Funktionen, die Menschen oder Technik schützen oder Bewegungen einschränken, laufen mit dem Wert der nächsten Ebene weiter. Komfortfunktionen, die von einem fehlerhaften Wert abhängen, pausieren für die betroffenen Fenster, damit sich kein Rollladen unerwartet bewegt. Zum Beheben: Öffne die Integration, wähle „Neu konfigurieren“ und speichere die Werte des Hauses."
+      "description": "Der gespeicherte Wert der Einstellung „{key}“ kann nicht gelesen werden. Funktionen, die Menschen oder Technik schützen oder Bewegungen einschränken, laufen weiter. Sie verwenden den Wert der nächsten Ebene; wo keine Ebene einen setzt, verwenden sie einen vorsichtigen Wert, der Bewegungen bis zur Reparatur stärker einschränken kann als gewohnt. Komfortfunktionen, die von einem fehlerhaften Wert abhängen, pausieren für die betroffenen Fenster, damit sich kein Rollladen unerwartet bewegt. Zum Beheben: Öffne die Integration, wähle „Neu konfigurieren“ und speichere die Werte des Hauses."
     },
     "setting_fault_global_none_not_allowed": {
       "title": "Eine gespeicherte Einstellung ist nicht verwendbar: Haus",
-      "description": "Die Einstellung „{key}“ ist als „keine“ gespeichert, braucht aber immer einen Wert. Funktionen, die Menschen oder Technik schützen oder Bewegungen einschränken, laufen mit dem Wert der nächsten Ebene weiter. Komfortfunktionen, die von einem fehlerhaften Wert abhängen, pausieren für die betroffenen Fenster, damit sich kein Rollladen unerwartet bewegt. Zum Beheben: Öffne die Integration, wähle „Neu konfigurieren“ und speichere die Werte des Hauses."
+      "description": "Die Einstellung „{key}“ ist als „keine“ gespeichert, braucht aber immer einen Wert. Funktionen, die Menschen oder Technik schützen oder Bewegungen einschränken, laufen weiter. Sie verwenden den Wert der nächsten Ebene; wo keine Ebene einen setzt, verwenden sie einen vorsichtigen Wert, der Bewegungen bis zur Reparatur stärker einschränken kann als gewohnt. Komfortfunktionen, die von einem fehlerhaften Wert abhängen, pausieren für die betroffenen Fenster, damit sich kein Rollladen unerwartet bewegt. Zum Beheben: Öffne die Integration, wähle „Neu konfigurieren“ und speichere die Werte des Hauses."
     },
     "setting_fault_global_invalid": {
       "title": "Eine gespeicherte Einstellung ist nicht verwendbar: Haus",
-      "description": "Der gespeicherte Wert der Einstellung „{key}“ wurde gelesen, ist aber kein zulässiger Wert. Funktionen, die Menschen oder Technik schützen oder Bewegungen einschränken, laufen mit dem Wert der nächsten Ebene weiter. Komfortfunktionen, die von einem fehlerhaften Wert abhängen, pausieren für die betroffenen Fenster, damit sich kein Rollladen unerwartet bewegt. Zum Beheben: Öffne die Integration, wähle „Neu konfigurieren“ und speichere die Werte des Hauses."
+      "description": "Der gespeicherte Wert der Einstellung „{key}“ wurde gelesen, ist aber kein zulässiger Wert. Funktionen, die Menschen oder Technik schützen oder Bewegungen einschränken, laufen weiter. Sie verwenden den Wert der nächsten Ebene; wo keine Ebene einen setzt, verwenden sie einen vorsichtigen Wert, der Bewegungen bis zur Reparatur stärker einschränken kann als gewohnt. Komfortfunktionen, die von einem fehlerhaften Wert abhängen, pausieren für die betroffenen Fenster, damit sich kein Rollladen unerwartet bewegt. Zum Beheben: Öffne die Integration, wähle „Neu konfigurieren“ und speichere die Werte des Hauses."
     },
     "setting_fault_global_not_inheritable": {
       "title": "Eine gespeicherte Einstellung ist nicht verwendbar: Haus",
-      "description": "Die Einstellung „{key}“ kann nur ein Fenster setzen, ist aber hier gespeichert. Sie hat keine Wirkung. Funktionen, die Menschen oder Technik schützen oder Bewegungen einschränken, laufen mit dem Wert der nächsten Ebene weiter. Komfortfunktionen, die von einem fehlerhaften Wert abhängen, pausieren für die betroffenen Fenster, damit sich kein Rollladen unerwartet bewegt. Zum Beheben: Öffne die Integration, wähle „Neu konfigurieren“ und speichere die Werte des Hauses."
+      "description": "Die Einstellung „{key}“ kann nur ein Fenster setzen, ist aber hier gespeichert. Sie hat keine Wirkung. Funktionen, die Menschen oder Technik schützen oder Bewegungen einschränken, laufen weiter. Sie verwenden den Wert der nächsten Ebene; wo keine Ebene einen setzt, verwenden sie einen vorsichtigen Wert, der Bewegungen bis zur Reparatur stärker einschränken kann als gewohnt. Komfortfunktionen, die von einem fehlerhaften Wert abhängen, pausieren für die betroffenen Fenster, damit sich kein Rollladen unerwartet bewegt. Zum Beheben: Öffne die Integration, wähle „Neu konfigurieren“ und speichere die Werte des Hauses."
     },
     "setting_fault_global_unknown_setting": {
       "title": "Eine gespeicherte Einstellung ist nicht verwendbar: Haus",
-      "description": "Die gespeicherte Einstellung „{key}“ kennt diese Version der Integration nicht. Sie wird ignoriert. Möglicherweise hat eine neuere Version sie geschrieben. Funktionen, die Menschen oder Technik schützen oder Bewegungen einschränken, laufen mit dem Wert der nächsten Ebene weiter. Komfortfunktionen, die von einem fehlerhaften Wert abhängen, pausieren für die betroffenen Fenster, damit sich kein Rollladen unerwartet bewegt. Zum Beheben: Öffne die Integration, wähle „Neu konfigurieren“ und speichere die Werte des Hauses."
+      "description": "Die gespeicherte Einstellung „{key}“ kennt diese Version der Integration nicht. Sie wird ignoriert. Möglicherweise hat eine neuere Version sie geschrieben. Funktionen, die Menschen oder Technik schützen oder Bewegungen einschränken, laufen weiter. Sie verwenden den Wert der nächsten Ebene; wo keine Ebene einen setzt, verwenden sie einen vorsichtigen Wert, der Bewegungen bis zur Reparatur stärker einschränken kann als gewohnt. Komfortfunktionen, die von einem fehlerhaften Wert abhängen, pausieren für die betroffenen Fenster, damit sich kein Rollladen unerwartet bewegt. Zum Beheben: Öffne die Integration, wähle „Neu konfigurieren“ und speichere die Werte des Hauses."
     },
     "setting_fault_global_level_unreadable": {
       "title": "Eine gespeicherte Einstellung ist nicht verwendbar: Haus",
-      "description": "Die gespeicherten Einstellungen können insgesamt nicht gelesen werden. Funktionen, die Menschen oder Technik schützen oder Bewegungen einschränken, laufen mit dem Wert der nächsten Ebene weiter. Komfortfunktionen, die von einem fehlerhaften Wert abhängen, pausieren für die betroffenen Fenster, damit sich kein Rollladen unerwartet bewegt. Zum Beheben: Öffne die Integration, wähle „Neu konfigurieren“ und speichere die Werte des Hauses."
+      "description": "Die gespeicherten Einstellungen können insgesamt nicht gelesen werden. Funktionen, die Menschen oder Technik schützen oder Bewegungen einschränken, laufen weiter. Sie verwenden den Wert der nächsten Ebene; wo keine Ebene einen setzt, verwenden sie einen vorsichtigen Wert, der Bewegungen bis zur Reparatur stärker einschränken kann als gewohnt. Komfortfunktionen, die von einem fehlerhaften Wert abhängen, pausieren für die betroffenen Fenster, damit sich kein Rollladen unerwartet bewegt. Zum Beheben: Öffne die Integration, wähle „Neu konfigurieren“ und speichere die Werte des Hauses."
     },
     "setting_fault_global_other": {
       "title": "Eine gespeicherte Einstellung ist nicht verwendbar: Haus",
-      "description": "Mit der gespeicherten Einstellung „{key}“ stimmt etwas nicht, das diese Version der Integration nicht genauer beschreiben kann. Funktionen, die Menschen oder Technik schützen oder Bewegungen einschränken, laufen mit dem Wert der nächsten Ebene weiter. Komfortfunktionen, die von einem fehlerhaften Wert abhängen, pausieren für die betroffenen Fenster, damit sich kein Rollladen unerwartet bewegt. Zum Beheben: Öffne die Integration, wähle „Neu konfigurieren“ und speichere die Werte des Hauses."
+      "description": "Mit der gespeicherten Einstellung „{key}“ stimmt etwas nicht, das diese Version der Integration nicht genauer beschreiben kann. Funktionen, die Menschen oder Technik schützen oder Bewegungen einschränken, laufen weiter. Sie verwenden den Wert der nächsten Ebene; wo keine Ebene einen setzt, verwenden sie einen vorsichtigen Wert, der Bewegungen bis zur Reparatur stärker einschränken kann als gewohnt. Komfortfunktionen, die von einem fehlerhaften Wert abhängen, pausieren für die betroffenen Fenster, damit sich kein Rollladen unerwartet bewegt. Zum Beheben: Öffne die Integration, wähle „Neu konfigurieren“ und speichere die Werte des Hauses."
     },
     "setting_fault_group_unreadable": {
       "title": "Eine gespeicherte Einstellung ist nicht verwendbar: Gruppe „{name}“",
-      "description": "Der gespeicherte Wert der Einstellung „{key}“ kann nicht gelesen werden. Funktionen, die Menschen oder Technik schützen oder Bewegungen einschränken, laufen mit dem Wert der nächsten Ebene weiter. Komfortfunktionen, die von einem fehlerhaften Wert abhängen, pausieren für die betroffenen Fenster, damit sich kein Rollladen unerwartet bewegt. Zum Beheben: Öffne die Gruppe, prüfe ihre Werte und speichere sie, oder entferne die Gruppe."
+      "description": "Der gespeicherte Wert der Einstellung „{key}“ kann nicht gelesen werden. Funktionen, die Menschen oder Technik schützen oder Bewegungen einschränken, laufen weiter. Sie verwenden den Wert der nächsten Ebene; wo keine Ebene einen setzt, verwenden sie einen vorsichtigen Wert, der Bewegungen bis zur Reparatur stärker einschränken kann als gewohnt. Komfortfunktionen, die von einem fehlerhaften Wert abhängen, pausieren für die betroffenen Fenster, damit sich kein Rollladen unerwartet bewegt. Zum Beheben: Öffne die Gruppe, prüfe ihre Werte und speichere sie, oder entferne die Gruppe."
     },
     "setting_fault_group_none_not_allowed": {
       "title": "Eine gespeicherte Einstellung ist nicht verwendbar: Gruppe „{name}“",
-      "description": "Die Einstellung „{key}“ ist als „keine“ gespeichert, braucht aber immer einen Wert. Funktionen, die Menschen oder Technik schützen oder Bewegungen einschränken, laufen mit dem Wert der nächsten Ebene weiter. Komfortfunktionen, die von einem fehlerhaften Wert abhängen, pausieren für die betroffenen Fenster, damit sich kein Rollladen unerwartet bewegt. Zum Beheben: Öffne die Gruppe, prüfe ihre Werte und speichere sie, oder entferne die Gruppe."
+      "description": "Die Einstellung „{key}“ ist als „keine“ gespeichert, braucht aber immer einen Wert. Funktionen, die Menschen oder Technik schützen oder Bewegungen einschränken, laufen weiter. Sie verwenden den Wert der nächsten Ebene; wo keine Ebene einen setzt, verwenden sie einen vorsichtigen Wert, der Bewegungen bis zur Reparatur stärker einschränken kann als gewohnt. Komfortfunktionen, die von einem fehlerhaften Wert abhängen, pausieren für die betroffenen Fenster, damit sich kein Rollladen unerwartet bewegt. Zum Beheben: Öffne die Gruppe, prüfe ihre Werte und speichere sie, oder entferne die Gruppe."
     },
     "setting_fault_group_invalid": {
       "title": "Eine gespeicherte Einstellung ist nicht verwendbar: Gruppe „{name}“",
-      "description": "Der gespeicherte Wert der Einstellung „{key}“ wurde gelesen, ist aber kein zulässiger Wert. Funktionen, die Menschen oder Technik schützen oder Bewegungen einschränken, laufen mit dem Wert der nächsten Ebene weiter. Komfortfunktionen, die von einem fehlerhaften Wert abhängen, pausieren für die betroffenen Fenster, damit sich kein Rollladen unerwartet bewegt. Zum Beheben: Öffne die Gruppe, prüfe ihre Werte und speichere sie, oder entferne die Gruppe."
+      "description": "Der gespeicherte Wert der Einstellung „{key}“ wurde gelesen, ist aber kein zulässiger Wert. Funktionen, die Menschen oder Technik schützen oder Bewegungen einschränken, laufen weiter. Sie verwenden den Wert der nächsten Ebene; wo keine Ebene einen setzt, verwenden sie einen vorsichtigen Wert, der Bewegungen bis zur Reparatur stärker einschränken kann als gewohnt. Komfortfunktionen, die von einem fehlerhaften Wert abhängen, pausieren für die betroffenen Fenster, damit sich kein Rollladen unerwartet bewegt. Zum Beheben: Öffne die Gruppe, prüfe ihre Werte und speichere sie, oder entferne die Gruppe."
     },
     "setting_fault_group_not_inheritable": {
       "title": "Eine gespeicherte Einstellung ist nicht verwendbar: Gruppe „{name}“",
-      "description": "Die Einstellung „{key}“ kann nur ein Fenster setzen, ist aber hier gespeichert. Sie hat keine Wirkung. Funktionen, die Menschen oder Technik schützen oder Bewegungen einschränken, laufen mit dem Wert der nächsten Ebene weiter. Komfortfunktionen, die von einem fehlerhaften Wert abhängen, pausieren für die betroffenen Fenster, damit sich kein Rollladen unerwartet bewegt. Zum Beheben: Öffne die Gruppe, prüfe ihre Werte und speichere sie, oder entferne die Gruppe."
+      "description": "Die Einstellung „{key}“ kann nur ein Fenster setzen, ist aber hier gespeichert. Sie hat keine Wirkung. Funktionen, die Menschen oder Technik schützen oder Bewegungen einschränken, laufen weiter. Sie verwenden den Wert der nächsten Ebene; wo keine Ebene einen setzt, verwenden sie einen vorsichtigen Wert, der Bewegungen bis zur Reparatur stärker einschränken kann als gewohnt. Komfortfunktionen, die von einem fehlerhaften Wert abhängen, pausieren für die betroffenen Fenster, damit sich kein Rollladen unerwartet bewegt. Zum Beheben: Öffne die Gruppe, prüfe ihre Werte und speichere sie, oder entferne die Gruppe."
     },
     "setting_fault_group_unknown_setting": {
       "title": "Eine gespeicherte Einstellung ist nicht verwendbar: Gruppe „{name}“",
-      "description": "Die gespeicherte Einstellung „{key}“ kennt diese Version der Integration nicht. Sie wird ignoriert. Möglicherweise hat eine neuere Version sie geschrieben. Funktionen, die Menschen oder Technik schützen oder Bewegungen einschränken, laufen mit dem Wert der nächsten Ebene weiter. Komfortfunktionen, die von einem fehlerhaften Wert abhängen, pausieren für die betroffenen Fenster, damit sich kein Rollladen unerwartet bewegt. Zum Beheben: Öffne die Gruppe, prüfe ihre Werte und speichere sie, oder entferne die Gruppe."
+      "description": "Die gespeicherte Einstellung „{key}“ kennt diese Version der Integration nicht. Sie wird ignoriert. Möglicherweise hat eine neuere Version sie geschrieben. Funktionen, die Menschen oder Technik schützen oder Bewegungen einschränken, laufen weiter. Sie verwenden den Wert der nächsten Ebene; wo keine Ebene einen setzt, verwenden sie einen vorsichtigen Wert, der Bewegungen bis zur Reparatur stärker einschränken kann als gewohnt. Komfortfunktionen, die von einem fehlerhaften Wert abhängen, pausieren für die betroffenen Fenster, damit sich kein Rollladen unerwartet bewegt. Zum Beheben: Öffne die Gruppe, prüfe ihre Werte und speichere sie, oder entferne die Gruppe."
     },
     "setting_fault_group_level_unreadable": {
       "title": "Eine gespeicherte Einstellung ist nicht verwendbar: Gruppe „{name}“",
-      "description": "Die gespeicherten Einstellungen können insgesamt nicht gelesen werden. Funktionen, die Menschen oder Technik schützen oder Bewegungen einschränken, laufen mit dem Wert der nächsten Ebene weiter. Komfortfunktionen, die von einem fehlerhaften Wert abhängen, pausieren für die betroffenen Fenster, damit sich kein Rollladen unerwartet bewegt. Zum Beheben: Öffne die Gruppe, prüfe ihre Werte und speichere sie, oder entferne die Gruppe."
+      "description": "Die gespeicherten Einstellungen können insgesamt nicht gelesen werden. Funktionen, die Menschen oder Technik schützen oder Bewegungen einschränken, laufen weiter. Sie verwenden den Wert der nächsten Ebene; wo keine Ebene einen setzt, verwenden sie einen vorsichtigen Wert, der Bewegungen bis zur Reparatur stärker einschränken kann als gewohnt. Komfortfunktionen, die von einem fehlerhaften Wert abhängen, pausieren für die betroffenen Fenster, damit sich kein Rollladen unerwartet bewegt. Zum Beheben: Öffne die Gruppe, prüfe ihre Werte und speichere sie, oder entferne die Gruppe."
     },
     "setting_fault_group_other": {
       "title": "Eine gespeicherte Einstellung ist nicht verwendbar: Gruppe „{name}“",
-      "description": "Mit der gespeicherten Einstellung „{key}“ stimmt etwas nicht, das diese Version der Integration nicht genauer beschreiben kann. Funktionen, die Menschen oder Technik schützen oder Bewegungen einschränken, laufen mit dem Wert der nächsten Ebene weiter. Komfortfunktionen, die von einem fehlerhaften Wert abhängen, pausieren für die betroffenen Fenster, damit sich kein Rollladen unerwartet bewegt. Zum Beheben: Öffne die Gruppe, prüfe ihre Werte und speichere sie, oder entferne die Gruppe."
+      "description": "Mit der gespeicherten Einstellung „{key}“ stimmt etwas nicht, das diese Version der Integration nicht genauer beschreiben kann. Funktionen, die Menschen oder Technik schützen oder Bewegungen einschränken, laufen weiter. Sie verwenden den Wert der nächsten Ebene; wo keine Ebene einen setzt, verwenden sie einen vorsichtigen Wert, der Bewegungen bis zur Reparatur stärker einschränken kann als gewohnt. Komfortfunktionen, die von einem fehlerhaften Wert abhängen, pausieren für die betroffenen Fenster, damit sich kein Rollladen unerwartet bewegt. Zum Beheben: Öffne die Gruppe, prüfe ihre Werte und speichere sie, oder entferne die Gruppe."
     },
     "setting_fault_window_unreadable": {
       "title": "Eine gespeicherte Einstellung ist nicht verwendbar: Fenster „{name}“",
-      "description": "Der gespeicherte Wert der Einstellung „{key}“ kann nicht gelesen werden. Funktionen, die Menschen oder Technik schützen oder Bewegungen einschränken, laufen mit dem Wert der nächsten Ebene weiter. Komfortfunktionen, die von einem fehlerhaften Wert abhängen, pausieren für die betroffenen Fenster, damit sich kein Rollladen unerwartet bewegt. Zum Beheben: Öffne das Fenster, prüfe seine Werte und speichere es, oder entferne das Fenster."
+      "description": "Der gespeicherte Wert der Einstellung „{key}“ kann nicht gelesen werden. Funktionen, die Menschen oder Technik schützen oder Bewegungen einschränken, laufen weiter. Sie verwenden den Wert der nächsten Ebene; wo keine Ebene einen setzt, verwenden sie einen vorsichtigen Wert, der Bewegungen bis zur Reparatur stärker einschränken kann als gewohnt. Komfortfunktionen, die von einem fehlerhaften Wert abhängen, pausieren für die betroffenen Fenster, damit sich kein Rollladen unerwartet bewegt. Zum Beheben: Öffne das Fenster, prüfe seine Werte und speichere es, oder entferne das Fenster."
     },
     "setting_fault_window_none_not_allowed": {
       "title": "Eine gespeicherte Einstellung ist nicht verwendbar: Fenster „{name}“",
-      "description": "Die Einstellung „{key}“ ist als „keine“ gespeichert, braucht aber immer einen Wert. Funktionen, die Menschen oder Technik schützen oder Bewegungen einschränken, laufen mit dem Wert der nächsten Ebene weiter. Komfortfunktionen, die von einem fehlerhaften Wert abhängen, pausieren für die betroffenen Fenster, damit sich kein Rollladen unerwartet bewegt. Zum Beheben: Öffne das Fenster, prüfe seine Werte und speichere es, oder entferne das Fenster."
+      "description": "Die Einstellung „{key}“ ist als „keine“ gespeichert, braucht aber immer einen Wert. Funktionen, die Menschen oder Technik schützen oder Bewegungen einschränken, laufen weiter. Sie verwenden den Wert der nächsten Ebene; wo keine Ebene einen setzt, verwenden sie einen vorsichtigen Wert, der Bewegungen bis zur Reparatur stärker einschränken kann als gewohnt. Komfortfunktionen, die von einem fehlerhaften Wert abhängen, pausieren für die betroffenen Fenster, damit sich kein Rollladen unerwartet bewegt. Zum Beheben: Öffne das Fenster, prüfe seine Werte und speichere es, oder entferne das Fenster."
     },
     "setting_fault_window_invalid": {
       "title": "Eine gespeicherte Einstellung ist nicht verwendbar: Fenster „{name}“",
-      "description": "Der gespeicherte Wert der Einstellung „{key}“ wurde gelesen, ist aber kein zulässiger Wert. Funktionen, die Menschen oder Technik schützen oder Bewegungen einschränken, laufen mit dem Wert der nächsten Ebene weiter. Komfortfunktionen, die von einem fehlerhaften Wert abhängen, pausieren für die betroffenen Fenster, damit sich kein Rollladen unerwartet bewegt. Zum Beheben: Öffne das Fenster, prüfe seine Werte und speichere es, oder entferne das Fenster."
+      "description": "Der gespeicherte Wert der Einstellung „{key}“ wurde gelesen, ist aber kein zulässiger Wert. Funktionen, die Menschen oder Technik schützen oder Bewegungen einschränken, laufen weiter. Sie verwenden den Wert der nächsten Ebene; wo keine Ebene einen setzt, verwenden sie einen vorsichtigen Wert, der Bewegungen bis zur Reparatur stärker einschränken kann als gewohnt. Komfortfunktionen, die von einem fehlerhaften Wert abhängen, pausieren für die betroffenen Fenster, damit sich kein Rollladen unerwartet bewegt. Zum Beheben: Öffne das Fenster, prüfe seine Werte und speichere es, oder entferne das Fenster."
     },
     "setting_fault_window_not_inheritable": {
       "title": "Eine gespeicherte Einstellung ist nicht verwendbar: Fenster „{name}“",
-      "description": "Die Einstellung „{key}“ kann nur ein Fenster setzen, ist aber hier gespeichert. Sie hat keine Wirkung. Funktionen, die Menschen oder Technik schützen oder Bewegungen einschränken, laufen mit dem Wert der nächsten Ebene weiter. Komfortfunktionen, die von einem fehlerhaften Wert abhängen, pausieren für die betroffenen Fenster, damit sich kein Rollladen unerwartet bewegt. Zum Beheben: Öffne das Fenster, prüfe seine Werte und speichere es, oder entferne das Fenster."
+      "description": "Die Einstellung „{key}“ kann nur ein Fenster setzen, ist aber hier gespeichert. Sie hat keine Wirkung. Funktionen, die Menschen oder Technik schützen oder Bewegungen einschränken, laufen weiter. Sie verwenden den Wert der nächsten Ebene; wo keine Ebene einen setzt, verwenden sie einen vorsichtigen Wert, der Bewegungen bis zur Reparatur stärker einschränken kann als gewohnt. Komfortfunktionen, die von einem fehlerhaften Wert abhängen, pausieren für die betroffenen Fenster, damit sich kein Rollladen unerwartet bewegt. Zum Beheben: Öffne das Fenster, prüfe seine Werte und speichere es, oder entferne das Fenster."
     },
     "setting_fault_window_unknown_setting": {
       "title": "Eine gespeicherte Einstellung ist nicht verwendbar: Fenster „{name}“",
-      "description": "Die gespeicherte Einstellung „{key}“ kennt diese Version der Integration nicht. Sie wird ignoriert. Möglicherweise hat eine neuere Version sie geschrieben. Funktionen, die Menschen oder Technik schützen oder Bewegungen einschränken, laufen mit dem Wert der nächsten Ebene weiter. Komfortfunktionen, die von einem fehlerhaften Wert abhängen, pausieren für die betroffenen Fenster, damit sich kein Rollladen unerwartet bewegt. Zum Beheben: Öffne das Fenster, prüfe seine Werte und speichere es, oder entferne das Fenster."
+      "description": "Die gespeicherte Einstellung „{key}“ kennt diese Version der Integration nicht. Sie wird ignoriert. Möglicherweise hat eine neuere Version sie geschrieben. Funktionen, die Menschen oder Technik schützen oder Bewegungen einschränken, laufen weiter. Sie verwenden den Wert der nächsten Ebene; wo keine Ebene einen setzt, verwenden sie einen vorsichtigen Wert, der Bewegungen bis zur Reparatur stärker einschränken kann als gewohnt. Komfortfunktionen, die von einem fehlerhaften Wert abhängen, pausieren für die betroffenen Fenster, damit sich kein Rollladen unerwartet bewegt. Zum Beheben: Öffne das Fenster, prüfe seine Werte und speichere es, oder entferne das Fenster."
     },
     "setting_fault_window_level_unreadable": {
       "title": "Eine gespeicherte Einstellung ist nicht verwendbar: Fenster „{name}“",
-      "description": "Die gespeicherten Einstellungen können insgesamt nicht gelesen werden. Funktionen, die Menschen oder Technik schützen oder Bewegungen einschränken, laufen mit dem Wert der nächsten Ebene weiter. Komfortfunktionen, die von einem fehlerhaften Wert abhängen, pausieren für die betroffenen Fenster, damit sich kein Rollladen unerwartet bewegt. Zum Beheben: Öffne das Fenster, prüfe seine Werte und speichere es, oder entferne das Fenster."
+      "description": "Die gespeicherten Einstellungen können insgesamt nicht gelesen werden. Funktionen, die Menschen oder Technik schützen oder Bewegungen einschränken, laufen weiter. Sie verwenden den Wert der nächsten Ebene; wo keine Ebene einen setzt, verwenden sie einen vorsichtigen Wert, der Bewegungen bis zur Reparatur stärker einschränken kann als gewohnt. Komfortfunktionen, die von einem fehlerhaften Wert abhängen, pausieren für die betroffenen Fenster, damit sich kein Rollladen unerwartet bewegt. Zum Beheben: Öffne das Fenster, prüfe seine Werte und speichere es, oder entferne das Fenster."
     },
     "setting_fault_window_other": {
       "title": "Eine gespeicherte Einstellung ist nicht verwendbar: Fenster „{name}“",
-      "description": "Mit der gespeicherten Einstellung „{key}“ stimmt etwas nicht, das diese Version der Integration nicht genauer beschreiben kann. Funktionen, die Menschen oder Technik schützen oder Bewegungen einschränken, laufen mit dem Wert der nächsten Ebene weiter. Komfortfunktionen, die von einem fehlerhaften Wert abhängen, pausieren für die betroffenen Fenster, damit sich kein Rollladen unerwartet bewegt. Zum Beheben: Öffne das Fenster, prüfe seine Werte und speichere es, oder entferne das Fenster."
+      "description": "Mit der gespeicherten Einstellung „{key}“ stimmt etwas nicht, das diese Version der Integration nicht genauer beschreiben kann. Funktionen, die Menschen oder Technik schützen oder Bewegungen einschränken, laufen weiter. Sie verwenden den Wert der nächsten Ebene; wo keine Ebene einen setzt, verwenden sie einen vorsichtigen Wert, der Bewegungen bis zur Reparatur stärker einschränken kann als gewohnt. Komfortfunktionen, die von einem fehlerhaften Wert abhängen, pausieren für die betroffenen Fenster, damit sich kein Rollladen unerwartet bewegt. Zum Beheben: Öffne das Fenster, prüfe seine Werte und speichere es, oder entferne das Fenster."
     }
+  },
+  "entity": {
+    "sensor": {
+      "active_reason": {
+        "name": "Grund",
+        "state": {
+          "fire_alarm": "Feueralarm",
+          "fire_unacknowledged": "Feueralarm vorbei, wartet auf Bestätigung",
+          "protection_event": "Schutzereignis, etwa Sturm oder Hagel",
+          "protection_return_manual": "Zurück auf die Position, die vor dem Schutzereignis von Hand gewählt war",
+          "sleep_mode": "Schlafmodus",
+          "external_request": "Anforderung einer Automation",
+          "privacy_lights_on": "Sichtschutz bei eingeschaltetem Licht",
+          "shading_geometric": "Beschattung nach dem Sonnenstand",
+          "shading_fixed": "Beschattung auf fester Position",
+          "solar_heating": "Die Sonne wärmt den Raum",
+          "schedule_day": "Tagesablauf: Tag",
+          "schedule_night": "Tagesablauf: Nacht",
+          "not_configured": "Nicht eingerichtet",
+          "inactive": "Derzeit nicht aktiv",
+          "input_unavailable": "Eine benötigte Entität ist nicht verfügbar",
+          "input_unknown": "Eine benötigte Entität hat keinen bekannten Wert",
+          "input_held_last_known": "Der letzte bekannte Wert einer Entität gilt",
+          "waiting_for_delay": "Wartet, bis die Verzögerung abgelaufen ist",
+          "outside_episode": "Die Bedingungen sind derzeit nicht erfüllt",
+          "episode_locked": "Für den Rest der laufenden Phase gesperrt",
+          "watchdog_released": "Freigegeben, weil es unplausibel lange dauerte",
+          "capability_missing": "Der Rollladen kann das nicht",
+          "day_type_fallback": "Wochentag verwendet, weil die Art des Tages nicht bekannt ist",
+          "function_disabled_by_fault": "Pausiert, weil eine gespeicherte Einstellung fehlerhaft ist",
+          "layer_failed": "Wegen eines internen Fehlers übersprungen",
+          "only_raise": "Wird zu dieser Zeit nur angehoben",
+          "only_lower": "Wird zu dieser Zeit nur gesenkt",
+          "sleep_exception_no_open": "Wird nicht geöffnet, solange jemand schläft",
+          "lockout_door_open": "Wird nicht gesenkt, solange die Tür offen ist",
+          "lockout_void_tamper": "Trotz offener Tür gesenkt: der Sabotagekontakt ist aktiv",
+          "lockout_contact_unavailable": "Wird nicht gesenkt: der Türkontakt ist nicht verfügbar",
+          "ventilation_floor": "Hält an der Lüftungsposition, weil das Fenster offen ist",
+          "rain_ventilation_floor": "Bei offenem Fenster auf die Regenposition gesenkt",
+          "frost_limit": "Öffnet wegen Frost nur bis zur Frostposition",
+          "frost_limit_source_blind": "Öffnet nur bis zur Frostposition, weil keine Temperatur bekannt ist",
+          "frost_hold": "Wird bei Frost nicht angehoben",
+          "no_intermediate_position": "Keine Zwischenposition während eines Schutzereignisses",
+          "constraint_failed": "Einschränkung wegen eines internen Fehlers beibehalten",
+          "sent": "Befehl gesendet",
+          "maintenance_lock": "Wartungssperre",
+          "dry_run": "Probelauf: nichts bewegt sich",
+          "cover_unavailable": "Der Rollladen ist nicht verfügbar",
+          "target_reached": "Steht bereits auf der gewünschten Position",
+          "mode_off": "Betriebsart: aus",
+          "mode_protection_only": "Betriebsart: nur Schutz",
+          "paused": "Pausiert",
+          "person_at_window": "Jemand ist am Fenster",
+          "manual_override": "Von Hand bewegt; automatische Bewegungen warten",
+          "movement_in_flight": "Wartet, bis die laufende Bewegung beendet ist",
+          "duplicate_command": "Befehl bereits unterwegs",
+          "movement_taken_over": "Laufende Bewegung übernommen",
+          "min_change": "Änderung zu klein für eine Bewegung",
+          "min_interval": "Wartet auf den Mindestabstand zwischen zwei Bewegungen",
+          "trigger_time_missing": "Zurückgehalten: es ist nicht bekannt, wann der Wunsch begann",
+          "command_backoff": "Wartet vor dem nächsten Versuch",
+          "staggered": "Wartet, bis es an der Reihe ist",
+          "gate_rule_failed": "Wegen eines internen Fehlers zurückgehalten",
+          "manual_detected": "Von Hand bewegt",
+          "manual_detected_member": "Ein Rollladen des Fensters wurde von Hand bewegt",
+          "external_movement_observed": "Im Probelauf von anderer Seite bewegt",
+          "moved_during_downtime": "Bewegt, während Home Assistant nicht lief",
+          "person_at_window_started": "Jemand ist ans Fenster gekommen",
+          "person_at_window_ended": "Niemand mehr am Fenster",
+          "override_started": "Handbetrieb begonnen",
+          "override_ended": "Handbetrieb beendet",
+          "protection_started": "Schutzereignis begonnen",
+          "protection_ended": "Schutzereignis beendet",
+          "protection_source_blind": "Die Entität eines Schutzereignisses hat keinen Wert",
+          "lockout_contact_blind": "Der Türkontakt hat keinen Wert",
+          "fire_acknowledged": "Feueralarm bestätigt",
+          "frost_protection_waived": "Frostschutz bis zum nächsten Morgen aufgehoben",
+          "frost_waiver_ended": "Frostschutz gilt wieder",
+          "frost_released_by_sun": "Frostschutz durch die Sonne aufgehoben",
+          "frost_source_blind": "Die Frost-Entität hat keinen Wert",
+          "position_may_be_inaccurate": "Die Position kann ungenau sein",
+          "command_failed": "Befehl fehlgeschlagen",
+          "actuator_no_reaction": "Der Rollladen hat nicht reagiert",
+          "movement_not_finished": "Kein Ende der Bewegung rechtzeitig gemeldet",
+          "member_unavailable": "Ein Rollladen des Fensters ist nicht verfügbar",
+          "button_refused_maintenance_lock": "Taster wegen der Wartungssperre abgewiesen"
+        }
+      },
+      "target_position": {
+        "name": "Berechnete Position"
+      },
+      "next_action": {
+        "name": "Nächste geplante Aktion",
+        "state_attributes": {
+          "target": {
+            "name": "Position"
+          },
+          "reason": {
+            "name": "Grund",
+            "state": {
+              "fire_alarm": "Feueralarm",
+              "fire_unacknowledged": "Feueralarm vorbei, wartet auf Bestätigung",
+              "protection_event": "Schutzereignis, etwa Sturm oder Hagel",
+              "protection_return_manual": "Zurück auf die Position, die vor dem Schutzereignis von Hand gewählt war",
+              "sleep_mode": "Schlafmodus",
+              "external_request": "Anforderung einer Automation",
+              "privacy_lights_on": "Sichtschutz bei eingeschaltetem Licht",
+              "shading_geometric": "Beschattung nach dem Sonnenstand",
+              "shading_fixed": "Beschattung auf fester Position",
+              "solar_heating": "Die Sonne wärmt den Raum",
+              "schedule_day": "Tagesablauf: Tag",
+              "schedule_night": "Tagesablauf: Nacht",
+              "not_configured": "Nicht eingerichtet",
+              "inactive": "Derzeit nicht aktiv",
+              "input_unavailable": "Eine benötigte Entität ist nicht verfügbar",
+              "input_unknown": "Eine benötigte Entität hat keinen bekannten Wert",
+              "input_held_last_known": "Der letzte bekannte Wert einer Entität gilt",
+              "waiting_for_delay": "Wartet, bis die Verzögerung abgelaufen ist",
+              "outside_episode": "Die Bedingungen sind derzeit nicht erfüllt",
+              "episode_locked": "Für den Rest der laufenden Phase gesperrt",
+              "watchdog_released": "Freigegeben, weil es unplausibel lange dauerte",
+              "capability_missing": "Der Rollladen kann das nicht",
+              "day_type_fallback": "Wochentag verwendet, weil die Art des Tages nicht bekannt ist",
+              "function_disabled_by_fault": "Pausiert, weil eine gespeicherte Einstellung fehlerhaft ist",
+              "layer_failed": "Wegen eines internen Fehlers übersprungen",
+              "only_raise": "Wird zu dieser Zeit nur angehoben",
+              "only_lower": "Wird zu dieser Zeit nur gesenkt",
+              "sleep_exception_no_open": "Wird nicht geöffnet, solange jemand schläft",
+              "lockout_door_open": "Wird nicht gesenkt, solange die Tür offen ist",
+              "lockout_void_tamper": "Trotz offener Tür gesenkt: der Sabotagekontakt ist aktiv",
+              "lockout_contact_unavailable": "Wird nicht gesenkt: der Türkontakt ist nicht verfügbar",
+              "ventilation_floor": "Hält an der Lüftungsposition, weil das Fenster offen ist",
+              "rain_ventilation_floor": "Bei offenem Fenster auf die Regenposition gesenkt",
+              "frost_limit": "Öffnet wegen Frost nur bis zur Frostposition",
+              "frost_limit_source_blind": "Öffnet nur bis zur Frostposition, weil keine Temperatur bekannt ist",
+              "frost_hold": "Wird bei Frost nicht angehoben",
+              "no_intermediate_position": "Keine Zwischenposition während eines Schutzereignisses",
+              "constraint_failed": "Einschränkung wegen eines internen Fehlers beibehalten",
+              "sent": "Befehl gesendet",
+              "maintenance_lock": "Wartungssperre",
+              "dry_run": "Probelauf: nichts bewegt sich",
+              "cover_unavailable": "Der Rollladen ist nicht verfügbar",
+              "target_reached": "Steht bereits auf der gewünschten Position",
+              "mode_off": "Betriebsart: aus",
+              "mode_protection_only": "Betriebsart: nur Schutz",
+              "paused": "Pausiert",
+              "person_at_window": "Jemand ist am Fenster",
+              "manual_override": "Von Hand bewegt; automatische Bewegungen warten",
+              "movement_in_flight": "Wartet, bis die laufende Bewegung beendet ist",
+              "duplicate_command": "Befehl bereits unterwegs",
+              "movement_taken_over": "Laufende Bewegung übernommen",
+              "min_change": "Änderung zu klein für eine Bewegung",
+              "min_interval": "Wartet auf den Mindestabstand zwischen zwei Bewegungen",
+              "trigger_time_missing": "Zurückgehalten: es ist nicht bekannt, wann der Wunsch begann",
+              "command_backoff": "Wartet vor dem nächsten Versuch",
+              "staggered": "Wartet, bis es an der Reihe ist",
+              "gate_rule_failed": "Wegen eines internen Fehlers zurückgehalten",
+              "manual_detected": "Von Hand bewegt",
+              "manual_detected_member": "Ein Rollladen des Fensters wurde von Hand bewegt",
+              "external_movement_observed": "Im Probelauf von anderer Seite bewegt",
+              "moved_during_downtime": "Bewegt, während Home Assistant nicht lief",
+              "person_at_window_started": "Jemand ist ans Fenster gekommen",
+              "person_at_window_ended": "Niemand mehr am Fenster",
+              "override_started": "Handbetrieb begonnen",
+              "override_ended": "Handbetrieb beendet",
+              "protection_started": "Schutzereignis begonnen",
+              "protection_ended": "Schutzereignis beendet",
+              "protection_source_blind": "Die Entität eines Schutzereignisses hat keinen Wert",
+              "lockout_contact_blind": "Der Türkontakt hat keinen Wert",
+              "fire_acknowledged": "Feueralarm bestätigt",
+              "frost_protection_waived": "Frostschutz bis zum nächsten Morgen aufgehoben",
+              "frost_waiver_ended": "Frostschutz gilt wieder",
+              "frost_released_by_sun": "Frostschutz durch die Sonne aufgehoben",
+              "frost_source_blind": "Die Frost-Entität hat keinen Wert",
+              "position_may_be_inaccurate": "Die Position kann ungenau sein",
+              "command_failed": "Befehl fehlgeschlagen",
+              "actuator_no_reaction": "Der Rollladen hat nicht reagiert",
+              "movement_not_finished": "Kein Ende der Bewegung rechtzeitig gemeldet",
+              "member_unavailable": "Ein Rollladen des Fensters ist nicht verfügbar",
+              "button_refused_maintenance_lock": "Taster wegen der Wartungssperre abgewiesen"
+            }
+          }
+        }
+      }
+    },
+    "binary_sensor": {
+      "override_active": {
+        "name": "Handbetrieb"
+      },
+      "dry_run": {
+        "name": "Probelauf"
+      }
+    }
+  },
+  "common": {
+    "logbook_sent": "Befehl gesendet: auf {target} % fahren. Grund: {cause}.",
+    "logbook_sent_no_target": "Befehl gesendet. Grund: {cause}.",
+    "logbook_dry_run": "Probelauf, nichts bewegt: wäre auf {target} % gefahren. Grund: {cause}.",
+    "logbook_dry_run_no_target": "Probelauf, nichts bewegt: wäre gefahren. Grund: {cause}.",
+    "logbook_held_back": "Bewegung auf {target} % zurückgehalten: {held}. Gewünscht wegen: {cause}.",
+    "logbook_held_back_no_target": "Bewegung zurückgehalten: {held}. Gewünscht wegen: {cause}."
   }
 }

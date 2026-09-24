@@ -23,6 +23,7 @@ from homeassistant.const import (
 )
 from homeassistant.core import HomeAssistant, ServiceCall, State
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
@@ -39,6 +40,7 @@ from custom_components.roller_shutter_suite.actuator import (
     fire_passed_failed_dry_run,
     forget_actuator,
 )
+from custom_components.roller_shutter_suite.const import status_signal
 from custom_components.roller_shutter_suite.controller import WindowController
 from custom_components.roller_shutter_suite.core.arbiter import member_expectation_end
 from custom_components.roller_shutter_suite.core.engine import Engine, build_arbiter
@@ -678,6 +680,29 @@ async def test_a_failing_call_does_not_stop_other_windows_and_reaches_the_core(
     assert len(logged) == 1
     assert "Example window 0" in logged[0].getMessage()
     assert logged[0].levelno == logging.WARNING
+
+
+async def test_the_readers_of_the_status_are_told_about_a_command_result(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The entities and the diagnostics see the context ID once the call returned."""
+    entry, covers = await setup_windows(hass, 1, gap=0)
+    await settle(hass, freezer)
+    (controller,) = controllers(entry)
+    seen: list[str | None] = []
+
+    def on_status() -> None:
+        commands = controller.status.commands
+        seen.append(commands[0].command.context_id if commands else None)
+
+    async_dispatcher_connect(hass, status_signal(controller.window_id), on_status)
+    script(controller, day())
+    await settle(hass, freezer)
+
+    assert [c.member_id for c in cover_calls(hass)] == covers
+    # The recompute that sent the command published it before the call
+    # returned; the result is published on its own.
+    assert seen[-1] == cover_calls(hass)[0].context_id
 
 
 async def test_a_failure_is_logged_once_until_a_call_works_again(

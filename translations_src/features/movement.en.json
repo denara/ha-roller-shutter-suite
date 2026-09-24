@@ -16,7 +16,7 @@
     },
     "stagger_gap": {
       "label": "Gap between motors",
-      "description": "When many shutters move together, the next motor starts this many seconds after the previous one, between windows and between the covers of one window. 0 switches it off for the covers of this window. A fire alarm is never staggered. The gap between the covers of one window only matters for a window with several covers."
+      "description": "When many shutters move together, their motors start one after the other. This gap, in seconds, is reserved after each motor of this window: the next motor, of this window or of another one, starts when it has passed. A value of 0 switches staggering off for this window; its covers start together when its turn comes. A fire alarm is never staggered. The gap between the covers of one window only matters for a window with several covers."
     },
     "reevaluate_after": {
       "label": "Look again at the latest after",

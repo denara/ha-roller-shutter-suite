@@ -111,11 +111,23 @@ The clock port reports the time in the **named** local zone of the installation,
 
 The core computes nothing astronomical. There is exactly one implementation of its `Sun` port, backed by the `astral` library that Home Assistant ships, in `sun_astral.py` of this integration (`AstralSun`, built from latitude, longitude, elevation and the name of the zone). `location.py` obtains the observer through Home Assistant's current helper, `homeassistant.helpers.sun.get_astral_observer` (Core 2026.9.2; `get_astral_location` is deprecated), hands plain values to that class, and never depends on the `sun` entity. An elevation that is not a height in metres (`astral` also accepts a pair of height and distance) fails the set-up closed. `location.py` imports `AstralSun` at the top of the module, like any other module of the integration; Home Assistant imports the integration's modules outside the event loop, and nothing is imported by name while the loop runs (an `importlib` call there trips Home Assistant's detection of blocking calls).
 
+## The status and its readers
+
+`WindowStatus` is read, never written, by three modules. After every recompute, after the result of a command has been recorded ([Moving covers](#moving-covers)), and when the phase changes, the controller sends the dispatcher signal `const.status_signal(window_id)` (`_publish_status`); the signal carries nothing, and each reader looks the controller up in `SuiteRuntime.windows` and reads its status. Looking it up by the window's ID each time means a reader never keeps a controller that was replaced.
+
+| Module | What it reads | What it makes of it |
+|---|---|---|
+| `entity.py`, `sensor.py`, `binary_sensor.py` | the decision, the schedule's next action, the observation, the controls | the entities of the window, unavailable while no member is available or the window has no controller |
+| `events.py` | the decision, whether commands were given, dry-run | one reason event per change of outcome (`record.reason_outcome`), and the last decisions for the diagnostics |
+| `diagnostics.py` | everything, plus the resolved configuration and the persisted state | the download, redacted |
+
+`record.py` turns a decision into plain data for all three; it imports nothing from Home Assistant. A fault of the safety net appears there as stage, place, function and reason code (`layer_failed`, `constraint_failed`, `gate_rule_failed`); `EvaluationFault.exception` is never read outside the controller's log line. The memory of the last event per window and the recent decisions live in `hass.data` next to the storage (`events.history_of`), so a reload does not fire the same outcome again; like the storage, they are lost at a restart. `SourceReading.since` appears in the diagnostics as `seen_unchanged_since`, documented as starting again with every reload; it is never presented as a persisted fact. The logbook platform (`logbook.py`) builds its messages from the translations Home Assistant already holds for the language of the installation, which the set-up of the entry loads; see [Status, reason events and diagnostics](../features/status-and-events.md) for the user's view.
+
 ## What the runtime does not do yet
 
 - **Persistence to disk.** The storage is in memory; a restart starts every window with a fresh state and a new seed. Restart reconciliation (section 11 of the specification) belongs to the persistence block.
 - **Retries, backoff, the tracker, manual detection.** The runtime has the core record that a command was given, with its context ID and whether the call failed; retrying a failed command, its backoff and the repair issue are the block of command verification, evaluating the movement is the block that tracks movements.
-- **Entities, events, repair issues about faults of the arbiter.** The status of a window is a plain object (`WindowStatus`) for the block that builds the entities.
+- **Repair issues about faults of the arbiter.** Faults are logged and shown in the status entities and the diagnostics; a repair issue for them belongs to a later block.
 - **Switches for pause, operating mode and maintenance lock.** The controls are neutral until that block exists; `SuiteRuntime.controls_of` is the seam.
 - **Cleaning up the state of a removed window.** The storage keeps it until the persistence block decides.
 

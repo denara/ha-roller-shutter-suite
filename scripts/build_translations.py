@@ -22,7 +22,14 @@ and of which kind they are comes from the catalog of the integration
 (``features/`` and the registry of the core), never from a second list here.
 On the levels that inherit, the script appends the shared inheritance hint to
 the helper text of a field, with the placeholders of that field. It also fans
-out the repair issues about stored settings: one per level and problem.
+out the repair issues about stored settings: one per level and problem, and
+the words for the reason codes (``_templates.reason_codes``) to the states of
+the reason sensor and to the attribute ``reason`` of the next planned action.
+
+**Languages** are the ``base.<language>.json`` files that exist. English is
+written to ``strings.json`` and ``translations/en.json``, every other language
+to ``translations/<language>.json``. A language is added by adding its
+fragments, nothing else.
 
 Usage::
 
@@ -327,6 +334,16 @@ def _fault_issues(templates: dict[str, Any]) -> dict[str, Any]:
     return issues
 
 
+def _reason_texts(result: dict[str, Any], templates: dict[str, Any]) -> None:
+    """Write the words for the reason codes where the entities show them."""
+    reasons = dict(templates["reason_codes"])
+    sensors = result.setdefault("entity", {}).setdefault("sensor", {})
+    sensors.setdefault("active_reason", {})["state"] = reasons
+    next_action = sensors.setdefault("next_action", {})
+    attributes = next_action.setdefault("state_attributes", {})
+    attributes.setdefault("reason", {})["state"] = dict(reasons)
+
+
 def build(language: str, catalog: Any | None = None) -> dict[str, Any]:
     """Return the complete translation of one language."""
     catalog = load_catalog() if catalog is None else catalog
@@ -364,6 +381,7 @@ def build(language: str, catalog: Any | None = None) -> dict[str, Any]:
                     }
                 }
         result.setdefault("issues", {}).update(_fault_issues(templates))
+        _reason_texts(result, templates)
     except KeyError as error:
         raise SourceError(
             f"language {language!r}: the key {error} is missing"
