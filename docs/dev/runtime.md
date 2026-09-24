@@ -75,7 +75,7 @@ What happens to a command:
 
 When Home Assistant stops or the entry is removed, queued commands are dropped and reported as failed; nothing of them was sent.
 
-**Testing it.** No test reaches a real cover. `runtime_kit.register_cover_services` registers stand-ins for the three cover actions that only record each call (`cover_calls`), with the context and the time; a test that wants a call to fail registers its own handler. The house settings of the runtime tests set `stagger_gap` to zero, so every member of a send is called at once; `tests/ha/test_actuator.py` sets its own gap.
+**Testing it.** No test reaches a real cover. `runtime_kit.register_cover_services` registers stand-ins for the three cover actions that only record each call (`cover_calls`), with the context and the time; a test that wants a call to fail registers its own handler. The house settings of the runtime tests set `stagger_gap` to zero, so every member of a send is called at once; `tests/ha/test_actuator.py` sets its own gap. `tests/ha/test_pilot_safety.py` is the safety proof of the pilot: it sets the integration up through its forms, keeps one window in dry-run next to an armed control window, and runs a whole day with a restart, a reload, a reconfigure, an unavailable cover and a stub fire alarm; the dry-run cover receives no call while the control cover does.
 
 ## Sources: an entity state or an entity attribute
 

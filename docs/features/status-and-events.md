@@ -2,7 +2,7 @@
 
 Every window explains itself: why it is where it is, where it should be, and what happens next. This page describes the entities that show it, the event the integration fires when it moves a shutter or holds a movement back, the entries in the logbook, and the diagnostics download.
 
-**Status: in development.** The entities, the event and the diagnostics exist, and an armed window does send commands to its covers; but no window can be armed in the forms yet, so every window is in dry-run and records the command it would give. Manual operation is not detected yet, so the entity "Manual override" is always off.
+**Status: pilot.** The entities, the event and the diagnostics exist, and an armed window does send commands to its covers; but no window can be armed in the forms yet, so every window is in dry-run and records the command it would give. Manual operation is not detected yet, so the entity "Manual override" is always off.
 
 ## The entities of a window
 
@@ -19,6 +19,8 @@ Each window has a device with the window's name. The device carries five entitie
 The entities update whenever the window is looked at again: when a cover or an entity the window uses changes, at every planned time, and at least every five minutes. They never poll.
 
 **When a cover is unavailable**, the entities of its window are unavailable too, and they come back by themselves with the cover; no reload is needed. A window with several covers stays available as long as at least one of them is.
+
+**A cover that reports its position as a decimal number**, such as `100.0` instead of `100`, is treated as a cover without position feedback: this version reads a position only as a whole number. The template cover and the cover group of Home Assistant report it that way. For such a cover the reason never reads "Already at the position it should have", and the diagnostics show `position: null`. The [pilot guide](../pilot.md#5-compare-with-your-existing-control) explains how to check a cover.
 
 ### What the reason tells you
 

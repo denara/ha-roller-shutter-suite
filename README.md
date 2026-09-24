@@ -4,7 +4,20 @@ A custom integration that becomes the single authority over roller shutters: sch
 
 ## Status
 
-**In development, not usable yet.** The integration can be installed and set up, but it does nothing so far. Do not install it on a system you rely on.
+**Pilot, dry-run only recommended.** Version 0.1.0 can be installed next to the control you use today. It decides what it would do with a shutter, shows it and writes it down, and moves nothing: every window is in dry-run, and this version offers no way to arm one. The [pilot guide](docs/pilot.md) takes you through installing it, adding one window, comparing its decisions with your existing control, and removing it again.
+
+What works:
+
+- the forms for the house, groups and windows, with values inherited from the house to groups to windows;
+- the daily routine: morning and evening on workdays, weekends and public holidays, fixed times or the sun with "not before" and "not after", a separate summer evening position, an outdoor brightness sensor, a random offset;
+- the settings of movement: minimum change, minimum interval, the gap between motors;
+- for every window: the entities Reason, Computed position, Next planned action, Manual override and Dry-run, the event `roller_shutter_suite_reason`, logbook entries and a diagnostics download.
+
+What does not work yet:
+
+- arming a window, so that it really moves its shutter;
+- shading, storm and hail, the fire alarm, sleep mode, reactions to open windows and doors, pause and maintenance switches, and the detection of a movement by hand;
+- remembering the state of a window across a restart of Home Assistant; the decisions do not depend on it, see the [pilot guide](docs/pilot.md#7-after-a-restart-of-home-assistant).
 
 Requires Home Assistant 2026.9 or newer.
 
@@ -15,7 +28,7 @@ The integration is installed through [HACS](https://hacs.xyz) as a custom reposi
 1. Open HACS in Home Assistant.
 2. Open the menu in the top right corner and choose **Custom repositories**.
 3. Enter `https://github.com/denara/ha-roller-shutter-suite` as the repository, choose **Integration** as the type and select **Add**.
-4. Search for **Roller Shutter Suite** in HACS, open it and select **Download**.
+4. Search for **Roller Shutter Suite** in HACS, open it and select **Download**; choose the version **v0.1.0** in the dialog.
 5. Restart Home Assistant.
 6. Go to **Settings** > **Devices & services** > **Add integration** and choose **Roller Shutter Suite**.
 
@@ -23,6 +36,7 @@ The integration can be set up only once per Home Assistant installation.
 
 ## Documentation
 
+- [Pilot guide](docs/pilot.md): one window in dry-run, step by step
 - [Documentation](docs/index.md)
 - [Project brief](docs/project-brief.md): what is being built and why
 
