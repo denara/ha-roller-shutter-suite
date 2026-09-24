@@ -71,6 +71,7 @@ from .geometry import (
     member_glass_for,
 )
 from .observation import (
+    CommandResult,
     MemberCommand,
     MemberObservation,
     MembersAtTargets,
@@ -125,8 +126,10 @@ from .values import (
 )
 from .window import (
     BLIND_SOURCE,
+    DEFAULT_STAGGER_GAP,
     DEFAULT_TOLERANCE_CALCULATED,
     DEFAULT_TOLERANCE_MEASURED,
+    MAX_STAGGER_GAP,
     MIN_TOLERANCE,
     SCHEDULE_DAY_TYPES,
     SCHEDULE_EDGES,
@@ -150,6 +153,7 @@ from .window import (
 __all__ = [
     "BLIND_SOURCE",
     "CONSTRAINT_REASONS",
+    "DEFAULT_STAGGER_GAP",
     "DEFAULT_TOLERANCE_CALCULATED",
     "DEFAULT_TOLERANCE_MEASURED",
     "FULLY_CLOSED",
@@ -160,6 +164,7 @@ __all__ = [
     "MAX_AMPLIFICATION_CAP",
     "MAX_MEASURED_LENGTH",
     "MAX_RANDOM_OFFSET",
+    "MAX_STAGGER_GAP",
     "MAX_SUN_OFFSET_MINUTES",
     "MEMBER_MEASUREMENT_FIELDS",
     "MIN_CALIBRATION_SPAN",
@@ -174,6 +179,7 @@ __all__ = [
     "BlindSource",
     "CapabilityProfile",
     "CapabilityState",
+    "CommandResult",
     "Constraint",
     "ConstraintResult",
     "ControlLevel",

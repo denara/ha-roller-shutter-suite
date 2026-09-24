@@ -41,6 +41,7 @@ EXPECTED = {
     "motor_min_change": (SettingKind.NUMBER, FunctionId.MOTOR_PROTECTION),
     "motor_min_interval": (SettingKind.DURATION, FunctionId.MOTOR_PROTECTION),
     "reevaluate_after": (SettingKind.DURATION, FunctionId.COMMAND_VERIFICATION),
+    "stagger_gap": (SettingKind.DURATION, FunctionId.MOTOR_PROTECTION),
 }
 
 
@@ -84,7 +85,20 @@ def test_without_stored_settings_the_window_has_the_built_in_defaults() -> None:
     assert resolution.config.frost == FrostSettings()
     assert resolution.config.motor_protection == MotorProtectionSettings()
     assert resolution.config.reevaluate_after == timedelta(minutes=5)
+    assert resolution.config.stagger_gap == timedelta(seconds=2)
     assert resolution.settings.faults == ()
+
+
+def test_the_staggering_gap_is_inherited_and_zero_is_a_valid_own_value() -> None:
+    """The house sets 5 seconds, a window switches staggering off for its motors."""
+    inherited = _resolve(house={"stagger_gap": 5})
+    own = _resolve(house={"stagger_gap": 5}, own={"stagger_gap": 0})
+
+    assert inherited.config is not None
+    assert inherited.config.stagger_gap == timedelta(seconds=5)
+    assert own.config is not None
+    assert own.config.stagger_gap == timedelta(0)
+    assert own.settings.faults == ()
 
 
 def test_each_setting_is_inherited_on_its_own() -> None:
@@ -143,6 +157,9 @@ def test_a_window_can_switch_inherited_frost_protection_off() -> None:
         ("motor_min_interval", "10 minutes"),
         ("reevaluate_after", 0),
         ("reevaluate_after", 366 * 24 * 60 * 60 + 1),
+        ("stagger_gap", 11),
+        ("stagger_gap", -1),
+        ("stagger_gap", "2 seconds"),
         ("frost_threshold", "__none__"),
     ],
 )
@@ -160,6 +177,7 @@ def test_a_faulty_stored_value_falls_back_and_pauses_nothing(
         "motor_min_change": 3,
         "motor_min_interval": 300,
         "reevaluate_after": 120,
+        "stagger_gap": 4,
     }
     resolution = _resolve(group=good, own={key: stored})
     expected = _resolve(group=good)
@@ -184,6 +202,7 @@ FAULT_VALUES = {
     "motor_min_change": 5,
     "motor_min_interval": timedelta(minutes=10),
     "reevaluate_after": timedelta(minutes=5),
+    "stagger_gap": timedelta(seconds=2),
 }
 """Confirmed by the project owner; the reasons stand at the entries of the registry."""
 

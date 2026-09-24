@@ -1,0 +1,26 @@
+{
+  "steps": {
+    "general": {
+      "title": "Movement",
+      "description": "How the integration spares the motors: it leaves out movements that are not worth it, waits between two comfort movements, and does not start all motors of a collective movement at the same moment. Protection movements are never held back by the minimum change and the minimum interval, and a fire alarm is never held back by any of these settings."
+    }
+  },
+  "fields": {
+    "motor_min_change": {
+      "label": "Minimum change",
+      "description": "A comfort movement smaller than this is left out. 0 switches it off. A shutter is still driven fully open or fully closed, however small the rest is. It can only be judged for covers that report their position; a cover that reports none is always moved."
+    },
+    "motor_min_interval": {
+      "label": "Minimum interval",
+      "description": "The shortest time between two comfort movements of the window, against flapping while shading follows the sun. 0 switches it off. Something new, such as the morning or the evening, sleep mode switched on, or the start of shading, moves at once all the same."
+    },
+    "stagger_gap": {
+      "label": "Gap between motors",
+      "description": "When many shutters move together, the next motor starts this many seconds after the previous one, between windows and between the covers of one window. 0 switches it off for the covers of this window. A fire alarm is never staggered. The gap between the covers of one window only matters for a window with several covers."
+    },
+    "reevaluate_after": {
+      "label": "Look again at the latest after",
+      "description": "When a movement waits for something whose end nobody knows, for example for a cover to become available again, the window is looked at again after this time at the latest."
+    }
+  }
+}

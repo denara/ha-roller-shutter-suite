@@ -2,8 +2,9 @@
 
 So far it offers what the arbiter needs: ``recompute(snapshot) → decision``,
 the state a decision leaves behind for a window in dry-run, the state a real
-send leaves behind, and arming a window. Observing members and command
-results are added by later blocks.
+send leaves behind, the state the result of a command leaves behind (its
+context ID, and whether it failed), and arming a window. Observing members
+is added by a later block.
 
 Every method is a pure function of its arguments. The engine keeps the window
 configuration and the arbiter, both immutable, and nothing else: no state, no
@@ -21,11 +22,12 @@ from .arbiter import (
     LayerRegistration,
     apply_take_over,
     arm,
+    record_command_result,
     record_sent_commands,
     remember_would_be_send,
 )
 from .constraints import DIRECTION_CONSTRAINT, FROST_CONSTRAINT
-from .model import Decision, WindowConfig, WindowState, WorldSnapshot
+from .model import CommandResult, Decision, WindowConfig, WindowState, WorldSnapshot
 from .reasons import ReasonCode
 from .schedule import SCHEDULE_LAYER
 
@@ -104,6 +106,16 @@ class Engine:
         send leaves the state as it is.
         """
         return record_sent_commands(snapshot, decision, command_ids)
+
+    @staticmethod
+    def on_command_result(state: WindowState, result: CommandResult) -> WindowState:
+        """Return the window state after the actuator reported a command's result.
+
+        The last own command of the member gets the context ID, and a failed
+        command is marked (``command_failed``), if its identifier is the one
+        of the result; a late result of an older command changes nothing.
+        """
+        return record_command_result(state, result)
 
     @staticmethod
     def arm(state: WindowState) -> WindowState:

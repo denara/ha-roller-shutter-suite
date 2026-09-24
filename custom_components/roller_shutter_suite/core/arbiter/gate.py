@@ -11,7 +11,7 @@ dry-run, except the last one: the arbiter hands a dry-run window its simulated
 commands and marks the outcome as hypothetical.
 """
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Final
@@ -87,8 +87,9 @@ def _target_reached(gate: GateInput) -> GateOutcome | None:
     """Compare with the real position, also for a window in dry-run.
 
     A member without position feedback counts as reached if its last real own
-    command already had this target. Members that are unavailable are not
-    commanded and therefore not judged.
+    command already had this target, unless that command failed
+    (``command_failed``): the actuator never received it. Members that are
+    unavailable are not commanded and therefore not judged.
     """
     targets = {
         target.member_id: target.position
@@ -96,7 +97,11 @@ def _target_reached(gate: GateInput) -> GateOutcome | None:
         if target.position is not None
     }
     reported = gate.current_positions
-    real_commands = gate.snapshot.state.commanded_targets
+    real_commands = {
+        member.member_id: member.last_own_command.target
+        for member in gate.snapshot.state.members
+        if member.last_own_command is not None and not member.last_own_command.failed
+    }
     addressed = _addressed_members(gate)
     if not addressed:
         return None  # nobody to judge: nothing is known to be reached
@@ -280,13 +285,48 @@ def _pending(gate: GateInput) -> dict[str, tuple[OwnCommand, datetime]]:
     return pending
 
 
-def _repeats(gate: GateInput, pending: dict[str, tuple[OwnCommand, datetime]]) -> bool:
-    """Return whether every target at the gate is the target of a pending command."""
-    return bool(pending) and all(
-        target.member_id in pending
-        and pending[target.member_id][0].target == target.position
-        for target in gate.to_send
+def _stands_at_target(gate: GateInput, member: MemberConfig) -> bool:
+    """Return whether a member reports a position within tolerance of its target.
+
+    A member without position feedback cannot be judged and never stands.
+    """
+    if has_no_position_feedback(member.capabilities):
+        return False
+    position = gate.current_positions.get(member.member_id)
+    target = next(
+        (t.position for t in gate.to_send if t.member_id == member.member_id), None
     )
+    return (
+        position is not None
+        and target is not None
+        and abs(position.value - target.value) <= member.capabilities.tolerance
+    )
+
+
+def _all_commanded(gate: GateInput, pending: Mapping[str, OwnCommand]) -> bool:
+    """Return whether a send now would repeat what is under way.
+
+    A send commands only the members that are available and do not stand at
+    their target within tolerance (the runtime filters the same way). So a
+    send would repeat the pending commands if every such member has a
+    pending command with its target, and there is at least one.
+    """
+    targets = {target.member_id: target.position for target in gate.to_send}
+    commanded = [
+        member
+        for member in _addressed_members(gate)
+        if not _stands_at_target(gate, member)
+    ]
+    return bool(commanded) and all(
+        member.member_id in pending
+        and pending[member.member_id].target == targets[member.member_id]
+        for member in commanded
+    )
+
+
+def _repeats(gate: GateInput, pending: dict[str, tuple[OwnCommand, datetime]]) -> bool:
+    """Return whether a send now would repeat the pending commands."""
+    return _all_commanded(gate, {key: value[0] for key, value in pending.items()})
 
 
 def _same_command_pending(gate: GateInput) -> GateOutcome | None:
@@ -297,6 +337,7 @@ def _same_command_pending(gate: GateInput) -> GateOutcome | None:
     taken_over = any(
         outranks(gate.wish.wish_class, pending[target.member_id][0].wish_class)
         for target in gate.to_send
+        if target.member_id in pending
     )
     return GateOutcome.suppress(
         GateRule.MOVEMENT_IN_FLIGHT,
@@ -323,11 +364,7 @@ def fire_command_pending(gate: GateInput) -> bool:
         end = expectation_window_end(gate, member.member_id, command)
         if end is not None and gate.snapshot.time < end:
             pending[member.member_id] = command
-    return bool(pending) and all(
-        target.member_id in pending
-        and pending[target.member_id].target == target.position
-        for target in gate.to_send
-    )
+    return _all_commanded(gate, pending)
 
 
 def _wait_for_rest(gate: GateInput) -> GateOutcome | None:

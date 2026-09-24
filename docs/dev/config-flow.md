@@ -44,6 +44,7 @@ custom_components/roller_shutter_suite/
   features/
     __init__.py      FEATURES and the catalog     <- one line per feature
     daily_routine/   the form of the feature
+    movement/        motor protection, staggering, re-evaluation time
 translations_src/    sources of the translations, outside the shipped integration
 scripts/build_translations.py
 ```
@@ -64,7 +65,7 @@ The registry of the core (`core/settings.py`) is the only description of a setti
 
 A `FeatureForm` lists the pages of one feature (`StepForm`: a name and its fields; a page has at most one section, because sections cannot be nested) and names the switch of the feature, if the registry has one. A `Catalog` ties the registry, the feature forms and the resolver together and refuses a form description that does not fit the registry: an unknown key, a switch that is no inheritable boolean, a list (which needs a step of its own), a key in two forms, two pages with the same step ID, and a day of the year or a reference inside the section. A day of the year is a text field, and an emptied text inside a section was never confirmed in a browser. A time has a selector of its own and may sit in the section; like every field, an empty text from it counts as an absent key.
 
-**A setting that is not offered yet** simply has no `FieldForm`. It stays in the registry, its stored value is kept when a form is saved, and the set-up resolves it like any other. At present these are `morning_condition_source` (the conditional morning opening is not built) and `schedule_profile` (one value), plus the settings of functions that have no form yet (frost protection, motor protection).
+**A setting that is not offered yet** simply has no `FieldForm`. It stays in the registry, its stored value is kept when a form is saved, and the set-up resolves it like any other. At present these are `morning_condition_source` (the conditional morning opening is not built) and `schedule_profile` (one value), plus the settings of functions that have no form yet (frost protection). Motor protection, the staggering gap and the re-evaluation time have the page "Movement" (`features/movement/`), which has no switch.
 
 **A bound is never wider than the core.** `tests/ha/test_flow_model.py` hands every `minimum` and `maximum` of the shipped forms to the resolver of the core as the own value of a window and fails on a fault, so a form cannot offer a value that the core refuses.
 
@@ -115,13 +116,13 @@ If the registry has an inheritable boolean that switches the feature, name it as
 
 ## Translations are generated
 
-Home Assistant loads one file per language, the strings of a step live under the flow that shows it, and a custom integration cannot use key references. `scripts/build_translations.py` therefore writes `strings.json`, `translations/en.json` and `translations/de.json` from `translations_src/`:
+Home Assistant loads one file per language, the strings of a step live under the flow that shows it, and a custom integration cannot use key references. `scripts/build_translations.py` therefore writes `strings.json` and one `translations/<language>.json` per language from `translations_src/`. A language is every `base.<language>.json` there; English also writes `strings.json`. A new language needs its base file and one fragment per feature, and nothing in the script or the tests changes:
 
 - `base.<language>.json`: everything that is not a feature step, and the shared templates under `_templates` (the inheritance hints, the section of expert values, the errors of the generated steps, and the parts of the repair issues about stored settings);
 - `features/<feature>.<language>.json`: `steps.<page>` (title, description), `fields.<name>` (label, description; for an optional reference also `entity_label` and `entity_description`), `switch` (label, description) if the feature has one, `unavailable.<name>` (label, description of the stand-in) for a setting that requires a capability, and `options.<translation key>` for the values of an enumeration.
 - `generated` in a fragment holds the texts of settings that are generated from lists: a `pattern` of the field name (`schedule_{day_type}_{edge}_{field}`), the `words` of each part in this language, and under `texts` one label and one helper text per value of the last part, in which `[edge]` stands for the word of the part `edge`. Six texts per language describe the 36 trigger settings.
 
-Which fields a step has, their kind and their section come from the catalog, which the script imports without Home Assistant. The script fans a feature step out to the three levels, appends the inheritance hint of the field's kind on the levels that inherit, and generates one repair issue per level and problem code. **Never edit the three generated files by hand.** `tests/scripts/test_build_translations.py` fails when they are not current, when English and German differ in a key or a placeholder, or when a source ends up inside the shipped integration; `uv run python scripts/build_translations.py --check` does the first of these on the command line. `tests/ha/test_translations.py` asks the forms what they show and fails when a field, an error, a menu entry or an issue has no translation.
+Which fields a step has, their kind and their section come from the catalog, which the script imports without Home Assistant. The script fans a feature step out to the three levels, appends the inheritance hint of the field's kind on the levels that inherit, and generates one repair issue per level and problem code. **Never edit the three generated files by hand.** `tests/scripts/test_build_translations.py` fails when they are not current, when a language differs from English in a key or a placeholder, or when a source ends up inside the shipped integration; `uv run python scripts/build_translations.py --check` does the first of these on the command line. `tests/ha/test_translations.py` asks the forms what they show and fails when a field, an error, a menu entry or an issue has no translation.
 
 ## What a flow took from an earlier page may be gone
 

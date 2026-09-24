@@ -18,9 +18,10 @@ from collections.abc import Callable, Mapping
 
 from homeassistant.core import HomeAssistant, callback
 
+from .actuator import CoverActuator
 from .controller import WindowController
 from .core.model import Controls
-from .core.ports import Actuator, Clock, Storage, Sun
+from .core.ports import Clock, Storage, Sun
 from .windows import WindowRuntime
 
 _LOGGER = logging.getLogger(__name__)
@@ -46,7 +47,7 @@ class SuiteRuntime:
         clock: Clock,
         sun: Sun,
         storage: Storage,
-        actuator: Actuator,
+        actuator: CoverActuator,
         controls_of: ControlsProvider = neutral_controls,
     ) -> None:
         """Create the runtime with the ports every controller shares."""

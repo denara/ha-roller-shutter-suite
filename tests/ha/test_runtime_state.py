@@ -125,7 +125,7 @@ async def test_reload_during_a_movement_sends_no_duplicate_and_detects_no_manual
     assert [c.target.value for c in commands_sent(entry)] == [100]
     commanded = controller_of(entry).state.members[0].last_own_command
     assert commanded is not None
-    assert commanded.command_id == commands_sent(entry)[0].command_id
+    assert commanded.context_id == commands_sent(entry)[0].context_id
     owner_before = controller_of(entry).state.owner
 
     # The whole entry reloads while the movement is in flight.
@@ -138,7 +138,7 @@ async def test_reload_during_a_movement_sends_no_duplicate_and_detects_no_manual
     controller = controller_of(entry)
     assert controller.state.members[0].last_own_command == commanded
     assert _reason(entry) is ReasonCode.DUPLICATE_COMMAND
-    assert commands_sent(entry) == []
+    assert len(commands_sent(entry)) == 1
     assert controller.state.owner is owner_before
     assert controller.state.manual_override is None
     # The reloaded window waits for the same deadline the gate reads.
@@ -153,7 +153,7 @@ async def test_reload_during_a_movement_sends_no_duplicate_and_detects_no_manual
     await settle(hass, freezer)
 
     assert _reason(entry) is ReasonCode.TARGET_REACHED
-    assert commands_sent(entry) == []
+    assert len(commands_sent(entry)) == 1
     assert controller.state.manual_override is None
 
 
@@ -201,20 +201,27 @@ async def test_a_send_is_recorded_as_the_core_records_it(
     controller = controller_of(entry)
     sent = commands_sent(entry)
     assert sorted(c.member_id for c in sent) == [left, right]
-    assert len({c.command_id for c in sent}) == len(sent)
+    assert len({c.context_id for c in sent}) == len(sent)
 
     state = controller.state
     by_member = {member.member_id: member for member in state.members}
+    identifiers = {
+        member.last_own_command.command_id
+        for member in state.members
+        if member.last_own_command is not None
+    }
+    assert len(identifiers) == len(sent)
     for recorded in sent:
         member = by_member[recorded.member_id]
         own = member.last_own_command
         assert own is not None
-        assert own.command_id == recorded.command_id
         assert own.target == recorded.target
         assert own.direction is TravelDirection.UP
         assert own.wish_class is WishClass.COMFORT
         assert own.reason is ReasonCode.SCHEDULE_DAY
-        assert own.context_id is None
+        # The context of the service call came back with the result.
+        assert own.context_id == recorded.context_id
+        assert not own.failed
         assert member.command_attempts == 1
         assert member.last_attempt_at == own.time
         assert state.last_comfort_movement == own.time
@@ -629,9 +636,16 @@ class RaisingActuator:
         """Start with nothing moved."""
         self.moved: list[str] = []
 
-    def move_to(self, command_id: str, member_id: str, target: Position) -> None:
+    def move_to(
+        self,
+        command_id: str,
+        member_id: str,
+        target: Position,
+        *,
+        decision: Decision | None = None,
+    ) -> None:
         """Record the first member and raise for the second."""
-        del command_id, target
+        del command_id, target, decision
         if self.moved:
             raise OSError("the platform is gone")
         self.moved.append(member_id)
