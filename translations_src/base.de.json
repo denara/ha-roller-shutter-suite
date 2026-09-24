@@ -283,11 +283,11 @@
     }
   },
   "common": {
-    "logbook_sent": "Befehl gesendet: auf {target} % fahren. Grund: {cause}.",
+    "logbook_sent": "Befehl gesendet, auf {target} % zu fahren. Grund: {cause}.",
     "logbook_sent_no_target": "Befehl gesendet. Grund: {cause}.",
     "logbook_dry_run": "Probelauf, nichts bewegt: wäre auf {target} % gefahren. Grund: {cause}.",
     "logbook_dry_run_no_target": "Probelauf, nichts bewegt: wäre gefahren. Grund: {cause}.",
-    "logbook_held_back": "Bewegung auf {target} % zurückgehalten: {held}. Anlass: {cause}.",
-    "logbook_held_back_no_target": "Bewegung zurückgehalten: {held}. Anlass: {cause}."
+    "logbook_held_back": "Bewegung auf {target} % zurückgehalten: {held}. Grund für die Bewegung: {cause}.",
+    "logbook_held_back_no_target": "Bewegung zurückgehalten: {held}. Grund für die Bewegung: {cause}."
   }
 }

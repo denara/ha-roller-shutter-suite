@@ -283,11 +283,11 @@
     }
   },
   "common": {
-    "logbook_sent": "command sent: move to {target} %. Reason: {cause}.",
+    "logbook_sent": "command sent to move to {target} %. Reason: {cause}.",
     "logbook_sent_no_target": "command sent. Reason: {cause}.",
     "logbook_dry_run": "dry-run, nothing moved: it would have moved to {target} %. Reason: {cause}.",
     "logbook_dry_run_no_target": "dry-run, nothing moved: it would have moved. Reason: {cause}.",
-    "logbook_held_back": "movement to {target} % held back: {held}. Wanted because of: {cause}.",
-    "logbook_held_back_no_target": "movement held back: {held}. Wanted because of: {cause}."
+    "logbook_held_back": "movement to {target} % held back: {held}. Reason for the movement: {cause}.",
+    "logbook_held_back_no_target": "movement held back: {held}. Reason for the movement: {cause}."
   }
 }

@@ -105,9 +105,9 @@ To be told about the fire alarm only, replace the condition with one that checks
 
 Every reason event appears in the logbook, under the name of the window and linked to its entity "Reason", in the language of your Home Assistant installation. Examples:
 
-- *Example window* command sent: move to 0 %. Reason: Daily routine: night.
+- *Example window* command sent to move to 0 %. Reason: Daily routine: night.
 - *Example window* dry-run, nothing moved: it would have moved to 100 %. Reason: Daily routine: day.
-- *Example window* movement to 0 % held back: Paused. Wanted because of: Daily routine: night.
+- *Example window* movement to 0 % held back: Paused. Reason for the movement: Daily routine: night.
 
 ## Diagnostics
 
