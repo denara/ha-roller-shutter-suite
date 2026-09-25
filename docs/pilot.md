@@ -54,7 +54,7 @@ The window's device (Settings > Devices & services > Roller Shutter Suite > the 
 | **Reason** (`sensor.example_window_reason`) | Why the window is where it is. In dry-run it reads **"Dry-run: nothing moves"** whenever the integration would have moved the shutter, and otherwise the reason of the daily routine, for example **"Daily routine: day"**. |
 | **Next planned action** (`sensor.example_window_next_planned_action`) | When the daily routine wants something new next, for example today at 20:00. Its attributes `target` and `reason` say which position it will want and why. |
 | **Dry-run** (`binary_sensor.example_window_dry_run`) | Must stay **on** for the whole pilot. |
-| **Computed position** (`sensor.example_window_computed_position`) | The position the window should have, in percent (100 % is fully open). |
+| **Target position** (`sensor.example_window_target_position`) | The position the window should have, in percent (100 % is fully open). |
 | **Manual override** (`binary_sensor.example_window_manual_override`) | Always off in this version. |
 
 **The attributes of the reason tell the whole story.** Open **Developer tools** > **States** (or select the entity and open its attributes) and look at:

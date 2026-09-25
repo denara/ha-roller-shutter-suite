@@ -2,25 +2,25 @@
   "steps": {
     "general": {
       "title": "Bewegung",
-      "description": "Wie die Integration die Motoren schont: Sie lässt Bewegungen aus, die sich nicht lohnen, wartet zwischen zwei Komfortbewegungen und startet bei einer gemeinsamen Bewegung nicht alle Motoren im selben Augenblick. Die Mindeständerung und der Mindestabstand halten Schutzbewegungen nie zurück, und einen Feueralarm hält keine dieser Einstellungen zurück."
+      "description": "So schonen die Rollläden ihre Motoren: Kleine Komfortbewegungen fallen weg, zwischen zwei Komfortbewegungen vergeht eine Weile, und wenn viele Rollläden gemeinsam fahren, starten ihre Motoren nacheinander. Komfortbewegungen sind zum Beispiel die des Tagesablaufs."
     }
   },
   "fields": {
     "motor_min_change": {
       "label": "Mindeständerung",
-      "description": "Eine Komfortbewegung, die kleiner ist, wird ausgelassen. 0 schaltet das ab. Ganz auf oder ganz zu fährt ein Rollladen trotzdem, auch wenn der Rest klein ist. Beurteilen lässt sich das nur bei Rollläden, die ihre Position melden; ein Rollladen, der keine meldet, wird immer bewegt."
+      "description": "Eine Komfortbewegung, die kleiner ist als dieser Wert, fällt weg. 0 schaltet das aus. Ganz auf oder ganz zu fährt ein Rollladen trotzdem, wie klein der restliche Weg auch ist. Das funktioniert nur bei Rollläden, die ihre Position melden; ein Rollladen ohne Positionsmeldung wird immer bewegt."
     },
     "motor_min_interval": {
       "label": "Mindestabstand",
-      "description": "Die kürzeste Zeit zwischen zwei Komfortbewegungen des Fensters, gegen Hin und Her, während die Beschattung der Sonne folgt. 0 schaltet das ab. Etwas Neues, etwa der Morgen oder der Abend, eingeschalteter Schlafmodus oder der Beginn der Beschattung, bewegt trotzdem sofort."
+      "description": "Die kürzeste Zeit zwischen zwei Komfortbewegungen des Fensters, damit ein Rollladen nicht ständig hin und her fährt. 0 schaltet das aus. Etwas Neues, etwa der Beginn des Morgens oder des Abends, bewegt den Rollladen trotzdem sofort."
     },
     "stagger_gap": {
       "label": "Abstand zwischen Motoren",
-      "description": "Wenn viele Rollläden zugleich fahren, starten ihre Motoren nacheinander. Dieser Abstand in Sekunden wird nach jedem Motor dieses Fensters freigehalten: Der nächste Motor, dieses oder eines anderen Fensters, startet, wenn er vergangen ist. Der Wert 0 schaltet die Staffelung für dieses Fenster ab; seine Rollläden starten gemeinsam, wenn es an der Reihe ist. Ein Feueralarm wird nie gestaffelt. Der Abstand zwischen den Rollläden eines Fensters zählt nur bei einem Fenster mit mehreren Rollläden."
+      "description": "Wenn viele Rollläden gleichzeitig fahren, starten ihre Motoren nacheinander. Nach jedem Motor dieses Fensters wartet der nächste Motor, dieses oder eines anderen Fensters, so viele Sekunden. 0 schaltet das für dieses Fenster aus: Seine Rollläden starten gemeinsam, wenn es an der Reihe ist. Zwischen den Rollläden eines Fensters zählt der Abstand nur, wenn das Fenster mehrere hat."
     },
     "reevaluate_after": {
       "label": "Spätestens erneut prüfen nach",
-      "description": "Wartet eine Bewegung auf etwas, dessen Ende niemand kennt, zum Beispiel darauf, dass ein Rollladen wieder erreichbar ist, wird das Fenster spätestens nach dieser Zeit erneut geprüft."
+      "description": "Muss eine Bewegung auf etwas warten, dessen Ende sich nicht absehen lässt, zum Beispiel darauf, dass ein Rollladen wieder verfügbar ist, wird das Fenster spätestens nach dieser Zeit erneut geprüft."
     }
   }
 }

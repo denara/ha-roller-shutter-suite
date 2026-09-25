@@ -72,7 +72,7 @@ async def test_a_sent_command_is_described_with_its_target_and_its_reason(
     described = describe(Event(EVENT_REASON, fired[0]))
     assert described == {
         "name": "Example window",
-        "message": "command sent: move to 0 %. Reason: Daily routine: night.",
+        "message": "command sent to move to 0 %. Reason: Daily routine: night.",
         "entity_id": REASON,
     }
 
@@ -97,7 +97,7 @@ async def test_dry_run_and_held_back_movements_are_described(
     )
     await advance(hass, freezer, local(20, 0, second=1))
     assert describe(Event(EVENT_REASON, fired[-1]))["message"] == (
-        "movement to 0 % held back: Paused. Wanted because of: Daily routine: night."
+        "movement to 0 % held back: Paused. Reason for the movement: Daily routine: night."
     )
 
 
@@ -111,7 +111,7 @@ async def test_dry_run_and_held_back_movements_are_described(
         ),
         (
             ReasonCode.MAINTENANCE_LOCK,
-            "movement held back: Maintenance lock. Wanted because of: Fire alarm.",
+            "movement held back: Maintenance lock. Reason for the movement: Fire alarm.",
         ),
     ],
 )
@@ -146,7 +146,7 @@ async def test_the_messages_follow_the_language_of_the_installation(
         await async_get_translations(hass, "de", category, {DOMAIN})
     describe = _describer(hass)
     assert describe(Event(EVENT_REASON, fired[0]))["message"] == (
-        "Befehl gesendet: auf 0 % fahren. Grund: Tagesablauf: Nacht."
+        "Befehl gesendet, auf 0 % zu fahren. Grund: Tagesablauf: Nacht."
     )
 
     hass.config.language = "xx"

@@ -7,7 +7,7 @@
   reason why it did not win. For a window in dry-run the record is the
   hypothetical one: ``would_send`` is the position that would have been sent,
   or ``gate_rule`` names the rule that would have held the wish back.
-- **Computed position** (``target_position``): the common target of the
+- **Target position** (``target_position``): the common target of the
   members after the constraints; unknown when the window has none (a layer
   holds it where it is, or the members have different targets).
 - **Next planned action** (``next_action``): the time of the next change of
