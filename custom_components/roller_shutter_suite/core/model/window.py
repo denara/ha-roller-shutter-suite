@@ -67,7 +67,8 @@ _RANDOM_OFFSET: Final = timedelta(0)
 MIN_TOLERANCE: Final = 1
 DEFAULT_TOLERANCE_CALCULATED: Final = 2
 DEFAULT_TOLERANCE_MEASURED: Final = 3
-_MAX_TOLERANCE: Final = 100
+MAX_TOLERANCE: Final = 100
+"""The largest tolerance and minimum change of a position, in percent."""
 _DEFAULT_FROST_POSITION: Final = Position(90)
 _DEFAULT_REEVALUATE_AFTER: Final = timedelta(minutes=5)
 _DEFAULT_MIN_INTERVAL: Final = timedelta(minutes=10)
@@ -203,7 +204,7 @@ class CapabilityProfile:
                 self.stated_tolerance, int
             ):
                 raise TypeError("the tolerance must be an integer")
-            if not MIN_TOLERANCE <= self.stated_tolerance <= _MAX_TOLERANCE:
+            if not MIN_TOLERANCE <= self.stated_tolerance <= MAX_TOLERANCE:
                 raise ValueError("the tolerance must be within 1 and 100")
 
     @property
@@ -355,7 +356,7 @@ class MotorProtectionSettings:
         """Validate the ranges."""
         if isinstance(self.min_change, bool) or not isinstance(self.min_change, int):
             raise TypeError("the minimum change must be an integer")
-        if not 0 <= self.min_change <= _MAX_TOLERANCE:
+        if not 0 <= self.min_change <= MAX_TOLERANCE:
             raise ValueError("the minimum change must be within 0 and 100")
         require_type(self.min_interval, timedelta, "the minimum interval")
         if self.min_interval < timedelta(0):

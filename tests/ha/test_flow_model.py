@@ -1,11 +1,10 @@
 """The form description fits the registry of the core, and is refused if it does not."""
 
-from typing import Any
+import dataclasses
 
 import pytest
 
 from custom_components.roller_shutter_suite.core.settings import (
-    PartialSettings,
     SettingKind,
     schedule_trigger_keys,
 )
@@ -14,16 +13,14 @@ from custom_components.roller_shutter_suite.features.daily_routine import (
     DAILY_ROUTINE,
 )
 from custom_components.roller_shutter_suite.flow.model import (
-    PROBE_MEMBER,
-    PROBE_WINDOW_ID,
+    DURATION_UNITS,
     Catalog,
     FeatureForm,
     FieldForm,
+    NumberBounds,
     StepForm,
 )
 from tests.ha.helpers import EXAMPLE_REGISTRY, resolve_example
-
-_EMPTY = PartialSettings()
 
 NOT_OFFERED_YET = {
     # The conditional morning opening is not built; the core keeps its place.
@@ -81,62 +78,95 @@ def test_trigger_fields_are_generated_from_the_list_of_the_core() -> None:
         ]
 
 
-def _stored(item: FieldForm, bound: float) -> Any:
-    """Return a bound of a form field as the form would store it."""
-    definition = CATALOG.definitions[item.key]
-    if definition.kind is SettingKind.DURATION:
-        return int(bound) * item.seconds_per_unit
-    return int(bound) if float(bound).is_integer() else bound
+def test_form_model_carries_no_bounds_and_no_unit_of_its_own() -> None:
+    """One source: the range and the unit of a number live in the registry entry.
+
+    A form describes where a field stands and how it is entered, never which
+    values are valid. The bounds of every number box are read from the
+    registry of the core, the same entry whose range the reader applies.
+    """
+    names = {entry.name for entry in dataclasses.fields(FieldForm)}
+
+    assert not names & {"minimum", "maximum", "unit", "min", "max", "bounds"}
+    assert names == {
+        "key",
+        "expert",
+        "step",
+        "seconds_per_unit",
+        "entity_domains",
+        "options_key",
+        "form_name",
+    }
 
 
-@pytest.mark.parametrize(
-    "item",
-    [
+def _number_fields() -> list[FieldForm]:
+    return [
         item
-        for item in DAILY_ROUTINE.fields
-        if (item.minimum, item.maximum) != (None,) * 2
-    ],
-    ids=lambda item: item.key,
-)
-def test_no_bound_of_a_form_is_wider_than_what_the_core_accepts(
+        for feature in FEATURES
+        for item in feature.fields
+        if CATALOG.definitions[item.key].kind
+        in (SettingKind.NUMBER, SettingKind.DURATION)
+    ]
+
+
+@pytest.mark.parametrize("item", _number_fields(), ids=lambda item: item.key)
+def test_every_number_box_has_the_range_and_unit_of_its_registry_entry(
     item: FieldForm,
 ) -> None:
-    """A form never offers a value that the core refuses.
-
-    The bounds of a number box are a convenience of the form. The rules are
-    those of the window configuration: every bound is read by the reader of
-    the setting and handed to the resolver of the core as the own value of a
-    window, which reports a refusal as a fault.
-    """
+    """A number keeps its range; a duration shows the whole units within it."""
     definition = CATALOG.definitions[item.key]
-    for bound in (item.minimum, item.maximum):
-        if bound is None:
-            continue
-        value = definition.parse(_stored(item, bound))
-        resolution = CATALOG.resolve(
-            window_id=PROBE_WINDOW_ID,
-            members=(PROBE_MEMBER,),
-            global_settings=_EMPTY,
-            window_settings=_EMPTY.with_value(item.key, value),
+    value_range = definition.value_range
+    bounds = CATALOG.number_bounds(item)
+
+    assert value_range is not None, f"{item.key} is a number without a range"
+    if definition.kind is SettingKind.NUMBER:
+        assert (bounds.minimum, bounds.maximum) == (
+            value_range.minimum,
+            value_range.maximum,
         )
-        assert not resolution.settings.faults, (item.key, bound)
+        assert bounds.unit == definition.unit
+        assert bounds.unit is not None
+    else:
+        size = item.seconds_per_unit
+        for bound, limit in (
+            (bounds.minimum, value_range.minimum),
+            (bounds.maximum, value_range.maximum),
+        ):
+            assert (bound is None) is (limit is None)
+            if bound is not None and limit is not None:
+                assert value_range.contains(bound * size)
+                assert isinstance(bound, int)
+        assert bounds.unit == DURATION_UNITS[size]
+    assert bounds.step == item.step
 
 
-def test_bound_that_is_wider_than_the_core_is_noticed() -> None:
-    """The counterpart: the check above sees a bound that the core refuses."""
-    definition = CATALOG.definitions["schedule_random_offset"]
-    value = definition.parse(31 * 60)
-
-    resolution = CATALOG.resolve(
-        window_id=PROBE_WINDOW_ID,
-        members=(PROBE_MEMBER,),
-        global_settings=_EMPTY,
-        window_settings=_EMPTY.with_value("schedule_random_offset", value),
+def test_bounds_of_a_duration_are_the_whole_units_inside_its_range() -> None:
+    """Re-evaluation: longer than zero seconds, so at least one whole minute."""
+    reevaluate = next(
+        item for item in _number_fields() if item.key == "reevaluate_after"
+    )
+    offset = next(
+        item for item in _number_fields() if item.key == "schedule_random_offset"
     )
 
-    assert [fault.key for fault in resolution.settings.faults] == [
-        "schedule_random_offset"
-    ]
+    assert CATALOG.number_bounds(reevaluate) == NumberBounds(1, None, "min", 1)
+    assert CATALOG.number_bounds(offset) == NumberBounds(0, 30, "min", 1)
+
+
+def test_whole_bounds_are_whole_numbers_and_texts_have_no_fraction() -> None:
+    """The elevation of a trigger is a float in the core, and still no "90.0"."""
+    elevation = next(
+        item
+        for item in _number_fields()
+        if item.key == "schedule_workday_morning_elevation"
+    )
+    bounds = CATALOG.number_bounds(elevation)
+
+    assert bounds == NumberBounds(-90, 90, "°", 0.1)
+    assert str(bounds.minimum) == "-90"
+    assert bounds.text(-90.0) == "-90 °"
+    assert bounds.text(22.5, with_unit=False) == "22.5"
+    assert NumberBounds(None, None, None, 1).text(5.0) == "5"
 
 
 @pytest.mark.parametrize(
@@ -174,10 +204,11 @@ def test_form_that_does_not_fit_the_registry_is_refused(
         _catalog(feature)
 
 
-def test_duration_needs_a_unit_of_at_least_one_second() -> None:
-    """A duration is stored in whole seconds."""
-    with pytest.raises(ValueError, match="too small"):
-        FieldForm("schedule_random_offset", seconds_per_unit=0)
+def test_duration_is_entered_in_a_known_unit() -> None:
+    """A duration is stored in whole seconds and entered in seconds, minutes or hours."""
+    for size in (0, 90):
+        with pytest.raises(ValueError, match="is not one of"):
+            FieldForm("schedule_random_offset", seconds_per_unit=size)
 
 
 def test_switches_count_as_form_keys() -> None:

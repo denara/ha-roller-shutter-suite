@@ -10,10 +10,10 @@ If you have not read [Concepts](concepts.md) yet: settings live on three levels,
 
 1. Open **Settings** > **Devices & services** and choose **Add integration**.
 2. Search for **Roller Shutter Suite** and select it.
-3. Confirm the first page.
+3. Confirm the first page. The pages have no way back, but you can change every setting later with **Reconfigure**.
 4. The page **Features** asks what Roller Shutter Suite takes care of in the whole house. Further pages follow only for what you turn on there.
-5. The pages of the daily routine follow: one general page (positions, how workdays and public holidays are recognized, summer, outdoor brightness) and one page each for workdays, weekends and public holidays (when the morning and the evening begin). Every field is filled with a sensible value, so you can simply save each page and adjust things later.
-6. Save the last page. The integration appears in the list.
+5. The pages of the daily routine follow: one general page (positions, how workdays and public holidays are recognized, summer, outdoor brightness) and one page each for workdays, weekends and public holidays (when the morning and the evening begin). Their titles count them: **Daily routine: workdays (1/3)**. Every field is filled with a sensible value, so you can simply go on with **Next** and adjust things later.
+6. The last page is **Movement**; its button says **Submit**. Save it, and the integration appears in the list.
 
 The integration can be added once. It stands for the whole house.
 
@@ -23,7 +23,7 @@ Groups and windows inherit the values of the house unless they set their own. On
 
 Open the integration, open the menu with the three dots and choose **Reconfigure**. The same pages appear, filled with the present values. Nothing is saved before the last page. When you save it, the integration reloads once, and every group and window that inherits a value follows the new one.
 
-**Worked example.** On workdays the shutters of the whole house shall open at 06:45 instead of 07:00. Choose **Reconfigure**, save the pages **Features** and **Daily routine** as they are, set **Morning: time** to 06:45 on the page **Daily routine on workdays**, and save the remaining pages. Every window that does not say otherwise now opens at 06:45 on workdays.
+**Worked example.** On workdays the shutters of the whole house shall open at 06:45 instead of 07:00. Choose **Reconfigure**, save the pages **Features** and **Daily routine** as they are, set **Morning: time** to 06:45 on the page **Daily routine: workdays (1/3)**, and save the remaining pages. Every window that does not say otherwise now opens at 06:45 on workdays.
 
 ## Adding a group
 
@@ -34,7 +34,7 @@ A group holds values that several windows share: a side of the house, a floor, a
 3. The next pages are the same pages as for the house, but now every value can be inherited; see [How inherited values look](#how-inherited-values-look). Change only what is different for this group.
 4. Save the last page.
 
-**Worked example.** The bedrooms shall stay dark longer on weekends. Add a group "Bedrooms", leave everything as it is until the page **Daily routine on weekends**, and enter 10:00 in **Morning: time**. Every window that you put into this group opens at 10:00 on weekends, while the rest of the house keeps its time. Everything else in the group stays empty and therefore follows the house, also when you change the house later.
+**Worked example.** The bedrooms shall stay dark longer on weekends. Add a group "Bedrooms", leave everything as it is until the page **Daily routine: weekends (2/3)**, and enter 10:00 in **Morning: time**. Every window that you put into this group opens at 10:00 on weekends, while the rest of the house keeps its time. Everything else in the group stays empty and therefore follows the house, also when you change the house later.
 
 To change a group, open its menu with the three dots and choose **Reconfigure**. You can also rename it there, or with the rename function of Home Assistant; both do the same.
 
@@ -118,6 +118,17 @@ Evening position           [            ] %
 Type a value and the window has its own. **Zero is a value**: an evening position of 0 % is something you set, and it wins like any other value. To go back to inheriting, empty the field again.
 
 A day of the year, such as the first day of summer, is entered as month and day with two digits each: `05-01` is 1 May. 29 February is not accepted, because it does not exist in every year.
+
+A time of day is entered in hours and minutes. A time that was saved with seconds, by an earlier version or by hand, still loads and keeps its seconds.
+
+**A number outside its range** is refused when you go on, and the page says which values the field takes:
+
+```text
+Morning position           [ -100       ] %
+  Enter a value from 0 to 100 %.
+```
+
+A field in the section of advanced settings cannot show an error of its own; the message then stands above the fields and names the field, for example: Enter a value from 0 to 30 min for "Random offset". Other values that the integration cannot take, such as a fraction where only whole numbers make sense, are refused in the same way, and nothing is saved until every page is accepted.
 
 **A switch: choose "Inherit" in the list.** A switch on these pages is a list with three entries, because a plain on/off switch could not say "inherit":
 

@@ -74,6 +74,8 @@ class GroupSubentryFlow(FeatureStepsMixin, ConfigSubentryFlow):
                 as_form_schema(schema), suggested
             ),
             errors=errors,
+            # The pages of the settings always follow.
+            last_step=False,
         )
 
     def _own_subentry_is_gone(self) -> bool:

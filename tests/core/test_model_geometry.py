@@ -402,8 +402,6 @@ def test_every_measurement_is_registered_with_its_kind_function_and_reader() -> 
         ("shading_depth", float("inf")),
         ("shading_pitch", HUGE),
         ("shading_fixed_position", 30.0),
-        ("shading_fixed_position", 101),
-        ("shading_calibration_seat", -1),
         ("shading_element_height", "__none__"),
     ],
 )
@@ -418,6 +416,23 @@ def test_a_stored_value_the_shared_readers_refuse_is_a_fault(
         SettingProblem.UNREADABLE,
         SettingProblem.NONE_NOT_ALLOWED,
     }
+
+
+@pytest.mark.parametrize(
+    ("key", "stored"),
+    [
+        ("shading_fixed_position", 101),
+        ("shading_calibration_seat", -1),
+        ("shading_calibration_glass_top", 100.5),
+    ],
+)
+def test_a_stored_position_outside_its_range_is_invalid(key: str, stored: Any) -> None:
+    """A position is a number from 0 to 100; the range of its entry says so."""
+    partial = settings_from_stored({key: stored}, WINDOW_SETTINGS)
+
+    assert [(fault.key, fault.problem) for fault in partial.faults] == [
+        (key, SettingProblem.INVALID)
+    ]
 
 
 # --- Through the resolver --------------------------------------------------------------

@@ -9,15 +9,15 @@
       "description": "Wie weit die Rollläden öffnen und schließen, woran Werktage, Wochenenden und Feiertage zu erkennen sind und was den Abend außerdem auslösen kann. Die Uhrzeiten folgen auf den nächsten Seiten, eine Seite je Art des Tages."
     },
     "workday": {
-      "title": "Tagesablauf an Werktagen",
+      "title": "Tagesablauf: Werktage ({page_number}/{page_count})",
       "description": "Wann Morgen und Abend an einem Werktag beginnen."
     },
     "weekend": {
-      "title": "Tagesablauf am Wochenende",
+      "title": "Tagesablauf: Wochenende ({page_number}/{page_count})",
       "description": "Wann Morgen und Abend an einem Samstag oder Sonntag beginnen oder an einem Tag, den die Werktag-Entität als frei meldet."
     },
     "holiday": {
-      "title": "Tagesablauf an Feiertagen",
+      "title": "Tagesablauf: Feiertage ({page_number}/{page_count})",
       "description": "Wann Morgen und Abend an einem Tag beginnen, den die Feiertag-Entität als Feiertag meldet."
     }
   },
@@ -66,7 +66,7 @@
     },
     "schedule_brightness_source": {
       "label": "Entität für die Außenhelligkeit",
-      "description": "Eine Entität, die die Außenhelligkeit in Lux meldet. Bleibt es für die eingestellte Dauer dunkler als die Schwelle, beginnt der Abend früher, aber nie früher als die Zeit unter „Abend: nicht vor“. Solange die Entität nicht verfügbar oder unbekannt ist, löst sie den Abend weder aus noch verzögert sie ihn.",
+      "description": "Eine Entität, die die Außenhelligkeit in Lux meldet. Bleibt es für die eingestellte Dauer dunkler als die Schwelle, beginnt der Abend früher, aber nicht vor der Zeit unter „Abend: nicht vor“. Solange die Entität nicht verfügbar oder unbekannt ist, löst sie den Abend weder aus noch verzögert sie ihn.",
       "entity_label": "Entität für die Außenhelligkeit (Lux)",
       "entity_description": "Gilt nur mit „Eigene Auswahl“ oben."
     },
@@ -80,7 +80,7 @@
     },
     "schedule_random_offset": {
       "label": "Zufälliger Versatz",
-      "description": "Verschiebt jeden Morgen und jeden Abend um bis zu so viele Minuten nach vorn oder hinten, für jedes Fenster und jeden Tag anders. 0 schaltet das aus; höchstens 30."
+      "description": "Verschiebt jeden Morgen und jeden Abend um bis zu so viele Minuten nach vorn oder hinten, für jedes Fenster und jeden Tag anders. 0 schaltet das aus."
     }
   },
   "generated": [
