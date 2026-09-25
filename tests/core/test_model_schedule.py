@@ -394,9 +394,7 @@ def test_the_two_lists_above_are_all_settings_of_the_schedule() -> None:
         ("schedule_weekend_evening_kind", "sunset"),
         ("schedule_summer_first_day", "02-29"),
         ("schedule_summer_last_day", "9-30"),
-        ("schedule_brightness_delay", -1),
         ("schedule_random_offset", "00:10"),
-        ("schedule_morning_position", 101),
     ],
 )
 def test_a_stored_value_the_shared_readers_refuse_is_a_fault(
@@ -407,6 +405,33 @@ def test_a_stored_value_the_shared_readers_refuse_is_a_fault(
 
     assert [fault.key for fault in partial.faults] == [key]
     assert partial.faults[0].problem is SettingProblem.UNREADABLE
+
+
+@pytest.mark.parametrize(
+    ("key", "stored", "detail"),
+    [
+        ("schedule_brightness_delay", -1, "expected a value of at least 0"),
+        ("schedule_morning_position", 101, "expected a value from 0 to 100"),
+        ("schedule_random_offset", 31 * 60, "expected a value from 0 to 1800"),
+        (
+            "schedule_workday_evening_offset_minutes",
+            -721,
+            "expected a value from -720 to 720",
+        ),
+        ("schedule_holiday_morning_elevation", 90.5, "expected a value from -90 to 90"),
+        ("schedule_brightness_threshold", -0.5, "expected a value of at least 0"),
+    ],
+)
+def test_a_stored_number_outside_the_range_of_its_entry_is_invalid(
+    key: str, stored: Any, detail: str
+) -> None:
+    """The range of the registry entry is the rule: readable, but not taken."""
+    partial = settings_from_stored({key: stored}, WINDOW_SETTINGS)
+
+    assert [(fault.key, fault.problem) for fault in partial.faults] == [
+        (key, SettingProblem.INVALID)
+    ]
+    assert partial.faults[0].detail == detail
 
 
 # --- Faults through the resolver -------------------------------------------------------------------

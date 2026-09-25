@@ -9,15 +9,15 @@
       "description": "How far the shutters open and close, how workdays, weekends and public holidays are told apart, and what else can start the evening. The times follow on the next pages, one page for each kind of day."
     },
     "workday": {
-      "title": "Daily routine on workdays",
+      "title": "Daily routine: workdays ({page_number}/{page_count})",
       "description": "When the morning and the evening begin on a workday."
     },
     "weekend": {
-      "title": "Daily routine on weekends",
+      "title": "Daily routine: weekends ({page_number}/{page_count})",
       "description": "When the morning and the evening begin on a Saturday or Sunday, or on a day that the workday entity reports as a day off."
     },
     "holiday": {
-      "title": "Daily routine on public holidays",
+      "title": "Daily routine: public holidays ({page_number}/{page_count})",
       "description": "When the morning and the evening begin on a day that the holiday entity reports as a public holiday."
     }
   },
@@ -66,7 +66,7 @@
     },
     "schedule_brightness_source": {
       "label": "Outdoor brightness entity",
-      "description": "An entity that reports the outdoor brightness in lux. If it stays darker than the threshold for the set duration, the evening begins early, but never earlier than the time set in \"Evening: not before\". While the entity is unavailable or unknown, it neither starts nor delays the evening.",
+      "description": "An entity that reports the outdoor brightness in lux. If it stays darker than the threshold for the set duration, the evening begins early, but not before the time set in \"Evening: not before\". While the entity is unavailable or unknown, it neither starts nor delays the evening.",
       "entity_label": "Entity for the outdoor brightness (lux)",
       "entity_description": "Used only with \"Own selection\" above."
     },
@@ -80,7 +80,7 @@
     },
     "schedule_random_offset": {
       "label": "Random offset",
-      "description": "Moves each morning and evening by up to this many minutes, earlier or later, differently for each window and each day. 0 turns it off; 30 is the maximum."
+      "description": "Moves each morning and evening by up to this many minutes, earlier or later, differently for each window and each day. 0 turns it off."
     }
   },
   "generated": [

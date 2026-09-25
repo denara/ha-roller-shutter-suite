@@ -6,9 +6,10 @@ the capability a setting requires. Nothing here repeats that. A
 :class:`FieldForm` adds only what the core does not know, because it concerns
 the form and nothing else: the step a setting appears in, whether it sits in
 the collapsed section of expert values, and how its input control looks (the
-bounds and the unit of a number box, the entity domains of a reference). The
-bounds are a convenience of the control; whether a value is valid is decided
-by the core, never by them.
+unit a duration is entered in, the step of a number box, the entity domains of
+a reference). The range and the unit of a number are part of the registry
+entry; :meth:`Catalog.number_bounds` turns them into the bounds of the number box,
+so the form carries no bounds of its own.
 
 A :class:`Catalog` ties the registry, the forms of the features and the
 resolver together. The flows read it when a step is shown, so a block that adds
@@ -19,7 +20,9 @@ This module imports nothing from Home Assistant: the translation generator
 reads it too.
 """
 
+import math
 from dataclasses import dataclass
+from types import MappingProxyType
 from typing import Any, Final, Protocol
 
 from custom_components.roller_shutter_suite.const import PROVISIONAL_TRAVEL_TIME
@@ -36,7 +39,18 @@ from custom_components.roller_shutter_suite.core.settings import (
     SettingKind,
     SettingsRegistry,
     WindowResolution,
+    format_number,
 )
+
+DURATION_UNITS: Final = MappingProxyType({1: "s", 60: "min", 3600: "h"})
+"""The units a duration can be entered in, by their size in seconds."""
+
+OUT_OF_RANGE_PREFIX: Final = "out_of_range_"
+"""The error of a number outside its range is ``out_of_range_<field name>``.
+
+One key per field, because the text names the range of that field; the
+translation generator writes the texts from the ranges of the registry.
+"""
 
 _KINDS_WITHOUT_A_GENERATED_FIELD: Final = frozenset({SettingKind.LIST})
 """A list has no generic input control; it needs a step written by hand."""
@@ -61,9 +75,10 @@ an absent key.
 class FieldForm:
     """How one setting of the registry appears in its form.
 
-    ``minimum``, ``maximum``, ``step`` and ``unit`` configure the number box
-    of a number or a duration. ``seconds_per_unit`` is the size of the unit a
-    duration is entered in (60 for minutes); it is stored in whole seconds.
+    ``step`` is the step of the number box of a number or a duration; its
+    bounds and its unit come from the registry entry. ``seconds_per_unit`` is
+    the size of the unit a duration is entered in (60 for minutes, one of
+    :data:`DURATION_UNITS`); it is stored in whole seconds.
     ``entity_domains`` limits the entity selector of an optional reference.
     ``options_key`` is the translation key of the options of an enumeration;
     without it the key of the setting is used, and settings that offer the
@@ -75,10 +90,7 @@ class FieldForm:
 
     key: str
     expert: bool = False
-    minimum: float | None = None
-    maximum: float | None = None
     step: float = 1
-    unit: str | None = None
     seconds_per_unit: int = 1
     entity_domains: tuple[str, ...] = ()
     options_key: str | None = None
@@ -86,8 +98,16 @@ class FieldForm:
 
     def __post_init__(self) -> None:
         """Validate what does not depend on the registry."""
-        if self.seconds_per_unit < 1:
-            raise ValueError(f"the unit of the duration {self.key!r} is too small")
+        if self.seconds_per_unit not in DURATION_UNITS:
+            raise ValueError(
+                f"the unit of the duration {self.key!r} is not one of "
+                f"{sorted(DURATION_UNITS)} seconds"
+            )
+
+    @property
+    def out_of_range_error(self) -> str:
+        """Return the error key of a number outside the range of this field."""
+        return f"{OUT_OF_RANGE_PREFIX}{self.name}"
 
     @property
     def name(self) -> str:
@@ -100,11 +120,30 @@ class StepForm:
     """One page of a feature: a name and the fields it shows.
 
     A page has at most one section, the collapsed one of the expert values,
-    because sections cannot be nested.
+    because sections cannot be nested. The ``numbered`` pages of a feature
+    carry a counter in their title: the placeholders ``{page_number}`` and
+    ``{page_count}`` count the numbered pages of the feature that the flow
+    shows, in their order ("Daily routine: workdays (1/3)").
     """
 
     name: str
     fields: tuple[FieldForm, ...]
+    numbered: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class NumberBounds:
+    """The number box of a field: bounds, unit and step in the unit of the form."""
+
+    minimum: float | None
+    maximum: float | None
+    unit: str | None
+    step: float
+
+    def text(self, value: float, *, with_unit: bool = True) -> str:
+        """Return a value of the box as language-neutral text, with its unit."""
+        number = format_number(value)
+        return f"{number} {self.unit}" if with_unit and self.unit else number
 
 
 @dataclass(frozen=True, slots=True)
@@ -203,6 +242,32 @@ class Catalog:
         """Return the entries of the registry by key."""
         return {definition.key: definition for definition in self.registry.definitions}
 
+    def number_bounds(self, item: FieldForm) -> NumberBounds:
+        """Return the number box of a number or a duration, from its registry entry.
+
+        A duration is stored in seconds and entered in the unit of the form,
+        in whole units: the bounds are the whole units that lie within the
+        range. A number keeps the bounds and the unit of its entry.
+        """
+        definition = self.definitions[item.key]
+        value_range = definition.value_range
+        minimum = None if value_range is None else value_range.minimum
+        maximum = None if value_range is None else value_range.maximum
+        if definition.kind is SettingKind.DURATION:
+            size = item.seconds_per_unit
+            return NumberBounds(
+                minimum=None if minimum is None else math.ceil(minimum / size),
+                maximum=None if maximum is None else math.floor(maximum / size),
+                unit=DURATION_UNITS[size],
+                step=item.step,
+            )
+        return NumberBounds(
+            minimum=_whole(minimum),
+            maximum=_whole(maximum),
+            unit=definition.unit,
+            step=item.step,
+        )
+
     def step(self, step_id: str) -> StepForm | None:
         """Return the page with the step ID, or ``None`` if the catalog has none."""
         return next(
@@ -226,6 +291,13 @@ class Catalog:
                 *((feature.switch,) if feature.switch is not None else ()),
             )
         )
+
+
+def _whole(value: float | None) -> float | None:
+    """Return a whole bound as an ``int``, so no form shows it as ``80.0``."""
+    if isinstance(value, float) and value.is_integer():
+        return int(value)
+    return value
 
 
 PROBE_WINDOW_ID: Final = "probe"

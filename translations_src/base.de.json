@@ -17,6 +17,18 @@
       "reference_missing": "Wähle eine Entität, oder wähle oben „Keine“ oder „Vom Haus oder von der Gruppe übernehmen“.",
       "invalid_combination": "Diese Einstellungen widersprechen sich: {combination}. Jede für sich wäre in Ordnung."
     },
+    "range_errors": {
+      "field": {
+        "between": "Gib einen Wert von {minimum} bis {maximum} ein.",
+        "at_least": "Gib einen Wert von mindestens {minimum} ein.",
+        "at_most": "Gib einen Wert von höchstens {maximum} ein."
+      },
+      "section": {
+        "between": "Gib für „{label}“ einen Wert von {minimum} bis {maximum} ein.",
+        "at_least": "Gib für „{label}“ einen Wert von mindestens {minimum} ein.",
+        "at_most": "Gib für „{label}“ einen Wert von höchstens {maximum} ein."
+      }
+    },
     "fault_title": "Eine Einstellung {level} kann nicht verwendet werden",
     "fault_levels": {
       "global": "des Hauses",
@@ -125,7 +137,7 @@
     "step": {
       "user": {
         "title": "Roller Shutter Suite einrichten",
-        "description": "Möchtest du Roller Shutter Suite einrichten? Auf den nächsten Seiten legst du die übergeordneten Einstellungen für das ganze Haus fest. Gruppen und Fenster übernehmen sie, bis sie dort überschrieben werden."
+        "description": "Möchtest du Roller Shutter Suite einrichten? Auf den nächsten Seiten legst du die übergeordneten Einstellungen für das ganze Haus fest. Gruppen und Fenster übernehmen sie, bis sie dort überschrieben werden. Zurückblättern geht nicht, aber jede Einstellung kannst du später über „Neu konfigurieren“ ändern."
       }
     },
     "abort": {

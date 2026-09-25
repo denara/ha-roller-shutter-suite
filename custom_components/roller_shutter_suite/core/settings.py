@@ -49,8 +49,15 @@ from typing import Any, Final
 
 from .model import (
     BLIND_SOURCE,
+    FULLY_CLOSED,
+    FULLY_OPEN,
     GEOMETRY_FIELDS,
     GEOMETRY_PREFIX,
+    MAX_RANDOM_OFFSET,
+    MAX_STAGGER_GAP,
+    MAX_SUN_OFFSET_MINUTES,
+    MAX_TOLERANCE,
+    MAX_TRIGGER_ELEVATION,
     MEMBER_MEASUREMENT_FIELDS,
     SCHEDULE_DAY_TYPES,
     SCHEDULE_EDGES,
@@ -186,6 +193,66 @@ values somebody may state.
 """
 
 
+_KINDS_WITH_A_RANGE: Final = frozenset({SettingKind.NUMBER, SettingKind.DURATION})
+
+
+def format_number(value: float) -> str:
+    """Return a number as language-neutral text; a whole number has no fraction.
+
+    ``80.0`` is ``"80"``, ``22.5`` is ``"22.5"``, ``-720`` is ``"-720"``. The
+    one place where a number of a setting becomes text for a user, so that a
+    whole number never appears as ``80.0``.
+    """
+    if isinstance(value, float) and value.is_integer():
+        return str(int(value))
+    return str(value)
+
+
+@dataclass(frozen=True, slots=True)
+class ValueRange:
+    """The range of a number or a duration, both bounds included.
+
+    The bounds are in the stored unit: a duration in seconds, a number in the
+    unit of its entry. ``None`` means "no bound on this side". The reader of
+    the setting refuses a value outside the range, the forms give their
+    number boxes these bounds, and the documentation states them, so the
+    range exists once.
+    """
+
+    minimum: float | None = None
+    maximum: float | None = None
+
+    def __post_init__(self) -> None:
+        """Validate the bounds."""
+        bounds = [bound for bound in (self.minimum, self.maximum) if bound is not None]
+        if not bounds:
+            raise ValueError("a range has at least one bound")
+        for bound in bounds:
+            if isinstance(bound, bool) or not isinstance(bound, (int, float)):
+                raise TypeError("the bound of a range must be a number")
+            if not math.isfinite(bound):
+                raise ValueError("the bound of a range must be finite")
+        if len(bounds) == 2 and bounds[0] > bounds[1]:  # noqa: PLR2004 - two bounds
+            raise ValueError("the minimum of a range lies above its maximum")
+
+    def contains(self, value: float) -> bool:
+        """Return whether the number lies within the range."""
+        return (self.minimum is None or value >= self.minimum) and (
+            self.maximum is None or value <= self.maximum
+        )
+
+    def refusal(self) -> str:
+        """Return the English text of a refusal, for logs."""
+        if self.maximum is None:
+            return f"expected a value of at least {format_number(self.minimum or 0)}"
+        if self.minimum is None:
+            return f"expected a value of at most {format_number(self.maximum)}"
+        return (
+            f"expected a value from {format_number(self.minimum)} "
+            f"to {format_number(self.maximum)}"
+        )
+
+
 @dataclass(frozen=True, slots=True)
 class SettingDefinition[T]:
     """Everything the resolver knows about one setting. The single place.
@@ -221,6 +288,14 @@ class SettingDefinition[T]:
       cover itself, measurements). Such a setting is read from the window
       level alone; on a group or the house it is a fault.
     - ``requires``: the capability the setting needs, if any.
+    - ``value_range``: the range of a number or a duration, in the stored
+      unit (seconds for a duration). :func:`settings_from_stored` refuses a
+      stored number outside it as ``invalid``,
+      the forms give their number boxes its bounds, and the documentation
+      states it. ``None``: the setting has no range of its own.
+    - ``unit``: the unit of a number, as the forms show it (``"%"``,
+      ``"lx"``). A duration has none here: it is stored in seconds, and a
+      form says in which unit it is entered.
     """
 
     key: str
@@ -231,12 +306,28 @@ class SettingDefinition[T]:
     inheritable: bool = True
     requires: CapabilityRequirement[T] | None = None
     fault_value: T | NoFaultValue = NO_FAULT_VALUE
+    value_range: ValueRange | None = None
+    unit: str | None = None
 
     def __post_init__(self) -> None:
         """Validate the description itself."""
         require_identifier(self.key, "the key of a setting")
         require_type(self.kind, SettingKind, "the kind of a setting")
         require_type(self.inheritable, bool, "the flag 'inheritable'")
+        if self.value_range is not None:
+            require_type(self.value_range, ValueRange, "the range of a setting")
+            if self.kind not in _KINDS_WITH_A_RANGE:
+                raise ValueError(
+                    f"the setting {self.key!r} is a {self.kind.value}; only a "
+                    "number or a duration has a range"
+                )
+        if self.unit is not None:
+            require_identifier(self.unit, "the unit of a setting")
+            if self.kind is not SettingKind.NUMBER:
+                raise ValueError(
+                    f"the setting {self.key!r} is a {self.kind.value}; only a "
+                    "number states a unit"
+                )
         if self.function is None:
             if self.inheritable:
                 raise ValueError(
@@ -289,6 +380,15 @@ class SettingDefinition[T]:
         if self.function is None:
             return FaultBehavior.FALL_BACK
         return self.function.fault_behavior
+
+    def out_of_range(self, value: JsonValue) -> bool:
+        """Return whether a stored number lies outside the range of the setting."""
+        return (
+            self.value_range is not None
+            and isinstance(value, (int, float))
+            and not isinstance(value, bool)
+            and not self.value_range.contains(value)
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -481,6 +581,8 @@ def settings_from_stored(data: object, registry: SettingsRegistry) -> PartialSet
     - :data:`STORED_NONE` on an optional reference is the set value ``None``:
       "explicitly none", which beats the levels below like any set value. On a
       setting of any other kind it is a fault (``none_not_allowed``);
+    - a number outside the range of its entry is a fault (``invalid``): it can
+      be read, but the setting does not take it;
     - a value the setting cannot read is a fault (``unreadable``);
     - a key the registry does not know is a fault (``unknown_setting``), so a
       misspelled key is noticed instead of silently meaning "inherit";
@@ -516,6 +618,12 @@ def settings_from_stored(data: object, registry: SettingsRegistry) -> PartialSet
                 faults[key] = SettingFault(
                     key, _NONE_FAULT, SettingProblem.NONE_NOT_ALLOWED
                 )
+        elif definition.value_range is not None and definition.out_of_range(raw):
+            # Readable, but outside the range of the entry: the one place that
+            # applies the range to stored data.
+            faults[key] = SettingFault(
+                key, definition.value_range.refusal(), SettingProblem.INVALID
+            )
         else:
             try:
                 values[key] = definition.parse(raw)
@@ -1351,24 +1459,48 @@ def _signed_minutes(value: JsonValue) -> int:
     return as_int(value)
 
 
-_TRIGGER_FIELD_KINDS: Final[
-    Mapping[str, tuple[SettingKind, Callable[[JsonValue], Any]]]
-] = MappingProxyType(
+POSITION_RANGE: Final = ValueRange(FULLY_CLOSED.value, FULLY_OPEN.value)
+"""The range of a position: 0 (fully closed) to 100 (fully open)."""
+
+PERCENT: Final = "%"
+
+_NOT_NEGATIVE: Final = ValueRange(minimum=0)
+
+
+@dataclass(frozen=True, slots=True)
+class _Reader:
+    """Kind, reader, range and unit of a setting that is generated from a list."""
+
+    kind: SettingKind
+    parse: Callable[[JsonValue], Any]
+    value_range: ValueRange | None = None
+    unit: str | None = None
+
+
+_TRIGGER_FIELD_KINDS: Final[Mapping[str, _Reader]] = MappingProxyType(
     {
-        "kind": (SettingKind.ENUMERATION, as_enum(TriggerKind)),
-        "time": (SettingKind.TIME, as_time),
-        "offset_minutes": (SettingKind.NUMBER, _signed_minutes),
-        "elevation": (SettingKind.NUMBER, _as_number),
-        "not_before": (SettingKind.TIME, as_time),
-        "not_after": (SettingKind.TIME, as_time),
+        "kind": _Reader(SettingKind.ENUMERATION, as_enum(TriggerKind)),
+        "time": _Reader(SettingKind.TIME, as_time),
+        "offset_minutes": _Reader(
+            SettingKind.NUMBER,
+            _signed_minutes,
+            ValueRange(-MAX_SUN_OFFSET_MINUTES, MAX_SUN_OFFSET_MINUTES),
+            "min",
+        ),
+        "elevation": _Reader(
+            SettingKind.NUMBER,
+            _as_number,
+            ValueRange(-MAX_TRIGGER_ELEVATION, MAX_TRIGGER_ELEVATION),
+            "°",
+        ),
+        "not_before": _Reader(SettingKind.TIME, as_time),
+        "not_after": _Reader(SettingKind.TIME, as_time),
     }
 )
-"""Kind and reader of every field of a trigger of the schedule."""
+"""Kind, reader, range and unit of every field of a trigger of the schedule."""
 
 
-def _schedule_setting(
-    key: str, kind: SettingKind, parse: Callable[[JsonValue], Any]
-) -> SettingDefinition[Any]:
+def _schedule_setting(key: str, reader: _Reader) -> SettingDefinition[Any]:
     """Return one setting of the schedule; its default is that of the field.
 
     The built-in defaults of the schedule stand in one place, at the fields
@@ -1377,10 +1509,12 @@ def _schedule_setting(
     defaults = {entry.name: entry.default for entry in dataclasses.fields(WindowConfig)}
     return SettingDefinition(
         key=key,
-        kind=kind,
+        kind=reader.kind,
         function=FunctionId.SCHEDULE,
         default=defaults[key],
-        parse=parse,
+        parse=reader.parse,
+        value_range=reader.value_range,
+        unit=reader.unit,
     )
 
 
@@ -1405,55 +1539,76 @@ def _trigger_entries() -> tuple[tuple[str, str], ...]:
 
 def _schedule_settings() -> tuple[SettingDefinition[Any], ...]:
     triggers = tuple(
-        _schedule_setting(key, *_TRIGGER_FIELD_KINDS[name])
+        _schedule_setting(key, _TRIGGER_FIELD_KINDS[name])
         for key, name in _trigger_entries()
     )
     boolean, number = SettingKind.BOOLEAN, SettingKind.NUMBER
     reference, duration = SettingKind.OPTIONAL_REFERENCE, SettingKind.DURATION
+    position = _Reader(number, _as_position, POSITION_RANGE, PERCENT)
     others = (
-        ("schedule_enabled", boolean, as_bool),
-        ("schedule_morning_position", number, _as_position),
-        ("schedule_evening_position", number, _as_position),
-        ("schedule_evening_position_summer", number, _as_position),
-        ("schedule_workday_source", reference, as_str),
-        ("schedule_holiday_source", reference, as_str),
-        ("schedule_season_source", reference, as_str),
-        ("schedule_summer_by_date", boolean, as_bool),
-        ("schedule_summer_first_day", SettingKind.DAY_OF_YEAR, as_day_of_year),
-        ("schedule_summer_last_day", SettingKind.DAY_OF_YEAR, as_day_of_year),
-        ("schedule_brightness_source", reference, as_str),
+        ("schedule_enabled", _Reader(boolean, as_bool)),
+        ("schedule_morning_position", position),
+        ("schedule_evening_position", position),
+        ("schedule_evening_position_summer", position),
+        ("schedule_workday_source", _Reader(reference, as_str)),
+        ("schedule_holiday_source", _Reader(reference, as_str)),
+        ("schedule_season_source", _Reader(reference, as_str)),
+        ("schedule_summer_by_date", _Reader(boolean, as_bool)),
+        (
+            "schedule_summer_first_day",
+            _Reader(SettingKind.DAY_OF_YEAR, as_day_of_year),
+        ),
+        ("schedule_summer_last_day", _Reader(SettingKind.DAY_OF_YEAR, as_day_of_year)),
+        ("schedule_brightness_source", _Reader(reference, as_str)),
         # In lux: the unit the brightness source has to report in.
-        ("schedule_brightness_threshold", number, _as_number),
-        ("schedule_brightness_delay", duration, as_duration),
-        ("schedule_random_offset", duration, as_duration),
+        (
+            "schedule_brightness_threshold",
+            _Reader(number, _as_number, _NOT_NEGATIVE, "lx"),
+        ),
+        ("schedule_brightness_delay", _Reader(duration, as_duration, _NOT_NEGATIVE)),
+        (
+            "schedule_random_offset",
+            _Reader(
+                duration,
+                as_duration,
+                ValueRange(0, MAX_RANDOM_OFFSET.total_seconds()),
+            ),
+        ),
     )
     return (*triggers, *(_schedule_setting(*entry) for entry in others))
 
 
-_GEOMETRY_FIELD_KINDS: Final[
-    Mapping[str, tuple[SettingKind, Callable[[JsonValue], Any]]]
-] = MappingProxyType(
+_GEOMETRY_POSITION: Final = _Reader(
+    SettingKind.NUMBER, _as_position, POSITION_RANGE, PERCENT
+)
+
+_GEOMETRY_FIELD_KINDS: Final[Mapping[str, _Reader]] = MappingProxyType(
     {
-        "use_measurements": (SettingKind.BOOLEAN, as_bool),
-        "fixed_position": (SettingKind.NUMBER, _as_position),
-        "orientation_known": (SettingKind.BOOLEAN, as_bool),
+        "use_measurements": _Reader(SettingKind.BOOLEAN, as_bool),
+        "fixed_position": _GEOMETRY_POSITION,
+        "orientation_known": _Reader(SettingKind.BOOLEAN, as_bool),
         # Degrees; an azimuth runs clockwise from north.
-        "orientation": (SettingKind.NUMBER, _as_number),
-        "view_left": (SettingKind.NUMBER, _as_number),
-        "view_right": (SettingKind.NUMBER, _as_number),
-        "min_elevation": (SettingKind.NUMBER, _as_number),
-        "end_elevation": (SettingKind.NUMBER, _as_number),
+        "orientation": _Reader(SettingKind.NUMBER, _as_number),
+        "view_left": _Reader(SettingKind.NUMBER, _as_number),
+        "view_right": _Reader(SettingKind.NUMBER, _as_number),
+        "min_elevation": _Reader(SettingKind.NUMBER, _as_number),
+        "end_elevation": _Reader(SettingKind.NUMBER, _as_number),
         # Metres.
-        "element_bottom": (SettingKind.NUMBER, _as_number),
-        "element_height": (SettingKind.NUMBER, _as_number),
-        "depth": (SettingKind.NUMBER, _as_number),
-        "pitch": (SettingKind.NUMBER, _as_number),
-        "amplification_cap": (SettingKind.NUMBER, _as_number),
-        "calibration_seat": (SettingKind.NUMBER, _as_position),
-        "calibration_glass_top": (SettingKind.NUMBER, _as_position),
+        "element_bottom": _Reader(SettingKind.NUMBER, _as_number),
+        "element_height": _Reader(SettingKind.NUMBER, _as_number),
+        "depth": _Reader(SettingKind.NUMBER, _as_number),
+        "pitch": _Reader(SettingKind.NUMBER, _as_number),
+        "amplification_cap": _Reader(SettingKind.NUMBER, _as_number),
+        "calibration_seat": _GEOMETRY_POSITION,
+        "calibration_glass_top": _GEOMETRY_POSITION,
     }
 )
-"""Kind and reader of every window-level measurement of shading."""
+"""Kind and reader of every window-level measurement of shading.
+
+Only the positions carry a range here. The other measurements have rules of
+their own in ``ShadingGeometrySettings``, and no form shows them yet; the
+block that adds their form carries their ranges into these entries.
+"""
 
 
 def shading_geometry_keys() -> tuple[str, ...]:
@@ -1475,10 +1630,12 @@ def _shading_geometry_settings() -> tuple[SettingDefinition[Any], ...]:
     return tuple(
         SettingDefinition(
             key=key,
-            kind=_GEOMETRY_FIELD_KINDS[name][0],
+            kind=_GEOMETRY_FIELD_KINDS[name].kind,
             function=FunctionId.SHADING,
             default=defaults[key],
-            parse=_GEOMETRY_FIELD_KINDS[name][1],
+            parse=_GEOMETRY_FIELD_KINDS[name].parse,
+            value_range=_GEOMETRY_FIELD_KINDS[name].value_range,
+            unit=_GEOMETRY_FIELD_KINDS[name].unit,
         )
         for key, name in zip(shading_geometry_keys(), GEOMETRY_FIELDS, strict=True)
     )
@@ -1564,6 +1721,8 @@ WINDOW_SETTINGS: Final = SettingsRegistry(
             # extreme, no opening at all in frost, was rejected (decision 13).
             fault_value=Position(90),
             parse=_as_position,
+            value_range=POSITION_RANGE,
+            unit=PERCENT,
         ),
         SettingDefinition(
             key="frost_applies_to_protection",
@@ -1598,6 +1757,8 @@ WINDOW_SETTINGS: Final = SettingsRegistry(
             # zero would switch the minimum change off.
             fault_value=5,
             parse=as_int,
+            value_range=ValueRange(0, MAX_TOLERANCE),
+            unit=PERCENT,
         ),
         SettingDefinition(
             key="motor_min_interval",
@@ -1607,6 +1768,7 @@ WINDOW_SETTINGS: Final = SettingsRegistry(
             # The default, stated on purpose: never shorter than approved.
             fault_value=timedelta(minutes=10),
             parse=as_duration,
+            value_range=_NOT_NEGATIVE,
         ),
         # The upper bound of a deferral that waits for a report of a member (a
         # member becomes available, the members come to rest). Waiting for the
@@ -1622,6 +1784,8 @@ WINDOW_SETTINGS: Final = SettingsRegistry(
             # says when a deferred window is evaluated again at the latest.
             fault_value=timedelta(minutes=5),
             parse=as_duration,
+            # Longer than zero: the smallest whole number of seconds.
+            value_range=ValueRange(minimum=1),
         ),
         # Staggering between motors (E13) spares the motors and the supply of
         # a house from starting all at once: it protects hardware and restricts
@@ -1640,6 +1804,7 @@ WINDOW_SETTINGS: Final = SettingsRegistry(
             # restricts a protection wish more than the default does.
             fault_value=timedelta(seconds=2),
             parse=as_duration,
+            value_range=ValueRange(0, MAX_STAGGER_GAP.total_seconds()),
         ),
         *_schedule_settings(),
         *_shading_geometry_settings(),

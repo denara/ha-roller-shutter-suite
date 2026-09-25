@@ -17,6 +17,18 @@
       "reference_missing": "Choose an entity, or choose \"None\" or \"Inherit\" above.",
       "invalid_combination": "These settings contradict each other: {combination}. Each one on its own would be fine."
     },
+    "range_errors": {
+      "field": {
+        "between": "Enter a value from {minimum} to {maximum}.",
+        "at_least": "Enter a value of at least {minimum}.",
+        "at_most": "Enter a value of at most {maximum}."
+      },
+      "section": {
+        "between": "Enter a value from {minimum} to {maximum} for \"{label}\".",
+        "at_least": "Enter a value of at least {minimum} for \"{label}\".",
+        "at_most": "Enter a value of at most {maximum} for \"{label}\"."
+      }
+    },
     "fault_title": "A setting of {level} cannot be used",
     "fault_levels": {
       "global": "the house",
@@ -125,7 +137,7 @@
     "step": {
       "user": {
         "title": "Set up Roller Shutter Suite",
-        "description": "Do you want to set up Roller Shutter Suite? On the next pages you choose the settings for the whole house. Groups and windows inherit them until you override them there."
+        "description": "Do you want to set up Roller Shutter Suite? On the next pages you choose the settings for the whole house. Groups and windows inherit them until you override them there. The pages have no way back, but you can change every setting later with \"Reconfigure\"."
       }
     },
     "abort": {

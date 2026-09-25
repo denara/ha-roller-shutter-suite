@@ -1,5 +1,6 @@
 """The translation generator: the shipped files are current and the languages agree."""
 
+import dataclasses
 import json
 import re
 from pathlib import Path
@@ -240,3 +241,61 @@ def test_sources_that_cannot_be_listed_are_cannot_check(
     output = capsys.readouterr().out
     assert "CANNOT CHECK" in output
     assert "cannot be listed" in output
+
+
+def _sources(language: str) -> tuple[dict[str, Any], dict[str, dict[str, Any]]]:
+    templates = json.loads(
+        (build_translations.SOURCES / f"base.{language}.json").read_text(
+            encoding="utf-8"
+        )
+    )["_templates"]
+    fragments = {
+        name: json.loads(
+            (
+                build_translations.SOURCES / "features" / f"{name}.{language}.json"
+            ).read_text(encoding="utf-8")
+        )
+        for name in ("daily_routine", "movement")
+    }
+    return templates, fragments
+
+
+def test_range_errors_name_the_range_of_the_registry_in_the_unit_of_the_form() -> None:
+    """One error per number field with a range; a field in the section is named."""
+    catalog = build_translations.load_catalog()
+    templates, fragments = _sources("en")
+
+    errors = build_translations.range_errors(catalog, fragments, templates, "group")
+
+    assert errors["out_of_range_schedule_morning_position"] == (
+        "Enter a value from 0 to 100 %."
+    )
+    assert errors["out_of_range_schedule_brightness_threshold_lux"] == (
+        "Enter a value of at least 0 lx."
+    )
+    # Stored in seconds, entered in minutes: 1800 seconds are 30 minutes.
+    assert errors["out_of_range_schedule_random_offset"] == (
+        'Enter a value from 0 to 30 min for "Random offset".'
+    )
+    assert "{" not in "".join(errors.values())
+
+
+def test_range_with_an_upper_bound_only_is_written_too() -> None:
+    """No setting has one yet; the generator is ready for it."""
+    catalog = build_translations.load_catalog()
+    templates, fragments = _sources("de")
+    gap = catalog.definitions["stagger_gap"]
+    upper_only = dataclasses.replace(gap, value_range=type(gap.value_range)(maximum=10))
+    registry = type(catalog.registry)(
+        tuple(
+            upper_only if entry.key == "stagger_gap" else entry
+            for entry in catalog.registry.definitions
+        )
+    )
+    changed = dataclasses.replace(catalog, registry=registry)
+
+    errors = build_translations.range_errors(changed, fragments, templates, "window")
+
+    assert (
+        errors["out_of_range_stagger_gap"] == "Gib einen Wert von höchstens 10 s ein."
+    )
