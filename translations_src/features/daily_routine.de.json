@@ -1,60 +1,60 @@
 {
   "switch": {
     "label": "Tagesablauf",
-    "description": "Öffnet die Rollläden am Morgen und schließt sie am Abend. Solange er ausgeschaltet ist, bewegt der Tagesablauf nichts; der Schutz läuft weiter."
+    "description": "Öffnet die Rollläden am Morgen und schließt sie am Abend. Ist er ausgeschaltet, bewegt der Tagesablauf nichts."
   },
   "steps": {
     "general": {
       "title": "Tagesablauf",
-      "description": "Wie weit die Rollläden öffnen und schließen, woran Werktage, Wochenenden und Feiertage erkannt werden und was den Abend sonst noch beginnen kann. Die Zeiten folgen auf den nächsten Seiten, eine Seite je Art von Tag."
+      "description": "Wie weit die Rollläden öffnen und schließen, woran Werktage, Wochenenden und Feiertage zu erkennen sind und was den Abend außerdem auslösen kann. Die Uhrzeiten folgen auf den nächsten Seiten, eine Seite je Art des Tages."
     },
     "workday": {
       "title": "Tagesablauf an Werktagen",
-      "description": "Wann der Morgen und der Abend an einem Werktag beginnen."
+      "description": "Wann Morgen und Abend an einem Werktag beginnen."
     },
     "weekend": {
       "title": "Tagesablauf am Wochenende",
-      "description": "Wann der Morgen und der Abend an einem Samstag oder Sonntag beginnen, oder an einem Tag, den die Werktag-Entität als frei meldet."
+      "description": "Wann Morgen und Abend an einem Samstag oder Sonntag beginnen oder an einem Tag, den die Werktag-Entität als frei meldet."
     },
     "holiday": {
       "title": "Tagesablauf an Feiertagen",
-      "description": "Wann der Morgen und der Abend an einem Tag beginnen, den die Feiertag-Entität als Feiertag meldet."
+      "description": "Wann Morgen und Abend an einem Tag beginnen, den die Feiertag-Entität als Feiertag meldet."
     }
   },
   "fields": {
     "schedule_morning_position": {
       "label": "Morgenposition",
-      "description": "Wohin der Rollladen am Morgen fährt. 100 % ist ganz offen, 0 % ganz geschlossen. Der Morgen hebt nur: Ein Rollladen, der schon höher steht, bleibt, wo er ist."
+      "description": "Wie weit der Rollladen am Morgen öffnet: 100 % ist ganz offen, 0 % ganz geschlossen. Morgens wird ein Rollladen nur angehoben; steht er schon höher, bleibt er, wo er ist."
     },
     "schedule_evening_position": {
       "label": "Abendposition",
-      "description": "Wohin der Rollladen am Abend fährt. 100 % ist ganz offen, 0 % ganz geschlossen. Der Abend senkt nur: Ein Rollladen, der schon tiefer steht, bleibt, wo er ist."
+      "description": "Wie weit der Rollladen am Abend schließt: 100 % ist ganz offen, 0 % ganz geschlossen. Abends wird ein Rollladen nur gesenkt; steht er schon tiefer, bleibt er, wo er ist."
     },
     "schedule_evening_position_summer": {
       "label": "Abendposition im Sommer",
-      "description": "Ersetzt die Abendposition, solange Sommer ist, zum Beispiel 30 % für Sichtschutz mit etwas Luft. Sie zählt nur mit einer Sommer-Entität oder mit Sommer nach Datum."
+      "description": "Gilt im Sommer statt der Abendposition, zum Beispiel 30 % für Sichtschutz mit etwas frischer Luft. Sie wirkt nur, wenn der Sommer über eine Entität oder nach Datum festgelegt ist."
     },
     "schedule_workday_source": {
       "label": "Werktag-Entität",
-      "description": "Eine Entität, die an Werktagen eingeschaltet ist, zum Beispiel der Werktag-Sensor von Home Assistant. Mit „Keine“ sind Montag bis Freitag Werktage.",
+      "description": "Eine Entität, die an Werktagen eingeschaltet ist, zum Beispiel ein Werktag-Sensor von Home Assistant. Mit „Keine“ sind Montag bis Freitag Werktage.",
       "entity_label": "Entität für Werktage",
-      "entity_description": "Zählt nur mit „Eigene Auswahl“ oben."
+      "entity_description": "Gilt nur mit „Eigene Auswahl“ oben."
     },
     "schedule_holiday_source": {
       "label": "Feiertag-Entität",
-      "description": "Eine Entität, die an Feiertagen eingeschaltet ist; ein Kalender mit einem ganztägigen Termin funktioniert ebenfalls. Mit „Keine“ gibt es keine Feiertage.",
+      "description": "Eine Entität, die an Feiertagen eingeschaltet ist; ein Kalender mit einem ganztägigen Termin geht auch. Mit „Keine“ gibt es keine Feiertage.",
       "entity_label": "Entität für Feiertage",
-      "entity_description": "Zählt nur mit „Eigene Auswahl“ oben."
+      "entity_description": "Gilt nur mit „Eigene Auswahl“ oben."
     },
     "schedule_season_source": {
       "label": "Sommer-Entität",
-      "description": "Eine Entität, die eingeschaltet ist, solange Sommer ist. Solange sie keinen Wert hat, zählt ihr letzter bekannter Wert.",
+      "description": "Eine Entität, die eingeschaltet ist, solange Sommer ist. Ist sie nicht verfügbar oder unbekannt, gilt ihr letzter bekannter Zustand.",
       "entity_label": "Entität für den Sommer",
-      "entity_description": "Zählt nur mit „Eigene Auswahl“ oben."
+      "entity_description": "Gilt nur mit „Eigene Auswahl“ oben."
     },
     "schedule_summer_by_date": {
       "label": "Sommer nach Datum",
-      "description": "Ohne Sommer-Entität dauert der Sommer vom ersten bis zum letzten unten angegebenen Tag."
+      "description": "Ohne Sommer-Entität dauert der Sommer vom ersten bis zum letzten unten eingestellten Tag."
     },
     "schedule_summer_first_day": {
       "label": "Erster Tag des Sommers",
@@ -62,25 +62,25 @@
     },
     "schedule_summer_last_day": {
       "label": "Letzter Tag des Sommers",
-      "description": "Monat und Tag mit je zwei Ziffern, zum Beispiel 09-30 für den 30. September. Der Zeitraum darf über den Jahreswechsel reichen."
+      "description": "Monat und Tag mit je zwei Ziffern, zum Beispiel 09-30 für den 30. September. Der Sommer darf über den Jahreswechsel reichen."
     },
     "schedule_brightness_source": {
       "label": "Entität für die Außenhelligkeit",
-      "description": "Eine Entität, die die Außenhelligkeit in Lux meldet. Ist es für die Dauer der Verzögerung dunkler als der Schwellwert, beginnt der Abend früher, aber nie vor „nicht vor“ des Abends. Eine Entität ohne Wert beginnt nichts und blockiert nichts.",
+      "description": "Eine Entität, die die Außenhelligkeit in Lux meldet. Bleibt es für die eingestellte Dauer dunkler als die Schwelle, beginnt der Abend früher, aber nie früher als die Zeit unter „Abend: nicht vor“. Solange die Entität nicht verfügbar oder unbekannt ist, löst sie den Abend weder aus noch verzögert sie ihn.",
       "entity_label": "Entität für die Außenhelligkeit (Lux)",
-      "entity_description": "Zählt nur mit „Eigene Auswahl“ oben."
+      "entity_description": "Gilt nur mit „Eigene Auswahl“ oben."
     },
     "schedule_brightness_threshold_lux": {
       "label": "Helligkeitsschwelle (Lux)",
-      "description": "Unterhalb dieser Außenhelligkeit, in Lux, gilt es als dunkel."
+      "description": "Unterhalb dieser Außenhelligkeit in Lux gilt es als dunkel."
     },
     "schedule_brightness_delay": {
-      "label": "Verzögerung der Helligkeit",
+      "label": "Dauer der Dunkelheit",
       "description": "Wie viele Minuten es dunkel sein muss, bevor der Abend beginnt."
     },
     "schedule_random_offset": {
       "label": "Zufälliger Versatz",
-      "description": "Verschiebt jeden Auslöser um bis zu so viele Minuten, früher oder später, für jedes Fenster und jeden Tag anders. 0 schaltet ihn aus; 30 ist das Maximum."
+      "description": "Verschiebt jeden Morgen und jeden Abend um bis zu so viele Minuten nach vorn oder hinten, für jedes Fenster und jeden Tag anders. 0 schaltet das aus; höchstens 30."
     }
   },
   "generated": [
@@ -101,23 +101,23 @@
         "field": {
           "kind": {
             "label": "[edge]: Auslöser",
-            "description": "Eine feste Uhrzeit; der Sonnenaufgang am Morgen oder der Sonnenuntergang am Abend, mit Versatz; oder die Höhe der Sonne. Für die beiden, die der Sonne folgen, begrenzen „nicht vor“ und „nicht nach“ unter den Expertenwerten die Zeit."
+            "description": "Eine feste Uhrzeit; der Sonnenaufgang am Morgen oder der Sonnenuntergang am Abend, mit Versatz; oder die Höhe der Sonne. Für die beiden, die der Sonne folgen, legen „nicht vor“ und „nicht nach“ in den erweiterten Einstellungen die früheste und die späteste Zeit fest."
           },
           "time": {
             "label": "[edge]: Uhrzeit",
-            "description": "Zählt mit dem Auslöser „Feste Uhrzeit“."
+            "description": "Gilt beim Auslöser „Feste Uhrzeit“."
           },
           "offset_minutes": {
             "label": "[edge]: Versatz zu Sonnenaufgang oder Sonnenuntergang",
-            "description": "Zählt mit dem Auslöser „Sonnenaufgang oder Sonnenuntergang“. Minuten; eine negative Zahl bedeutet früher."
+            "description": "Gilt beim Auslöser „Sonnenaufgang oder Sonnenuntergang“. In Minuten; eine negative Zahl bedeutet früher."
           },
           "elevation": {
             "label": "[edge]: Höhe der Sonne",
-            "description": "Zählt mit dem Auslöser „Höhe der Sonne“. Grad über dem Horizont; eine negative Zahl bedeutet darunter."
+            "description": "Gilt beim Auslöser „Höhe der Sonne“. In Grad über dem Horizont; eine negative Zahl bedeutet darunter."
           },
           "not_before": {
             "label": "[edge]: nicht vor",
-            "description": "Die früheste Zeit für einen Auslöser, der der Sonne folgt. An einem Tag, an dem die Sonne keine Zeit liefert, steht diese Zeit oder „nicht nach“ dafür ein."
+            "description": "Die früheste Zeit für einen Auslöser, der der Sonne folgt. An einem Tag, an dem die Sonne keine Zeit ergibt, etwa weil sie die gewählte Höhe nie erreicht, gilt stattdessen diese Zeit oder „nicht nach“."
           },
           "not_after": {
             "label": "[edge]: nicht nach",

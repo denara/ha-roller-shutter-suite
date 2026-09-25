@@ -1,13 +1,15 @@
 # Movement
 
-The page "Movement" of the forms holds the settings that spare the motors of your shutters. Like every setting they can be set for the house, a group or a single window, and a level that leaves a field empty inherits it ([Concepts](../concepts.md)).
+The page "Movement" of the forms holds the settings that spare the motors of your shutters. Like every setting they can be made for the house, a group or a single window; a group or window that leaves a field empty inherits the setting ([Concepts](../concepts.md)).
+
+**Status: pilot.** These settings can be made and are part of every decision, but every window is in [dry-run](dry-run.md) and moves nothing. Shading, sleep mode, requests from automations, protection from storms and hail and the fire alarm, which this page uses as examples, arrive with later versions; in this version only the daily routine creates comfort movements.
 
 | Setting | Default | What it does |
 |---|---|---|
 | Minimum change | 5 % | A comfort movement smaller than this is left out. |
 | Minimum interval | 10 minutes | The shortest time between two comfort movements of a window. |
 | Gap between motors | 2 seconds | When many shutters move together, the next motor starts this long after the previous one. |
-| Look again at the latest after (expert value) | 5 minutes | How long a window waits at most, when it waits for something whose end nobody knows, before it is looked at again. |
+| Check again at the latest after (advanced setting) | 5 minutes | How long a window waits at most, when it waits for something whose end nobody knows, before it is checked again. |
 
 ## Minimum change and minimum interval
 
@@ -29,10 +31,10 @@ When many shutters move at the same moment, for example at the evening, their mo
 
 The gap between the covers of one window only matters for a window with several covers.
 
-## Look again at the latest after
+## Check again at the latest after
 
-Sometimes a window waits for something whose end nobody can know in advance: for a cover that is unavailable to come back, or for the covers of a window to come to rest. The window is looked at again as soon as something changes; this setting is only the safety net for the case that no change is ever reported. It is an expert value, and the default suits almost every installation.
+Sometimes a window waits for something whose end nobody can know in advance: for a cover that is unavailable to come back, or for the covers of a window to come to rest. The window is checked again as soon as something changes; this setting is only the safety net for the case that no change is ever reported. It is one of the advanced settings, and the default suits almost every home.
 
-## Faulty stored values
+## Faulty saved settings
 
-If a stored value of one of these settings cannot be read, the value of the next level applies (group, then house), and a repair issue names the setting. If no level has a valid value, the default applies. None of these settings is ever switched off by a fault: they protect the motors.
+If a saved setting of this page cannot be read, the same setting of the group or the house applies instead, and a repair issue names the setting. If neither has a valid one, the default applies. None of these settings is ever switched off by a fault: they protect the motors.

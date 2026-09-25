@@ -1,135 +1,135 @@
 {
   "_templates": {
-    "inherit_hint_empty": "Leer lassen, um zu erben. Geerbt wird derzeit: {inherited} (von {source}).",
-    "inherit_hint_choice": "Geerbt wird derzeit: {inherited} (von {source}).",
-    "inherit_hint_switch": "„Erben“ folgt {source}.",
-    "enumeration_inherit_option": "Erben",
+    "inherit_hint_empty": "Leer lassen, um die Einstellung von {source} zu übernehmen (derzeit {inherited}).",
+    "inherit_hint_choice": "Derzeit übernommen von {source}: {inherited}.",
+    "inherit_hint_switch": "Beim Übernehmen gilt die Einstellung von {source}.",
+    "enumeration_inherit_option": "Vom Haus oder von der Gruppe übernehmen",
     "features_title": "Funktionen",
-    "features_description": "Wähle, was eingeschaltet ist. Nur eingeschaltete Funktionen bekommen eine eigene Seite.",
-    "features_description_inheriting": "Wähle, was hier entschieden wird. „Erben“ folgt der Ebene darüber; der Eintrag zeigt, was das derzeit bedeutet. Nur eingeschaltete Funktionen bekommen eine eigene Seite.",
-    "expert_name": "Expertenwerte",
-    "expert_description": "Es gelten sinnvolle Voreinstellungen. Ändere sie nur, wenn du weißt, warum.",
+    "features_description": "Lege fest, worum sich Roller Shutter Suite im ganzen Haus kümmern soll. Weitere Seiten folgen nur für das, was du hier einschaltest.",
+    "features_description_inheriting": "Lege fest, worum sich Roller Shutter Suite hier kümmern soll. Mit „Vom Haus oder von der Gruppe übernehmen“ gilt, was dort gewählt ist; die Liste zeigt, was das gerade ist. Weitere Seiten folgen nur für das, was eingeschaltet ist.",
+    "expert_name": "Erweiterte Einstellungen",
+    "expert_description": "Die Voreinstellungen passen für die meisten Häuser. Ändere sie nur, wenn du einen Grund dafür hast.",
     "errors": {
-      "invalid_value": "Dieser Wert kann nicht verwendet werden.",
+      "invalid_value": "Dieser Wert ist hier nicht möglich.",
       "fraction_not_allowed": "Gib eine ganze Zahl ein.",
       "invalid_day_of_year": "Gib den Tag als Monat und Tag mit je zwei Ziffern ein, zum Beispiel 05-01.",
       "leap_day_not_allowed": "Den 29. Februar gibt es nicht in jedem Jahr. Wähle den 28. Februar oder den 1. März.",
-      "reference_missing": "Wähle eine Entität, oder wähle oben „Keine“ oder „Erben“.",
-      "invalid_combination": "Diese Werte passen nicht zusammen: {combination}. Jeder für sich wäre in Ordnung."
+      "reference_missing": "Wähle eine Entität, oder wähle oben „Keine“ oder „Vom Haus oder von der Gruppe übernehmen“.",
+      "invalid_combination": "Diese Einstellungen widersprechen sich: {combination}. Jede für sich wäre in Ordnung."
     },
-    "fault_title": "Eine gespeicherte Einstellung ist nicht verwendbar: {level}",
+    "fault_title": "Eine Einstellung {level} kann nicht verwendet werden",
     "fault_levels": {
-      "global": "Haus",
-      "group": "Gruppe „{name}“",
-      "window": "Fenster „{name}“"
+      "global": "des Hauses",
+      "group": "der Gruppe „{name}“",
+      "window": "des Fensters „{name}“"
     },
     "fault_problems": {
-      "unreadable": "Der gespeicherte Wert der Einstellung „{key}“ kann nicht gelesen werden.",
-      "none_not_allowed": "Die Einstellung „{key}“ ist als „keine“ gespeichert, braucht aber immer einen Wert.",
-      "invalid": "Der gespeicherte Wert der Einstellung „{key}“ wurde gelesen, ist aber kein zulässiger Wert.",
-      "not_inheritable": "Die Einstellung „{key}“ kann nur ein Fenster setzen, ist aber hier gespeichert. Sie hat keine Wirkung.",
-      "unknown_setting": "Die gespeicherte Einstellung „{key}“ kennt diese Version der Integration nicht. Sie wird ignoriert. Möglicherweise hat eine neuere Version sie geschrieben.",
-      "level_unreadable": "Die gespeicherten Einstellungen können insgesamt nicht gelesen werden.",
-      "other": "Mit der gespeicherten Einstellung „{key}“ stimmt etwas nicht, das diese Version der Integration nicht genauer beschreiben kann."
+      "unreadable": "Die gespeicherte Einstellung „{key}“ lässt sich nicht lesen.",
+      "none_not_allowed": "Die Einstellung „{key}“ ist als „Keine“ gespeichert, braucht aber immer einen Wert.",
+      "invalid": "Die gespeicherte Einstellung „{key}“ lässt sich lesen, ist so aber nicht zulässig.",
+      "not_inheritable": "Die Einstellung „{key}“ kann nur für ein einzelnes Fenster getroffen werden, ist aber hier gespeichert. Hier hat sie keine Wirkung.",
+      "unknown_setting": "Diese Version von Roller Shutter Suite kennt die gespeicherte Einstellung „{key}“ nicht; vielleicht hat eine neuere Version sie gespeichert. Sie wird nicht beachtet.",
+      "level_unreadable": "Die gespeicherten Einstellungen lassen sich überhaupt nicht lesen.",
+      "other": "Mit der gespeicherten Einstellung „{key}“ stimmt etwas nicht, und diese Version von Roller Shutter Suite kann nicht genauer sagen, was."
     },
-    "fault_consequence": "Funktionen, die Menschen oder Technik schützen oder Bewegungen einschränken, laufen weiter. Sie verwenden den Wert der nächsten Ebene; wo keine Ebene einen setzt, verwenden sie einen vorsichtigen Wert, der Bewegungen bis zur Reparatur stärker einschränken kann als gewohnt. Komfortfunktionen, die von einem fehlerhaften Wert abhängen, pausieren für die betroffenen Fenster, damit sich kein Rollladen unerwartet bewegt.",
+    "fault_consequence": "Bis zur Reparatur wirken Einstellungen, die Menschen oder Technik schützen oder Bewegungen begrenzen, weiter: Sie verwenden stattdessen dieselbe Einstellung der Gruppe oder des Hauses, und wo keine gesetzt ist, eine vorsichtige Vorgabe, die Bewegungen stärker zurückhalten kann als gewohnt. Komfortbewegungen, die von dieser Einstellung abhängen, etwa die des Tagesablaufs, sind für die betroffenen Fenster ausgesetzt, damit sich kein Rollladen unerwartet bewegt.",
     "fault_repairs": {
-      "global": "Zum Beheben: Öffne die Integration, wähle „Neu konfigurieren“ und speichere die Werte des Hauses.",
-      "group": "Zum Beheben: Öffne die Gruppe, prüfe ihre Werte und speichere sie, oder entferne die Gruppe.",
-      "window": "Zum Beheben: Öffne das Fenster, prüfe seine Werte und speichere es, oder entferne das Fenster."
+      "global": "Zum Beheben öffne Roller Shutter Suite, wähle „Neu konfigurieren“ und speichere die Einstellungen des Hauses.",
+      "group": "Zum Beheben öffne die Gruppe, prüfe ihre Einstellungen und speichere sie, oder lösche die Gruppe.",
+      "window": "Zum Beheben öffne das Fenster, prüfe seine Einstellungen und speichere es, oder lösche das Fenster."
     },
     "reason_codes": {
       "fire_alarm": "Feueralarm",
-      "fire_unacknowledged": "Feueralarm vorbei, wartet auf Bestätigung",
-      "protection_event": "Schutzereignis, etwa Sturm oder Hagel",
-      "protection_return_manual": "Zurück auf die Position, die vor dem Schutzereignis von Hand gewählt war",
+      "fire_unacknowledged": "Feueralarm vorbei, wartet auf Quittierung",
+      "protection_event": "Schutz vor Sturm, Hagel oder Ähnlichem",
+      "protection_return_manual": "Zurück auf die Position, die vor dem Schutz von Hand eingestellt war",
       "sleep_mode": "Schlafmodus",
       "external_request": "Anforderung einer Automation",
       "privacy_lights_on": "Sichtschutz bei eingeschaltetem Licht",
-      "shading_geometric": "Beschattung nach dem Sonnenstand",
+      "shading_geometric": "Beschattung, die der Sonne folgt",
       "shading_fixed": "Beschattung auf fester Position",
-      "solar_heating": "Die Sonne wärmt den Raum",
+      "solar_heating": "Die Sonne darf den Raum wärmen",
       "schedule_day": "Tagesablauf: Tag",
       "schedule_night": "Tagesablauf: Nacht",
       "not_configured": "Nicht eingerichtet",
-      "inactive": "Derzeit nicht aktiv",
+      "inactive": "Gerade nicht aktiv",
       "input_unavailable": "Eine benötigte Entität ist nicht verfügbar",
-      "input_unknown": "Eine benötigte Entität hat keinen bekannten Wert",
-      "input_held_last_known": "Der letzte bekannte Wert einer Entität gilt",
-      "waiting_for_delay": "Wartet, bis die Verzögerung abgelaufen ist",
-      "outside_episode": "Die Bedingungen sind derzeit nicht erfüllt",
-      "episode_locked": "Für den Rest der laufenden Phase gesperrt",
-      "watchdog_released": "Freigegeben, weil es unplausibel lange dauerte",
+      "input_unknown": "Der Zustand einer benötigten Entität ist unbekannt",
+      "input_held_last_known": "Der letzte bekannte Zustand einer Entität wird verwendet",
+      "waiting_for_delay": "Wartet die eingestellte Verzögerung ab",
+      "outside_episode": "Bedingungen gerade nicht erfüllt",
+      "episode_locked": "Wartet, bis die Bedingung nicht mehr gilt",
+      "watchdog_released": "Beendet, weil es unplausibel lange dauerte",
       "capability_missing": "Der Rollladen kann das nicht",
-      "day_type_fallback": "Wochentag verwendet, weil die Art des Tages nicht bekannt ist",
-      "function_disabled_by_fault": "Pausiert, weil eine gespeicherte Einstellung fehlerhaft ist",
+      "day_type_fallback": "Art des Tages unbekannt, der Wochentag gilt",
+      "function_disabled_by_fault": "Ausgesetzt, weil eine gespeicherte Einstellung fehlerhaft ist",
       "layer_failed": "Wegen eines internen Fehlers übersprungen",
-      "only_raise": "Wird zu dieser Zeit nur angehoben",
-      "only_lower": "Wird zu dieser Zeit nur gesenkt",
+      "only_raise": "Wird zu dieser Tageszeit nur angehoben",
+      "only_lower": "Wird zu dieser Tageszeit nur gesenkt",
       "sleep_exception_no_open": "Wird nicht geöffnet, solange jemand schläft",
       "lockout_door_open": "Wird nicht gesenkt, solange die Tür offen ist",
-      "lockout_void_tamper": "Trotz offener Tür gesenkt: der Sabotagekontakt ist aktiv",
-      "lockout_contact_unavailable": "Wird nicht gesenkt: der Türkontakt ist nicht verfügbar",
+      "lockout_void_tamper": "Trotz offener Tür gesenkt: Der Sabotagekontakt ist aktiv",
+      "lockout_contact_unavailable": "Wird nicht gesenkt: Der Türkontakt ist nicht verfügbar",
       "ventilation_floor": "Hält an der Lüftungsposition, weil das Fenster offen ist",
       "rain_ventilation_floor": "Bei offenem Fenster auf die Regenposition gesenkt",
       "frost_limit": "Öffnet wegen Frost nur bis zur Frostposition",
-      "frost_limit_source_blind": "Öffnet nur bis zur Frostposition, weil keine Temperatur bekannt ist",
+      "frost_limit_source_blind": "Öffnet nur bis zur Frostposition, weil die Temperatur unbekannt ist",
       "frost_hold": "Wird bei Frost nicht angehoben",
-      "no_intermediate_position": "Keine Zwischenposition während eines Schutzereignisses",
-      "constraint_failed": "Einschränkung wegen eines internen Fehlers beibehalten",
+      "no_intermediate_position": "Keine Zwischenposition, solange der Schutz aktiv ist",
+      "constraint_failed": "Begrenzung wegen eines internen Fehlers beibehalten",
       "sent": "Befehl gesendet",
       "maintenance_lock": "Wartungssperre",
-      "dry_run": "Probelauf: nichts bewegt sich",
+      "dry_run": "Probelauf: Nichts bewegt sich",
       "cover_unavailable": "Der Rollladen ist nicht verfügbar",
-      "target_reached": "Steht bereits auf der gewünschten Position",
-      "mode_off": "Betriebsart: aus",
-      "mode_protection_only": "Betriebsart: nur Schutz",
+      "target_reached": "Steht bereits richtig",
+      "mode_off": "Betriebsart: Aus",
+      "mode_protection_only": "Betriebsart: Nur Schutz",
       "paused": "Pausiert",
       "person_at_window": "Jemand ist am Fenster",
       "manual_override": "Von Hand bewegt; automatische Bewegungen warten",
-      "movement_in_flight": "Wartet, bis die laufende Bewegung beendet ist",
+      "movement_in_flight": "Wartet, bis die laufende Bewegung endet",
       "duplicate_command": "Befehl bereits unterwegs",
-      "movement_taken_over": "Laufende Bewegung übernommen",
-      "min_change": "Änderung zu klein für eine Bewegung",
-      "min_interval": "Wartet auf den Mindestabstand zwischen zwei Bewegungen",
-      "trigger_time_missing": "Zurückgehalten: es ist nicht bekannt, wann der Wunsch begann",
+      "movement_taken_over": "Setzt die bereits laufende Bewegung fort",
+      "min_change": "Änderung zu klein, um sich zu lohnen",
+      "min_interval": "Wartet den Mindestabstand zwischen zwei Bewegungen ab",
+      "trigger_time_missing": "Zurückgehalten: Unbekannt, seit wann der Grund für diese Bewegung besteht",
       "command_backoff": "Wartet vor dem nächsten Versuch",
       "staggered": "Wartet, bis es an der Reihe ist",
       "gate_rule_failed": "Wegen eines internen Fehlers zurückgehalten",
       "manual_detected": "Von Hand bewegt",
       "manual_detected_member": "Ein Rollladen des Fensters wurde von Hand bewegt",
-      "external_movement_observed": "Im Probelauf von anderer Seite bewegt",
+      "external_movement_observed": "Während des Probelaufs anderweitig bewegt",
       "moved_during_downtime": "Bewegt, während Home Assistant nicht lief",
       "person_at_window_started": "Jemand ist ans Fenster gekommen",
       "person_at_window_ended": "Niemand mehr am Fenster",
       "override_started": "Handbetrieb begonnen",
       "override_ended": "Handbetrieb beendet",
-      "protection_started": "Schutzereignis begonnen",
-      "protection_ended": "Schutzereignis beendet",
-      "protection_source_blind": "Die Entität eines Schutzereignisses hat keinen Wert",
-      "lockout_contact_blind": "Der Türkontakt hat keinen Wert",
-      "fire_acknowledged": "Feueralarm bestätigt",
+      "protection_started": "Schutz begonnen",
+      "protection_ended": "Schutz beendet",
+      "protection_source_blind": "Eine Entität für den Schutz ist nicht verfügbar oder unbekannt",
+      "lockout_contact_blind": "Der Türkontakt ist nicht verfügbar oder unbekannt",
+      "fire_acknowledged": "Feueralarm quittiert",
       "frost_protection_waived": "Frostschutz bis zum nächsten Morgen aufgehoben",
       "frost_waiver_ended": "Frostschutz gilt wieder",
       "frost_released_by_sun": "Frostschutz durch die Sonne aufgehoben",
-      "frost_source_blind": "Die Frost-Entität hat keinen Wert",
+      "frost_source_blind": "Die Entität für Frost ist nicht verfügbar oder unbekannt",
       "position_may_be_inaccurate": "Die Position kann ungenau sein",
       "command_failed": "Befehl fehlgeschlagen",
       "actuator_no_reaction": "Der Rollladen hat nicht reagiert",
-      "movement_not_finished": "Kein Ende der Bewegung rechtzeitig gemeldet",
+      "movement_not_finished": "Das Ende der Bewegung wurde nicht rechtzeitig gemeldet",
       "member_unavailable": "Ein Rollladen des Fensters ist nicht verfügbar",
-      "button_refused_maintenance_lock": "Taster wegen der Wartungssperre abgewiesen"
+      "button_refused_maintenance_lock": "Tastendruck wegen der Wartungssperre nicht beachtet"
     }
   },
   "config": {
     "step": {
       "user": {
         "title": "Roller Shutter Suite einrichten",
-        "description": "Möchtest du Roller Shutter Suite einrichten? Die nächsten Seiten fragen nach den Werten des Hauses. Gruppen und Fenster erben sie, solange sie keine eigenen setzen."
+        "description": "Möchtest du Roller Shutter Suite einrichten? Auf den nächsten Seiten legst du die übergeordneten Einstellungen für das ganze Haus fest. Gruppen und Fenster übernehmen sie, bis sie dort überschrieben werden."
       }
     },
     "abort": {
-      "reconfigure_successful": "Die Werte des Hauses wurden gespeichert."
+      "reconfigure_successful": "Die Einstellungen des Hauses wurden gespeichert."
     }
   },
   "config_subentries": {
@@ -142,7 +142,7 @@
       "step": {
         "basics": {
           "title": "Gruppe",
-          "description": "Eine Gruppe enthält Werte, die sich mehrere Fenster teilen, zum Beispiel eine Fassade oder ein Stockwerk.",
+          "description": "In einer Gruppe teilen sich mehrere Fenster ihre Einstellungen, zum Beispiel alle Fenster einer Hausseite oder eines Stockwerks.",
           "data": {
             "name": "Name"
           }
@@ -153,7 +153,7 @@
       },
       "abort": {
         "reconfigure_successful": "Die Gruppe wurde gespeichert.",
-        "subentry_removed": "Die Gruppe wurde entfernt, während dieses Formular geöffnet war. Es wurde nichts gespeichert."
+        "subentry_removed": "Die Gruppe wurde gelöscht, während dieses Formular offen war. Es wurde nichts gespeichert."
       }
     },
     "window": {
@@ -165,59 +165,59 @@
       "step": {
         "basics": {
           "title": "Fenster",
-          "description": "Wähle den Rollladen dieses Fensters. Wenn mehrere Rollläden immer gemeinsam bewegt werden, wähle alle oder eine Rollladengruppe.",
+          "description": "Wähle die Abdeckung dieses Fensters. Fahren mehrere Rollläden immer gemeinsam, etwa zwei nebeneinander, dann wähle alle ihre Abdeckungen oder ihre Abdeckungsgruppe.",
           "data": {
             "name": "Name",
-            "covers": "Rollläden",
+            "covers": "Abdeckungen",
             "group_id": "Gruppe"
           },
           "data_description": {
-            "covers": "Ein Rollladen kann nur zu einem Fenster gehören.",
-            "group_id": "Das Fenster erbt seine Werte von dieser Gruppe. Leer lassen, um direkt vom Haus zu erben."
+            "covers": "Eine Abdeckung kann nur zu einem Fenster gehören.",
+            "group_id": "Das Fenster übernimmt die Einstellungen dieser Gruppe. Leer lassen, dann übernimmt es die Einstellungen des Hauses."
           }
         },
         "members": {
-          "title": "Mitglieder der Rollladengruppe",
-          "description": "{groups} ist eine Rollladengruppe. Eine Gruppe meldet nur den Mittelwert ihrer Mitglieder, deshalb speichert und bewegt das Fenster die Mitglieder selbst:\n\n{members}",
+          "title": "Mitglieder der Abdeckungsgruppe",
+          "description": "{groups} ist eine Abdeckungsgruppe. Eine solche Gruppe meldet nur eine mittlere Position ihrer Abdeckungen, deshalb verwendet das Fenster stattdessen die einzelnen Abdeckungen:\n\n{members}",
           "menu_options": {
-            "members_accept": "Mit diesen Rollläden fortfahren",
-            "basics": "Andere Rollläden wählen"
+            "members_accept": "Mit diesen Abdeckungen fortfahren",
+            "basics": "Andere Abdeckungen wählen"
           }
         },
         "degraded": {
-          "title": "Rollladen ohne Positionen",
-          "description": "Diese Rollläden können keine Position anfahren oder melden keine: {covers}\n\nSie werden angenommen und nur geöffnet und geschlossen. Für sie sind Beschattungspositionen, andere Zwischenpositionen und die Erkennung manueller Bedienung inaktiv.",
+          "title": "Rollläden, die nur öffnen und schließen",
+          "description": "Diese Rollläden können keine Position anfahren oder melden keine: {covers}\n\nDu kannst sie trotzdem verwenden. Sie werden immer nur ganz geöffnet oder ganz geschlossen, nie auf eine Position dazwischen gefahren.",
           "menu_options": {
-            "degraded_accept": "Mit diesen Rollläden fortfahren",
-            "basics": "Andere Rollläden wählen"
+            "degraded_accept": "Mit diesen Abdeckungen fortfahren",
+            "basics": "Andere Abdeckungen wählen"
           }
         }
       },
       "error": {
         "name_blank": "Gib einen Namen ein.",
-        "group_removed": "Die gewählte Gruppe gibt es nicht mehr; sie wurde entfernt, während dieses Formular geöffnet war. Wähle eine andere Gruppe, oder speichere ohne Gruppe, dann erbt das Fenster vom Haus.",
-        "no_covers": "Die Auswahl enthält keinen Rollladen.",
-        "cover_in_use": "{cover} gehört bereits zum Fenster „{window}“. Ein Rollladen kann nur zu einem Fenster gehören."
+        "group_removed": "Die gewählte Gruppe wurde gelöscht, während dieses Formular offen war. Wähle eine andere Gruppe, oder speichere ohne Gruppe; dann übernimmt das Fenster die Einstellungen des Hauses.",
+        "no_covers": "Deine Auswahl enthält keine Abdeckung.",
+        "cover_in_use": "{cover} gehört bereits zum Fenster „{window}“. Eine Abdeckung kann nur zu einem Fenster gehören."
       },
       "abort": {
         "reconfigure_successful": "Das Fenster wurde gespeichert.",
-        "subentry_removed": "Das Fenster wurde entfernt, während dieses Formular geöffnet war. Es wurde nichts gespeichert."
+        "subentry_removed": "Das Fenster wurde gelöscht, während dieses Formular offen war. Es wurde nichts gespeichert."
       }
     }
   },
   "selector": {
     "inherited_switch": {
       "options": {
-        "inherit_on": "Erben (derzeit: ein)",
-        "inherit_off": "Erben (derzeit: aus)",
+        "inherit_on": "Vom Haus oder von der Gruppe übernehmen (derzeit ein)",
+        "inherit_off": "Vom Haus oder von der Gruppe übernehmen (derzeit aus)",
         "on": "Ein",
         "off": "Aus"
       }
     },
     "reference_choice": {
       "options": {
-        "inherit_none": "Erben (derzeit: keine)",
-        "inherit_reference": "Erben (derzeit: die unten genannte Entität)",
+        "inherit_none": "Vom Haus oder von der Gruppe übernehmen (derzeit keine)",
+        "inherit_reference": "Vom Haus oder von der Gruppe übernehmen (derzeit die unten genannte Entität)",
         "none": "Keine",
         "own": "Eigene Auswahl"
       }
@@ -226,31 +226,31 @@
   "issues": {
     "window_covers_unreadable": {
       "title": "Fenster „{window}“ ist nicht eingerichtet",
-      "description": "Die gespeicherten Rollläden des Fensters „{window}“ können nicht gelesen werden. Das Fenster ist deshalb nicht eingerichtet, und nichts wirkt auf es. Alle anderen Fenster laufen wie gewohnt. Zum Beheben: Öffne das Fenster, wähle seine Rollläden neu und speichere es, oder entferne das Fenster."
+      "description": "Die gespeicherten Abdeckungen des Fensters „{window}“ lassen sich nicht lesen. Roller Shutter Suite kümmert sich deshalb überhaupt nicht um dieses Fenster. Alle anderen Fenster arbeiten wie gewohnt. Zum Beheben öffne das Fenster, wähle seine Abdeckungen neu und speichere es, oder lösche das Fenster."
     },
     "group_missing": {
       "title": "Die Gruppe von Fenster „{window}“ gibt es nicht mehr",
-      "description": "Das Fenster „{window}“ verweist auf eine Gruppe, die entfernt wurde. Es erbt seine Werte vom Haus, bis du das Fenster öffnest und speicherst, mit einer anderen Gruppe oder ohne."
+      "description": "Das Fenster „{window}“ gehörte zu einer Gruppe, die gelöscht wurde. Bis du das Fenster öffnest und speicherst, mit einer anderen Gruppe oder ohne, übernimmt es die Einstellungen des Hauses."
     },
     "group_reference_unreadable": {
-      "title": "Die Gruppe von Fenster „{window}“ kann nicht gelesen werden",
-      "description": "Der gespeicherte Verweis des Fensters „{window}“ auf seine Gruppe kann nicht gelesen werden. Der Schutz läuft mit den Werten des Hauses weiter. Die Komfortfunktionen dieses Fensters pausieren, weil nicht bekannt ist, welche Werte die Gruppe gesetzt hätte. Zum Beheben: Öffne das Fenster, wähle seine Gruppe neu und speichere es."
+      "title": "Die Gruppe von Fenster „{window}“ lässt sich nicht lesen",
+      "description": "Die gespeicherte Gruppe des Fensters „{window}“ lässt sich nicht lesen. Einstellungen, die Menschen oder Technik schützen oder Bewegungen begrenzen, verwenden stattdessen die Einstellungen des Hauses. Die Komfortbewegungen dieses Fensters sind ausgesetzt, weil nicht bekannt ist, was die Gruppe eingestellt hätte. Zum Beheben öffne das Fenster, wähle seine Gruppe neu und speichere es."
     },
     "dry_run_unreadable": {
-      "title": "Der Probelauf von Fenster „{window}“ kann nicht gelesen werden",
-      "description": "Der gespeicherte Probelauf-Zustand des Fensters „{window}“ kann nicht gelesen werden. Das Fenster wird behandelt, als wäre es im Probelauf, es bewegt sich also nicht. Zum Beheben: Öffne das Fenster und speichere es."
+      "title": "Probelauf von Fenster „{window}“ lässt sich nicht lesen",
+      "description": "Aus den gespeicherten Einstellungen geht nicht hervor, ob das Fenster „{window}“ im Probelauf ist. Es wird behandelt, als wäre es im Probelauf, und bewegt sich also nicht. Zum Beheben öffne das Fenster und speichere es."
     },
     "option_unavailable": {
       "title": "Fenster „{window}“ kann die Einstellung „{key}“ nicht nutzen",
-      "description": "Das Fenster „{window}“ setzt „{key}“ selbst, aber diese Rollläden können nicht, was die Einstellung braucht: {covers}. Der Wert bleibt gespeichert und gilt wieder, sobald die Rollläden es können."
+      "description": "Das Fenster „{window}“ überschreibt die Einstellung „{key}“, aber diese Rollläden unterstützen das nicht: {covers}. Die Einstellung bleibt gespeichert und wirkt wieder, sobald die Rollläden es unterstützen."
     },
     "setting_combination": {
-      "title": "Gespeicherte Einstellungen passen nicht zusammen",
-      "description": "Jeder dieser gespeicherten Werte ist für sich in Ordnung, zusammen sind sie aber nicht zulässig: {settings}. Der Name in Klammern sagt, wo der jeweilige Wert gespeichert ist. Komfortfunktionen, die davon abhängen, pausieren für die betroffenen Fenster; der Schutz läuft weiter. Zum Beheben: Ändere einen der Werte und speichere."
+      "title": "Gespeicherte Einstellungen widersprechen sich",
+      "description": "Jede dieser gespeicherten Einstellungen ist für sich in Ordnung, zusammen sind sie aber nicht zulässig: {settings}. Der Name in Klammern sagt, wo die jeweilige Einstellung gespeichert ist. Komfortbewegungen, die davon abhängen, sind für die betroffenen Fenster ausgesetzt; Einstellungen, die Menschen oder Technik schützen oder Bewegungen begrenzen, wirken weiter. Zum Beheben ändere eine der Einstellungen und speichere."
     },
     "rule_without_keys": {
-      "title": "Gespeicherte Einstellungen wurden ohne benennbaren Grund abgelehnt",
-      "description": "Die Einstellungen mindestens eines Fensters wurden als Ganzes abgelehnt, und die Integration konnte nicht sagen, welche Werte betroffen sind. Das ist ein Fehler in der Integration, nicht in deinen Daten. Der Schutz läuft weiter; Komfortfunktionen pausieren. Bitte melde es dem Autor der Integration."
+      "title": "Gespeicherte Einstellungen wurden aus unbekanntem Grund abgelehnt",
+      "description": "Die Einstellungen mindestens eines Fensters wurden als Ganzes abgelehnt, und Roller Shutter Suite konnte nicht sagen, welche Einstellungen der Grund sind. Das ist ein Fehler in der Integration, nicht in deinen Einstellungen. Einstellungen, die Menschen oder Technik schützen oder Bewegungen begrenzen, wirken weiter; Komfortbewegungen sind ausgesetzt. Bitte melde das dem Autor der Integration."
     }
   },
   "entity": {
@@ -259,7 +259,7 @@
         "name": "Grund"
       },
       "target_position": {
-        "name": "Berechnete Position"
+        "name": "Zielposition"
       },
       "next_action": {
         "name": "Nächste geplante Aktion",
@@ -283,11 +283,11 @@
     }
   },
   "common": {
-    "logbook_sent": "Befehl gesendet: auf {target} % fahren. Grund: {cause}.",
+    "logbook_sent": "Befehl gesendet, auf {target} % zu fahren. Grund: {cause}.",
     "logbook_sent_no_target": "Befehl gesendet. Grund: {cause}.",
     "logbook_dry_run": "Probelauf, nichts bewegt: wäre auf {target} % gefahren. Grund: {cause}.",
     "logbook_dry_run_no_target": "Probelauf, nichts bewegt: wäre gefahren. Grund: {cause}.",
-    "logbook_held_back": "Bewegung auf {target} % zurückgehalten: {held}. Gewünscht wegen: {cause}.",
-    "logbook_held_back_no_target": "Bewegung zurückgehalten: {held}. Gewünscht wegen: {cause}."
+    "logbook_held_back": "Bewegung auf {target} % zurückgehalten: {held}. Grund für die Bewegung: {cause}.",
+    "logbook_held_back_no_target": "Bewegung zurückgehalten: {held}. Grund für die Bewegung: {cause}."
   }
 }

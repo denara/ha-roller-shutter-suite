@@ -3,21 +3,21 @@
     "step": {
       "user": {
         "title": "Roller Shutter Suite einrichten",
-        "description": "Möchtest du Roller Shutter Suite einrichten? Die nächsten Seiten fragen nach den Werten des Hauses. Gruppen und Fenster erben sie, solange sie keine eigenen setzen."
+        "description": "Möchtest du Roller Shutter Suite einrichten? Auf den nächsten Seiten legst du die übergeordneten Einstellungen für das ganze Haus fest. Gruppen und Fenster übernehmen sie, bis sie dort überschrieben werden."
       },
       "features": {
         "title": "Funktionen",
-        "description": "Wähle, was eingeschaltet ist. Nur eingeschaltete Funktionen bekommen eine eigene Seite.",
+        "description": "Lege fest, worum sich Roller Shutter Suite im ganzen Haus kümmern soll. Weitere Seiten folgen nur für das, was du hier einschaltest.",
         "data": {
           "schedule_enabled": "Tagesablauf"
         },
         "data_description": {
-          "schedule_enabled": "Öffnet die Rollläden am Morgen und schließt sie am Abend. Solange er ausgeschaltet ist, bewegt der Tagesablauf nichts; der Schutz läuft weiter."
+          "schedule_enabled": "Öffnet die Rollläden am Morgen und schließt sie am Abend. Ist er ausgeschaltet, bewegt der Tagesablauf nichts."
         }
       },
       "feature_daily_routine_general": {
         "title": "Tagesablauf",
-        "description": "Wie weit die Rollläden öffnen und schließen, woran Werktage, Wochenenden und Feiertage erkannt werden und was den Abend sonst noch beginnen kann. Die Zeiten folgen auf den nächsten Seiten, eine Seite je Art von Tag.",
+        "description": "Wie weit die Rollläden öffnen und schließen, woran Werktage, Wochenenden und Feiertage zu erkennen sind und was den Abend außerdem auslösen kann. Die Uhrzeiten folgen auf den nächsten Seiten, eine Seite je Art des Tages.",
         "data": {
           "schedule_morning_position": "Morgenposition",
           "schedule_evening_position": "Abendposition",
@@ -36,40 +36,40 @@
           "schedule_brightness_threshold_lux": "Helligkeitsschwelle (Lux)"
         },
         "data_description": {
-          "schedule_morning_position": "Wohin der Rollladen am Morgen fährt. 100 % ist ganz offen, 0 % ganz geschlossen. Der Morgen hebt nur: Ein Rollladen, der schon höher steht, bleibt, wo er ist.",
-          "schedule_evening_position": "Wohin der Rollladen am Abend fährt. 100 % ist ganz offen, 0 % ganz geschlossen. Der Abend senkt nur: Ein Rollladen, der schon tiefer steht, bleibt, wo er ist.",
-          "schedule_workday_source_choice": "Eine Entität, die an Werktagen eingeschaltet ist, zum Beispiel der Werktag-Sensor von Home Assistant. Mit „Keine“ sind Montag bis Freitag Werktage.",
-          "schedule_workday_source": "Zählt nur mit „Eigene Auswahl“ oben.",
-          "schedule_holiday_source_choice": "Eine Entität, die an Feiertagen eingeschaltet ist; ein Kalender mit einem ganztägigen Termin funktioniert ebenfalls. Mit „Keine“ gibt es keine Feiertage.",
-          "schedule_holiday_source": "Zählt nur mit „Eigene Auswahl“ oben.",
-          "schedule_season_source_choice": "Eine Entität, die eingeschaltet ist, solange Sommer ist. Solange sie keinen Wert hat, zählt ihr letzter bekannter Wert.",
-          "schedule_season_source": "Zählt nur mit „Eigene Auswahl“ oben.",
-          "schedule_summer_by_date": "Ohne Sommer-Entität dauert der Sommer vom ersten bis zum letzten unten angegebenen Tag.",
+          "schedule_morning_position": "Wie weit der Rollladen am Morgen öffnet: 100 % ist ganz offen, 0 % ganz geschlossen. Morgens wird ein Rollladen nur angehoben; steht er schon höher, bleibt er, wo er ist.",
+          "schedule_evening_position": "Wie weit der Rollladen am Abend schließt: 100 % ist ganz offen, 0 % ganz geschlossen. Abends wird ein Rollladen nur gesenkt; steht er schon tiefer, bleibt er, wo er ist.",
+          "schedule_workday_source_choice": "Eine Entität, die an Werktagen eingeschaltet ist, zum Beispiel ein Werktag-Sensor von Home Assistant. Mit „Keine“ sind Montag bis Freitag Werktage.",
+          "schedule_workday_source": "Gilt nur mit „Eigene Auswahl“ oben.",
+          "schedule_holiday_source_choice": "Eine Entität, die an Feiertagen eingeschaltet ist; ein Kalender mit einem ganztägigen Termin geht auch. Mit „Keine“ gibt es keine Feiertage.",
+          "schedule_holiday_source": "Gilt nur mit „Eigene Auswahl“ oben.",
+          "schedule_season_source_choice": "Eine Entität, die eingeschaltet ist, solange Sommer ist. Ist sie nicht verfügbar oder unbekannt, gilt ihr letzter bekannter Zustand.",
+          "schedule_season_source": "Gilt nur mit „Eigene Auswahl“ oben.",
+          "schedule_summer_by_date": "Ohne Sommer-Entität dauert der Sommer vom ersten bis zum letzten unten eingestellten Tag.",
           "schedule_summer_first_day": "Monat und Tag mit je zwei Ziffern, zum Beispiel 05-01 für den 1. Mai.",
-          "schedule_summer_last_day": "Monat und Tag mit je zwei Ziffern, zum Beispiel 09-30 für den 30. September. Der Zeitraum darf über den Jahreswechsel reichen.",
-          "schedule_evening_position_summer": "Ersetzt die Abendposition, solange Sommer ist, zum Beispiel 30 % für Sichtschutz mit etwas Luft. Sie zählt nur mit einer Sommer-Entität oder mit Sommer nach Datum.",
-          "schedule_brightness_source_choice": "Eine Entität, die die Außenhelligkeit in Lux meldet. Ist es für die Dauer der Verzögerung dunkler als der Schwellwert, beginnt der Abend früher, aber nie vor „nicht vor“ des Abends. Eine Entität ohne Wert beginnt nichts und blockiert nichts.",
-          "schedule_brightness_source": "Zählt nur mit „Eigene Auswahl“ oben.",
-          "schedule_brightness_threshold_lux": "Unterhalb dieser Außenhelligkeit, in Lux, gilt es als dunkel."
+          "schedule_summer_last_day": "Monat und Tag mit je zwei Ziffern, zum Beispiel 09-30 für den 30. September. Der Sommer darf über den Jahreswechsel reichen.",
+          "schedule_evening_position_summer": "Gilt im Sommer statt der Abendposition, zum Beispiel 30 % für Sichtschutz mit etwas frischer Luft. Sie wirkt nur, wenn der Sommer über eine Entität oder nach Datum festgelegt ist.",
+          "schedule_brightness_source_choice": "Eine Entität, die die Außenhelligkeit in Lux meldet. Bleibt es für die eingestellte Dauer dunkler als die Schwelle, beginnt der Abend früher, aber nie früher als die Zeit unter „Abend: nicht vor“. Solange die Entität nicht verfügbar oder unbekannt ist, löst sie den Abend weder aus noch verzögert sie ihn.",
+          "schedule_brightness_source": "Gilt nur mit „Eigene Auswahl“ oben.",
+          "schedule_brightness_threshold_lux": "Unterhalb dieser Außenhelligkeit in Lux gilt es als dunkel."
         },
         "sections": {
           "expert": {
-            "name": "Expertenwerte",
-            "description": "Es gelten sinnvolle Voreinstellungen. Ändere sie nur, wenn du weißt, warum.",
+            "name": "Erweiterte Einstellungen",
+            "description": "Die Voreinstellungen passen für die meisten Häuser. Ändere sie nur, wenn du einen Grund dafür hast.",
             "data": {
-              "schedule_brightness_delay": "Verzögerung der Helligkeit",
+              "schedule_brightness_delay": "Dauer der Dunkelheit",
               "schedule_random_offset": "Zufälliger Versatz"
             },
             "data_description": {
               "schedule_brightness_delay": "Wie viele Minuten es dunkel sein muss, bevor der Abend beginnt.",
-              "schedule_random_offset": "Verschiebt jeden Auslöser um bis zu so viele Minuten, früher oder später, für jedes Fenster und jeden Tag anders. 0 schaltet ihn aus; 30 ist das Maximum."
+              "schedule_random_offset": "Verschiebt jeden Morgen und jeden Abend um bis zu so viele Minuten nach vorn oder hinten, für jedes Fenster und jeden Tag anders. 0 schaltet das aus; höchstens 30."
             }
           }
         }
       },
       "feature_daily_routine_workday": {
         "title": "Tagesablauf an Werktagen",
-        "description": "Wann der Morgen und der Abend an einem Werktag beginnen.",
+        "description": "Wann Morgen und Abend an einem Werktag beginnen.",
         "data": {
           "schedule_workday_morning_kind": "Morgen: Auslöser",
           "schedule_workday_morning_time": "Morgen: Uhrzeit",
@@ -77,15 +77,15 @@
           "schedule_workday_evening_time": "Abend: Uhrzeit"
         },
         "data_description": {
-          "schedule_workday_morning_kind": "Eine feste Uhrzeit; der Sonnenaufgang am Morgen oder der Sonnenuntergang am Abend, mit Versatz; oder die Höhe der Sonne. Für die beiden, die der Sonne folgen, begrenzen „nicht vor“ und „nicht nach“ unter den Expertenwerten die Zeit.",
-          "schedule_workday_morning_time": "Zählt mit dem Auslöser „Feste Uhrzeit“.",
-          "schedule_workday_evening_kind": "Eine feste Uhrzeit; der Sonnenaufgang am Morgen oder der Sonnenuntergang am Abend, mit Versatz; oder die Höhe der Sonne. Für die beiden, die der Sonne folgen, begrenzen „nicht vor“ und „nicht nach“ unter den Expertenwerten die Zeit.",
-          "schedule_workday_evening_time": "Zählt mit dem Auslöser „Feste Uhrzeit“."
+          "schedule_workday_morning_kind": "Eine feste Uhrzeit; der Sonnenaufgang am Morgen oder der Sonnenuntergang am Abend, mit Versatz; oder die Höhe der Sonne. Für die beiden, die der Sonne folgen, legen „nicht vor“ und „nicht nach“ in den erweiterten Einstellungen die früheste und die späteste Zeit fest.",
+          "schedule_workday_morning_time": "Gilt beim Auslöser „Feste Uhrzeit“.",
+          "schedule_workday_evening_kind": "Eine feste Uhrzeit; der Sonnenaufgang am Morgen oder der Sonnenuntergang am Abend, mit Versatz; oder die Höhe der Sonne. Für die beiden, die der Sonne folgen, legen „nicht vor“ und „nicht nach“ in den erweiterten Einstellungen die früheste und die späteste Zeit fest.",
+          "schedule_workday_evening_time": "Gilt beim Auslöser „Feste Uhrzeit“."
         },
         "sections": {
           "expert": {
-            "name": "Expertenwerte",
-            "description": "Es gelten sinnvolle Voreinstellungen. Ändere sie nur, wenn du weißt, warum.",
+            "name": "Erweiterte Einstellungen",
+            "description": "Die Voreinstellungen passen für die meisten Häuser. Ändere sie nur, wenn du einen Grund dafür hast.",
             "data": {
               "schedule_workday_morning_offset_minutes": "Morgen: Versatz zu Sonnenaufgang oder Sonnenuntergang",
               "schedule_workday_morning_elevation": "Morgen: Höhe der Sonne",
@@ -97,13 +97,13 @@
               "schedule_workday_evening_not_after": "Abend: nicht nach"
             },
             "data_description": {
-              "schedule_workday_morning_offset_minutes": "Zählt mit dem Auslöser „Sonnenaufgang oder Sonnenuntergang“. Minuten; eine negative Zahl bedeutet früher.",
-              "schedule_workday_morning_elevation": "Zählt mit dem Auslöser „Höhe der Sonne“. Grad über dem Horizont; eine negative Zahl bedeutet darunter.",
-              "schedule_workday_morning_not_before": "Die früheste Zeit für einen Auslöser, der der Sonne folgt. An einem Tag, an dem die Sonne keine Zeit liefert, steht diese Zeit oder „nicht nach“ dafür ein.",
+              "schedule_workday_morning_offset_minutes": "Gilt beim Auslöser „Sonnenaufgang oder Sonnenuntergang“. In Minuten; eine negative Zahl bedeutet früher.",
+              "schedule_workday_morning_elevation": "Gilt beim Auslöser „Höhe der Sonne“. In Grad über dem Horizont; eine negative Zahl bedeutet darunter.",
+              "schedule_workday_morning_not_before": "Die früheste Zeit für einen Auslöser, der der Sonne folgt. An einem Tag, an dem die Sonne keine Zeit ergibt, etwa weil sie die gewählte Höhe nie erreicht, gilt stattdessen diese Zeit oder „nicht nach“.",
               "schedule_workday_morning_not_after": "Die späteste Zeit für einen Auslöser, der der Sonne folgt.",
-              "schedule_workday_evening_offset_minutes": "Zählt mit dem Auslöser „Sonnenaufgang oder Sonnenuntergang“. Minuten; eine negative Zahl bedeutet früher.",
-              "schedule_workday_evening_elevation": "Zählt mit dem Auslöser „Höhe der Sonne“. Grad über dem Horizont; eine negative Zahl bedeutet darunter.",
-              "schedule_workday_evening_not_before": "Die früheste Zeit für einen Auslöser, der der Sonne folgt. An einem Tag, an dem die Sonne keine Zeit liefert, steht diese Zeit oder „nicht nach“ dafür ein.",
+              "schedule_workday_evening_offset_minutes": "Gilt beim Auslöser „Sonnenaufgang oder Sonnenuntergang“. In Minuten; eine negative Zahl bedeutet früher.",
+              "schedule_workday_evening_elevation": "Gilt beim Auslöser „Höhe der Sonne“. In Grad über dem Horizont; eine negative Zahl bedeutet darunter.",
+              "schedule_workday_evening_not_before": "Die früheste Zeit für einen Auslöser, der der Sonne folgt. An einem Tag, an dem die Sonne keine Zeit ergibt, etwa weil sie die gewählte Höhe nie erreicht, gilt stattdessen diese Zeit oder „nicht nach“.",
               "schedule_workday_evening_not_after": "Die späteste Zeit für einen Auslöser, der der Sonne folgt."
             }
           }
@@ -111,7 +111,7 @@
       },
       "feature_daily_routine_weekend": {
         "title": "Tagesablauf am Wochenende",
-        "description": "Wann der Morgen und der Abend an einem Samstag oder Sonntag beginnen, oder an einem Tag, den die Werktag-Entität als frei meldet.",
+        "description": "Wann Morgen und Abend an einem Samstag oder Sonntag beginnen oder an einem Tag, den die Werktag-Entität als frei meldet.",
         "data": {
           "schedule_weekend_morning_kind": "Morgen: Auslöser",
           "schedule_weekend_morning_time": "Morgen: Uhrzeit",
@@ -119,15 +119,15 @@
           "schedule_weekend_evening_time": "Abend: Uhrzeit"
         },
         "data_description": {
-          "schedule_weekend_morning_kind": "Eine feste Uhrzeit; der Sonnenaufgang am Morgen oder der Sonnenuntergang am Abend, mit Versatz; oder die Höhe der Sonne. Für die beiden, die der Sonne folgen, begrenzen „nicht vor“ und „nicht nach“ unter den Expertenwerten die Zeit.",
-          "schedule_weekend_morning_time": "Zählt mit dem Auslöser „Feste Uhrzeit“.",
-          "schedule_weekend_evening_kind": "Eine feste Uhrzeit; der Sonnenaufgang am Morgen oder der Sonnenuntergang am Abend, mit Versatz; oder die Höhe der Sonne. Für die beiden, die der Sonne folgen, begrenzen „nicht vor“ und „nicht nach“ unter den Expertenwerten die Zeit.",
-          "schedule_weekend_evening_time": "Zählt mit dem Auslöser „Feste Uhrzeit“."
+          "schedule_weekend_morning_kind": "Eine feste Uhrzeit; der Sonnenaufgang am Morgen oder der Sonnenuntergang am Abend, mit Versatz; oder die Höhe der Sonne. Für die beiden, die der Sonne folgen, legen „nicht vor“ und „nicht nach“ in den erweiterten Einstellungen die früheste und die späteste Zeit fest.",
+          "schedule_weekend_morning_time": "Gilt beim Auslöser „Feste Uhrzeit“.",
+          "schedule_weekend_evening_kind": "Eine feste Uhrzeit; der Sonnenaufgang am Morgen oder der Sonnenuntergang am Abend, mit Versatz; oder die Höhe der Sonne. Für die beiden, die der Sonne folgen, legen „nicht vor“ und „nicht nach“ in den erweiterten Einstellungen die früheste und die späteste Zeit fest.",
+          "schedule_weekend_evening_time": "Gilt beim Auslöser „Feste Uhrzeit“."
         },
         "sections": {
           "expert": {
-            "name": "Expertenwerte",
-            "description": "Es gelten sinnvolle Voreinstellungen. Ändere sie nur, wenn du weißt, warum.",
+            "name": "Erweiterte Einstellungen",
+            "description": "Die Voreinstellungen passen für die meisten Häuser. Ändere sie nur, wenn du einen Grund dafür hast.",
             "data": {
               "schedule_weekend_morning_offset_minutes": "Morgen: Versatz zu Sonnenaufgang oder Sonnenuntergang",
               "schedule_weekend_morning_elevation": "Morgen: Höhe der Sonne",
@@ -139,13 +139,13 @@
               "schedule_weekend_evening_not_after": "Abend: nicht nach"
             },
             "data_description": {
-              "schedule_weekend_morning_offset_minutes": "Zählt mit dem Auslöser „Sonnenaufgang oder Sonnenuntergang“. Minuten; eine negative Zahl bedeutet früher.",
-              "schedule_weekend_morning_elevation": "Zählt mit dem Auslöser „Höhe der Sonne“. Grad über dem Horizont; eine negative Zahl bedeutet darunter.",
-              "schedule_weekend_morning_not_before": "Die früheste Zeit für einen Auslöser, der der Sonne folgt. An einem Tag, an dem die Sonne keine Zeit liefert, steht diese Zeit oder „nicht nach“ dafür ein.",
+              "schedule_weekend_morning_offset_minutes": "Gilt beim Auslöser „Sonnenaufgang oder Sonnenuntergang“. In Minuten; eine negative Zahl bedeutet früher.",
+              "schedule_weekend_morning_elevation": "Gilt beim Auslöser „Höhe der Sonne“. In Grad über dem Horizont; eine negative Zahl bedeutet darunter.",
+              "schedule_weekend_morning_not_before": "Die früheste Zeit für einen Auslöser, der der Sonne folgt. An einem Tag, an dem die Sonne keine Zeit ergibt, etwa weil sie die gewählte Höhe nie erreicht, gilt stattdessen diese Zeit oder „nicht nach“.",
               "schedule_weekend_morning_not_after": "Die späteste Zeit für einen Auslöser, der der Sonne folgt.",
-              "schedule_weekend_evening_offset_minutes": "Zählt mit dem Auslöser „Sonnenaufgang oder Sonnenuntergang“. Minuten; eine negative Zahl bedeutet früher.",
-              "schedule_weekend_evening_elevation": "Zählt mit dem Auslöser „Höhe der Sonne“. Grad über dem Horizont; eine negative Zahl bedeutet darunter.",
-              "schedule_weekend_evening_not_before": "Die früheste Zeit für einen Auslöser, der der Sonne folgt. An einem Tag, an dem die Sonne keine Zeit liefert, steht diese Zeit oder „nicht nach“ dafür ein.",
+              "schedule_weekend_evening_offset_minutes": "Gilt beim Auslöser „Sonnenaufgang oder Sonnenuntergang“. In Minuten; eine negative Zahl bedeutet früher.",
+              "schedule_weekend_evening_elevation": "Gilt beim Auslöser „Höhe der Sonne“. In Grad über dem Horizont; eine negative Zahl bedeutet darunter.",
+              "schedule_weekend_evening_not_before": "Die früheste Zeit für einen Auslöser, der der Sonne folgt. An einem Tag, an dem die Sonne keine Zeit ergibt, etwa weil sie die gewählte Höhe nie erreicht, gilt stattdessen diese Zeit oder „nicht nach“.",
               "schedule_weekend_evening_not_after": "Die späteste Zeit für einen Auslöser, der der Sonne folgt."
             }
           }
@@ -153,7 +153,7 @@
       },
       "feature_daily_routine_holiday": {
         "title": "Tagesablauf an Feiertagen",
-        "description": "Wann der Morgen und der Abend an einem Tag beginnen, den die Feiertag-Entität als Feiertag meldet.",
+        "description": "Wann Morgen und Abend an einem Tag beginnen, den die Feiertag-Entität als Feiertag meldet.",
         "data": {
           "schedule_holiday_morning_kind": "Morgen: Auslöser",
           "schedule_holiday_morning_time": "Morgen: Uhrzeit",
@@ -161,15 +161,15 @@
           "schedule_holiday_evening_time": "Abend: Uhrzeit"
         },
         "data_description": {
-          "schedule_holiday_morning_kind": "Eine feste Uhrzeit; der Sonnenaufgang am Morgen oder der Sonnenuntergang am Abend, mit Versatz; oder die Höhe der Sonne. Für die beiden, die der Sonne folgen, begrenzen „nicht vor“ und „nicht nach“ unter den Expertenwerten die Zeit.",
-          "schedule_holiday_morning_time": "Zählt mit dem Auslöser „Feste Uhrzeit“.",
-          "schedule_holiday_evening_kind": "Eine feste Uhrzeit; der Sonnenaufgang am Morgen oder der Sonnenuntergang am Abend, mit Versatz; oder die Höhe der Sonne. Für die beiden, die der Sonne folgen, begrenzen „nicht vor“ und „nicht nach“ unter den Expertenwerten die Zeit.",
-          "schedule_holiday_evening_time": "Zählt mit dem Auslöser „Feste Uhrzeit“."
+          "schedule_holiday_morning_kind": "Eine feste Uhrzeit; der Sonnenaufgang am Morgen oder der Sonnenuntergang am Abend, mit Versatz; oder die Höhe der Sonne. Für die beiden, die der Sonne folgen, legen „nicht vor“ und „nicht nach“ in den erweiterten Einstellungen die früheste und die späteste Zeit fest.",
+          "schedule_holiday_morning_time": "Gilt beim Auslöser „Feste Uhrzeit“.",
+          "schedule_holiday_evening_kind": "Eine feste Uhrzeit; der Sonnenaufgang am Morgen oder der Sonnenuntergang am Abend, mit Versatz; oder die Höhe der Sonne. Für die beiden, die der Sonne folgen, legen „nicht vor“ und „nicht nach“ in den erweiterten Einstellungen die früheste und die späteste Zeit fest.",
+          "schedule_holiday_evening_time": "Gilt beim Auslöser „Feste Uhrzeit“."
         },
         "sections": {
           "expert": {
-            "name": "Expertenwerte",
-            "description": "Es gelten sinnvolle Voreinstellungen. Ändere sie nur, wenn du weißt, warum.",
+            "name": "Erweiterte Einstellungen",
+            "description": "Die Voreinstellungen passen für die meisten Häuser. Ändere sie nur, wenn du einen Grund dafür hast.",
             "data": {
               "schedule_holiday_morning_offset_minutes": "Morgen: Versatz zu Sonnenaufgang oder Sonnenuntergang",
               "schedule_holiday_morning_elevation": "Morgen: Höhe der Sonne",
@@ -181,13 +181,13 @@
               "schedule_holiday_evening_not_after": "Abend: nicht nach"
             },
             "data_description": {
-              "schedule_holiday_morning_offset_minutes": "Zählt mit dem Auslöser „Sonnenaufgang oder Sonnenuntergang“. Minuten; eine negative Zahl bedeutet früher.",
-              "schedule_holiday_morning_elevation": "Zählt mit dem Auslöser „Höhe der Sonne“. Grad über dem Horizont; eine negative Zahl bedeutet darunter.",
-              "schedule_holiday_morning_not_before": "Die früheste Zeit für einen Auslöser, der der Sonne folgt. An einem Tag, an dem die Sonne keine Zeit liefert, steht diese Zeit oder „nicht nach“ dafür ein.",
+              "schedule_holiday_morning_offset_minutes": "Gilt beim Auslöser „Sonnenaufgang oder Sonnenuntergang“. In Minuten; eine negative Zahl bedeutet früher.",
+              "schedule_holiday_morning_elevation": "Gilt beim Auslöser „Höhe der Sonne“. In Grad über dem Horizont; eine negative Zahl bedeutet darunter.",
+              "schedule_holiday_morning_not_before": "Die früheste Zeit für einen Auslöser, der der Sonne folgt. An einem Tag, an dem die Sonne keine Zeit ergibt, etwa weil sie die gewählte Höhe nie erreicht, gilt stattdessen diese Zeit oder „nicht nach“.",
               "schedule_holiday_morning_not_after": "Die späteste Zeit für einen Auslöser, der der Sonne folgt.",
-              "schedule_holiday_evening_offset_minutes": "Zählt mit dem Auslöser „Sonnenaufgang oder Sonnenuntergang“. Minuten; eine negative Zahl bedeutet früher.",
-              "schedule_holiday_evening_elevation": "Zählt mit dem Auslöser „Höhe der Sonne“. Grad über dem Horizont; eine negative Zahl bedeutet darunter.",
-              "schedule_holiday_evening_not_before": "Die früheste Zeit für einen Auslöser, der der Sonne folgt. An einem Tag, an dem die Sonne keine Zeit liefert, steht diese Zeit oder „nicht nach“ dafür ein.",
+              "schedule_holiday_evening_offset_minutes": "Gilt beim Auslöser „Sonnenaufgang oder Sonnenuntergang“. In Minuten; eine negative Zahl bedeutet früher.",
+              "schedule_holiday_evening_elevation": "Gilt beim Auslöser „Höhe der Sonne“. In Grad über dem Horizont; eine negative Zahl bedeutet darunter.",
+              "schedule_holiday_evening_not_before": "Die früheste Zeit für einen Auslöser, der der Sonne folgt. An einem Tag, an dem die Sonne keine Zeit ergibt, etwa weil sie die gewählte Höhe nie erreicht, gilt stattdessen diese Zeit oder „nicht nach“.",
               "schedule_holiday_evening_not_after": "Die späteste Zeit für einen Auslöser, der der Sonne folgt."
             }
           }
@@ -195,41 +195,41 @@
       },
       "feature_movement_general": {
         "title": "Bewegung",
-        "description": "Wie die Integration die Motoren schont: Sie lässt Bewegungen aus, die sich nicht lohnen, wartet zwischen zwei Komfortbewegungen und startet bei einer gemeinsamen Bewegung nicht alle Motoren im selben Augenblick. Die Mindeständerung und der Mindestabstand halten Schutzbewegungen nie zurück, und einen Feueralarm hält keine dieser Einstellungen zurück.",
+        "description": "So schonen die Rollläden ihre Motoren: Kleine Komfortbewegungen fallen weg, zwischen zwei Komfortbewegungen vergeht eine Weile, und wenn viele Rollläden gemeinsam fahren, starten ihre Motoren nacheinander. Komfortbewegungen sind zum Beispiel die des Tagesablaufs.",
         "data": {
           "motor_min_change": "Mindeständerung",
           "motor_min_interval": "Mindestabstand",
           "stagger_gap": "Abstand zwischen Motoren"
         },
         "data_description": {
-          "motor_min_change": "Eine Komfortbewegung, die kleiner ist, wird ausgelassen. 0 schaltet das ab. Ganz auf oder ganz zu fährt ein Rollladen trotzdem, auch wenn der Rest klein ist. Beurteilen lässt sich das nur bei Rollläden, die ihre Position melden; ein Rollladen, der keine meldet, wird immer bewegt.",
-          "motor_min_interval": "Die kürzeste Zeit zwischen zwei Komfortbewegungen des Fensters, gegen Hin und Her, während die Beschattung der Sonne folgt. 0 schaltet das ab. Etwas Neues, etwa der Morgen oder der Abend, eingeschalteter Schlafmodus oder der Beginn der Beschattung, bewegt trotzdem sofort.",
-          "stagger_gap": "Wenn viele Rollläden zugleich fahren, starten ihre Motoren nacheinander. Dieser Abstand in Sekunden wird nach jedem Motor dieses Fensters freigehalten: Der nächste Motor, dieses oder eines anderen Fensters, startet, wenn er vergangen ist. Der Wert 0 schaltet die Staffelung für dieses Fenster ab; seine Rollläden starten gemeinsam, wenn es an der Reihe ist. Ein Feueralarm wird nie gestaffelt. Der Abstand zwischen den Rollläden eines Fensters zählt nur bei einem Fenster mit mehreren Rollläden."
+          "motor_min_change": "Eine Komfortbewegung, die kleiner ist als dieser Wert, fällt weg. 0 schaltet das aus. Ganz auf oder ganz zu fährt ein Rollladen trotzdem, wie klein der restliche Weg auch ist. Das funktioniert nur bei Rollläden, die ihre Position melden; ein Rollladen ohne Positionsmeldung wird immer bewegt.",
+          "motor_min_interval": "Die kürzeste Zeit zwischen zwei Komfortbewegungen des Fensters, damit ein Rollladen nicht ständig hin und her fährt. 0 schaltet das aus. Etwas Neues, etwa der Beginn des Morgens oder des Abends, bewegt den Rollladen trotzdem sofort.",
+          "stagger_gap": "Wenn viele Rollläden gleichzeitig fahren, starten ihre Motoren nacheinander. Nach jedem Motor dieses Fensters wartet der nächste Motor, dieses oder eines anderen Fensters, so viele Sekunden. 0 schaltet das für dieses Fenster aus: Seine Rollläden starten gemeinsam, wenn es an der Reihe ist. Zwischen den Rollläden eines Fensters zählt der Abstand nur, wenn das Fenster mehrere hat."
         },
         "sections": {
           "expert": {
-            "name": "Expertenwerte",
-            "description": "Es gelten sinnvolle Voreinstellungen. Ändere sie nur, wenn du weißt, warum.",
+            "name": "Erweiterte Einstellungen",
+            "description": "Die Voreinstellungen passen für die meisten Häuser. Ändere sie nur, wenn du einen Grund dafür hast.",
             "data": {
               "reevaluate_after": "Spätestens erneut prüfen nach"
             },
             "data_description": {
-              "reevaluate_after": "Wartet eine Bewegung auf etwas, dessen Ende niemand kennt, zum Beispiel darauf, dass ein Rollladen wieder erreichbar ist, wird das Fenster spätestens nach dieser Zeit erneut geprüft."
+              "reevaluate_after": "Muss eine Bewegung auf etwas warten, dessen Ende sich nicht absehen lässt, zum Beispiel darauf, dass ein Rollladen wieder verfügbar ist, wird das Fenster spätestens nach dieser Zeit erneut geprüft."
             }
           }
         }
       }
     },
     "abort": {
-      "reconfigure_successful": "Die Werte des Hauses wurden gespeichert."
+      "reconfigure_successful": "Die Einstellungen des Hauses wurden gespeichert."
     },
     "error": {
-      "invalid_value": "Dieser Wert kann nicht verwendet werden.",
+      "invalid_value": "Dieser Wert ist hier nicht möglich.",
       "fraction_not_allowed": "Gib eine ganze Zahl ein.",
       "invalid_day_of_year": "Gib den Tag als Monat und Tag mit je zwei Ziffern ein, zum Beispiel 05-01.",
       "leap_day_not_allowed": "Den 29. Februar gibt es nicht in jedem Jahr. Wähle den 28. Februar oder den 1. März.",
-      "reference_missing": "Wähle eine Entität, oder wähle oben „Keine“ oder „Erben“.",
-      "invalid_combination": "Diese Werte passen nicht zusammen: {combination}. Jeder für sich wäre in Ordnung."
+      "reference_missing": "Wähle eine Entität, oder wähle oben „Keine“ oder „Vom Haus oder von der Gruppe übernehmen“.",
+      "invalid_combination": "Diese Einstellungen widersprechen sich: {combination}. Jede für sich wäre in Ordnung."
     }
   },
   "config_subentries": {
@@ -242,24 +242,24 @@
       "step": {
         "basics": {
           "title": "Gruppe",
-          "description": "Eine Gruppe enthält Werte, die sich mehrere Fenster teilen, zum Beispiel eine Fassade oder ein Stockwerk.",
+          "description": "In einer Gruppe teilen sich mehrere Fenster ihre Einstellungen, zum Beispiel alle Fenster einer Hausseite oder eines Stockwerks.",
           "data": {
             "name": "Name"
           }
         },
         "features": {
           "title": "Funktionen",
-          "description": "Wähle, was hier entschieden wird. „Erben“ folgt der Ebene darüber; der Eintrag zeigt, was das derzeit bedeutet. Nur eingeschaltete Funktionen bekommen eine eigene Seite.",
+          "description": "Lege fest, worum sich Roller Shutter Suite hier kümmern soll. Mit „Vom Haus oder von der Gruppe übernehmen“ gilt, was dort gewählt ist; die Liste zeigt, was das gerade ist. Weitere Seiten folgen nur für das, was eingeschaltet ist.",
           "data": {
             "schedule_enabled": "Tagesablauf"
           },
           "data_description": {
-            "schedule_enabled": "Öffnet die Rollläden am Morgen und schließt sie am Abend. Solange er ausgeschaltet ist, bewegt der Tagesablauf nichts; der Schutz läuft weiter. „Erben“ folgt {schedule_enabled_source}."
+            "schedule_enabled": "Öffnet die Rollläden am Morgen und schließt sie am Abend. Ist er ausgeschaltet, bewegt der Tagesablauf nichts. Beim Übernehmen gilt die Einstellung von {schedule_enabled_source}."
           }
         },
         "feature_daily_routine_general": {
           "title": "Tagesablauf",
-          "description": "Wie weit die Rollläden öffnen und schließen, woran Werktage, Wochenenden und Feiertage erkannt werden und was den Abend sonst noch beginnen kann. Die Zeiten folgen auf den nächsten Seiten, eine Seite je Art von Tag.",
+          "description": "Wie weit die Rollläden öffnen und schließen, woran Werktage, Wochenenden und Feiertage zu erkennen sind und was den Abend außerdem auslösen kann. Die Uhrzeiten folgen auf den nächsten Seiten, eine Seite je Art des Tages.",
           "data": {
             "schedule_morning_position": "Morgenposition",
             "schedule_evening_position": "Abendposition",
@@ -278,40 +278,40 @@
             "schedule_brightness_threshold_lux": "Helligkeitsschwelle (Lux)"
           },
           "data_description": {
-            "schedule_morning_position": "Wohin der Rollladen am Morgen fährt. 100 % ist ganz offen, 0 % ganz geschlossen. Der Morgen hebt nur: Ein Rollladen, der schon höher steht, bleibt, wo er ist. Leer lassen, um zu erben. Geerbt wird derzeit: {schedule_morning_position_inherited} (von {schedule_morning_position_source}).",
-            "schedule_evening_position": "Wohin der Rollladen am Abend fährt. 100 % ist ganz offen, 0 % ganz geschlossen. Der Abend senkt nur: Ein Rollladen, der schon tiefer steht, bleibt, wo er ist. Leer lassen, um zu erben. Geerbt wird derzeit: {schedule_evening_position_inherited} (von {schedule_evening_position_source}).",
-            "schedule_workday_source_choice": "Eine Entität, die an Werktagen eingeschaltet ist, zum Beispiel der Werktag-Sensor von Home Assistant. Mit „Keine“ sind Montag bis Freitag Werktage. Geerbt wird derzeit: {schedule_workday_source_inherited} (von {schedule_workday_source_source}).",
-            "schedule_workday_source": "Zählt nur mit „Eigene Auswahl“ oben.",
-            "schedule_holiday_source_choice": "Eine Entität, die an Feiertagen eingeschaltet ist; ein Kalender mit einem ganztägigen Termin funktioniert ebenfalls. Mit „Keine“ gibt es keine Feiertage. Geerbt wird derzeit: {schedule_holiday_source_inherited} (von {schedule_holiday_source_source}).",
-            "schedule_holiday_source": "Zählt nur mit „Eigene Auswahl“ oben.",
-            "schedule_season_source_choice": "Eine Entität, die eingeschaltet ist, solange Sommer ist. Solange sie keinen Wert hat, zählt ihr letzter bekannter Wert. Geerbt wird derzeit: {schedule_season_source_inherited} (von {schedule_season_source_source}).",
-            "schedule_season_source": "Zählt nur mit „Eigene Auswahl“ oben.",
-            "schedule_summer_by_date": "Ohne Sommer-Entität dauert der Sommer vom ersten bis zum letzten unten angegebenen Tag. „Erben“ folgt {schedule_summer_by_date_source}.",
-            "schedule_summer_first_day": "Monat und Tag mit je zwei Ziffern, zum Beispiel 05-01 für den 1. Mai. Leer lassen, um zu erben. Geerbt wird derzeit: {schedule_summer_first_day_inherited} (von {schedule_summer_first_day_source}).",
-            "schedule_summer_last_day": "Monat und Tag mit je zwei Ziffern, zum Beispiel 09-30 für den 30. September. Der Zeitraum darf über den Jahreswechsel reichen. Leer lassen, um zu erben. Geerbt wird derzeit: {schedule_summer_last_day_inherited} (von {schedule_summer_last_day_source}).",
-            "schedule_evening_position_summer": "Ersetzt die Abendposition, solange Sommer ist, zum Beispiel 30 % für Sichtschutz mit etwas Luft. Sie zählt nur mit einer Sommer-Entität oder mit Sommer nach Datum. Leer lassen, um zu erben. Geerbt wird derzeit: {schedule_evening_position_summer_inherited} (von {schedule_evening_position_summer_source}).",
-            "schedule_brightness_source_choice": "Eine Entität, die die Außenhelligkeit in Lux meldet. Ist es für die Dauer der Verzögerung dunkler als der Schwellwert, beginnt der Abend früher, aber nie vor „nicht vor“ des Abends. Eine Entität ohne Wert beginnt nichts und blockiert nichts. Geerbt wird derzeit: {schedule_brightness_source_inherited} (von {schedule_brightness_source_source}).",
-            "schedule_brightness_source": "Zählt nur mit „Eigene Auswahl“ oben.",
-            "schedule_brightness_threshold_lux": "Unterhalb dieser Außenhelligkeit, in Lux, gilt es als dunkel. Leer lassen, um zu erben. Geerbt wird derzeit: {schedule_brightness_threshold_lux_inherited} (von {schedule_brightness_threshold_lux_source})."
+            "schedule_morning_position": "Wie weit der Rollladen am Morgen öffnet: 100 % ist ganz offen, 0 % ganz geschlossen. Morgens wird ein Rollladen nur angehoben; steht er schon höher, bleibt er, wo er ist. Leer lassen, um die Einstellung von {schedule_morning_position_source} zu übernehmen (derzeit {schedule_morning_position_inherited}).",
+            "schedule_evening_position": "Wie weit der Rollladen am Abend schließt: 100 % ist ganz offen, 0 % ganz geschlossen. Abends wird ein Rollladen nur gesenkt; steht er schon tiefer, bleibt er, wo er ist. Leer lassen, um die Einstellung von {schedule_evening_position_source} zu übernehmen (derzeit {schedule_evening_position_inherited}).",
+            "schedule_workday_source_choice": "Eine Entität, die an Werktagen eingeschaltet ist, zum Beispiel ein Werktag-Sensor von Home Assistant. Mit „Keine“ sind Montag bis Freitag Werktage. Derzeit übernommen von {schedule_workday_source_source}: {schedule_workday_source_inherited}.",
+            "schedule_workday_source": "Gilt nur mit „Eigene Auswahl“ oben.",
+            "schedule_holiday_source_choice": "Eine Entität, die an Feiertagen eingeschaltet ist; ein Kalender mit einem ganztägigen Termin geht auch. Mit „Keine“ gibt es keine Feiertage. Derzeit übernommen von {schedule_holiday_source_source}: {schedule_holiday_source_inherited}.",
+            "schedule_holiday_source": "Gilt nur mit „Eigene Auswahl“ oben.",
+            "schedule_season_source_choice": "Eine Entität, die eingeschaltet ist, solange Sommer ist. Ist sie nicht verfügbar oder unbekannt, gilt ihr letzter bekannter Zustand. Derzeit übernommen von {schedule_season_source_source}: {schedule_season_source_inherited}.",
+            "schedule_season_source": "Gilt nur mit „Eigene Auswahl“ oben.",
+            "schedule_summer_by_date": "Ohne Sommer-Entität dauert der Sommer vom ersten bis zum letzten unten eingestellten Tag. Beim Übernehmen gilt die Einstellung von {schedule_summer_by_date_source}.",
+            "schedule_summer_first_day": "Monat und Tag mit je zwei Ziffern, zum Beispiel 05-01 für den 1. Mai. Leer lassen, um die Einstellung von {schedule_summer_first_day_source} zu übernehmen (derzeit {schedule_summer_first_day_inherited}).",
+            "schedule_summer_last_day": "Monat und Tag mit je zwei Ziffern, zum Beispiel 09-30 für den 30. September. Der Sommer darf über den Jahreswechsel reichen. Leer lassen, um die Einstellung von {schedule_summer_last_day_source} zu übernehmen (derzeit {schedule_summer_last_day_inherited}).",
+            "schedule_evening_position_summer": "Gilt im Sommer statt der Abendposition, zum Beispiel 30 % für Sichtschutz mit etwas frischer Luft. Sie wirkt nur, wenn der Sommer über eine Entität oder nach Datum festgelegt ist. Leer lassen, um die Einstellung von {schedule_evening_position_summer_source} zu übernehmen (derzeit {schedule_evening_position_summer_inherited}).",
+            "schedule_brightness_source_choice": "Eine Entität, die die Außenhelligkeit in Lux meldet. Bleibt es für die eingestellte Dauer dunkler als die Schwelle, beginnt der Abend früher, aber nie früher als die Zeit unter „Abend: nicht vor“. Solange die Entität nicht verfügbar oder unbekannt ist, löst sie den Abend weder aus noch verzögert sie ihn. Derzeit übernommen von {schedule_brightness_source_source}: {schedule_brightness_source_inherited}.",
+            "schedule_brightness_source": "Gilt nur mit „Eigene Auswahl“ oben.",
+            "schedule_brightness_threshold_lux": "Unterhalb dieser Außenhelligkeit in Lux gilt es als dunkel. Leer lassen, um die Einstellung von {schedule_brightness_threshold_lux_source} zu übernehmen (derzeit {schedule_brightness_threshold_lux_inherited})."
           },
           "sections": {
             "expert": {
-              "name": "Expertenwerte",
-              "description": "Es gelten sinnvolle Voreinstellungen. Ändere sie nur, wenn du weißt, warum.",
+              "name": "Erweiterte Einstellungen",
+              "description": "Die Voreinstellungen passen für die meisten Häuser. Ändere sie nur, wenn du einen Grund dafür hast.",
               "data": {
-                "schedule_brightness_delay": "Verzögerung der Helligkeit",
+                "schedule_brightness_delay": "Dauer der Dunkelheit",
                 "schedule_random_offset": "Zufälliger Versatz"
               },
               "data_description": {
-                "schedule_brightness_delay": "Wie viele Minuten es dunkel sein muss, bevor der Abend beginnt. Leer lassen, um zu erben. Geerbt wird derzeit: {schedule_brightness_delay_inherited} (von {schedule_brightness_delay_source}).",
-                "schedule_random_offset": "Verschiebt jeden Auslöser um bis zu so viele Minuten, früher oder später, für jedes Fenster und jeden Tag anders. 0 schaltet ihn aus; 30 ist das Maximum. Leer lassen, um zu erben. Geerbt wird derzeit: {schedule_random_offset_inherited} (von {schedule_random_offset_source})."
+                "schedule_brightness_delay": "Wie viele Minuten es dunkel sein muss, bevor der Abend beginnt. Leer lassen, um die Einstellung von {schedule_brightness_delay_source} zu übernehmen (derzeit {schedule_brightness_delay_inherited}).",
+                "schedule_random_offset": "Verschiebt jeden Morgen und jeden Abend um bis zu so viele Minuten nach vorn oder hinten, für jedes Fenster und jeden Tag anders. 0 schaltet das aus; höchstens 30. Leer lassen, um die Einstellung von {schedule_random_offset_source} zu übernehmen (derzeit {schedule_random_offset_inherited})."
               }
             }
           }
         },
         "feature_daily_routine_workday": {
           "title": "Tagesablauf an Werktagen",
-          "description": "Wann der Morgen und der Abend an einem Werktag beginnen.",
+          "description": "Wann Morgen und Abend an einem Werktag beginnen.",
           "data": {
             "schedule_workday_morning_kind": "Morgen: Auslöser",
             "schedule_workday_morning_time": "Morgen: Uhrzeit",
@@ -319,15 +319,15 @@
             "schedule_workday_evening_time": "Abend: Uhrzeit"
           },
           "data_description": {
-            "schedule_workday_morning_kind": "Eine feste Uhrzeit; der Sonnenaufgang am Morgen oder der Sonnenuntergang am Abend, mit Versatz; oder die Höhe der Sonne. Für die beiden, die der Sonne folgen, begrenzen „nicht vor“ und „nicht nach“ unter den Expertenwerten die Zeit. Geerbt wird derzeit: {schedule_workday_morning_kind_inherited} (von {schedule_workday_morning_kind_source}).",
-            "schedule_workday_morning_time": "Zählt mit dem Auslöser „Feste Uhrzeit“. Leer lassen, um zu erben. Geerbt wird derzeit: {schedule_workday_morning_time_inherited} (von {schedule_workday_morning_time_source}).",
-            "schedule_workday_evening_kind": "Eine feste Uhrzeit; der Sonnenaufgang am Morgen oder der Sonnenuntergang am Abend, mit Versatz; oder die Höhe der Sonne. Für die beiden, die der Sonne folgen, begrenzen „nicht vor“ und „nicht nach“ unter den Expertenwerten die Zeit. Geerbt wird derzeit: {schedule_workday_evening_kind_inherited} (von {schedule_workday_evening_kind_source}).",
-            "schedule_workday_evening_time": "Zählt mit dem Auslöser „Feste Uhrzeit“. Leer lassen, um zu erben. Geerbt wird derzeit: {schedule_workday_evening_time_inherited} (von {schedule_workday_evening_time_source})."
+            "schedule_workday_morning_kind": "Eine feste Uhrzeit; der Sonnenaufgang am Morgen oder der Sonnenuntergang am Abend, mit Versatz; oder die Höhe der Sonne. Für die beiden, die der Sonne folgen, legen „nicht vor“ und „nicht nach“ in den erweiterten Einstellungen die früheste und die späteste Zeit fest. Derzeit übernommen von {schedule_workday_morning_kind_source}: {schedule_workday_morning_kind_inherited}.",
+            "schedule_workday_morning_time": "Gilt beim Auslöser „Feste Uhrzeit“. Leer lassen, um die Einstellung von {schedule_workday_morning_time_source} zu übernehmen (derzeit {schedule_workday_morning_time_inherited}).",
+            "schedule_workday_evening_kind": "Eine feste Uhrzeit; der Sonnenaufgang am Morgen oder der Sonnenuntergang am Abend, mit Versatz; oder die Höhe der Sonne. Für die beiden, die der Sonne folgen, legen „nicht vor“ und „nicht nach“ in den erweiterten Einstellungen die früheste und die späteste Zeit fest. Derzeit übernommen von {schedule_workday_evening_kind_source}: {schedule_workday_evening_kind_inherited}.",
+            "schedule_workday_evening_time": "Gilt beim Auslöser „Feste Uhrzeit“. Leer lassen, um die Einstellung von {schedule_workday_evening_time_source} zu übernehmen (derzeit {schedule_workday_evening_time_inherited})."
           },
           "sections": {
             "expert": {
-              "name": "Expertenwerte",
-              "description": "Es gelten sinnvolle Voreinstellungen. Ändere sie nur, wenn du weißt, warum.",
+              "name": "Erweiterte Einstellungen",
+              "description": "Die Voreinstellungen passen für die meisten Häuser. Ändere sie nur, wenn du einen Grund dafür hast.",
               "data": {
                 "schedule_workday_morning_offset_minutes": "Morgen: Versatz zu Sonnenaufgang oder Sonnenuntergang",
                 "schedule_workday_morning_elevation": "Morgen: Höhe der Sonne",
@@ -339,21 +339,21 @@
                 "schedule_workday_evening_not_after": "Abend: nicht nach"
               },
               "data_description": {
-                "schedule_workday_morning_offset_minutes": "Zählt mit dem Auslöser „Sonnenaufgang oder Sonnenuntergang“. Minuten; eine negative Zahl bedeutet früher. Leer lassen, um zu erben. Geerbt wird derzeit: {schedule_workday_morning_offset_minutes_inherited} (von {schedule_workday_morning_offset_minutes_source}).",
-                "schedule_workday_morning_elevation": "Zählt mit dem Auslöser „Höhe der Sonne“. Grad über dem Horizont; eine negative Zahl bedeutet darunter. Leer lassen, um zu erben. Geerbt wird derzeit: {schedule_workday_morning_elevation_inherited} (von {schedule_workday_morning_elevation_source}).",
-                "schedule_workday_morning_not_before": "Die früheste Zeit für einen Auslöser, der der Sonne folgt. An einem Tag, an dem die Sonne keine Zeit liefert, steht diese Zeit oder „nicht nach“ dafür ein. Leer lassen, um zu erben. Geerbt wird derzeit: {schedule_workday_morning_not_before_inherited} (von {schedule_workday_morning_not_before_source}).",
-                "schedule_workday_morning_not_after": "Die späteste Zeit für einen Auslöser, der der Sonne folgt. Leer lassen, um zu erben. Geerbt wird derzeit: {schedule_workday_morning_not_after_inherited} (von {schedule_workday_morning_not_after_source}).",
-                "schedule_workday_evening_offset_minutes": "Zählt mit dem Auslöser „Sonnenaufgang oder Sonnenuntergang“. Minuten; eine negative Zahl bedeutet früher. Leer lassen, um zu erben. Geerbt wird derzeit: {schedule_workday_evening_offset_minutes_inherited} (von {schedule_workday_evening_offset_minutes_source}).",
-                "schedule_workday_evening_elevation": "Zählt mit dem Auslöser „Höhe der Sonne“. Grad über dem Horizont; eine negative Zahl bedeutet darunter. Leer lassen, um zu erben. Geerbt wird derzeit: {schedule_workday_evening_elevation_inherited} (von {schedule_workday_evening_elevation_source}).",
-                "schedule_workday_evening_not_before": "Die früheste Zeit für einen Auslöser, der der Sonne folgt. An einem Tag, an dem die Sonne keine Zeit liefert, steht diese Zeit oder „nicht nach“ dafür ein. Leer lassen, um zu erben. Geerbt wird derzeit: {schedule_workday_evening_not_before_inherited} (von {schedule_workday_evening_not_before_source}).",
-                "schedule_workday_evening_not_after": "Die späteste Zeit für einen Auslöser, der der Sonne folgt. Leer lassen, um zu erben. Geerbt wird derzeit: {schedule_workday_evening_not_after_inherited} (von {schedule_workday_evening_not_after_source})."
+                "schedule_workday_morning_offset_minutes": "Gilt beim Auslöser „Sonnenaufgang oder Sonnenuntergang“. In Minuten; eine negative Zahl bedeutet früher. Leer lassen, um die Einstellung von {schedule_workday_morning_offset_minutes_source} zu übernehmen (derzeit {schedule_workday_morning_offset_minutes_inherited}).",
+                "schedule_workday_morning_elevation": "Gilt beim Auslöser „Höhe der Sonne“. In Grad über dem Horizont; eine negative Zahl bedeutet darunter. Leer lassen, um die Einstellung von {schedule_workday_morning_elevation_source} zu übernehmen (derzeit {schedule_workday_morning_elevation_inherited}).",
+                "schedule_workday_morning_not_before": "Die früheste Zeit für einen Auslöser, der der Sonne folgt. An einem Tag, an dem die Sonne keine Zeit ergibt, etwa weil sie die gewählte Höhe nie erreicht, gilt stattdessen diese Zeit oder „nicht nach“. Leer lassen, um die Einstellung von {schedule_workday_morning_not_before_source} zu übernehmen (derzeit {schedule_workday_morning_not_before_inherited}).",
+                "schedule_workday_morning_not_after": "Die späteste Zeit für einen Auslöser, der der Sonne folgt. Leer lassen, um die Einstellung von {schedule_workday_morning_not_after_source} zu übernehmen (derzeit {schedule_workday_morning_not_after_inherited}).",
+                "schedule_workday_evening_offset_minutes": "Gilt beim Auslöser „Sonnenaufgang oder Sonnenuntergang“. In Minuten; eine negative Zahl bedeutet früher. Leer lassen, um die Einstellung von {schedule_workday_evening_offset_minutes_source} zu übernehmen (derzeit {schedule_workday_evening_offset_minutes_inherited}).",
+                "schedule_workday_evening_elevation": "Gilt beim Auslöser „Höhe der Sonne“. In Grad über dem Horizont; eine negative Zahl bedeutet darunter. Leer lassen, um die Einstellung von {schedule_workday_evening_elevation_source} zu übernehmen (derzeit {schedule_workday_evening_elevation_inherited}).",
+                "schedule_workday_evening_not_before": "Die früheste Zeit für einen Auslöser, der der Sonne folgt. An einem Tag, an dem die Sonne keine Zeit ergibt, etwa weil sie die gewählte Höhe nie erreicht, gilt stattdessen diese Zeit oder „nicht nach“. Leer lassen, um die Einstellung von {schedule_workday_evening_not_before_source} zu übernehmen (derzeit {schedule_workday_evening_not_before_inherited}).",
+                "schedule_workday_evening_not_after": "Die späteste Zeit für einen Auslöser, der der Sonne folgt. Leer lassen, um die Einstellung von {schedule_workday_evening_not_after_source} zu übernehmen (derzeit {schedule_workday_evening_not_after_inherited})."
               }
             }
           }
         },
         "feature_daily_routine_weekend": {
           "title": "Tagesablauf am Wochenende",
-          "description": "Wann der Morgen und der Abend an einem Samstag oder Sonntag beginnen, oder an einem Tag, den die Werktag-Entität als frei meldet.",
+          "description": "Wann Morgen und Abend an einem Samstag oder Sonntag beginnen oder an einem Tag, den die Werktag-Entität als frei meldet.",
           "data": {
             "schedule_weekend_morning_kind": "Morgen: Auslöser",
             "schedule_weekend_morning_time": "Morgen: Uhrzeit",
@@ -361,15 +361,15 @@
             "schedule_weekend_evening_time": "Abend: Uhrzeit"
           },
           "data_description": {
-            "schedule_weekend_morning_kind": "Eine feste Uhrzeit; der Sonnenaufgang am Morgen oder der Sonnenuntergang am Abend, mit Versatz; oder die Höhe der Sonne. Für die beiden, die der Sonne folgen, begrenzen „nicht vor“ und „nicht nach“ unter den Expertenwerten die Zeit. Geerbt wird derzeit: {schedule_weekend_morning_kind_inherited} (von {schedule_weekend_morning_kind_source}).",
-            "schedule_weekend_morning_time": "Zählt mit dem Auslöser „Feste Uhrzeit“. Leer lassen, um zu erben. Geerbt wird derzeit: {schedule_weekend_morning_time_inherited} (von {schedule_weekend_morning_time_source}).",
-            "schedule_weekend_evening_kind": "Eine feste Uhrzeit; der Sonnenaufgang am Morgen oder der Sonnenuntergang am Abend, mit Versatz; oder die Höhe der Sonne. Für die beiden, die der Sonne folgen, begrenzen „nicht vor“ und „nicht nach“ unter den Expertenwerten die Zeit. Geerbt wird derzeit: {schedule_weekend_evening_kind_inherited} (von {schedule_weekend_evening_kind_source}).",
-            "schedule_weekend_evening_time": "Zählt mit dem Auslöser „Feste Uhrzeit“. Leer lassen, um zu erben. Geerbt wird derzeit: {schedule_weekend_evening_time_inherited} (von {schedule_weekend_evening_time_source})."
+            "schedule_weekend_morning_kind": "Eine feste Uhrzeit; der Sonnenaufgang am Morgen oder der Sonnenuntergang am Abend, mit Versatz; oder die Höhe der Sonne. Für die beiden, die der Sonne folgen, legen „nicht vor“ und „nicht nach“ in den erweiterten Einstellungen die früheste und die späteste Zeit fest. Derzeit übernommen von {schedule_weekend_morning_kind_source}: {schedule_weekend_morning_kind_inherited}.",
+            "schedule_weekend_morning_time": "Gilt beim Auslöser „Feste Uhrzeit“. Leer lassen, um die Einstellung von {schedule_weekend_morning_time_source} zu übernehmen (derzeit {schedule_weekend_morning_time_inherited}).",
+            "schedule_weekend_evening_kind": "Eine feste Uhrzeit; der Sonnenaufgang am Morgen oder der Sonnenuntergang am Abend, mit Versatz; oder die Höhe der Sonne. Für die beiden, die der Sonne folgen, legen „nicht vor“ und „nicht nach“ in den erweiterten Einstellungen die früheste und die späteste Zeit fest. Derzeit übernommen von {schedule_weekend_evening_kind_source}: {schedule_weekend_evening_kind_inherited}.",
+            "schedule_weekend_evening_time": "Gilt beim Auslöser „Feste Uhrzeit“. Leer lassen, um die Einstellung von {schedule_weekend_evening_time_source} zu übernehmen (derzeit {schedule_weekend_evening_time_inherited})."
           },
           "sections": {
             "expert": {
-              "name": "Expertenwerte",
-              "description": "Es gelten sinnvolle Voreinstellungen. Ändere sie nur, wenn du weißt, warum.",
+              "name": "Erweiterte Einstellungen",
+              "description": "Die Voreinstellungen passen für die meisten Häuser. Ändere sie nur, wenn du einen Grund dafür hast.",
               "data": {
                 "schedule_weekend_morning_offset_minutes": "Morgen: Versatz zu Sonnenaufgang oder Sonnenuntergang",
                 "schedule_weekend_morning_elevation": "Morgen: Höhe der Sonne",
@@ -381,21 +381,21 @@
                 "schedule_weekend_evening_not_after": "Abend: nicht nach"
               },
               "data_description": {
-                "schedule_weekend_morning_offset_minutes": "Zählt mit dem Auslöser „Sonnenaufgang oder Sonnenuntergang“. Minuten; eine negative Zahl bedeutet früher. Leer lassen, um zu erben. Geerbt wird derzeit: {schedule_weekend_morning_offset_minutes_inherited} (von {schedule_weekend_morning_offset_minutes_source}).",
-                "schedule_weekend_morning_elevation": "Zählt mit dem Auslöser „Höhe der Sonne“. Grad über dem Horizont; eine negative Zahl bedeutet darunter. Leer lassen, um zu erben. Geerbt wird derzeit: {schedule_weekend_morning_elevation_inherited} (von {schedule_weekend_morning_elevation_source}).",
-                "schedule_weekend_morning_not_before": "Die früheste Zeit für einen Auslöser, der der Sonne folgt. An einem Tag, an dem die Sonne keine Zeit liefert, steht diese Zeit oder „nicht nach“ dafür ein. Leer lassen, um zu erben. Geerbt wird derzeit: {schedule_weekend_morning_not_before_inherited} (von {schedule_weekend_morning_not_before_source}).",
-                "schedule_weekend_morning_not_after": "Die späteste Zeit für einen Auslöser, der der Sonne folgt. Leer lassen, um zu erben. Geerbt wird derzeit: {schedule_weekend_morning_not_after_inherited} (von {schedule_weekend_morning_not_after_source}).",
-                "schedule_weekend_evening_offset_minutes": "Zählt mit dem Auslöser „Sonnenaufgang oder Sonnenuntergang“. Minuten; eine negative Zahl bedeutet früher. Leer lassen, um zu erben. Geerbt wird derzeit: {schedule_weekend_evening_offset_minutes_inherited} (von {schedule_weekend_evening_offset_minutes_source}).",
-                "schedule_weekend_evening_elevation": "Zählt mit dem Auslöser „Höhe der Sonne“. Grad über dem Horizont; eine negative Zahl bedeutet darunter. Leer lassen, um zu erben. Geerbt wird derzeit: {schedule_weekend_evening_elevation_inherited} (von {schedule_weekend_evening_elevation_source}).",
-                "schedule_weekend_evening_not_before": "Die früheste Zeit für einen Auslöser, der der Sonne folgt. An einem Tag, an dem die Sonne keine Zeit liefert, steht diese Zeit oder „nicht nach“ dafür ein. Leer lassen, um zu erben. Geerbt wird derzeit: {schedule_weekend_evening_not_before_inherited} (von {schedule_weekend_evening_not_before_source}).",
-                "schedule_weekend_evening_not_after": "Die späteste Zeit für einen Auslöser, der der Sonne folgt. Leer lassen, um zu erben. Geerbt wird derzeit: {schedule_weekend_evening_not_after_inherited} (von {schedule_weekend_evening_not_after_source})."
+                "schedule_weekend_morning_offset_minutes": "Gilt beim Auslöser „Sonnenaufgang oder Sonnenuntergang“. In Minuten; eine negative Zahl bedeutet früher. Leer lassen, um die Einstellung von {schedule_weekend_morning_offset_minutes_source} zu übernehmen (derzeit {schedule_weekend_morning_offset_minutes_inherited}).",
+                "schedule_weekend_morning_elevation": "Gilt beim Auslöser „Höhe der Sonne“. In Grad über dem Horizont; eine negative Zahl bedeutet darunter. Leer lassen, um die Einstellung von {schedule_weekend_morning_elevation_source} zu übernehmen (derzeit {schedule_weekend_morning_elevation_inherited}).",
+                "schedule_weekend_morning_not_before": "Die früheste Zeit für einen Auslöser, der der Sonne folgt. An einem Tag, an dem die Sonne keine Zeit ergibt, etwa weil sie die gewählte Höhe nie erreicht, gilt stattdessen diese Zeit oder „nicht nach“. Leer lassen, um die Einstellung von {schedule_weekend_morning_not_before_source} zu übernehmen (derzeit {schedule_weekend_morning_not_before_inherited}).",
+                "schedule_weekend_morning_not_after": "Die späteste Zeit für einen Auslöser, der der Sonne folgt. Leer lassen, um die Einstellung von {schedule_weekend_morning_not_after_source} zu übernehmen (derzeit {schedule_weekend_morning_not_after_inherited}).",
+                "schedule_weekend_evening_offset_minutes": "Gilt beim Auslöser „Sonnenaufgang oder Sonnenuntergang“. In Minuten; eine negative Zahl bedeutet früher. Leer lassen, um die Einstellung von {schedule_weekend_evening_offset_minutes_source} zu übernehmen (derzeit {schedule_weekend_evening_offset_minutes_inherited}).",
+                "schedule_weekend_evening_elevation": "Gilt beim Auslöser „Höhe der Sonne“. In Grad über dem Horizont; eine negative Zahl bedeutet darunter. Leer lassen, um die Einstellung von {schedule_weekend_evening_elevation_source} zu übernehmen (derzeit {schedule_weekend_evening_elevation_inherited}).",
+                "schedule_weekend_evening_not_before": "Die früheste Zeit für einen Auslöser, der der Sonne folgt. An einem Tag, an dem die Sonne keine Zeit ergibt, etwa weil sie die gewählte Höhe nie erreicht, gilt stattdessen diese Zeit oder „nicht nach“. Leer lassen, um die Einstellung von {schedule_weekend_evening_not_before_source} zu übernehmen (derzeit {schedule_weekend_evening_not_before_inherited}).",
+                "schedule_weekend_evening_not_after": "Die späteste Zeit für einen Auslöser, der der Sonne folgt. Leer lassen, um die Einstellung von {schedule_weekend_evening_not_after_source} zu übernehmen (derzeit {schedule_weekend_evening_not_after_inherited})."
               }
             }
           }
         },
         "feature_daily_routine_holiday": {
           "title": "Tagesablauf an Feiertagen",
-          "description": "Wann der Morgen und der Abend an einem Tag beginnen, den die Feiertag-Entität als Feiertag meldet.",
+          "description": "Wann Morgen und Abend an einem Tag beginnen, den die Feiertag-Entität als Feiertag meldet.",
           "data": {
             "schedule_holiday_morning_kind": "Morgen: Auslöser",
             "schedule_holiday_morning_time": "Morgen: Uhrzeit",
@@ -403,15 +403,15 @@
             "schedule_holiday_evening_time": "Abend: Uhrzeit"
           },
           "data_description": {
-            "schedule_holiday_morning_kind": "Eine feste Uhrzeit; der Sonnenaufgang am Morgen oder der Sonnenuntergang am Abend, mit Versatz; oder die Höhe der Sonne. Für die beiden, die der Sonne folgen, begrenzen „nicht vor“ und „nicht nach“ unter den Expertenwerten die Zeit. Geerbt wird derzeit: {schedule_holiday_morning_kind_inherited} (von {schedule_holiday_morning_kind_source}).",
-            "schedule_holiday_morning_time": "Zählt mit dem Auslöser „Feste Uhrzeit“. Leer lassen, um zu erben. Geerbt wird derzeit: {schedule_holiday_morning_time_inherited} (von {schedule_holiday_morning_time_source}).",
-            "schedule_holiday_evening_kind": "Eine feste Uhrzeit; der Sonnenaufgang am Morgen oder der Sonnenuntergang am Abend, mit Versatz; oder die Höhe der Sonne. Für die beiden, die der Sonne folgen, begrenzen „nicht vor“ und „nicht nach“ unter den Expertenwerten die Zeit. Geerbt wird derzeit: {schedule_holiday_evening_kind_inherited} (von {schedule_holiday_evening_kind_source}).",
-            "schedule_holiday_evening_time": "Zählt mit dem Auslöser „Feste Uhrzeit“. Leer lassen, um zu erben. Geerbt wird derzeit: {schedule_holiday_evening_time_inherited} (von {schedule_holiday_evening_time_source})."
+            "schedule_holiday_morning_kind": "Eine feste Uhrzeit; der Sonnenaufgang am Morgen oder der Sonnenuntergang am Abend, mit Versatz; oder die Höhe der Sonne. Für die beiden, die der Sonne folgen, legen „nicht vor“ und „nicht nach“ in den erweiterten Einstellungen die früheste und die späteste Zeit fest. Derzeit übernommen von {schedule_holiday_morning_kind_source}: {schedule_holiday_morning_kind_inherited}.",
+            "schedule_holiday_morning_time": "Gilt beim Auslöser „Feste Uhrzeit“. Leer lassen, um die Einstellung von {schedule_holiday_morning_time_source} zu übernehmen (derzeit {schedule_holiday_morning_time_inherited}).",
+            "schedule_holiday_evening_kind": "Eine feste Uhrzeit; der Sonnenaufgang am Morgen oder der Sonnenuntergang am Abend, mit Versatz; oder die Höhe der Sonne. Für die beiden, die der Sonne folgen, legen „nicht vor“ und „nicht nach“ in den erweiterten Einstellungen die früheste und die späteste Zeit fest. Derzeit übernommen von {schedule_holiday_evening_kind_source}: {schedule_holiday_evening_kind_inherited}.",
+            "schedule_holiday_evening_time": "Gilt beim Auslöser „Feste Uhrzeit“. Leer lassen, um die Einstellung von {schedule_holiday_evening_time_source} zu übernehmen (derzeit {schedule_holiday_evening_time_inherited})."
           },
           "sections": {
             "expert": {
-              "name": "Expertenwerte",
-              "description": "Es gelten sinnvolle Voreinstellungen. Ändere sie nur, wenn du weißt, warum.",
+              "name": "Erweiterte Einstellungen",
+              "description": "Die Voreinstellungen passen für die meisten Häuser. Ändere sie nur, wenn du einen Grund dafür hast.",
               "data": {
                 "schedule_holiday_morning_offset_minutes": "Morgen: Versatz zu Sonnenaufgang oder Sonnenuntergang",
                 "schedule_holiday_morning_elevation": "Morgen: Höhe der Sonne",
@@ -423,40 +423,40 @@
                 "schedule_holiday_evening_not_after": "Abend: nicht nach"
               },
               "data_description": {
-                "schedule_holiday_morning_offset_minutes": "Zählt mit dem Auslöser „Sonnenaufgang oder Sonnenuntergang“. Minuten; eine negative Zahl bedeutet früher. Leer lassen, um zu erben. Geerbt wird derzeit: {schedule_holiday_morning_offset_minutes_inherited} (von {schedule_holiday_morning_offset_minutes_source}).",
-                "schedule_holiday_morning_elevation": "Zählt mit dem Auslöser „Höhe der Sonne“. Grad über dem Horizont; eine negative Zahl bedeutet darunter. Leer lassen, um zu erben. Geerbt wird derzeit: {schedule_holiday_morning_elevation_inherited} (von {schedule_holiday_morning_elevation_source}).",
-                "schedule_holiday_morning_not_before": "Die früheste Zeit für einen Auslöser, der der Sonne folgt. An einem Tag, an dem die Sonne keine Zeit liefert, steht diese Zeit oder „nicht nach“ dafür ein. Leer lassen, um zu erben. Geerbt wird derzeit: {schedule_holiday_morning_not_before_inherited} (von {schedule_holiday_morning_not_before_source}).",
-                "schedule_holiday_morning_not_after": "Die späteste Zeit für einen Auslöser, der der Sonne folgt. Leer lassen, um zu erben. Geerbt wird derzeit: {schedule_holiday_morning_not_after_inherited} (von {schedule_holiday_morning_not_after_source}).",
-                "schedule_holiday_evening_offset_minutes": "Zählt mit dem Auslöser „Sonnenaufgang oder Sonnenuntergang“. Minuten; eine negative Zahl bedeutet früher. Leer lassen, um zu erben. Geerbt wird derzeit: {schedule_holiday_evening_offset_minutes_inherited} (von {schedule_holiday_evening_offset_minutes_source}).",
-                "schedule_holiday_evening_elevation": "Zählt mit dem Auslöser „Höhe der Sonne“. Grad über dem Horizont; eine negative Zahl bedeutet darunter. Leer lassen, um zu erben. Geerbt wird derzeit: {schedule_holiday_evening_elevation_inherited} (von {schedule_holiday_evening_elevation_source}).",
-                "schedule_holiday_evening_not_before": "Die früheste Zeit für einen Auslöser, der der Sonne folgt. An einem Tag, an dem die Sonne keine Zeit liefert, steht diese Zeit oder „nicht nach“ dafür ein. Leer lassen, um zu erben. Geerbt wird derzeit: {schedule_holiday_evening_not_before_inherited} (von {schedule_holiday_evening_not_before_source}).",
-                "schedule_holiday_evening_not_after": "Die späteste Zeit für einen Auslöser, der der Sonne folgt. Leer lassen, um zu erben. Geerbt wird derzeit: {schedule_holiday_evening_not_after_inherited} (von {schedule_holiday_evening_not_after_source})."
+                "schedule_holiday_morning_offset_minutes": "Gilt beim Auslöser „Sonnenaufgang oder Sonnenuntergang“. In Minuten; eine negative Zahl bedeutet früher. Leer lassen, um die Einstellung von {schedule_holiday_morning_offset_minutes_source} zu übernehmen (derzeit {schedule_holiday_morning_offset_minutes_inherited}).",
+                "schedule_holiday_morning_elevation": "Gilt beim Auslöser „Höhe der Sonne“. In Grad über dem Horizont; eine negative Zahl bedeutet darunter. Leer lassen, um die Einstellung von {schedule_holiday_morning_elevation_source} zu übernehmen (derzeit {schedule_holiday_morning_elevation_inherited}).",
+                "schedule_holiday_morning_not_before": "Die früheste Zeit für einen Auslöser, der der Sonne folgt. An einem Tag, an dem die Sonne keine Zeit ergibt, etwa weil sie die gewählte Höhe nie erreicht, gilt stattdessen diese Zeit oder „nicht nach“. Leer lassen, um die Einstellung von {schedule_holiday_morning_not_before_source} zu übernehmen (derzeit {schedule_holiday_morning_not_before_inherited}).",
+                "schedule_holiday_morning_not_after": "Die späteste Zeit für einen Auslöser, der der Sonne folgt. Leer lassen, um die Einstellung von {schedule_holiday_morning_not_after_source} zu übernehmen (derzeit {schedule_holiday_morning_not_after_inherited}).",
+                "schedule_holiday_evening_offset_minutes": "Gilt beim Auslöser „Sonnenaufgang oder Sonnenuntergang“. In Minuten; eine negative Zahl bedeutet früher. Leer lassen, um die Einstellung von {schedule_holiday_evening_offset_minutes_source} zu übernehmen (derzeit {schedule_holiday_evening_offset_minutes_inherited}).",
+                "schedule_holiday_evening_elevation": "Gilt beim Auslöser „Höhe der Sonne“. In Grad über dem Horizont; eine negative Zahl bedeutet darunter. Leer lassen, um die Einstellung von {schedule_holiday_evening_elevation_source} zu übernehmen (derzeit {schedule_holiday_evening_elevation_inherited}).",
+                "schedule_holiday_evening_not_before": "Die früheste Zeit für einen Auslöser, der der Sonne folgt. An einem Tag, an dem die Sonne keine Zeit ergibt, etwa weil sie die gewählte Höhe nie erreicht, gilt stattdessen diese Zeit oder „nicht nach“. Leer lassen, um die Einstellung von {schedule_holiday_evening_not_before_source} zu übernehmen (derzeit {schedule_holiday_evening_not_before_inherited}).",
+                "schedule_holiday_evening_not_after": "Die späteste Zeit für einen Auslöser, der der Sonne folgt. Leer lassen, um die Einstellung von {schedule_holiday_evening_not_after_source} zu übernehmen (derzeit {schedule_holiday_evening_not_after_inherited})."
               }
             }
           }
         },
         "feature_movement_general": {
           "title": "Bewegung",
-          "description": "Wie die Integration die Motoren schont: Sie lässt Bewegungen aus, die sich nicht lohnen, wartet zwischen zwei Komfortbewegungen und startet bei einer gemeinsamen Bewegung nicht alle Motoren im selben Augenblick. Die Mindeständerung und der Mindestabstand halten Schutzbewegungen nie zurück, und einen Feueralarm hält keine dieser Einstellungen zurück.",
+          "description": "So schonen die Rollläden ihre Motoren: Kleine Komfortbewegungen fallen weg, zwischen zwei Komfortbewegungen vergeht eine Weile, und wenn viele Rollläden gemeinsam fahren, starten ihre Motoren nacheinander. Komfortbewegungen sind zum Beispiel die des Tagesablaufs.",
           "data": {
             "motor_min_change": "Mindeständerung",
             "motor_min_interval": "Mindestabstand",
             "stagger_gap": "Abstand zwischen Motoren"
           },
           "data_description": {
-            "motor_min_change": "Eine Komfortbewegung, die kleiner ist, wird ausgelassen. 0 schaltet das ab. Ganz auf oder ganz zu fährt ein Rollladen trotzdem, auch wenn der Rest klein ist. Beurteilen lässt sich das nur bei Rollläden, die ihre Position melden; ein Rollladen, der keine meldet, wird immer bewegt. Leer lassen, um zu erben. Geerbt wird derzeit: {motor_min_change_inherited} (von {motor_min_change_source}).",
-            "motor_min_interval": "Die kürzeste Zeit zwischen zwei Komfortbewegungen des Fensters, gegen Hin und Her, während die Beschattung der Sonne folgt. 0 schaltet das ab. Etwas Neues, etwa der Morgen oder der Abend, eingeschalteter Schlafmodus oder der Beginn der Beschattung, bewegt trotzdem sofort. Leer lassen, um zu erben. Geerbt wird derzeit: {motor_min_interval_inherited} (von {motor_min_interval_source}).",
-            "stagger_gap": "Wenn viele Rollläden zugleich fahren, starten ihre Motoren nacheinander. Dieser Abstand in Sekunden wird nach jedem Motor dieses Fensters freigehalten: Der nächste Motor, dieses oder eines anderen Fensters, startet, wenn er vergangen ist. Der Wert 0 schaltet die Staffelung für dieses Fenster ab; seine Rollläden starten gemeinsam, wenn es an der Reihe ist. Ein Feueralarm wird nie gestaffelt. Der Abstand zwischen den Rollläden eines Fensters zählt nur bei einem Fenster mit mehreren Rollläden. Leer lassen, um zu erben. Geerbt wird derzeit: {stagger_gap_inherited} (von {stagger_gap_source})."
+            "motor_min_change": "Eine Komfortbewegung, die kleiner ist als dieser Wert, fällt weg. 0 schaltet das aus. Ganz auf oder ganz zu fährt ein Rollladen trotzdem, wie klein der restliche Weg auch ist. Das funktioniert nur bei Rollläden, die ihre Position melden; ein Rollladen ohne Positionsmeldung wird immer bewegt. Leer lassen, um die Einstellung von {motor_min_change_source} zu übernehmen (derzeit {motor_min_change_inherited}).",
+            "motor_min_interval": "Die kürzeste Zeit zwischen zwei Komfortbewegungen des Fensters, damit ein Rollladen nicht ständig hin und her fährt. 0 schaltet das aus. Etwas Neues, etwa der Beginn des Morgens oder des Abends, bewegt den Rollladen trotzdem sofort. Leer lassen, um die Einstellung von {motor_min_interval_source} zu übernehmen (derzeit {motor_min_interval_inherited}).",
+            "stagger_gap": "Wenn viele Rollläden gleichzeitig fahren, starten ihre Motoren nacheinander. Nach jedem Motor dieses Fensters wartet der nächste Motor, dieses oder eines anderen Fensters, so viele Sekunden. 0 schaltet das für dieses Fenster aus: Seine Rollläden starten gemeinsam, wenn es an der Reihe ist. Zwischen den Rollläden eines Fensters zählt der Abstand nur, wenn das Fenster mehrere hat. Leer lassen, um die Einstellung von {stagger_gap_source} zu übernehmen (derzeit {stagger_gap_inherited})."
           },
           "sections": {
             "expert": {
-              "name": "Expertenwerte",
-              "description": "Es gelten sinnvolle Voreinstellungen. Ändere sie nur, wenn du weißt, warum.",
+              "name": "Erweiterte Einstellungen",
+              "description": "Die Voreinstellungen passen für die meisten Häuser. Ändere sie nur, wenn du einen Grund dafür hast.",
               "data": {
                 "reevaluate_after": "Spätestens erneut prüfen nach"
               },
               "data_description": {
-                "reevaluate_after": "Wartet eine Bewegung auf etwas, dessen Ende niemand kennt, zum Beispiel darauf, dass ein Rollladen wieder erreichbar ist, wird das Fenster spätestens nach dieser Zeit erneut geprüft. Leer lassen, um zu erben. Geerbt wird derzeit: {reevaluate_after_inherited} (von {reevaluate_after_source})."
+                "reevaluate_after": "Muss eine Bewegung auf etwas warten, dessen Ende sich nicht absehen lässt, zum Beispiel darauf, dass ein Rollladen wieder verfügbar ist, wird das Fenster spätestens nach dieser Zeit erneut geprüft. Leer lassen, um die Einstellung von {reevaluate_after_source} zu übernehmen (derzeit {reevaluate_after_inherited})."
               }
             }
           }
@@ -464,16 +464,16 @@
       },
       "error": {
         "name_blank": "Gib einen Namen ein.",
-        "invalid_value": "Dieser Wert kann nicht verwendet werden.",
+        "invalid_value": "Dieser Wert ist hier nicht möglich.",
         "fraction_not_allowed": "Gib eine ganze Zahl ein.",
         "invalid_day_of_year": "Gib den Tag als Monat und Tag mit je zwei Ziffern ein, zum Beispiel 05-01.",
         "leap_day_not_allowed": "Den 29. Februar gibt es nicht in jedem Jahr. Wähle den 28. Februar oder den 1. März.",
-        "reference_missing": "Wähle eine Entität, oder wähle oben „Keine“ oder „Erben“.",
-        "invalid_combination": "Diese Werte passen nicht zusammen: {combination}. Jeder für sich wäre in Ordnung."
+        "reference_missing": "Wähle eine Entität, oder wähle oben „Keine“ oder „Vom Haus oder von der Gruppe übernehmen“.",
+        "invalid_combination": "Diese Einstellungen widersprechen sich: {combination}. Jede für sich wäre in Ordnung."
       },
       "abort": {
         "reconfigure_successful": "Die Gruppe wurde gespeichert.",
-        "subentry_removed": "Die Gruppe wurde entfernt, während dieses Formular geöffnet war. Es wurde nichts gespeichert."
+        "subentry_removed": "Die Gruppe wurde gelöscht, während dieses Formular offen war. Es wurde nichts gespeichert."
       }
     },
     "window": {
@@ -485,46 +485,46 @@
       "step": {
         "basics": {
           "title": "Fenster",
-          "description": "Wähle den Rollladen dieses Fensters. Wenn mehrere Rollläden immer gemeinsam bewegt werden, wähle alle oder eine Rollladengruppe.",
+          "description": "Wähle die Abdeckung dieses Fensters. Fahren mehrere Rollläden immer gemeinsam, etwa zwei nebeneinander, dann wähle alle ihre Abdeckungen oder ihre Abdeckungsgruppe.",
           "data": {
             "name": "Name",
-            "covers": "Rollläden",
+            "covers": "Abdeckungen",
             "group_id": "Gruppe"
           },
           "data_description": {
-            "covers": "Ein Rollladen kann nur zu einem Fenster gehören.",
-            "group_id": "Das Fenster erbt seine Werte von dieser Gruppe. Leer lassen, um direkt vom Haus zu erben."
+            "covers": "Eine Abdeckung kann nur zu einem Fenster gehören.",
+            "group_id": "Das Fenster übernimmt die Einstellungen dieser Gruppe. Leer lassen, dann übernimmt es die Einstellungen des Hauses."
           }
         },
         "members": {
-          "title": "Mitglieder der Rollladengruppe",
-          "description": "{groups} ist eine Rollladengruppe. Eine Gruppe meldet nur den Mittelwert ihrer Mitglieder, deshalb speichert und bewegt das Fenster die Mitglieder selbst:\n\n{members}",
+          "title": "Mitglieder der Abdeckungsgruppe",
+          "description": "{groups} ist eine Abdeckungsgruppe. Eine solche Gruppe meldet nur eine mittlere Position ihrer Abdeckungen, deshalb verwendet das Fenster stattdessen die einzelnen Abdeckungen:\n\n{members}",
           "menu_options": {
-            "members_accept": "Mit diesen Rollläden fortfahren",
-            "basics": "Andere Rollläden wählen"
+            "members_accept": "Mit diesen Abdeckungen fortfahren",
+            "basics": "Andere Abdeckungen wählen"
           }
         },
         "degraded": {
-          "title": "Rollladen ohne Positionen",
-          "description": "Diese Rollläden können keine Position anfahren oder melden keine: {covers}\n\nSie werden angenommen und nur geöffnet und geschlossen. Für sie sind Beschattungspositionen, andere Zwischenpositionen und die Erkennung manueller Bedienung inaktiv.",
+          "title": "Rollläden, die nur öffnen und schließen",
+          "description": "Diese Rollläden können keine Position anfahren oder melden keine: {covers}\n\nDu kannst sie trotzdem verwenden. Sie werden immer nur ganz geöffnet oder ganz geschlossen, nie auf eine Position dazwischen gefahren.",
           "menu_options": {
-            "degraded_accept": "Mit diesen Rollläden fortfahren",
-            "basics": "Andere Rollläden wählen"
+            "degraded_accept": "Mit diesen Abdeckungen fortfahren",
+            "basics": "Andere Abdeckungen wählen"
           }
         },
         "features": {
           "title": "Funktionen",
-          "description": "Wähle, was hier entschieden wird. „Erben“ folgt der Ebene darüber; der Eintrag zeigt, was das derzeit bedeutet. Nur eingeschaltete Funktionen bekommen eine eigene Seite.",
+          "description": "Lege fest, worum sich Roller Shutter Suite hier kümmern soll. Mit „Vom Haus oder von der Gruppe übernehmen“ gilt, was dort gewählt ist; die Liste zeigt, was das gerade ist. Weitere Seiten folgen nur für das, was eingeschaltet ist.",
           "data": {
             "schedule_enabled": "Tagesablauf"
           },
           "data_description": {
-            "schedule_enabled": "Öffnet die Rollläden am Morgen und schließt sie am Abend. Solange er ausgeschaltet ist, bewegt der Tagesablauf nichts; der Schutz läuft weiter. „Erben“ folgt {schedule_enabled_source}."
+            "schedule_enabled": "Öffnet die Rollläden am Morgen und schließt sie am Abend. Ist er ausgeschaltet, bewegt der Tagesablauf nichts. Beim Übernehmen gilt die Einstellung von {schedule_enabled_source}."
           }
         },
         "feature_daily_routine_general": {
           "title": "Tagesablauf",
-          "description": "Wie weit die Rollläden öffnen und schließen, woran Werktage, Wochenenden und Feiertage erkannt werden und was den Abend sonst noch beginnen kann. Die Zeiten folgen auf den nächsten Seiten, eine Seite je Art von Tag.",
+          "description": "Wie weit die Rollläden öffnen und schließen, woran Werktage, Wochenenden und Feiertage zu erkennen sind und was den Abend außerdem auslösen kann. Die Uhrzeiten folgen auf den nächsten Seiten, eine Seite je Art des Tages.",
           "data": {
             "schedule_morning_position": "Morgenposition",
             "schedule_evening_position": "Abendposition",
@@ -543,40 +543,40 @@
             "schedule_brightness_threshold_lux": "Helligkeitsschwelle (Lux)"
           },
           "data_description": {
-            "schedule_morning_position": "Wohin der Rollladen am Morgen fährt. 100 % ist ganz offen, 0 % ganz geschlossen. Der Morgen hebt nur: Ein Rollladen, der schon höher steht, bleibt, wo er ist. Leer lassen, um zu erben. Geerbt wird derzeit: {schedule_morning_position_inherited} (von {schedule_morning_position_source}).",
-            "schedule_evening_position": "Wohin der Rollladen am Abend fährt. 100 % ist ganz offen, 0 % ganz geschlossen. Der Abend senkt nur: Ein Rollladen, der schon tiefer steht, bleibt, wo er ist. Leer lassen, um zu erben. Geerbt wird derzeit: {schedule_evening_position_inherited} (von {schedule_evening_position_source}).",
-            "schedule_workday_source_choice": "Eine Entität, die an Werktagen eingeschaltet ist, zum Beispiel der Werktag-Sensor von Home Assistant. Mit „Keine“ sind Montag bis Freitag Werktage. Geerbt wird derzeit: {schedule_workday_source_inherited} (von {schedule_workday_source_source}).",
-            "schedule_workday_source": "Zählt nur mit „Eigene Auswahl“ oben.",
-            "schedule_holiday_source_choice": "Eine Entität, die an Feiertagen eingeschaltet ist; ein Kalender mit einem ganztägigen Termin funktioniert ebenfalls. Mit „Keine“ gibt es keine Feiertage. Geerbt wird derzeit: {schedule_holiday_source_inherited} (von {schedule_holiday_source_source}).",
-            "schedule_holiday_source": "Zählt nur mit „Eigene Auswahl“ oben.",
-            "schedule_season_source_choice": "Eine Entität, die eingeschaltet ist, solange Sommer ist. Solange sie keinen Wert hat, zählt ihr letzter bekannter Wert. Geerbt wird derzeit: {schedule_season_source_inherited} (von {schedule_season_source_source}).",
-            "schedule_season_source": "Zählt nur mit „Eigene Auswahl“ oben.",
-            "schedule_summer_by_date": "Ohne Sommer-Entität dauert der Sommer vom ersten bis zum letzten unten angegebenen Tag. „Erben“ folgt {schedule_summer_by_date_source}.",
-            "schedule_summer_first_day": "Monat und Tag mit je zwei Ziffern, zum Beispiel 05-01 für den 1. Mai. Leer lassen, um zu erben. Geerbt wird derzeit: {schedule_summer_first_day_inherited} (von {schedule_summer_first_day_source}).",
-            "schedule_summer_last_day": "Monat und Tag mit je zwei Ziffern, zum Beispiel 09-30 für den 30. September. Der Zeitraum darf über den Jahreswechsel reichen. Leer lassen, um zu erben. Geerbt wird derzeit: {schedule_summer_last_day_inherited} (von {schedule_summer_last_day_source}).",
-            "schedule_evening_position_summer": "Ersetzt die Abendposition, solange Sommer ist, zum Beispiel 30 % für Sichtschutz mit etwas Luft. Sie zählt nur mit einer Sommer-Entität oder mit Sommer nach Datum. Leer lassen, um zu erben. Geerbt wird derzeit: {schedule_evening_position_summer_inherited} (von {schedule_evening_position_summer_source}).",
-            "schedule_brightness_source_choice": "Eine Entität, die die Außenhelligkeit in Lux meldet. Ist es für die Dauer der Verzögerung dunkler als der Schwellwert, beginnt der Abend früher, aber nie vor „nicht vor“ des Abends. Eine Entität ohne Wert beginnt nichts und blockiert nichts. Geerbt wird derzeit: {schedule_brightness_source_inherited} (von {schedule_brightness_source_source}).",
-            "schedule_brightness_source": "Zählt nur mit „Eigene Auswahl“ oben.",
-            "schedule_brightness_threshold_lux": "Unterhalb dieser Außenhelligkeit, in Lux, gilt es als dunkel. Leer lassen, um zu erben. Geerbt wird derzeit: {schedule_brightness_threshold_lux_inherited} (von {schedule_brightness_threshold_lux_source})."
+            "schedule_morning_position": "Wie weit der Rollladen am Morgen öffnet: 100 % ist ganz offen, 0 % ganz geschlossen. Morgens wird ein Rollladen nur angehoben; steht er schon höher, bleibt er, wo er ist. Leer lassen, um die Einstellung von {schedule_morning_position_source} zu übernehmen (derzeit {schedule_morning_position_inherited}).",
+            "schedule_evening_position": "Wie weit der Rollladen am Abend schließt: 100 % ist ganz offen, 0 % ganz geschlossen. Abends wird ein Rollladen nur gesenkt; steht er schon tiefer, bleibt er, wo er ist. Leer lassen, um die Einstellung von {schedule_evening_position_source} zu übernehmen (derzeit {schedule_evening_position_inherited}).",
+            "schedule_workday_source_choice": "Eine Entität, die an Werktagen eingeschaltet ist, zum Beispiel ein Werktag-Sensor von Home Assistant. Mit „Keine“ sind Montag bis Freitag Werktage. Derzeit übernommen von {schedule_workday_source_source}: {schedule_workday_source_inherited}.",
+            "schedule_workday_source": "Gilt nur mit „Eigene Auswahl“ oben.",
+            "schedule_holiday_source_choice": "Eine Entität, die an Feiertagen eingeschaltet ist; ein Kalender mit einem ganztägigen Termin geht auch. Mit „Keine“ gibt es keine Feiertage. Derzeit übernommen von {schedule_holiday_source_source}: {schedule_holiday_source_inherited}.",
+            "schedule_holiday_source": "Gilt nur mit „Eigene Auswahl“ oben.",
+            "schedule_season_source_choice": "Eine Entität, die eingeschaltet ist, solange Sommer ist. Ist sie nicht verfügbar oder unbekannt, gilt ihr letzter bekannter Zustand. Derzeit übernommen von {schedule_season_source_source}: {schedule_season_source_inherited}.",
+            "schedule_season_source": "Gilt nur mit „Eigene Auswahl“ oben.",
+            "schedule_summer_by_date": "Ohne Sommer-Entität dauert der Sommer vom ersten bis zum letzten unten eingestellten Tag. Beim Übernehmen gilt die Einstellung von {schedule_summer_by_date_source}.",
+            "schedule_summer_first_day": "Monat und Tag mit je zwei Ziffern, zum Beispiel 05-01 für den 1. Mai. Leer lassen, um die Einstellung von {schedule_summer_first_day_source} zu übernehmen (derzeit {schedule_summer_first_day_inherited}).",
+            "schedule_summer_last_day": "Monat und Tag mit je zwei Ziffern, zum Beispiel 09-30 für den 30. September. Der Sommer darf über den Jahreswechsel reichen. Leer lassen, um die Einstellung von {schedule_summer_last_day_source} zu übernehmen (derzeit {schedule_summer_last_day_inherited}).",
+            "schedule_evening_position_summer": "Gilt im Sommer statt der Abendposition, zum Beispiel 30 % für Sichtschutz mit etwas frischer Luft. Sie wirkt nur, wenn der Sommer über eine Entität oder nach Datum festgelegt ist. Leer lassen, um die Einstellung von {schedule_evening_position_summer_source} zu übernehmen (derzeit {schedule_evening_position_summer_inherited}).",
+            "schedule_brightness_source_choice": "Eine Entität, die die Außenhelligkeit in Lux meldet. Bleibt es für die eingestellte Dauer dunkler als die Schwelle, beginnt der Abend früher, aber nie früher als die Zeit unter „Abend: nicht vor“. Solange die Entität nicht verfügbar oder unbekannt ist, löst sie den Abend weder aus noch verzögert sie ihn. Derzeit übernommen von {schedule_brightness_source_source}: {schedule_brightness_source_inherited}.",
+            "schedule_brightness_source": "Gilt nur mit „Eigene Auswahl“ oben.",
+            "schedule_brightness_threshold_lux": "Unterhalb dieser Außenhelligkeit in Lux gilt es als dunkel. Leer lassen, um die Einstellung von {schedule_brightness_threshold_lux_source} zu übernehmen (derzeit {schedule_brightness_threshold_lux_inherited})."
           },
           "sections": {
             "expert": {
-              "name": "Expertenwerte",
-              "description": "Es gelten sinnvolle Voreinstellungen. Ändere sie nur, wenn du weißt, warum.",
+              "name": "Erweiterte Einstellungen",
+              "description": "Die Voreinstellungen passen für die meisten Häuser. Ändere sie nur, wenn du einen Grund dafür hast.",
               "data": {
-                "schedule_brightness_delay": "Verzögerung der Helligkeit",
+                "schedule_brightness_delay": "Dauer der Dunkelheit",
                 "schedule_random_offset": "Zufälliger Versatz"
               },
               "data_description": {
-                "schedule_brightness_delay": "Wie viele Minuten es dunkel sein muss, bevor der Abend beginnt. Leer lassen, um zu erben. Geerbt wird derzeit: {schedule_brightness_delay_inherited} (von {schedule_brightness_delay_source}).",
-                "schedule_random_offset": "Verschiebt jeden Auslöser um bis zu so viele Minuten, früher oder später, für jedes Fenster und jeden Tag anders. 0 schaltet ihn aus; 30 ist das Maximum. Leer lassen, um zu erben. Geerbt wird derzeit: {schedule_random_offset_inherited} (von {schedule_random_offset_source})."
+                "schedule_brightness_delay": "Wie viele Minuten es dunkel sein muss, bevor der Abend beginnt. Leer lassen, um die Einstellung von {schedule_brightness_delay_source} zu übernehmen (derzeit {schedule_brightness_delay_inherited}).",
+                "schedule_random_offset": "Verschiebt jeden Morgen und jeden Abend um bis zu so viele Minuten nach vorn oder hinten, für jedes Fenster und jeden Tag anders. 0 schaltet das aus; höchstens 30. Leer lassen, um die Einstellung von {schedule_random_offset_source} zu übernehmen (derzeit {schedule_random_offset_inherited})."
               }
             }
           }
         },
         "feature_daily_routine_workday": {
           "title": "Tagesablauf an Werktagen",
-          "description": "Wann der Morgen und der Abend an einem Werktag beginnen.",
+          "description": "Wann Morgen und Abend an einem Werktag beginnen.",
           "data": {
             "schedule_workday_morning_kind": "Morgen: Auslöser",
             "schedule_workday_morning_time": "Morgen: Uhrzeit",
@@ -584,15 +584,15 @@
             "schedule_workday_evening_time": "Abend: Uhrzeit"
           },
           "data_description": {
-            "schedule_workday_morning_kind": "Eine feste Uhrzeit; der Sonnenaufgang am Morgen oder der Sonnenuntergang am Abend, mit Versatz; oder die Höhe der Sonne. Für die beiden, die der Sonne folgen, begrenzen „nicht vor“ und „nicht nach“ unter den Expertenwerten die Zeit. Geerbt wird derzeit: {schedule_workday_morning_kind_inherited} (von {schedule_workday_morning_kind_source}).",
-            "schedule_workday_morning_time": "Zählt mit dem Auslöser „Feste Uhrzeit“. Leer lassen, um zu erben. Geerbt wird derzeit: {schedule_workday_morning_time_inherited} (von {schedule_workday_morning_time_source}).",
-            "schedule_workday_evening_kind": "Eine feste Uhrzeit; der Sonnenaufgang am Morgen oder der Sonnenuntergang am Abend, mit Versatz; oder die Höhe der Sonne. Für die beiden, die der Sonne folgen, begrenzen „nicht vor“ und „nicht nach“ unter den Expertenwerten die Zeit. Geerbt wird derzeit: {schedule_workday_evening_kind_inherited} (von {schedule_workday_evening_kind_source}).",
-            "schedule_workday_evening_time": "Zählt mit dem Auslöser „Feste Uhrzeit“. Leer lassen, um zu erben. Geerbt wird derzeit: {schedule_workday_evening_time_inherited} (von {schedule_workday_evening_time_source})."
+            "schedule_workday_morning_kind": "Eine feste Uhrzeit; der Sonnenaufgang am Morgen oder der Sonnenuntergang am Abend, mit Versatz; oder die Höhe der Sonne. Für die beiden, die der Sonne folgen, legen „nicht vor“ und „nicht nach“ in den erweiterten Einstellungen die früheste und die späteste Zeit fest. Derzeit übernommen von {schedule_workday_morning_kind_source}: {schedule_workday_morning_kind_inherited}.",
+            "schedule_workday_morning_time": "Gilt beim Auslöser „Feste Uhrzeit“. Leer lassen, um die Einstellung von {schedule_workday_morning_time_source} zu übernehmen (derzeit {schedule_workday_morning_time_inherited}).",
+            "schedule_workday_evening_kind": "Eine feste Uhrzeit; der Sonnenaufgang am Morgen oder der Sonnenuntergang am Abend, mit Versatz; oder die Höhe der Sonne. Für die beiden, die der Sonne folgen, legen „nicht vor“ und „nicht nach“ in den erweiterten Einstellungen die früheste und die späteste Zeit fest. Derzeit übernommen von {schedule_workday_evening_kind_source}: {schedule_workday_evening_kind_inherited}.",
+            "schedule_workday_evening_time": "Gilt beim Auslöser „Feste Uhrzeit“. Leer lassen, um die Einstellung von {schedule_workday_evening_time_source} zu übernehmen (derzeit {schedule_workday_evening_time_inherited})."
           },
           "sections": {
             "expert": {
-              "name": "Expertenwerte",
-              "description": "Es gelten sinnvolle Voreinstellungen. Ändere sie nur, wenn du weißt, warum.",
+              "name": "Erweiterte Einstellungen",
+              "description": "Die Voreinstellungen passen für die meisten Häuser. Ändere sie nur, wenn du einen Grund dafür hast.",
               "data": {
                 "schedule_workday_morning_offset_minutes": "Morgen: Versatz zu Sonnenaufgang oder Sonnenuntergang",
                 "schedule_workday_morning_elevation": "Morgen: Höhe der Sonne",
@@ -604,21 +604,21 @@
                 "schedule_workday_evening_not_after": "Abend: nicht nach"
               },
               "data_description": {
-                "schedule_workday_morning_offset_minutes": "Zählt mit dem Auslöser „Sonnenaufgang oder Sonnenuntergang“. Minuten; eine negative Zahl bedeutet früher. Leer lassen, um zu erben. Geerbt wird derzeit: {schedule_workday_morning_offset_minutes_inherited} (von {schedule_workday_morning_offset_minutes_source}).",
-                "schedule_workday_morning_elevation": "Zählt mit dem Auslöser „Höhe der Sonne“. Grad über dem Horizont; eine negative Zahl bedeutet darunter. Leer lassen, um zu erben. Geerbt wird derzeit: {schedule_workday_morning_elevation_inherited} (von {schedule_workday_morning_elevation_source}).",
-                "schedule_workday_morning_not_before": "Die früheste Zeit für einen Auslöser, der der Sonne folgt. An einem Tag, an dem die Sonne keine Zeit liefert, steht diese Zeit oder „nicht nach“ dafür ein. Leer lassen, um zu erben. Geerbt wird derzeit: {schedule_workday_morning_not_before_inherited} (von {schedule_workday_morning_not_before_source}).",
-                "schedule_workday_morning_not_after": "Die späteste Zeit für einen Auslöser, der der Sonne folgt. Leer lassen, um zu erben. Geerbt wird derzeit: {schedule_workday_morning_not_after_inherited} (von {schedule_workday_morning_not_after_source}).",
-                "schedule_workday_evening_offset_minutes": "Zählt mit dem Auslöser „Sonnenaufgang oder Sonnenuntergang“. Minuten; eine negative Zahl bedeutet früher. Leer lassen, um zu erben. Geerbt wird derzeit: {schedule_workday_evening_offset_minutes_inherited} (von {schedule_workday_evening_offset_minutes_source}).",
-                "schedule_workday_evening_elevation": "Zählt mit dem Auslöser „Höhe der Sonne“. Grad über dem Horizont; eine negative Zahl bedeutet darunter. Leer lassen, um zu erben. Geerbt wird derzeit: {schedule_workday_evening_elevation_inherited} (von {schedule_workday_evening_elevation_source}).",
-                "schedule_workday_evening_not_before": "Die früheste Zeit für einen Auslöser, der der Sonne folgt. An einem Tag, an dem die Sonne keine Zeit liefert, steht diese Zeit oder „nicht nach“ dafür ein. Leer lassen, um zu erben. Geerbt wird derzeit: {schedule_workday_evening_not_before_inherited} (von {schedule_workday_evening_not_before_source}).",
-                "schedule_workday_evening_not_after": "Die späteste Zeit für einen Auslöser, der der Sonne folgt. Leer lassen, um zu erben. Geerbt wird derzeit: {schedule_workday_evening_not_after_inherited} (von {schedule_workday_evening_not_after_source})."
+                "schedule_workday_morning_offset_minutes": "Gilt beim Auslöser „Sonnenaufgang oder Sonnenuntergang“. In Minuten; eine negative Zahl bedeutet früher. Leer lassen, um die Einstellung von {schedule_workday_morning_offset_minutes_source} zu übernehmen (derzeit {schedule_workday_morning_offset_minutes_inherited}).",
+                "schedule_workday_morning_elevation": "Gilt beim Auslöser „Höhe der Sonne“. In Grad über dem Horizont; eine negative Zahl bedeutet darunter. Leer lassen, um die Einstellung von {schedule_workday_morning_elevation_source} zu übernehmen (derzeit {schedule_workday_morning_elevation_inherited}).",
+                "schedule_workday_morning_not_before": "Die früheste Zeit für einen Auslöser, der der Sonne folgt. An einem Tag, an dem die Sonne keine Zeit ergibt, etwa weil sie die gewählte Höhe nie erreicht, gilt stattdessen diese Zeit oder „nicht nach“. Leer lassen, um die Einstellung von {schedule_workday_morning_not_before_source} zu übernehmen (derzeit {schedule_workday_morning_not_before_inherited}).",
+                "schedule_workday_morning_not_after": "Die späteste Zeit für einen Auslöser, der der Sonne folgt. Leer lassen, um die Einstellung von {schedule_workday_morning_not_after_source} zu übernehmen (derzeit {schedule_workday_morning_not_after_inherited}).",
+                "schedule_workday_evening_offset_minutes": "Gilt beim Auslöser „Sonnenaufgang oder Sonnenuntergang“. In Minuten; eine negative Zahl bedeutet früher. Leer lassen, um die Einstellung von {schedule_workday_evening_offset_minutes_source} zu übernehmen (derzeit {schedule_workday_evening_offset_minutes_inherited}).",
+                "schedule_workday_evening_elevation": "Gilt beim Auslöser „Höhe der Sonne“. In Grad über dem Horizont; eine negative Zahl bedeutet darunter. Leer lassen, um die Einstellung von {schedule_workday_evening_elevation_source} zu übernehmen (derzeit {schedule_workday_evening_elevation_inherited}).",
+                "schedule_workday_evening_not_before": "Die früheste Zeit für einen Auslöser, der der Sonne folgt. An einem Tag, an dem die Sonne keine Zeit ergibt, etwa weil sie die gewählte Höhe nie erreicht, gilt stattdessen diese Zeit oder „nicht nach“. Leer lassen, um die Einstellung von {schedule_workday_evening_not_before_source} zu übernehmen (derzeit {schedule_workday_evening_not_before_inherited}).",
+                "schedule_workday_evening_not_after": "Die späteste Zeit für einen Auslöser, der der Sonne folgt. Leer lassen, um die Einstellung von {schedule_workday_evening_not_after_source} zu übernehmen (derzeit {schedule_workday_evening_not_after_inherited})."
               }
             }
           }
         },
         "feature_daily_routine_weekend": {
           "title": "Tagesablauf am Wochenende",
-          "description": "Wann der Morgen und der Abend an einem Samstag oder Sonntag beginnen, oder an einem Tag, den die Werktag-Entität als frei meldet.",
+          "description": "Wann Morgen und Abend an einem Samstag oder Sonntag beginnen oder an einem Tag, den die Werktag-Entität als frei meldet.",
           "data": {
             "schedule_weekend_morning_kind": "Morgen: Auslöser",
             "schedule_weekend_morning_time": "Morgen: Uhrzeit",
@@ -626,15 +626,15 @@
             "schedule_weekend_evening_time": "Abend: Uhrzeit"
           },
           "data_description": {
-            "schedule_weekend_morning_kind": "Eine feste Uhrzeit; der Sonnenaufgang am Morgen oder der Sonnenuntergang am Abend, mit Versatz; oder die Höhe der Sonne. Für die beiden, die der Sonne folgen, begrenzen „nicht vor“ und „nicht nach“ unter den Expertenwerten die Zeit. Geerbt wird derzeit: {schedule_weekend_morning_kind_inherited} (von {schedule_weekend_morning_kind_source}).",
-            "schedule_weekend_morning_time": "Zählt mit dem Auslöser „Feste Uhrzeit“. Leer lassen, um zu erben. Geerbt wird derzeit: {schedule_weekend_morning_time_inherited} (von {schedule_weekend_morning_time_source}).",
-            "schedule_weekend_evening_kind": "Eine feste Uhrzeit; der Sonnenaufgang am Morgen oder der Sonnenuntergang am Abend, mit Versatz; oder die Höhe der Sonne. Für die beiden, die der Sonne folgen, begrenzen „nicht vor“ und „nicht nach“ unter den Expertenwerten die Zeit. Geerbt wird derzeit: {schedule_weekend_evening_kind_inherited} (von {schedule_weekend_evening_kind_source}).",
-            "schedule_weekend_evening_time": "Zählt mit dem Auslöser „Feste Uhrzeit“. Leer lassen, um zu erben. Geerbt wird derzeit: {schedule_weekend_evening_time_inherited} (von {schedule_weekend_evening_time_source})."
+            "schedule_weekend_morning_kind": "Eine feste Uhrzeit; der Sonnenaufgang am Morgen oder der Sonnenuntergang am Abend, mit Versatz; oder die Höhe der Sonne. Für die beiden, die der Sonne folgen, legen „nicht vor“ und „nicht nach“ in den erweiterten Einstellungen die früheste und die späteste Zeit fest. Derzeit übernommen von {schedule_weekend_morning_kind_source}: {schedule_weekend_morning_kind_inherited}.",
+            "schedule_weekend_morning_time": "Gilt beim Auslöser „Feste Uhrzeit“. Leer lassen, um die Einstellung von {schedule_weekend_morning_time_source} zu übernehmen (derzeit {schedule_weekend_morning_time_inherited}).",
+            "schedule_weekend_evening_kind": "Eine feste Uhrzeit; der Sonnenaufgang am Morgen oder der Sonnenuntergang am Abend, mit Versatz; oder die Höhe der Sonne. Für die beiden, die der Sonne folgen, legen „nicht vor“ und „nicht nach“ in den erweiterten Einstellungen die früheste und die späteste Zeit fest. Derzeit übernommen von {schedule_weekend_evening_kind_source}: {schedule_weekend_evening_kind_inherited}.",
+            "schedule_weekend_evening_time": "Gilt beim Auslöser „Feste Uhrzeit“. Leer lassen, um die Einstellung von {schedule_weekend_evening_time_source} zu übernehmen (derzeit {schedule_weekend_evening_time_inherited})."
           },
           "sections": {
             "expert": {
-              "name": "Expertenwerte",
-              "description": "Es gelten sinnvolle Voreinstellungen. Ändere sie nur, wenn du weißt, warum.",
+              "name": "Erweiterte Einstellungen",
+              "description": "Die Voreinstellungen passen für die meisten Häuser. Ändere sie nur, wenn du einen Grund dafür hast.",
               "data": {
                 "schedule_weekend_morning_offset_minutes": "Morgen: Versatz zu Sonnenaufgang oder Sonnenuntergang",
                 "schedule_weekend_morning_elevation": "Morgen: Höhe der Sonne",
@@ -646,21 +646,21 @@
                 "schedule_weekend_evening_not_after": "Abend: nicht nach"
               },
               "data_description": {
-                "schedule_weekend_morning_offset_minutes": "Zählt mit dem Auslöser „Sonnenaufgang oder Sonnenuntergang“. Minuten; eine negative Zahl bedeutet früher. Leer lassen, um zu erben. Geerbt wird derzeit: {schedule_weekend_morning_offset_minutes_inherited} (von {schedule_weekend_morning_offset_minutes_source}).",
-                "schedule_weekend_morning_elevation": "Zählt mit dem Auslöser „Höhe der Sonne“. Grad über dem Horizont; eine negative Zahl bedeutet darunter. Leer lassen, um zu erben. Geerbt wird derzeit: {schedule_weekend_morning_elevation_inherited} (von {schedule_weekend_morning_elevation_source}).",
-                "schedule_weekend_morning_not_before": "Die früheste Zeit für einen Auslöser, der der Sonne folgt. An einem Tag, an dem die Sonne keine Zeit liefert, steht diese Zeit oder „nicht nach“ dafür ein. Leer lassen, um zu erben. Geerbt wird derzeit: {schedule_weekend_morning_not_before_inherited} (von {schedule_weekend_morning_not_before_source}).",
-                "schedule_weekend_morning_not_after": "Die späteste Zeit für einen Auslöser, der der Sonne folgt. Leer lassen, um zu erben. Geerbt wird derzeit: {schedule_weekend_morning_not_after_inherited} (von {schedule_weekend_morning_not_after_source}).",
-                "schedule_weekend_evening_offset_minutes": "Zählt mit dem Auslöser „Sonnenaufgang oder Sonnenuntergang“. Minuten; eine negative Zahl bedeutet früher. Leer lassen, um zu erben. Geerbt wird derzeit: {schedule_weekend_evening_offset_minutes_inherited} (von {schedule_weekend_evening_offset_minutes_source}).",
-                "schedule_weekend_evening_elevation": "Zählt mit dem Auslöser „Höhe der Sonne“. Grad über dem Horizont; eine negative Zahl bedeutet darunter. Leer lassen, um zu erben. Geerbt wird derzeit: {schedule_weekend_evening_elevation_inherited} (von {schedule_weekend_evening_elevation_source}).",
-                "schedule_weekend_evening_not_before": "Die früheste Zeit für einen Auslöser, der der Sonne folgt. An einem Tag, an dem die Sonne keine Zeit liefert, steht diese Zeit oder „nicht nach“ dafür ein. Leer lassen, um zu erben. Geerbt wird derzeit: {schedule_weekend_evening_not_before_inherited} (von {schedule_weekend_evening_not_before_source}).",
-                "schedule_weekend_evening_not_after": "Die späteste Zeit für einen Auslöser, der der Sonne folgt. Leer lassen, um zu erben. Geerbt wird derzeit: {schedule_weekend_evening_not_after_inherited} (von {schedule_weekend_evening_not_after_source})."
+                "schedule_weekend_morning_offset_minutes": "Gilt beim Auslöser „Sonnenaufgang oder Sonnenuntergang“. In Minuten; eine negative Zahl bedeutet früher. Leer lassen, um die Einstellung von {schedule_weekend_morning_offset_minutes_source} zu übernehmen (derzeit {schedule_weekend_morning_offset_minutes_inherited}).",
+                "schedule_weekend_morning_elevation": "Gilt beim Auslöser „Höhe der Sonne“. In Grad über dem Horizont; eine negative Zahl bedeutet darunter. Leer lassen, um die Einstellung von {schedule_weekend_morning_elevation_source} zu übernehmen (derzeit {schedule_weekend_morning_elevation_inherited}).",
+                "schedule_weekend_morning_not_before": "Die früheste Zeit für einen Auslöser, der der Sonne folgt. An einem Tag, an dem die Sonne keine Zeit ergibt, etwa weil sie die gewählte Höhe nie erreicht, gilt stattdessen diese Zeit oder „nicht nach“. Leer lassen, um die Einstellung von {schedule_weekend_morning_not_before_source} zu übernehmen (derzeit {schedule_weekend_morning_not_before_inherited}).",
+                "schedule_weekend_morning_not_after": "Die späteste Zeit für einen Auslöser, der der Sonne folgt. Leer lassen, um die Einstellung von {schedule_weekend_morning_not_after_source} zu übernehmen (derzeit {schedule_weekend_morning_not_after_inherited}).",
+                "schedule_weekend_evening_offset_minutes": "Gilt beim Auslöser „Sonnenaufgang oder Sonnenuntergang“. In Minuten; eine negative Zahl bedeutet früher. Leer lassen, um die Einstellung von {schedule_weekend_evening_offset_minutes_source} zu übernehmen (derzeit {schedule_weekend_evening_offset_minutes_inherited}).",
+                "schedule_weekend_evening_elevation": "Gilt beim Auslöser „Höhe der Sonne“. In Grad über dem Horizont; eine negative Zahl bedeutet darunter. Leer lassen, um die Einstellung von {schedule_weekend_evening_elevation_source} zu übernehmen (derzeit {schedule_weekend_evening_elevation_inherited}).",
+                "schedule_weekend_evening_not_before": "Die früheste Zeit für einen Auslöser, der der Sonne folgt. An einem Tag, an dem die Sonne keine Zeit ergibt, etwa weil sie die gewählte Höhe nie erreicht, gilt stattdessen diese Zeit oder „nicht nach“. Leer lassen, um die Einstellung von {schedule_weekend_evening_not_before_source} zu übernehmen (derzeit {schedule_weekend_evening_not_before_inherited}).",
+                "schedule_weekend_evening_not_after": "Die späteste Zeit für einen Auslöser, der der Sonne folgt. Leer lassen, um die Einstellung von {schedule_weekend_evening_not_after_source} zu übernehmen (derzeit {schedule_weekend_evening_not_after_inherited})."
               }
             }
           }
         },
         "feature_daily_routine_holiday": {
           "title": "Tagesablauf an Feiertagen",
-          "description": "Wann der Morgen und der Abend an einem Tag beginnen, den die Feiertag-Entität als Feiertag meldet.",
+          "description": "Wann Morgen und Abend an einem Tag beginnen, den die Feiertag-Entität als Feiertag meldet.",
           "data": {
             "schedule_holiday_morning_kind": "Morgen: Auslöser",
             "schedule_holiday_morning_time": "Morgen: Uhrzeit",
@@ -668,15 +668,15 @@
             "schedule_holiday_evening_time": "Abend: Uhrzeit"
           },
           "data_description": {
-            "schedule_holiday_morning_kind": "Eine feste Uhrzeit; der Sonnenaufgang am Morgen oder der Sonnenuntergang am Abend, mit Versatz; oder die Höhe der Sonne. Für die beiden, die der Sonne folgen, begrenzen „nicht vor“ und „nicht nach“ unter den Expertenwerten die Zeit. Geerbt wird derzeit: {schedule_holiday_morning_kind_inherited} (von {schedule_holiday_morning_kind_source}).",
-            "schedule_holiday_morning_time": "Zählt mit dem Auslöser „Feste Uhrzeit“. Leer lassen, um zu erben. Geerbt wird derzeit: {schedule_holiday_morning_time_inherited} (von {schedule_holiday_morning_time_source}).",
-            "schedule_holiday_evening_kind": "Eine feste Uhrzeit; der Sonnenaufgang am Morgen oder der Sonnenuntergang am Abend, mit Versatz; oder die Höhe der Sonne. Für die beiden, die der Sonne folgen, begrenzen „nicht vor“ und „nicht nach“ unter den Expertenwerten die Zeit. Geerbt wird derzeit: {schedule_holiday_evening_kind_inherited} (von {schedule_holiday_evening_kind_source}).",
-            "schedule_holiday_evening_time": "Zählt mit dem Auslöser „Feste Uhrzeit“. Leer lassen, um zu erben. Geerbt wird derzeit: {schedule_holiday_evening_time_inherited} (von {schedule_holiday_evening_time_source})."
+            "schedule_holiday_morning_kind": "Eine feste Uhrzeit; der Sonnenaufgang am Morgen oder der Sonnenuntergang am Abend, mit Versatz; oder die Höhe der Sonne. Für die beiden, die der Sonne folgen, legen „nicht vor“ und „nicht nach“ in den erweiterten Einstellungen die früheste und die späteste Zeit fest. Derzeit übernommen von {schedule_holiday_morning_kind_source}: {schedule_holiday_morning_kind_inherited}.",
+            "schedule_holiday_morning_time": "Gilt beim Auslöser „Feste Uhrzeit“. Leer lassen, um die Einstellung von {schedule_holiday_morning_time_source} zu übernehmen (derzeit {schedule_holiday_morning_time_inherited}).",
+            "schedule_holiday_evening_kind": "Eine feste Uhrzeit; der Sonnenaufgang am Morgen oder der Sonnenuntergang am Abend, mit Versatz; oder die Höhe der Sonne. Für die beiden, die der Sonne folgen, legen „nicht vor“ und „nicht nach“ in den erweiterten Einstellungen die früheste und die späteste Zeit fest. Derzeit übernommen von {schedule_holiday_evening_kind_source}: {schedule_holiday_evening_kind_inherited}.",
+            "schedule_holiday_evening_time": "Gilt beim Auslöser „Feste Uhrzeit“. Leer lassen, um die Einstellung von {schedule_holiday_evening_time_source} zu übernehmen (derzeit {schedule_holiday_evening_time_inherited})."
           },
           "sections": {
             "expert": {
-              "name": "Expertenwerte",
-              "description": "Es gelten sinnvolle Voreinstellungen. Ändere sie nur, wenn du weißt, warum.",
+              "name": "Erweiterte Einstellungen",
+              "description": "Die Voreinstellungen passen für die meisten Häuser. Ändere sie nur, wenn du einen Grund dafür hast.",
               "data": {
                 "schedule_holiday_morning_offset_minutes": "Morgen: Versatz zu Sonnenaufgang oder Sonnenuntergang",
                 "schedule_holiday_morning_elevation": "Morgen: Höhe der Sonne",
@@ -688,40 +688,40 @@
                 "schedule_holiday_evening_not_after": "Abend: nicht nach"
               },
               "data_description": {
-                "schedule_holiday_morning_offset_minutes": "Zählt mit dem Auslöser „Sonnenaufgang oder Sonnenuntergang“. Minuten; eine negative Zahl bedeutet früher. Leer lassen, um zu erben. Geerbt wird derzeit: {schedule_holiday_morning_offset_minutes_inherited} (von {schedule_holiday_morning_offset_minutes_source}).",
-                "schedule_holiday_morning_elevation": "Zählt mit dem Auslöser „Höhe der Sonne“. Grad über dem Horizont; eine negative Zahl bedeutet darunter. Leer lassen, um zu erben. Geerbt wird derzeit: {schedule_holiday_morning_elevation_inherited} (von {schedule_holiday_morning_elevation_source}).",
-                "schedule_holiday_morning_not_before": "Die früheste Zeit für einen Auslöser, der der Sonne folgt. An einem Tag, an dem die Sonne keine Zeit liefert, steht diese Zeit oder „nicht nach“ dafür ein. Leer lassen, um zu erben. Geerbt wird derzeit: {schedule_holiday_morning_not_before_inherited} (von {schedule_holiday_morning_not_before_source}).",
-                "schedule_holiday_morning_not_after": "Die späteste Zeit für einen Auslöser, der der Sonne folgt. Leer lassen, um zu erben. Geerbt wird derzeit: {schedule_holiday_morning_not_after_inherited} (von {schedule_holiday_morning_not_after_source}).",
-                "schedule_holiday_evening_offset_minutes": "Zählt mit dem Auslöser „Sonnenaufgang oder Sonnenuntergang“. Minuten; eine negative Zahl bedeutet früher. Leer lassen, um zu erben. Geerbt wird derzeit: {schedule_holiday_evening_offset_minutes_inherited} (von {schedule_holiday_evening_offset_minutes_source}).",
-                "schedule_holiday_evening_elevation": "Zählt mit dem Auslöser „Höhe der Sonne“. Grad über dem Horizont; eine negative Zahl bedeutet darunter. Leer lassen, um zu erben. Geerbt wird derzeit: {schedule_holiday_evening_elevation_inherited} (von {schedule_holiday_evening_elevation_source}).",
-                "schedule_holiday_evening_not_before": "Die früheste Zeit für einen Auslöser, der der Sonne folgt. An einem Tag, an dem die Sonne keine Zeit liefert, steht diese Zeit oder „nicht nach“ dafür ein. Leer lassen, um zu erben. Geerbt wird derzeit: {schedule_holiday_evening_not_before_inherited} (von {schedule_holiday_evening_not_before_source}).",
-                "schedule_holiday_evening_not_after": "Die späteste Zeit für einen Auslöser, der der Sonne folgt. Leer lassen, um zu erben. Geerbt wird derzeit: {schedule_holiday_evening_not_after_inherited} (von {schedule_holiday_evening_not_after_source})."
+                "schedule_holiday_morning_offset_minutes": "Gilt beim Auslöser „Sonnenaufgang oder Sonnenuntergang“. In Minuten; eine negative Zahl bedeutet früher. Leer lassen, um die Einstellung von {schedule_holiday_morning_offset_minutes_source} zu übernehmen (derzeit {schedule_holiday_morning_offset_minutes_inherited}).",
+                "schedule_holiday_morning_elevation": "Gilt beim Auslöser „Höhe der Sonne“. In Grad über dem Horizont; eine negative Zahl bedeutet darunter. Leer lassen, um die Einstellung von {schedule_holiday_morning_elevation_source} zu übernehmen (derzeit {schedule_holiday_morning_elevation_inherited}).",
+                "schedule_holiday_morning_not_before": "Die früheste Zeit für einen Auslöser, der der Sonne folgt. An einem Tag, an dem die Sonne keine Zeit ergibt, etwa weil sie die gewählte Höhe nie erreicht, gilt stattdessen diese Zeit oder „nicht nach“. Leer lassen, um die Einstellung von {schedule_holiday_morning_not_before_source} zu übernehmen (derzeit {schedule_holiday_morning_not_before_inherited}).",
+                "schedule_holiday_morning_not_after": "Die späteste Zeit für einen Auslöser, der der Sonne folgt. Leer lassen, um die Einstellung von {schedule_holiday_morning_not_after_source} zu übernehmen (derzeit {schedule_holiday_morning_not_after_inherited}).",
+                "schedule_holiday_evening_offset_minutes": "Gilt beim Auslöser „Sonnenaufgang oder Sonnenuntergang“. In Minuten; eine negative Zahl bedeutet früher. Leer lassen, um die Einstellung von {schedule_holiday_evening_offset_minutes_source} zu übernehmen (derzeit {schedule_holiday_evening_offset_minutes_inherited}).",
+                "schedule_holiday_evening_elevation": "Gilt beim Auslöser „Höhe der Sonne“. In Grad über dem Horizont; eine negative Zahl bedeutet darunter. Leer lassen, um die Einstellung von {schedule_holiday_evening_elevation_source} zu übernehmen (derzeit {schedule_holiday_evening_elevation_inherited}).",
+                "schedule_holiday_evening_not_before": "Die früheste Zeit für einen Auslöser, der der Sonne folgt. An einem Tag, an dem die Sonne keine Zeit ergibt, etwa weil sie die gewählte Höhe nie erreicht, gilt stattdessen diese Zeit oder „nicht nach“. Leer lassen, um die Einstellung von {schedule_holiday_evening_not_before_source} zu übernehmen (derzeit {schedule_holiday_evening_not_before_inherited}).",
+                "schedule_holiday_evening_not_after": "Die späteste Zeit für einen Auslöser, der der Sonne folgt. Leer lassen, um die Einstellung von {schedule_holiday_evening_not_after_source} zu übernehmen (derzeit {schedule_holiday_evening_not_after_inherited})."
               }
             }
           }
         },
         "feature_movement_general": {
           "title": "Bewegung",
-          "description": "Wie die Integration die Motoren schont: Sie lässt Bewegungen aus, die sich nicht lohnen, wartet zwischen zwei Komfortbewegungen und startet bei einer gemeinsamen Bewegung nicht alle Motoren im selben Augenblick. Die Mindeständerung und der Mindestabstand halten Schutzbewegungen nie zurück, und einen Feueralarm hält keine dieser Einstellungen zurück.",
+          "description": "So schonen die Rollläden ihre Motoren: Kleine Komfortbewegungen fallen weg, zwischen zwei Komfortbewegungen vergeht eine Weile, und wenn viele Rollläden gemeinsam fahren, starten ihre Motoren nacheinander. Komfortbewegungen sind zum Beispiel die des Tagesablaufs.",
           "data": {
             "motor_min_change": "Mindeständerung",
             "motor_min_interval": "Mindestabstand",
             "stagger_gap": "Abstand zwischen Motoren"
           },
           "data_description": {
-            "motor_min_change": "Eine Komfortbewegung, die kleiner ist, wird ausgelassen. 0 schaltet das ab. Ganz auf oder ganz zu fährt ein Rollladen trotzdem, auch wenn der Rest klein ist. Beurteilen lässt sich das nur bei Rollläden, die ihre Position melden; ein Rollladen, der keine meldet, wird immer bewegt. Leer lassen, um zu erben. Geerbt wird derzeit: {motor_min_change_inherited} (von {motor_min_change_source}).",
-            "motor_min_interval": "Die kürzeste Zeit zwischen zwei Komfortbewegungen des Fensters, gegen Hin und Her, während die Beschattung der Sonne folgt. 0 schaltet das ab. Etwas Neues, etwa der Morgen oder der Abend, eingeschalteter Schlafmodus oder der Beginn der Beschattung, bewegt trotzdem sofort. Leer lassen, um zu erben. Geerbt wird derzeit: {motor_min_interval_inherited} (von {motor_min_interval_source}).",
-            "stagger_gap": "Wenn viele Rollläden zugleich fahren, starten ihre Motoren nacheinander. Dieser Abstand in Sekunden wird nach jedem Motor dieses Fensters freigehalten: Der nächste Motor, dieses oder eines anderen Fensters, startet, wenn er vergangen ist. Der Wert 0 schaltet die Staffelung für dieses Fenster ab; seine Rollläden starten gemeinsam, wenn es an der Reihe ist. Ein Feueralarm wird nie gestaffelt. Der Abstand zwischen den Rollläden eines Fensters zählt nur bei einem Fenster mit mehreren Rollläden. Leer lassen, um zu erben. Geerbt wird derzeit: {stagger_gap_inherited} (von {stagger_gap_source})."
+            "motor_min_change": "Eine Komfortbewegung, die kleiner ist als dieser Wert, fällt weg. 0 schaltet das aus. Ganz auf oder ganz zu fährt ein Rollladen trotzdem, wie klein der restliche Weg auch ist. Das funktioniert nur bei Rollläden, die ihre Position melden; ein Rollladen ohne Positionsmeldung wird immer bewegt. Leer lassen, um die Einstellung von {motor_min_change_source} zu übernehmen (derzeit {motor_min_change_inherited}).",
+            "motor_min_interval": "Die kürzeste Zeit zwischen zwei Komfortbewegungen des Fensters, damit ein Rollladen nicht ständig hin und her fährt. 0 schaltet das aus. Etwas Neues, etwa der Beginn des Morgens oder des Abends, bewegt den Rollladen trotzdem sofort. Leer lassen, um die Einstellung von {motor_min_interval_source} zu übernehmen (derzeit {motor_min_interval_inherited}).",
+            "stagger_gap": "Wenn viele Rollläden gleichzeitig fahren, starten ihre Motoren nacheinander. Nach jedem Motor dieses Fensters wartet der nächste Motor, dieses oder eines anderen Fensters, so viele Sekunden. 0 schaltet das für dieses Fenster aus: Seine Rollläden starten gemeinsam, wenn es an der Reihe ist. Zwischen den Rollläden eines Fensters zählt der Abstand nur, wenn das Fenster mehrere hat. Leer lassen, um die Einstellung von {stagger_gap_source} zu übernehmen (derzeit {stagger_gap_inherited})."
           },
           "sections": {
             "expert": {
-              "name": "Expertenwerte",
-              "description": "Es gelten sinnvolle Voreinstellungen. Ändere sie nur, wenn du weißt, warum.",
+              "name": "Erweiterte Einstellungen",
+              "description": "Die Voreinstellungen passen für die meisten Häuser. Ändere sie nur, wenn du einen Grund dafür hast.",
               "data": {
                 "reevaluate_after": "Spätestens erneut prüfen nach"
               },
               "data_description": {
-                "reevaluate_after": "Wartet eine Bewegung auf etwas, dessen Ende niemand kennt, zum Beispiel darauf, dass ein Rollladen wieder erreichbar ist, wird das Fenster spätestens nach dieser Zeit erneut geprüft. Leer lassen, um zu erben. Geerbt wird derzeit: {reevaluate_after_inherited} (von {reevaluate_after_source})."
+                "reevaluate_after": "Muss eine Bewegung auf etwas warten, dessen Ende sich nicht absehen lässt, zum Beispiel darauf, dass ein Rollladen wieder verfügbar ist, wird das Fenster spätestens nach dieser Zeit erneut geprüft. Leer lassen, um die Einstellung von {reevaluate_after_source} zu übernehmen (derzeit {reevaluate_after_inherited})."
               }
             }
           }
@@ -729,42 +729,42 @@
       },
       "error": {
         "name_blank": "Gib einen Namen ein.",
-        "group_removed": "Die gewählte Gruppe gibt es nicht mehr; sie wurde entfernt, während dieses Formular geöffnet war. Wähle eine andere Gruppe, oder speichere ohne Gruppe, dann erbt das Fenster vom Haus.",
-        "no_covers": "Die Auswahl enthält keinen Rollladen.",
-        "cover_in_use": "{cover} gehört bereits zum Fenster „{window}“. Ein Rollladen kann nur zu einem Fenster gehören.",
-        "invalid_value": "Dieser Wert kann nicht verwendet werden.",
+        "group_removed": "Die gewählte Gruppe wurde gelöscht, während dieses Formular offen war. Wähle eine andere Gruppe, oder speichere ohne Gruppe; dann übernimmt das Fenster die Einstellungen des Hauses.",
+        "no_covers": "Deine Auswahl enthält keine Abdeckung.",
+        "cover_in_use": "{cover} gehört bereits zum Fenster „{window}“. Eine Abdeckung kann nur zu einem Fenster gehören.",
+        "invalid_value": "Dieser Wert ist hier nicht möglich.",
         "fraction_not_allowed": "Gib eine ganze Zahl ein.",
         "invalid_day_of_year": "Gib den Tag als Monat und Tag mit je zwei Ziffern ein, zum Beispiel 05-01.",
         "leap_day_not_allowed": "Den 29. Februar gibt es nicht in jedem Jahr. Wähle den 28. Februar oder den 1. März.",
-        "reference_missing": "Wähle eine Entität, oder wähle oben „Keine“ oder „Erben“.",
-        "invalid_combination": "Diese Werte passen nicht zusammen: {combination}. Jeder für sich wäre in Ordnung."
+        "reference_missing": "Wähle eine Entität, oder wähle oben „Keine“ oder „Vom Haus oder von der Gruppe übernehmen“.",
+        "invalid_combination": "Diese Einstellungen widersprechen sich: {combination}. Jede für sich wäre in Ordnung."
       },
       "abort": {
         "reconfigure_successful": "Das Fenster wurde gespeichert.",
-        "subentry_removed": "Das Fenster wurde entfernt, während dieses Formular geöffnet war. Es wurde nichts gespeichert."
+        "subentry_removed": "Das Fenster wurde gelöscht, während dieses Formular offen war. Es wurde nichts gespeichert."
       }
     }
   },
   "selector": {
     "inherited_switch": {
       "options": {
-        "inherit_on": "Erben (derzeit: ein)",
-        "inherit_off": "Erben (derzeit: aus)",
+        "inherit_on": "Vom Haus oder von der Gruppe übernehmen (derzeit ein)",
+        "inherit_off": "Vom Haus oder von der Gruppe übernehmen (derzeit aus)",
         "on": "Ein",
         "off": "Aus"
       }
     },
     "reference_choice": {
       "options": {
-        "inherit_none": "Erben (derzeit: keine)",
-        "inherit_reference": "Erben (derzeit: die unten genannte Entität)",
+        "inherit_none": "Vom Haus oder von der Gruppe übernehmen (derzeit keine)",
+        "inherit_reference": "Vom Haus oder von der Gruppe übernehmen (derzeit die unten genannte Entität)",
         "none": "Keine",
         "own": "Eigene Auswahl"
       }
     },
     "schedule_trigger_kind": {
       "options": {
-        "inherit": "Erben",
+        "inherit": "Vom Haus oder von der Gruppe übernehmen",
         "fixed_time": "Feste Uhrzeit",
         "sun_event": "Sonnenaufgang oder Sonnenuntergang",
         "elevation": "Höhe der Sonne"
@@ -774,115 +774,115 @@
   "issues": {
     "window_covers_unreadable": {
       "title": "Fenster „{window}“ ist nicht eingerichtet",
-      "description": "Die gespeicherten Rollläden des Fensters „{window}“ können nicht gelesen werden. Das Fenster ist deshalb nicht eingerichtet, und nichts wirkt auf es. Alle anderen Fenster laufen wie gewohnt. Zum Beheben: Öffne das Fenster, wähle seine Rollläden neu und speichere es, oder entferne das Fenster."
+      "description": "Die gespeicherten Abdeckungen des Fensters „{window}“ lassen sich nicht lesen. Roller Shutter Suite kümmert sich deshalb überhaupt nicht um dieses Fenster. Alle anderen Fenster arbeiten wie gewohnt. Zum Beheben öffne das Fenster, wähle seine Abdeckungen neu und speichere es, oder lösche das Fenster."
     },
     "group_missing": {
       "title": "Die Gruppe von Fenster „{window}“ gibt es nicht mehr",
-      "description": "Das Fenster „{window}“ verweist auf eine Gruppe, die entfernt wurde. Es erbt seine Werte vom Haus, bis du das Fenster öffnest und speicherst, mit einer anderen Gruppe oder ohne."
+      "description": "Das Fenster „{window}“ gehörte zu einer Gruppe, die gelöscht wurde. Bis du das Fenster öffnest und speicherst, mit einer anderen Gruppe oder ohne, übernimmt es die Einstellungen des Hauses."
     },
     "group_reference_unreadable": {
-      "title": "Die Gruppe von Fenster „{window}“ kann nicht gelesen werden",
-      "description": "Der gespeicherte Verweis des Fensters „{window}“ auf seine Gruppe kann nicht gelesen werden. Der Schutz läuft mit den Werten des Hauses weiter. Die Komfortfunktionen dieses Fensters pausieren, weil nicht bekannt ist, welche Werte die Gruppe gesetzt hätte. Zum Beheben: Öffne das Fenster, wähle seine Gruppe neu und speichere es."
+      "title": "Die Gruppe von Fenster „{window}“ lässt sich nicht lesen",
+      "description": "Die gespeicherte Gruppe des Fensters „{window}“ lässt sich nicht lesen. Einstellungen, die Menschen oder Technik schützen oder Bewegungen begrenzen, verwenden stattdessen die Einstellungen des Hauses. Die Komfortbewegungen dieses Fensters sind ausgesetzt, weil nicht bekannt ist, was die Gruppe eingestellt hätte. Zum Beheben öffne das Fenster, wähle seine Gruppe neu und speichere es."
     },
     "dry_run_unreadable": {
-      "title": "Der Probelauf von Fenster „{window}“ kann nicht gelesen werden",
-      "description": "Der gespeicherte Probelauf-Zustand des Fensters „{window}“ kann nicht gelesen werden. Das Fenster wird behandelt, als wäre es im Probelauf, es bewegt sich also nicht. Zum Beheben: Öffne das Fenster und speichere es."
+      "title": "Probelauf von Fenster „{window}“ lässt sich nicht lesen",
+      "description": "Aus den gespeicherten Einstellungen geht nicht hervor, ob das Fenster „{window}“ im Probelauf ist. Es wird behandelt, als wäre es im Probelauf, und bewegt sich also nicht. Zum Beheben öffne das Fenster und speichere es."
     },
     "option_unavailable": {
       "title": "Fenster „{window}“ kann die Einstellung „{key}“ nicht nutzen",
-      "description": "Das Fenster „{window}“ setzt „{key}“ selbst, aber diese Rollläden können nicht, was die Einstellung braucht: {covers}. Der Wert bleibt gespeichert und gilt wieder, sobald die Rollläden es können."
+      "description": "Das Fenster „{window}“ überschreibt die Einstellung „{key}“, aber diese Rollläden unterstützen das nicht: {covers}. Die Einstellung bleibt gespeichert und wirkt wieder, sobald die Rollläden es unterstützen."
     },
     "setting_combination": {
-      "title": "Gespeicherte Einstellungen passen nicht zusammen",
-      "description": "Jeder dieser gespeicherten Werte ist für sich in Ordnung, zusammen sind sie aber nicht zulässig: {settings}. Der Name in Klammern sagt, wo der jeweilige Wert gespeichert ist. Komfortfunktionen, die davon abhängen, pausieren für die betroffenen Fenster; der Schutz läuft weiter. Zum Beheben: Ändere einen der Werte und speichere."
+      "title": "Gespeicherte Einstellungen widersprechen sich",
+      "description": "Jede dieser gespeicherten Einstellungen ist für sich in Ordnung, zusammen sind sie aber nicht zulässig: {settings}. Der Name in Klammern sagt, wo die jeweilige Einstellung gespeichert ist. Komfortbewegungen, die davon abhängen, sind für die betroffenen Fenster ausgesetzt; Einstellungen, die Menschen oder Technik schützen oder Bewegungen begrenzen, wirken weiter. Zum Beheben ändere eine der Einstellungen und speichere."
     },
     "rule_without_keys": {
-      "title": "Gespeicherte Einstellungen wurden ohne benennbaren Grund abgelehnt",
-      "description": "Die Einstellungen mindestens eines Fensters wurden als Ganzes abgelehnt, und die Integration konnte nicht sagen, welche Werte betroffen sind. Das ist ein Fehler in der Integration, nicht in deinen Daten. Der Schutz läuft weiter; Komfortfunktionen pausieren. Bitte melde es dem Autor der Integration."
+      "title": "Gespeicherte Einstellungen wurden aus unbekanntem Grund abgelehnt",
+      "description": "Die Einstellungen mindestens eines Fensters wurden als Ganzes abgelehnt, und Roller Shutter Suite konnte nicht sagen, welche Einstellungen der Grund sind. Das ist ein Fehler in der Integration, nicht in deinen Einstellungen. Einstellungen, die Menschen oder Technik schützen oder Bewegungen begrenzen, wirken weiter; Komfortbewegungen sind ausgesetzt. Bitte melde das dem Autor der Integration."
     },
     "setting_fault_global_unreadable": {
-      "title": "Eine gespeicherte Einstellung ist nicht verwendbar: Haus",
-      "description": "Der gespeicherte Wert der Einstellung „{key}“ kann nicht gelesen werden. Funktionen, die Menschen oder Technik schützen oder Bewegungen einschränken, laufen weiter. Sie verwenden den Wert der nächsten Ebene; wo keine Ebene einen setzt, verwenden sie einen vorsichtigen Wert, der Bewegungen bis zur Reparatur stärker einschränken kann als gewohnt. Komfortfunktionen, die von einem fehlerhaften Wert abhängen, pausieren für die betroffenen Fenster, damit sich kein Rollladen unerwartet bewegt. Zum Beheben: Öffne die Integration, wähle „Neu konfigurieren“ und speichere die Werte des Hauses."
+      "title": "Eine Einstellung des Hauses kann nicht verwendet werden",
+      "description": "Die gespeicherte Einstellung „{key}“ lässt sich nicht lesen. Bis zur Reparatur wirken Einstellungen, die Menschen oder Technik schützen oder Bewegungen begrenzen, weiter: Sie verwenden stattdessen dieselbe Einstellung der Gruppe oder des Hauses, und wo keine gesetzt ist, eine vorsichtige Vorgabe, die Bewegungen stärker zurückhalten kann als gewohnt. Komfortbewegungen, die von dieser Einstellung abhängen, etwa die des Tagesablaufs, sind für die betroffenen Fenster ausgesetzt, damit sich kein Rollladen unerwartet bewegt. Zum Beheben öffne Roller Shutter Suite, wähle „Neu konfigurieren“ und speichere die Einstellungen des Hauses."
     },
     "setting_fault_global_none_not_allowed": {
-      "title": "Eine gespeicherte Einstellung ist nicht verwendbar: Haus",
-      "description": "Die Einstellung „{key}“ ist als „keine“ gespeichert, braucht aber immer einen Wert. Funktionen, die Menschen oder Technik schützen oder Bewegungen einschränken, laufen weiter. Sie verwenden den Wert der nächsten Ebene; wo keine Ebene einen setzt, verwenden sie einen vorsichtigen Wert, der Bewegungen bis zur Reparatur stärker einschränken kann als gewohnt. Komfortfunktionen, die von einem fehlerhaften Wert abhängen, pausieren für die betroffenen Fenster, damit sich kein Rollladen unerwartet bewegt. Zum Beheben: Öffne die Integration, wähle „Neu konfigurieren“ und speichere die Werte des Hauses."
+      "title": "Eine Einstellung des Hauses kann nicht verwendet werden",
+      "description": "Die Einstellung „{key}“ ist als „Keine“ gespeichert, braucht aber immer einen Wert. Bis zur Reparatur wirken Einstellungen, die Menschen oder Technik schützen oder Bewegungen begrenzen, weiter: Sie verwenden stattdessen dieselbe Einstellung der Gruppe oder des Hauses, und wo keine gesetzt ist, eine vorsichtige Vorgabe, die Bewegungen stärker zurückhalten kann als gewohnt. Komfortbewegungen, die von dieser Einstellung abhängen, etwa die des Tagesablaufs, sind für die betroffenen Fenster ausgesetzt, damit sich kein Rollladen unerwartet bewegt. Zum Beheben öffne Roller Shutter Suite, wähle „Neu konfigurieren“ und speichere die Einstellungen des Hauses."
     },
     "setting_fault_global_invalid": {
-      "title": "Eine gespeicherte Einstellung ist nicht verwendbar: Haus",
-      "description": "Der gespeicherte Wert der Einstellung „{key}“ wurde gelesen, ist aber kein zulässiger Wert. Funktionen, die Menschen oder Technik schützen oder Bewegungen einschränken, laufen weiter. Sie verwenden den Wert der nächsten Ebene; wo keine Ebene einen setzt, verwenden sie einen vorsichtigen Wert, der Bewegungen bis zur Reparatur stärker einschränken kann als gewohnt. Komfortfunktionen, die von einem fehlerhaften Wert abhängen, pausieren für die betroffenen Fenster, damit sich kein Rollladen unerwartet bewegt. Zum Beheben: Öffne die Integration, wähle „Neu konfigurieren“ und speichere die Werte des Hauses."
+      "title": "Eine Einstellung des Hauses kann nicht verwendet werden",
+      "description": "Die gespeicherte Einstellung „{key}“ lässt sich lesen, ist so aber nicht zulässig. Bis zur Reparatur wirken Einstellungen, die Menschen oder Technik schützen oder Bewegungen begrenzen, weiter: Sie verwenden stattdessen dieselbe Einstellung der Gruppe oder des Hauses, und wo keine gesetzt ist, eine vorsichtige Vorgabe, die Bewegungen stärker zurückhalten kann als gewohnt. Komfortbewegungen, die von dieser Einstellung abhängen, etwa die des Tagesablaufs, sind für die betroffenen Fenster ausgesetzt, damit sich kein Rollladen unerwartet bewegt. Zum Beheben öffne Roller Shutter Suite, wähle „Neu konfigurieren“ und speichere die Einstellungen des Hauses."
     },
     "setting_fault_global_not_inheritable": {
-      "title": "Eine gespeicherte Einstellung ist nicht verwendbar: Haus",
-      "description": "Die Einstellung „{key}“ kann nur ein Fenster setzen, ist aber hier gespeichert. Sie hat keine Wirkung. Funktionen, die Menschen oder Technik schützen oder Bewegungen einschränken, laufen weiter. Sie verwenden den Wert der nächsten Ebene; wo keine Ebene einen setzt, verwenden sie einen vorsichtigen Wert, der Bewegungen bis zur Reparatur stärker einschränken kann als gewohnt. Komfortfunktionen, die von einem fehlerhaften Wert abhängen, pausieren für die betroffenen Fenster, damit sich kein Rollladen unerwartet bewegt. Zum Beheben: Öffne die Integration, wähle „Neu konfigurieren“ und speichere die Werte des Hauses."
+      "title": "Eine Einstellung des Hauses kann nicht verwendet werden",
+      "description": "Die Einstellung „{key}“ kann nur für ein einzelnes Fenster getroffen werden, ist aber hier gespeichert. Hier hat sie keine Wirkung. Bis zur Reparatur wirken Einstellungen, die Menschen oder Technik schützen oder Bewegungen begrenzen, weiter: Sie verwenden stattdessen dieselbe Einstellung der Gruppe oder des Hauses, und wo keine gesetzt ist, eine vorsichtige Vorgabe, die Bewegungen stärker zurückhalten kann als gewohnt. Komfortbewegungen, die von dieser Einstellung abhängen, etwa die des Tagesablaufs, sind für die betroffenen Fenster ausgesetzt, damit sich kein Rollladen unerwartet bewegt. Zum Beheben öffne Roller Shutter Suite, wähle „Neu konfigurieren“ und speichere die Einstellungen des Hauses."
     },
     "setting_fault_global_unknown_setting": {
-      "title": "Eine gespeicherte Einstellung ist nicht verwendbar: Haus",
-      "description": "Die gespeicherte Einstellung „{key}“ kennt diese Version der Integration nicht. Sie wird ignoriert. Möglicherweise hat eine neuere Version sie geschrieben. Funktionen, die Menschen oder Technik schützen oder Bewegungen einschränken, laufen weiter. Sie verwenden den Wert der nächsten Ebene; wo keine Ebene einen setzt, verwenden sie einen vorsichtigen Wert, der Bewegungen bis zur Reparatur stärker einschränken kann als gewohnt. Komfortfunktionen, die von einem fehlerhaften Wert abhängen, pausieren für die betroffenen Fenster, damit sich kein Rollladen unerwartet bewegt. Zum Beheben: Öffne die Integration, wähle „Neu konfigurieren“ und speichere die Werte des Hauses."
+      "title": "Eine Einstellung des Hauses kann nicht verwendet werden",
+      "description": "Diese Version von Roller Shutter Suite kennt die gespeicherte Einstellung „{key}“ nicht; vielleicht hat eine neuere Version sie gespeichert. Sie wird nicht beachtet. Bis zur Reparatur wirken Einstellungen, die Menschen oder Technik schützen oder Bewegungen begrenzen, weiter: Sie verwenden stattdessen dieselbe Einstellung der Gruppe oder des Hauses, und wo keine gesetzt ist, eine vorsichtige Vorgabe, die Bewegungen stärker zurückhalten kann als gewohnt. Komfortbewegungen, die von dieser Einstellung abhängen, etwa die des Tagesablaufs, sind für die betroffenen Fenster ausgesetzt, damit sich kein Rollladen unerwartet bewegt. Zum Beheben öffne Roller Shutter Suite, wähle „Neu konfigurieren“ und speichere die Einstellungen des Hauses."
     },
     "setting_fault_global_level_unreadable": {
-      "title": "Eine gespeicherte Einstellung ist nicht verwendbar: Haus",
-      "description": "Die gespeicherten Einstellungen können insgesamt nicht gelesen werden. Funktionen, die Menschen oder Technik schützen oder Bewegungen einschränken, laufen weiter. Sie verwenden den Wert der nächsten Ebene; wo keine Ebene einen setzt, verwenden sie einen vorsichtigen Wert, der Bewegungen bis zur Reparatur stärker einschränken kann als gewohnt. Komfortfunktionen, die von einem fehlerhaften Wert abhängen, pausieren für die betroffenen Fenster, damit sich kein Rollladen unerwartet bewegt. Zum Beheben: Öffne die Integration, wähle „Neu konfigurieren“ und speichere die Werte des Hauses."
+      "title": "Eine Einstellung des Hauses kann nicht verwendet werden",
+      "description": "Die gespeicherten Einstellungen lassen sich überhaupt nicht lesen. Bis zur Reparatur wirken Einstellungen, die Menschen oder Technik schützen oder Bewegungen begrenzen, weiter: Sie verwenden stattdessen dieselbe Einstellung der Gruppe oder des Hauses, und wo keine gesetzt ist, eine vorsichtige Vorgabe, die Bewegungen stärker zurückhalten kann als gewohnt. Komfortbewegungen, die von dieser Einstellung abhängen, etwa die des Tagesablaufs, sind für die betroffenen Fenster ausgesetzt, damit sich kein Rollladen unerwartet bewegt. Zum Beheben öffne Roller Shutter Suite, wähle „Neu konfigurieren“ und speichere die Einstellungen des Hauses."
     },
     "setting_fault_global_other": {
-      "title": "Eine gespeicherte Einstellung ist nicht verwendbar: Haus",
-      "description": "Mit der gespeicherten Einstellung „{key}“ stimmt etwas nicht, das diese Version der Integration nicht genauer beschreiben kann. Funktionen, die Menschen oder Technik schützen oder Bewegungen einschränken, laufen weiter. Sie verwenden den Wert der nächsten Ebene; wo keine Ebene einen setzt, verwenden sie einen vorsichtigen Wert, der Bewegungen bis zur Reparatur stärker einschränken kann als gewohnt. Komfortfunktionen, die von einem fehlerhaften Wert abhängen, pausieren für die betroffenen Fenster, damit sich kein Rollladen unerwartet bewegt. Zum Beheben: Öffne die Integration, wähle „Neu konfigurieren“ und speichere die Werte des Hauses."
+      "title": "Eine Einstellung des Hauses kann nicht verwendet werden",
+      "description": "Mit der gespeicherten Einstellung „{key}“ stimmt etwas nicht, und diese Version von Roller Shutter Suite kann nicht genauer sagen, was. Bis zur Reparatur wirken Einstellungen, die Menschen oder Technik schützen oder Bewegungen begrenzen, weiter: Sie verwenden stattdessen dieselbe Einstellung der Gruppe oder des Hauses, und wo keine gesetzt ist, eine vorsichtige Vorgabe, die Bewegungen stärker zurückhalten kann als gewohnt. Komfortbewegungen, die von dieser Einstellung abhängen, etwa die des Tagesablaufs, sind für die betroffenen Fenster ausgesetzt, damit sich kein Rollladen unerwartet bewegt. Zum Beheben öffne Roller Shutter Suite, wähle „Neu konfigurieren“ und speichere die Einstellungen des Hauses."
     },
     "setting_fault_group_unreadable": {
-      "title": "Eine gespeicherte Einstellung ist nicht verwendbar: Gruppe „{name}“",
-      "description": "Der gespeicherte Wert der Einstellung „{key}“ kann nicht gelesen werden. Funktionen, die Menschen oder Technik schützen oder Bewegungen einschränken, laufen weiter. Sie verwenden den Wert der nächsten Ebene; wo keine Ebene einen setzt, verwenden sie einen vorsichtigen Wert, der Bewegungen bis zur Reparatur stärker einschränken kann als gewohnt. Komfortfunktionen, die von einem fehlerhaften Wert abhängen, pausieren für die betroffenen Fenster, damit sich kein Rollladen unerwartet bewegt. Zum Beheben: Öffne die Gruppe, prüfe ihre Werte und speichere sie, oder entferne die Gruppe."
+      "title": "Eine Einstellung der Gruppe „{name}“ kann nicht verwendet werden",
+      "description": "Die gespeicherte Einstellung „{key}“ lässt sich nicht lesen. Bis zur Reparatur wirken Einstellungen, die Menschen oder Technik schützen oder Bewegungen begrenzen, weiter: Sie verwenden stattdessen dieselbe Einstellung der Gruppe oder des Hauses, und wo keine gesetzt ist, eine vorsichtige Vorgabe, die Bewegungen stärker zurückhalten kann als gewohnt. Komfortbewegungen, die von dieser Einstellung abhängen, etwa die des Tagesablaufs, sind für die betroffenen Fenster ausgesetzt, damit sich kein Rollladen unerwartet bewegt. Zum Beheben öffne die Gruppe, prüfe ihre Einstellungen und speichere sie, oder lösche die Gruppe."
     },
     "setting_fault_group_none_not_allowed": {
-      "title": "Eine gespeicherte Einstellung ist nicht verwendbar: Gruppe „{name}“",
-      "description": "Die Einstellung „{key}“ ist als „keine“ gespeichert, braucht aber immer einen Wert. Funktionen, die Menschen oder Technik schützen oder Bewegungen einschränken, laufen weiter. Sie verwenden den Wert der nächsten Ebene; wo keine Ebene einen setzt, verwenden sie einen vorsichtigen Wert, der Bewegungen bis zur Reparatur stärker einschränken kann als gewohnt. Komfortfunktionen, die von einem fehlerhaften Wert abhängen, pausieren für die betroffenen Fenster, damit sich kein Rollladen unerwartet bewegt. Zum Beheben: Öffne die Gruppe, prüfe ihre Werte und speichere sie, oder entferne die Gruppe."
+      "title": "Eine Einstellung der Gruppe „{name}“ kann nicht verwendet werden",
+      "description": "Die Einstellung „{key}“ ist als „Keine“ gespeichert, braucht aber immer einen Wert. Bis zur Reparatur wirken Einstellungen, die Menschen oder Technik schützen oder Bewegungen begrenzen, weiter: Sie verwenden stattdessen dieselbe Einstellung der Gruppe oder des Hauses, und wo keine gesetzt ist, eine vorsichtige Vorgabe, die Bewegungen stärker zurückhalten kann als gewohnt. Komfortbewegungen, die von dieser Einstellung abhängen, etwa die des Tagesablaufs, sind für die betroffenen Fenster ausgesetzt, damit sich kein Rollladen unerwartet bewegt. Zum Beheben öffne die Gruppe, prüfe ihre Einstellungen und speichere sie, oder lösche die Gruppe."
     },
     "setting_fault_group_invalid": {
-      "title": "Eine gespeicherte Einstellung ist nicht verwendbar: Gruppe „{name}“",
-      "description": "Der gespeicherte Wert der Einstellung „{key}“ wurde gelesen, ist aber kein zulässiger Wert. Funktionen, die Menschen oder Technik schützen oder Bewegungen einschränken, laufen weiter. Sie verwenden den Wert der nächsten Ebene; wo keine Ebene einen setzt, verwenden sie einen vorsichtigen Wert, der Bewegungen bis zur Reparatur stärker einschränken kann als gewohnt. Komfortfunktionen, die von einem fehlerhaften Wert abhängen, pausieren für die betroffenen Fenster, damit sich kein Rollladen unerwartet bewegt. Zum Beheben: Öffne die Gruppe, prüfe ihre Werte und speichere sie, oder entferne die Gruppe."
+      "title": "Eine Einstellung der Gruppe „{name}“ kann nicht verwendet werden",
+      "description": "Die gespeicherte Einstellung „{key}“ lässt sich lesen, ist so aber nicht zulässig. Bis zur Reparatur wirken Einstellungen, die Menschen oder Technik schützen oder Bewegungen begrenzen, weiter: Sie verwenden stattdessen dieselbe Einstellung der Gruppe oder des Hauses, und wo keine gesetzt ist, eine vorsichtige Vorgabe, die Bewegungen stärker zurückhalten kann als gewohnt. Komfortbewegungen, die von dieser Einstellung abhängen, etwa die des Tagesablaufs, sind für die betroffenen Fenster ausgesetzt, damit sich kein Rollladen unerwartet bewegt. Zum Beheben öffne die Gruppe, prüfe ihre Einstellungen und speichere sie, oder lösche die Gruppe."
     },
     "setting_fault_group_not_inheritable": {
-      "title": "Eine gespeicherte Einstellung ist nicht verwendbar: Gruppe „{name}“",
-      "description": "Die Einstellung „{key}“ kann nur ein Fenster setzen, ist aber hier gespeichert. Sie hat keine Wirkung. Funktionen, die Menschen oder Technik schützen oder Bewegungen einschränken, laufen weiter. Sie verwenden den Wert der nächsten Ebene; wo keine Ebene einen setzt, verwenden sie einen vorsichtigen Wert, der Bewegungen bis zur Reparatur stärker einschränken kann als gewohnt. Komfortfunktionen, die von einem fehlerhaften Wert abhängen, pausieren für die betroffenen Fenster, damit sich kein Rollladen unerwartet bewegt. Zum Beheben: Öffne die Gruppe, prüfe ihre Werte und speichere sie, oder entferne die Gruppe."
+      "title": "Eine Einstellung der Gruppe „{name}“ kann nicht verwendet werden",
+      "description": "Die Einstellung „{key}“ kann nur für ein einzelnes Fenster getroffen werden, ist aber hier gespeichert. Hier hat sie keine Wirkung. Bis zur Reparatur wirken Einstellungen, die Menschen oder Technik schützen oder Bewegungen begrenzen, weiter: Sie verwenden stattdessen dieselbe Einstellung der Gruppe oder des Hauses, und wo keine gesetzt ist, eine vorsichtige Vorgabe, die Bewegungen stärker zurückhalten kann als gewohnt. Komfortbewegungen, die von dieser Einstellung abhängen, etwa die des Tagesablaufs, sind für die betroffenen Fenster ausgesetzt, damit sich kein Rollladen unerwartet bewegt. Zum Beheben öffne die Gruppe, prüfe ihre Einstellungen und speichere sie, oder lösche die Gruppe."
     },
     "setting_fault_group_unknown_setting": {
-      "title": "Eine gespeicherte Einstellung ist nicht verwendbar: Gruppe „{name}“",
-      "description": "Die gespeicherte Einstellung „{key}“ kennt diese Version der Integration nicht. Sie wird ignoriert. Möglicherweise hat eine neuere Version sie geschrieben. Funktionen, die Menschen oder Technik schützen oder Bewegungen einschränken, laufen weiter. Sie verwenden den Wert der nächsten Ebene; wo keine Ebene einen setzt, verwenden sie einen vorsichtigen Wert, der Bewegungen bis zur Reparatur stärker einschränken kann als gewohnt. Komfortfunktionen, die von einem fehlerhaften Wert abhängen, pausieren für die betroffenen Fenster, damit sich kein Rollladen unerwartet bewegt. Zum Beheben: Öffne die Gruppe, prüfe ihre Werte und speichere sie, oder entferne die Gruppe."
+      "title": "Eine Einstellung der Gruppe „{name}“ kann nicht verwendet werden",
+      "description": "Diese Version von Roller Shutter Suite kennt die gespeicherte Einstellung „{key}“ nicht; vielleicht hat eine neuere Version sie gespeichert. Sie wird nicht beachtet. Bis zur Reparatur wirken Einstellungen, die Menschen oder Technik schützen oder Bewegungen begrenzen, weiter: Sie verwenden stattdessen dieselbe Einstellung der Gruppe oder des Hauses, und wo keine gesetzt ist, eine vorsichtige Vorgabe, die Bewegungen stärker zurückhalten kann als gewohnt. Komfortbewegungen, die von dieser Einstellung abhängen, etwa die des Tagesablaufs, sind für die betroffenen Fenster ausgesetzt, damit sich kein Rollladen unerwartet bewegt. Zum Beheben öffne die Gruppe, prüfe ihre Einstellungen und speichere sie, oder lösche die Gruppe."
     },
     "setting_fault_group_level_unreadable": {
-      "title": "Eine gespeicherte Einstellung ist nicht verwendbar: Gruppe „{name}“",
-      "description": "Die gespeicherten Einstellungen können insgesamt nicht gelesen werden. Funktionen, die Menschen oder Technik schützen oder Bewegungen einschränken, laufen weiter. Sie verwenden den Wert der nächsten Ebene; wo keine Ebene einen setzt, verwenden sie einen vorsichtigen Wert, der Bewegungen bis zur Reparatur stärker einschränken kann als gewohnt. Komfortfunktionen, die von einem fehlerhaften Wert abhängen, pausieren für die betroffenen Fenster, damit sich kein Rollladen unerwartet bewegt. Zum Beheben: Öffne die Gruppe, prüfe ihre Werte und speichere sie, oder entferne die Gruppe."
+      "title": "Eine Einstellung der Gruppe „{name}“ kann nicht verwendet werden",
+      "description": "Die gespeicherten Einstellungen lassen sich überhaupt nicht lesen. Bis zur Reparatur wirken Einstellungen, die Menschen oder Technik schützen oder Bewegungen begrenzen, weiter: Sie verwenden stattdessen dieselbe Einstellung der Gruppe oder des Hauses, und wo keine gesetzt ist, eine vorsichtige Vorgabe, die Bewegungen stärker zurückhalten kann als gewohnt. Komfortbewegungen, die von dieser Einstellung abhängen, etwa die des Tagesablaufs, sind für die betroffenen Fenster ausgesetzt, damit sich kein Rollladen unerwartet bewegt. Zum Beheben öffne die Gruppe, prüfe ihre Einstellungen und speichere sie, oder lösche die Gruppe."
     },
     "setting_fault_group_other": {
-      "title": "Eine gespeicherte Einstellung ist nicht verwendbar: Gruppe „{name}“",
-      "description": "Mit der gespeicherten Einstellung „{key}“ stimmt etwas nicht, das diese Version der Integration nicht genauer beschreiben kann. Funktionen, die Menschen oder Technik schützen oder Bewegungen einschränken, laufen weiter. Sie verwenden den Wert der nächsten Ebene; wo keine Ebene einen setzt, verwenden sie einen vorsichtigen Wert, der Bewegungen bis zur Reparatur stärker einschränken kann als gewohnt. Komfortfunktionen, die von einem fehlerhaften Wert abhängen, pausieren für die betroffenen Fenster, damit sich kein Rollladen unerwartet bewegt. Zum Beheben: Öffne die Gruppe, prüfe ihre Werte und speichere sie, oder entferne die Gruppe."
+      "title": "Eine Einstellung der Gruppe „{name}“ kann nicht verwendet werden",
+      "description": "Mit der gespeicherten Einstellung „{key}“ stimmt etwas nicht, und diese Version von Roller Shutter Suite kann nicht genauer sagen, was. Bis zur Reparatur wirken Einstellungen, die Menschen oder Technik schützen oder Bewegungen begrenzen, weiter: Sie verwenden stattdessen dieselbe Einstellung der Gruppe oder des Hauses, und wo keine gesetzt ist, eine vorsichtige Vorgabe, die Bewegungen stärker zurückhalten kann als gewohnt. Komfortbewegungen, die von dieser Einstellung abhängen, etwa die des Tagesablaufs, sind für die betroffenen Fenster ausgesetzt, damit sich kein Rollladen unerwartet bewegt. Zum Beheben öffne die Gruppe, prüfe ihre Einstellungen und speichere sie, oder lösche die Gruppe."
     },
     "setting_fault_window_unreadable": {
-      "title": "Eine gespeicherte Einstellung ist nicht verwendbar: Fenster „{name}“",
-      "description": "Der gespeicherte Wert der Einstellung „{key}“ kann nicht gelesen werden. Funktionen, die Menschen oder Technik schützen oder Bewegungen einschränken, laufen weiter. Sie verwenden den Wert der nächsten Ebene; wo keine Ebene einen setzt, verwenden sie einen vorsichtigen Wert, der Bewegungen bis zur Reparatur stärker einschränken kann als gewohnt. Komfortfunktionen, die von einem fehlerhaften Wert abhängen, pausieren für die betroffenen Fenster, damit sich kein Rollladen unerwartet bewegt. Zum Beheben: Öffne das Fenster, prüfe seine Werte und speichere es, oder entferne das Fenster."
+      "title": "Eine Einstellung des Fensters „{name}“ kann nicht verwendet werden",
+      "description": "Die gespeicherte Einstellung „{key}“ lässt sich nicht lesen. Bis zur Reparatur wirken Einstellungen, die Menschen oder Technik schützen oder Bewegungen begrenzen, weiter: Sie verwenden stattdessen dieselbe Einstellung der Gruppe oder des Hauses, und wo keine gesetzt ist, eine vorsichtige Vorgabe, die Bewegungen stärker zurückhalten kann als gewohnt. Komfortbewegungen, die von dieser Einstellung abhängen, etwa die des Tagesablaufs, sind für die betroffenen Fenster ausgesetzt, damit sich kein Rollladen unerwartet bewegt. Zum Beheben öffne das Fenster, prüfe seine Einstellungen und speichere es, oder lösche das Fenster."
     },
     "setting_fault_window_none_not_allowed": {
-      "title": "Eine gespeicherte Einstellung ist nicht verwendbar: Fenster „{name}“",
-      "description": "Die Einstellung „{key}“ ist als „keine“ gespeichert, braucht aber immer einen Wert. Funktionen, die Menschen oder Technik schützen oder Bewegungen einschränken, laufen weiter. Sie verwenden den Wert der nächsten Ebene; wo keine Ebene einen setzt, verwenden sie einen vorsichtigen Wert, der Bewegungen bis zur Reparatur stärker einschränken kann als gewohnt. Komfortfunktionen, die von einem fehlerhaften Wert abhängen, pausieren für die betroffenen Fenster, damit sich kein Rollladen unerwartet bewegt. Zum Beheben: Öffne das Fenster, prüfe seine Werte und speichere es, oder entferne das Fenster."
+      "title": "Eine Einstellung des Fensters „{name}“ kann nicht verwendet werden",
+      "description": "Die Einstellung „{key}“ ist als „Keine“ gespeichert, braucht aber immer einen Wert. Bis zur Reparatur wirken Einstellungen, die Menschen oder Technik schützen oder Bewegungen begrenzen, weiter: Sie verwenden stattdessen dieselbe Einstellung der Gruppe oder des Hauses, und wo keine gesetzt ist, eine vorsichtige Vorgabe, die Bewegungen stärker zurückhalten kann als gewohnt. Komfortbewegungen, die von dieser Einstellung abhängen, etwa die des Tagesablaufs, sind für die betroffenen Fenster ausgesetzt, damit sich kein Rollladen unerwartet bewegt. Zum Beheben öffne das Fenster, prüfe seine Einstellungen und speichere es, oder lösche das Fenster."
     },
     "setting_fault_window_invalid": {
-      "title": "Eine gespeicherte Einstellung ist nicht verwendbar: Fenster „{name}“",
-      "description": "Der gespeicherte Wert der Einstellung „{key}“ wurde gelesen, ist aber kein zulässiger Wert. Funktionen, die Menschen oder Technik schützen oder Bewegungen einschränken, laufen weiter. Sie verwenden den Wert der nächsten Ebene; wo keine Ebene einen setzt, verwenden sie einen vorsichtigen Wert, der Bewegungen bis zur Reparatur stärker einschränken kann als gewohnt. Komfortfunktionen, die von einem fehlerhaften Wert abhängen, pausieren für die betroffenen Fenster, damit sich kein Rollladen unerwartet bewegt. Zum Beheben: Öffne das Fenster, prüfe seine Werte und speichere es, oder entferne das Fenster."
+      "title": "Eine Einstellung des Fensters „{name}“ kann nicht verwendet werden",
+      "description": "Die gespeicherte Einstellung „{key}“ lässt sich lesen, ist so aber nicht zulässig. Bis zur Reparatur wirken Einstellungen, die Menschen oder Technik schützen oder Bewegungen begrenzen, weiter: Sie verwenden stattdessen dieselbe Einstellung der Gruppe oder des Hauses, und wo keine gesetzt ist, eine vorsichtige Vorgabe, die Bewegungen stärker zurückhalten kann als gewohnt. Komfortbewegungen, die von dieser Einstellung abhängen, etwa die des Tagesablaufs, sind für die betroffenen Fenster ausgesetzt, damit sich kein Rollladen unerwartet bewegt. Zum Beheben öffne das Fenster, prüfe seine Einstellungen und speichere es, oder lösche das Fenster."
     },
     "setting_fault_window_not_inheritable": {
-      "title": "Eine gespeicherte Einstellung ist nicht verwendbar: Fenster „{name}“",
-      "description": "Die Einstellung „{key}“ kann nur ein Fenster setzen, ist aber hier gespeichert. Sie hat keine Wirkung. Funktionen, die Menschen oder Technik schützen oder Bewegungen einschränken, laufen weiter. Sie verwenden den Wert der nächsten Ebene; wo keine Ebene einen setzt, verwenden sie einen vorsichtigen Wert, der Bewegungen bis zur Reparatur stärker einschränken kann als gewohnt. Komfortfunktionen, die von einem fehlerhaften Wert abhängen, pausieren für die betroffenen Fenster, damit sich kein Rollladen unerwartet bewegt. Zum Beheben: Öffne das Fenster, prüfe seine Werte und speichere es, oder entferne das Fenster."
+      "title": "Eine Einstellung des Fensters „{name}“ kann nicht verwendet werden",
+      "description": "Die Einstellung „{key}“ kann nur für ein einzelnes Fenster getroffen werden, ist aber hier gespeichert. Hier hat sie keine Wirkung. Bis zur Reparatur wirken Einstellungen, die Menschen oder Technik schützen oder Bewegungen begrenzen, weiter: Sie verwenden stattdessen dieselbe Einstellung der Gruppe oder des Hauses, und wo keine gesetzt ist, eine vorsichtige Vorgabe, die Bewegungen stärker zurückhalten kann als gewohnt. Komfortbewegungen, die von dieser Einstellung abhängen, etwa die des Tagesablaufs, sind für die betroffenen Fenster ausgesetzt, damit sich kein Rollladen unerwartet bewegt. Zum Beheben öffne das Fenster, prüfe seine Einstellungen und speichere es, oder lösche das Fenster."
     },
     "setting_fault_window_unknown_setting": {
-      "title": "Eine gespeicherte Einstellung ist nicht verwendbar: Fenster „{name}“",
-      "description": "Die gespeicherte Einstellung „{key}“ kennt diese Version der Integration nicht. Sie wird ignoriert. Möglicherweise hat eine neuere Version sie geschrieben. Funktionen, die Menschen oder Technik schützen oder Bewegungen einschränken, laufen weiter. Sie verwenden den Wert der nächsten Ebene; wo keine Ebene einen setzt, verwenden sie einen vorsichtigen Wert, der Bewegungen bis zur Reparatur stärker einschränken kann als gewohnt. Komfortfunktionen, die von einem fehlerhaften Wert abhängen, pausieren für die betroffenen Fenster, damit sich kein Rollladen unerwartet bewegt. Zum Beheben: Öffne das Fenster, prüfe seine Werte und speichere es, oder entferne das Fenster."
+      "title": "Eine Einstellung des Fensters „{name}“ kann nicht verwendet werden",
+      "description": "Diese Version von Roller Shutter Suite kennt die gespeicherte Einstellung „{key}“ nicht; vielleicht hat eine neuere Version sie gespeichert. Sie wird nicht beachtet. Bis zur Reparatur wirken Einstellungen, die Menschen oder Technik schützen oder Bewegungen begrenzen, weiter: Sie verwenden stattdessen dieselbe Einstellung der Gruppe oder des Hauses, und wo keine gesetzt ist, eine vorsichtige Vorgabe, die Bewegungen stärker zurückhalten kann als gewohnt. Komfortbewegungen, die von dieser Einstellung abhängen, etwa die des Tagesablaufs, sind für die betroffenen Fenster ausgesetzt, damit sich kein Rollladen unerwartet bewegt. Zum Beheben öffne das Fenster, prüfe seine Einstellungen und speichere es, oder lösche das Fenster."
     },
     "setting_fault_window_level_unreadable": {
-      "title": "Eine gespeicherte Einstellung ist nicht verwendbar: Fenster „{name}“",
-      "description": "Die gespeicherten Einstellungen können insgesamt nicht gelesen werden. Funktionen, die Menschen oder Technik schützen oder Bewegungen einschränken, laufen weiter. Sie verwenden den Wert der nächsten Ebene; wo keine Ebene einen setzt, verwenden sie einen vorsichtigen Wert, der Bewegungen bis zur Reparatur stärker einschränken kann als gewohnt. Komfortfunktionen, die von einem fehlerhaften Wert abhängen, pausieren für die betroffenen Fenster, damit sich kein Rollladen unerwartet bewegt. Zum Beheben: Öffne das Fenster, prüfe seine Werte und speichere es, oder entferne das Fenster."
+      "title": "Eine Einstellung des Fensters „{name}“ kann nicht verwendet werden",
+      "description": "Die gespeicherten Einstellungen lassen sich überhaupt nicht lesen. Bis zur Reparatur wirken Einstellungen, die Menschen oder Technik schützen oder Bewegungen begrenzen, weiter: Sie verwenden stattdessen dieselbe Einstellung der Gruppe oder des Hauses, und wo keine gesetzt ist, eine vorsichtige Vorgabe, die Bewegungen stärker zurückhalten kann als gewohnt. Komfortbewegungen, die von dieser Einstellung abhängen, etwa die des Tagesablaufs, sind für die betroffenen Fenster ausgesetzt, damit sich kein Rollladen unerwartet bewegt. Zum Beheben öffne das Fenster, prüfe seine Einstellungen und speichere es, oder lösche das Fenster."
     },
     "setting_fault_window_other": {
-      "title": "Eine gespeicherte Einstellung ist nicht verwendbar: Fenster „{name}“",
-      "description": "Mit der gespeicherten Einstellung „{key}“ stimmt etwas nicht, das diese Version der Integration nicht genauer beschreiben kann. Funktionen, die Menschen oder Technik schützen oder Bewegungen einschränken, laufen weiter. Sie verwenden den Wert der nächsten Ebene; wo keine Ebene einen setzt, verwenden sie einen vorsichtigen Wert, der Bewegungen bis zur Reparatur stärker einschränken kann als gewohnt. Komfortfunktionen, die von einem fehlerhaften Wert abhängen, pausieren für die betroffenen Fenster, damit sich kein Rollladen unerwartet bewegt. Zum Beheben: Öffne das Fenster, prüfe seine Werte und speichere es, oder entferne das Fenster."
+      "title": "Eine Einstellung des Fensters „{name}“ kann nicht verwendet werden",
+      "description": "Mit der gespeicherten Einstellung „{key}“ stimmt etwas nicht, und diese Version von Roller Shutter Suite kann nicht genauer sagen, was. Bis zur Reparatur wirken Einstellungen, die Menschen oder Technik schützen oder Bewegungen begrenzen, weiter: Sie verwenden stattdessen dieselbe Einstellung der Gruppe oder des Hauses, und wo keine gesetzt ist, eine vorsichtige Vorgabe, die Bewegungen stärker zurückhalten kann als gewohnt. Komfortbewegungen, die von dieser Einstellung abhängen, etwa die des Tagesablaufs, sind für die betroffenen Fenster ausgesetzt, damit sich kein Rollladen unerwartet bewegt. Zum Beheben öffne das Fenster, prüfe seine Einstellungen und speichere es, oder lösche das Fenster."
     }
   },
   "entity": {
@@ -891,89 +891,89 @@
         "name": "Grund",
         "state": {
           "fire_alarm": "Feueralarm",
-          "fire_unacknowledged": "Feueralarm vorbei, wartet auf Bestätigung",
-          "protection_event": "Schutzereignis, etwa Sturm oder Hagel",
-          "protection_return_manual": "Zurück auf die Position, die vor dem Schutzereignis von Hand gewählt war",
+          "fire_unacknowledged": "Feueralarm vorbei, wartet auf Quittierung",
+          "protection_event": "Schutz vor Sturm, Hagel oder Ähnlichem",
+          "protection_return_manual": "Zurück auf die Position, die vor dem Schutz von Hand eingestellt war",
           "sleep_mode": "Schlafmodus",
           "external_request": "Anforderung einer Automation",
           "privacy_lights_on": "Sichtschutz bei eingeschaltetem Licht",
-          "shading_geometric": "Beschattung nach dem Sonnenstand",
+          "shading_geometric": "Beschattung, die der Sonne folgt",
           "shading_fixed": "Beschattung auf fester Position",
-          "solar_heating": "Die Sonne wärmt den Raum",
+          "solar_heating": "Die Sonne darf den Raum wärmen",
           "schedule_day": "Tagesablauf: Tag",
           "schedule_night": "Tagesablauf: Nacht",
           "not_configured": "Nicht eingerichtet",
-          "inactive": "Derzeit nicht aktiv",
+          "inactive": "Gerade nicht aktiv",
           "input_unavailable": "Eine benötigte Entität ist nicht verfügbar",
-          "input_unknown": "Eine benötigte Entität hat keinen bekannten Wert",
-          "input_held_last_known": "Der letzte bekannte Wert einer Entität gilt",
-          "waiting_for_delay": "Wartet, bis die Verzögerung abgelaufen ist",
-          "outside_episode": "Die Bedingungen sind derzeit nicht erfüllt",
-          "episode_locked": "Für den Rest der laufenden Phase gesperrt",
-          "watchdog_released": "Freigegeben, weil es unplausibel lange dauerte",
+          "input_unknown": "Der Zustand einer benötigten Entität ist unbekannt",
+          "input_held_last_known": "Der letzte bekannte Zustand einer Entität wird verwendet",
+          "waiting_for_delay": "Wartet die eingestellte Verzögerung ab",
+          "outside_episode": "Bedingungen gerade nicht erfüllt",
+          "episode_locked": "Wartet, bis die Bedingung nicht mehr gilt",
+          "watchdog_released": "Beendet, weil es unplausibel lange dauerte",
           "capability_missing": "Der Rollladen kann das nicht",
-          "day_type_fallback": "Wochentag verwendet, weil die Art des Tages nicht bekannt ist",
-          "function_disabled_by_fault": "Pausiert, weil eine gespeicherte Einstellung fehlerhaft ist",
+          "day_type_fallback": "Art des Tages unbekannt, der Wochentag gilt",
+          "function_disabled_by_fault": "Ausgesetzt, weil eine gespeicherte Einstellung fehlerhaft ist",
           "layer_failed": "Wegen eines internen Fehlers übersprungen",
-          "only_raise": "Wird zu dieser Zeit nur angehoben",
-          "only_lower": "Wird zu dieser Zeit nur gesenkt",
+          "only_raise": "Wird zu dieser Tageszeit nur angehoben",
+          "only_lower": "Wird zu dieser Tageszeit nur gesenkt",
           "sleep_exception_no_open": "Wird nicht geöffnet, solange jemand schläft",
           "lockout_door_open": "Wird nicht gesenkt, solange die Tür offen ist",
-          "lockout_void_tamper": "Trotz offener Tür gesenkt: der Sabotagekontakt ist aktiv",
-          "lockout_contact_unavailable": "Wird nicht gesenkt: der Türkontakt ist nicht verfügbar",
+          "lockout_void_tamper": "Trotz offener Tür gesenkt: Der Sabotagekontakt ist aktiv",
+          "lockout_contact_unavailable": "Wird nicht gesenkt: Der Türkontakt ist nicht verfügbar",
           "ventilation_floor": "Hält an der Lüftungsposition, weil das Fenster offen ist",
           "rain_ventilation_floor": "Bei offenem Fenster auf die Regenposition gesenkt",
           "frost_limit": "Öffnet wegen Frost nur bis zur Frostposition",
-          "frost_limit_source_blind": "Öffnet nur bis zur Frostposition, weil keine Temperatur bekannt ist",
+          "frost_limit_source_blind": "Öffnet nur bis zur Frostposition, weil die Temperatur unbekannt ist",
           "frost_hold": "Wird bei Frost nicht angehoben",
-          "no_intermediate_position": "Keine Zwischenposition während eines Schutzereignisses",
-          "constraint_failed": "Einschränkung wegen eines internen Fehlers beibehalten",
+          "no_intermediate_position": "Keine Zwischenposition, solange der Schutz aktiv ist",
+          "constraint_failed": "Begrenzung wegen eines internen Fehlers beibehalten",
           "sent": "Befehl gesendet",
           "maintenance_lock": "Wartungssperre",
-          "dry_run": "Probelauf: nichts bewegt sich",
+          "dry_run": "Probelauf: Nichts bewegt sich",
           "cover_unavailable": "Der Rollladen ist nicht verfügbar",
-          "target_reached": "Steht bereits auf der gewünschten Position",
-          "mode_off": "Betriebsart: aus",
-          "mode_protection_only": "Betriebsart: nur Schutz",
+          "target_reached": "Steht bereits richtig",
+          "mode_off": "Betriebsart: Aus",
+          "mode_protection_only": "Betriebsart: Nur Schutz",
           "paused": "Pausiert",
           "person_at_window": "Jemand ist am Fenster",
           "manual_override": "Von Hand bewegt; automatische Bewegungen warten",
-          "movement_in_flight": "Wartet, bis die laufende Bewegung beendet ist",
+          "movement_in_flight": "Wartet, bis die laufende Bewegung endet",
           "duplicate_command": "Befehl bereits unterwegs",
-          "movement_taken_over": "Laufende Bewegung übernommen",
-          "min_change": "Änderung zu klein für eine Bewegung",
-          "min_interval": "Wartet auf den Mindestabstand zwischen zwei Bewegungen",
-          "trigger_time_missing": "Zurückgehalten: es ist nicht bekannt, wann der Wunsch begann",
+          "movement_taken_over": "Setzt die bereits laufende Bewegung fort",
+          "min_change": "Änderung zu klein, um sich zu lohnen",
+          "min_interval": "Wartet den Mindestabstand zwischen zwei Bewegungen ab",
+          "trigger_time_missing": "Zurückgehalten: Unbekannt, seit wann der Grund für diese Bewegung besteht",
           "command_backoff": "Wartet vor dem nächsten Versuch",
           "staggered": "Wartet, bis es an der Reihe ist",
           "gate_rule_failed": "Wegen eines internen Fehlers zurückgehalten",
           "manual_detected": "Von Hand bewegt",
           "manual_detected_member": "Ein Rollladen des Fensters wurde von Hand bewegt",
-          "external_movement_observed": "Im Probelauf von anderer Seite bewegt",
+          "external_movement_observed": "Während des Probelaufs anderweitig bewegt",
           "moved_during_downtime": "Bewegt, während Home Assistant nicht lief",
           "person_at_window_started": "Jemand ist ans Fenster gekommen",
           "person_at_window_ended": "Niemand mehr am Fenster",
           "override_started": "Handbetrieb begonnen",
           "override_ended": "Handbetrieb beendet",
-          "protection_started": "Schutzereignis begonnen",
-          "protection_ended": "Schutzereignis beendet",
-          "protection_source_blind": "Die Entität eines Schutzereignisses hat keinen Wert",
-          "lockout_contact_blind": "Der Türkontakt hat keinen Wert",
-          "fire_acknowledged": "Feueralarm bestätigt",
+          "protection_started": "Schutz begonnen",
+          "protection_ended": "Schutz beendet",
+          "protection_source_blind": "Eine Entität für den Schutz ist nicht verfügbar oder unbekannt",
+          "lockout_contact_blind": "Der Türkontakt ist nicht verfügbar oder unbekannt",
+          "fire_acknowledged": "Feueralarm quittiert",
           "frost_protection_waived": "Frostschutz bis zum nächsten Morgen aufgehoben",
           "frost_waiver_ended": "Frostschutz gilt wieder",
           "frost_released_by_sun": "Frostschutz durch die Sonne aufgehoben",
-          "frost_source_blind": "Die Frost-Entität hat keinen Wert",
+          "frost_source_blind": "Die Entität für Frost ist nicht verfügbar oder unbekannt",
           "position_may_be_inaccurate": "Die Position kann ungenau sein",
           "command_failed": "Befehl fehlgeschlagen",
           "actuator_no_reaction": "Der Rollladen hat nicht reagiert",
-          "movement_not_finished": "Kein Ende der Bewegung rechtzeitig gemeldet",
+          "movement_not_finished": "Das Ende der Bewegung wurde nicht rechtzeitig gemeldet",
           "member_unavailable": "Ein Rollladen des Fensters ist nicht verfügbar",
-          "button_refused_maintenance_lock": "Taster wegen der Wartungssperre abgewiesen"
+          "button_refused_maintenance_lock": "Tastendruck wegen der Wartungssperre nicht beachtet"
         }
       },
       "target_position": {
-        "name": "Berechnete Position"
+        "name": "Zielposition"
       },
       "next_action": {
         "name": "Nächste geplante Aktion",
@@ -985,85 +985,85 @@
             "name": "Grund",
             "state": {
               "fire_alarm": "Feueralarm",
-              "fire_unacknowledged": "Feueralarm vorbei, wartet auf Bestätigung",
-              "protection_event": "Schutzereignis, etwa Sturm oder Hagel",
-              "protection_return_manual": "Zurück auf die Position, die vor dem Schutzereignis von Hand gewählt war",
+              "fire_unacknowledged": "Feueralarm vorbei, wartet auf Quittierung",
+              "protection_event": "Schutz vor Sturm, Hagel oder Ähnlichem",
+              "protection_return_manual": "Zurück auf die Position, die vor dem Schutz von Hand eingestellt war",
               "sleep_mode": "Schlafmodus",
               "external_request": "Anforderung einer Automation",
               "privacy_lights_on": "Sichtschutz bei eingeschaltetem Licht",
-              "shading_geometric": "Beschattung nach dem Sonnenstand",
+              "shading_geometric": "Beschattung, die der Sonne folgt",
               "shading_fixed": "Beschattung auf fester Position",
-              "solar_heating": "Die Sonne wärmt den Raum",
+              "solar_heating": "Die Sonne darf den Raum wärmen",
               "schedule_day": "Tagesablauf: Tag",
               "schedule_night": "Tagesablauf: Nacht",
               "not_configured": "Nicht eingerichtet",
-              "inactive": "Derzeit nicht aktiv",
+              "inactive": "Gerade nicht aktiv",
               "input_unavailable": "Eine benötigte Entität ist nicht verfügbar",
-              "input_unknown": "Eine benötigte Entität hat keinen bekannten Wert",
-              "input_held_last_known": "Der letzte bekannte Wert einer Entität gilt",
-              "waiting_for_delay": "Wartet, bis die Verzögerung abgelaufen ist",
-              "outside_episode": "Die Bedingungen sind derzeit nicht erfüllt",
-              "episode_locked": "Für den Rest der laufenden Phase gesperrt",
-              "watchdog_released": "Freigegeben, weil es unplausibel lange dauerte",
+              "input_unknown": "Der Zustand einer benötigten Entität ist unbekannt",
+              "input_held_last_known": "Der letzte bekannte Zustand einer Entität wird verwendet",
+              "waiting_for_delay": "Wartet die eingestellte Verzögerung ab",
+              "outside_episode": "Bedingungen gerade nicht erfüllt",
+              "episode_locked": "Wartet, bis die Bedingung nicht mehr gilt",
+              "watchdog_released": "Beendet, weil es unplausibel lange dauerte",
               "capability_missing": "Der Rollladen kann das nicht",
-              "day_type_fallback": "Wochentag verwendet, weil die Art des Tages nicht bekannt ist",
-              "function_disabled_by_fault": "Pausiert, weil eine gespeicherte Einstellung fehlerhaft ist",
+              "day_type_fallback": "Art des Tages unbekannt, der Wochentag gilt",
+              "function_disabled_by_fault": "Ausgesetzt, weil eine gespeicherte Einstellung fehlerhaft ist",
               "layer_failed": "Wegen eines internen Fehlers übersprungen",
-              "only_raise": "Wird zu dieser Zeit nur angehoben",
-              "only_lower": "Wird zu dieser Zeit nur gesenkt",
+              "only_raise": "Wird zu dieser Tageszeit nur angehoben",
+              "only_lower": "Wird zu dieser Tageszeit nur gesenkt",
               "sleep_exception_no_open": "Wird nicht geöffnet, solange jemand schläft",
               "lockout_door_open": "Wird nicht gesenkt, solange die Tür offen ist",
-              "lockout_void_tamper": "Trotz offener Tür gesenkt: der Sabotagekontakt ist aktiv",
-              "lockout_contact_unavailable": "Wird nicht gesenkt: der Türkontakt ist nicht verfügbar",
+              "lockout_void_tamper": "Trotz offener Tür gesenkt: Der Sabotagekontakt ist aktiv",
+              "lockout_contact_unavailable": "Wird nicht gesenkt: Der Türkontakt ist nicht verfügbar",
               "ventilation_floor": "Hält an der Lüftungsposition, weil das Fenster offen ist",
               "rain_ventilation_floor": "Bei offenem Fenster auf die Regenposition gesenkt",
               "frost_limit": "Öffnet wegen Frost nur bis zur Frostposition",
-              "frost_limit_source_blind": "Öffnet nur bis zur Frostposition, weil keine Temperatur bekannt ist",
+              "frost_limit_source_blind": "Öffnet nur bis zur Frostposition, weil die Temperatur unbekannt ist",
               "frost_hold": "Wird bei Frost nicht angehoben",
-              "no_intermediate_position": "Keine Zwischenposition während eines Schutzereignisses",
-              "constraint_failed": "Einschränkung wegen eines internen Fehlers beibehalten",
+              "no_intermediate_position": "Keine Zwischenposition, solange der Schutz aktiv ist",
+              "constraint_failed": "Begrenzung wegen eines internen Fehlers beibehalten",
               "sent": "Befehl gesendet",
               "maintenance_lock": "Wartungssperre",
-              "dry_run": "Probelauf: nichts bewegt sich",
+              "dry_run": "Probelauf: Nichts bewegt sich",
               "cover_unavailable": "Der Rollladen ist nicht verfügbar",
-              "target_reached": "Steht bereits auf der gewünschten Position",
-              "mode_off": "Betriebsart: aus",
-              "mode_protection_only": "Betriebsart: nur Schutz",
+              "target_reached": "Steht bereits richtig",
+              "mode_off": "Betriebsart: Aus",
+              "mode_protection_only": "Betriebsart: Nur Schutz",
               "paused": "Pausiert",
               "person_at_window": "Jemand ist am Fenster",
               "manual_override": "Von Hand bewegt; automatische Bewegungen warten",
-              "movement_in_flight": "Wartet, bis die laufende Bewegung beendet ist",
+              "movement_in_flight": "Wartet, bis die laufende Bewegung endet",
               "duplicate_command": "Befehl bereits unterwegs",
-              "movement_taken_over": "Laufende Bewegung übernommen",
-              "min_change": "Änderung zu klein für eine Bewegung",
-              "min_interval": "Wartet auf den Mindestabstand zwischen zwei Bewegungen",
-              "trigger_time_missing": "Zurückgehalten: es ist nicht bekannt, wann der Wunsch begann",
+              "movement_taken_over": "Setzt die bereits laufende Bewegung fort",
+              "min_change": "Änderung zu klein, um sich zu lohnen",
+              "min_interval": "Wartet den Mindestabstand zwischen zwei Bewegungen ab",
+              "trigger_time_missing": "Zurückgehalten: Unbekannt, seit wann der Grund für diese Bewegung besteht",
               "command_backoff": "Wartet vor dem nächsten Versuch",
               "staggered": "Wartet, bis es an der Reihe ist",
               "gate_rule_failed": "Wegen eines internen Fehlers zurückgehalten",
               "manual_detected": "Von Hand bewegt",
               "manual_detected_member": "Ein Rollladen des Fensters wurde von Hand bewegt",
-              "external_movement_observed": "Im Probelauf von anderer Seite bewegt",
+              "external_movement_observed": "Während des Probelaufs anderweitig bewegt",
               "moved_during_downtime": "Bewegt, während Home Assistant nicht lief",
               "person_at_window_started": "Jemand ist ans Fenster gekommen",
               "person_at_window_ended": "Niemand mehr am Fenster",
               "override_started": "Handbetrieb begonnen",
               "override_ended": "Handbetrieb beendet",
-              "protection_started": "Schutzereignis begonnen",
-              "protection_ended": "Schutzereignis beendet",
-              "protection_source_blind": "Die Entität eines Schutzereignisses hat keinen Wert",
-              "lockout_contact_blind": "Der Türkontakt hat keinen Wert",
-              "fire_acknowledged": "Feueralarm bestätigt",
+              "protection_started": "Schutz begonnen",
+              "protection_ended": "Schutz beendet",
+              "protection_source_blind": "Eine Entität für den Schutz ist nicht verfügbar oder unbekannt",
+              "lockout_contact_blind": "Der Türkontakt ist nicht verfügbar oder unbekannt",
+              "fire_acknowledged": "Feueralarm quittiert",
               "frost_protection_waived": "Frostschutz bis zum nächsten Morgen aufgehoben",
               "frost_waiver_ended": "Frostschutz gilt wieder",
               "frost_released_by_sun": "Frostschutz durch die Sonne aufgehoben",
-              "frost_source_blind": "Die Frost-Entität hat keinen Wert",
+              "frost_source_blind": "Die Entität für Frost ist nicht verfügbar oder unbekannt",
               "position_may_be_inaccurate": "Die Position kann ungenau sein",
               "command_failed": "Befehl fehlgeschlagen",
               "actuator_no_reaction": "Der Rollladen hat nicht reagiert",
-              "movement_not_finished": "Kein Ende der Bewegung rechtzeitig gemeldet",
+              "movement_not_finished": "Das Ende der Bewegung wurde nicht rechtzeitig gemeldet",
               "member_unavailable": "Ein Rollladen des Fensters ist nicht verfügbar",
-              "button_refused_maintenance_lock": "Taster wegen der Wartungssperre abgewiesen"
+              "button_refused_maintenance_lock": "Tastendruck wegen der Wartungssperre nicht beachtet"
             }
           }
         }
@@ -1079,11 +1079,11 @@
     }
   },
   "common": {
-    "logbook_sent": "Befehl gesendet: auf {target} % fahren. Grund: {cause}.",
+    "logbook_sent": "Befehl gesendet, auf {target} % zu fahren. Grund: {cause}.",
     "logbook_sent_no_target": "Befehl gesendet. Grund: {cause}.",
     "logbook_dry_run": "Probelauf, nichts bewegt: wäre auf {target} % gefahren. Grund: {cause}.",
     "logbook_dry_run_no_target": "Probelauf, nichts bewegt: wäre gefahren. Grund: {cause}.",
-    "logbook_held_back": "Bewegung auf {target} % zurückgehalten: {held}. Gewünscht wegen: {cause}.",
-    "logbook_held_back_no_target": "Bewegung zurückgehalten: {held}. Gewünscht wegen: {cause}."
+    "logbook_held_back": "Bewegung auf {target} % zurückgehalten: {held}. Grund für die Bewegung: {cause}.",
+    "logbook_held_back_no_target": "Bewegung zurückgehalten: {held}. Grund für die Bewegung: {cause}."
   }
 }
