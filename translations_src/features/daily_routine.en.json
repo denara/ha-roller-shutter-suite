@@ -66,7 +66,7 @@
     },
     "schedule_brightness_source": {
       "label": "Outdoor brightness entity",
-      "description": "An entity that reports the outdoor brightness in lux. If it stays darker than the threshold for the set duration, the evening begins early, but never before the evening's \"not before\". While the entity is unavailable or unknown, it neither starts nor delays the evening.",
+      "description": "An entity that reports the outdoor brightness in lux. If it stays darker than the threshold for the set duration, the evening begins early, but never earlier than the time set in \"Evening: not before\". While the entity is unavailable or unknown, it neither starts nor delays the evening.",
       "entity_label": "Entity for the outdoor brightness (lux)",
       "entity_description": "Used only with \"Own selection\" above."
     },

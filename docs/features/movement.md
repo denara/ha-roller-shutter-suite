@@ -2,7 +2,7 @@
 
 The page "Movement" of the forms holds the settings that spare the motors of your shutters. Like every setting they can be made for the house, a group or a single window; a group or window that leaves a field empty inherits the setting ([Concepts](../concepts.md)).
 
-**Status: pilot.** These settings can be made and are part of every decision, but every window is in [dry-run](dry-run.md) and moves nothing. Protection from storms and hail and the fire alarm, which this page mentions, arrive with later versions.
+**Status: pilot.** These settings can be made and are part of every decision, but every window is in [dry-run](dry-run.md) and moves nothing. Shading, sleep mode, requests from automations, protection from storms and hail and the fire alarm, which this page uses as examples, arrive with later versions; in this version only the daily routine creates comfort movements.
 
 | Setting | Default | What it does |
 |---|---|---|

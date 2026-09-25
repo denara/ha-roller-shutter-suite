@@ -6,7 +6,7 @@
   "steps": {
     "general": {
       "title": "Tagesablauf",
-      "description": "Wie weit die Rollläden öffnen und schließen, woran Werktage, Wochenenden und Feiertage zu erkennen sind und was den Abend außerdem auslösen kann. Die Uhrzeiten folgen auf den nächsten Seiten, eine Seite für jede Art von Tag."
+      "description": "Wie weit die Rollläden öffnen und schließen, woran Werktage, Wochenenden und Feiertage zu erkennen sind und was den Abend außerdem auslösen kann. Die Uhrzeiten folgen auf den nächsten Seiten, eine Seite je Art des Tages."
     },
     "workday": {
       "title": "Tagesablauf an Werktagen",
@@ -66,7 +66,7 @@
     },
     "schedule_brightness_source": {
       "label": "Entität für die Außenhelligkeit",
-      "description": "Eine Entität, die die Außenhelligkeit in Lux meldet. Bleibt es für die eingestellte Dauer dunkler als die Schwelle, beginnt der Abend früher, aber nie vor „nicht vor“ des Abends. Solange die Entität nicht verfügbar oder unbekannt ist, löst sie den Abend weder aus noch verzögert sie ihn.",
+      "description": "Eine Entität, die die Außenhelligkeit in Lux meldet. Bleibt es für die eingestellte Dauer dunkler als die Schwelle, beginnt der Abend früher, aber nie früher als die Zeit unter „Abend: nicht vor“. Solange die Entität nicht verfügbar oder unbekannt ist, löst sie den Abend weder aus noch verzögert sie ihn.",
       "entity_label": "Entität für die Außenhelligkeit (Lux)",
       "entity_description": "Gilt nur mit „Eigene Auswahl“ oben."
     },

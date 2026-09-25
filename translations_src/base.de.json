@@ -32,7 +32,7 @@
       "level_unreadable": "Die gespeicherten Einstellungen lassen sich überhaupt nicht lesen.",
       "other": "Mit der gespeicherten Einstellung „{key}“ stimmt etwas nicht, und diese Version von Roller Shutter Suite kann nicht genauer sagen, was."
     },
-    "fault_consequence": "Bis zur Reparatur wirken Einstellungen, die die Rollläden schützen oder ihre Bewegungen begrenzen, weiter: Sie verwenden stattdessen dieselbe Einstellung der Gruppe oder des Hauses, und wo keine gesetzt ist, eine vorsichtige Vorgabe, die Bewegungen stärker zurückhalten kann als gewohnt. Komfortbewegungen, die von dieser Einstellung abhängen, etwa die des Tagesablaufs, sind für die betroffenen Fenster ausgesetzt, damit sich kein Rollladen unerwartet bewegt.",
+    "fault_consequence": "Bis zur Reparatur wirken Einstellungen, die Menschen oder Technik schützen oder Bewegungen begrenzen, weiter: Sie verwenden stattdessen dieselbe Einstellung der Gruppe oder des Hauses, und wo keine gesetzt ist, eine vorsichtige Vorgabe, die Bewegungen stärker zurückhalten kann als gewohnt. Komfortbewegungen, die von dieser Einstellung abhängen, etwa die des Tagesablaufs, sind für die betroffenen Fenster ausgesetzt, damit sich kein Rollladen unerwartet bewegt.",
     "fault_repairs": {
       "global": "Zum Beheben öffne Roller Shutter Suite, wähle „Neu konfigurieren“ und speichere die Einstellungen des Hauses.",
       "group": "Zum Beheben öffne die Gruppe, prüfe ihre Einstellungen und speichere sie, oder lösche die Gruppe.",
@@ -92,7 +92,7 @@
       "movement_taken_over": "Setzt die bereits laufende Bewegung fort",
       "min_change": "Änderung zu klein, um sich zu lohnen",
       "min_interval": "Wartet den Mindestabstand zwischen zwei Bewegungen ab",
-      "trigger_time_missing": "Zurückgehalten: Es ist nicht bekannt, seit wann die Bewegung gewünscht ist",
+      "trigger_time_missing": "Zurückgehalten: Unbekannt, seit wann der Grund für diese Bewegung besteht",
       "command_backoff": "Wartet vor dem nächsten Versuch",
       "staggered": "Wartet, bis es an der Reihe ist",
       "gate_rule_failed": "Wegen eines internen Fehlers zurückgehalten",
@@ -226,7 +226,7 @@
   "issues": {
     "window_covers_unreadable": {
       "title": "Fenster „{window}“ ist nicht eingerichtet",
-      "description": "Die gespeicherten Rollläden des Fensters „{window}“ lassen sich nicht lesen. Roller Shutter Suite kümmert sich deshalb überhaupt nicht um dieses Fenster. Alle anderen Fenster arbeiten wie gewohnt. Zum Beheben öffne das Fenster, wähle seine Rollläden neu und speichere es, oder lösche das Fenster."
+      "description": "Die gespeicherten Abdeckungen des Fensters „{window}“ lassen sich nicht lesen. Roller Shutter Suite kümmert sich deshalb überhaupt nicht um dieses Fenster. Alle anderen Fenster arbeiten wie gewohnt. Zum Beheben öffne das Fenster, wähle seine Abdeckungen neu und speichere es, oder lösche das Fenster."
     },
     "group_missing": {
       "title": "Die Gruppe von Fenster „{window}“ gibt es nicht mehr",
@@ -234,7 +234,7 @@
     },
     "group_reference_unreadable": {
       "title": "Die Gruppe von Fenster „{window}“ lässt sich nicht lesen",
-      "description": "Die gespeicherte Gruppe des Fensters „{window}“ lässt sich nicht lesen. Einstellungen, die die Rollläden schützen oder ihre Bewegungen begrenzen, verwenden stattdessen die Einstellungen des Hauses. Die Komfortbewegungen dieses Fensters sind ausgesetzt, weil nicht bekannt ist, was die Gruppe eingestellt hätte. Zum Beheben öffne das Fenster, wähle seine Gruppe neu und speichere es."
+      "description": "Die gespeicherte Gruppe des Fensters „{window}“ lässt sich nicht lesen. Einstellungen, die Menschen oder Technik schützen oder Bewegungen begrenzen, verwenden stattdessen die Einstellungen des Hauses. Die Komfortbewegungen dieses Fensters sind ausgesetzt, weil nicht bekannt ist, was die Gruppe eingestellt hätte. Zum Beheben öffne das Fenster, wähle seine Gruppe neu und speichere es."
     },
     "dry_run_unreadable": {
       "title": "Probelauf von Fenster „{window}“ lässt sich nicht lesen",
@@ -242,15 +242,15 @@
     },
     "option_unavailable": {
       "title": "Fenster „{window}“ kann die Einstellung „{key}“ nicht nutzen",
-      "description": "Das Fenster „{window}“ überschreibt die Einstellung „{key}“, aber diese Rollläden können nicht, was sie braucht: {covers}. Die Einstellung bleibt gespeichert und gilt wieder, sobald die Rollläden es können."
+      "description": "Das Fenster „{window}“ überschreibt die Einstellung „{key}“, aber diese Rollläden unterstützen das nicht: {covers}. Die Einstellung bleibt gespeichert und wirkt wieder, sobald die Rollläden es unterstützen."
     },
     "setting_combination": {
       "title": "Gespeicherte Einstellungen widersprechen sich",
-      "description": "Jede dieser gespeicherten Einstellungen ist für sich in Ordnung, zusammen sind sie aber nicht zulässig: {settings}. Der Name in Klammern sagt, wo die jeweilige Einstellung gespeichert ist. Komfortbewegungen, die davon abhängen, sind für die betroffenen Fenster ausgesetzt; Einstellungen, die die Rollläden schützen oder ihre Bewegungen begrenzen, wirken weiter. Zum Beheben ändere eine der Einstellungen und speichere."
+      "description": "Jede dieser gespeicherten Einstellungen ist für sich in Ordnung, zusammen sind sie aber nicht zulässig: {settings}. Der Name in Klammern sagt, wo die jeweilige Einstellung gespeichert ist. Komfortbewegungen, die davon abhängen, sind für die betroffenen Fenster ausgesetzt; Einstellungen, die Menschen oder Technik schützen oder Bewegungen begrenzen, wirken weiter. Zum Beheben ändere eine der Einstellungen und speichere."
     },
     "rule_without_keys": {
       "title": "Gespeicherte Einstellungen wurden aus unbekanntem Grund abgelehnt",
-      "description": "Die Einstellungen mindestens eines Fensters wurden als Ganzes abgelehnt, und Roller Shutter Suite konnte nicht sagen, welche Einstellungen der Grund sind. Das ist ein Fehler in der Integration, nicht in deinen Einstellungen. Einstellungen, die die Rollläden schützen oder ihre Bewegungen begrenzen, wirken weiter; Komfortbewegungen sind ausgesetzt. Bitte melde das dem Autor der Integration."
+      "description": "Die Einstellungen mindestens eines Fensters wurden als Ganzes abgelehnt, und Roller Shutter Suite konnte nicht sagen, welche Einstellungen der Grund sind. Das ist ein Fehler in der Integration, nicht in deinen Einstellungen. Einstellungen, die Menschen oder Technik schützen oder Bewegungen begrenzen, wirken weiter; Komfortbewegungen sind ausgesetzt. Bitte melde das dem Autor der Integration."
     }
   },
   "entity": {

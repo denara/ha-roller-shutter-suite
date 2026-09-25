@@ -60,7 +60,7 @@ The same works in the evening: "at sunset, not before 17:30, not after 21:30" cl
 
 Both limits are always set, and for sunrise, sunset and sun elevation they do one more job in a case you may never meet: far in the north the sun does not rise at all on some winter days, and an elevation such as "20 degrees above the horizon" is not reached anywhere in central Europe in December. On such a day one of the two limits decides, and which one depends on the side the sun stays on. If it stays **too low** all day, it is the dark case: the morning happens late, at "not after", and the evening early, at "not before". Example: your evening closes "when the sun has sunk below 20 degrees", not before 16:00. In December the sun never climbs to 20 degrees where you live, so it has been "below 20 degrees" all day, and the shutters close at 16:00; a morning "when the sun has risen above 20 degrees, not after 09:00" opens at 09:00. If the sun stays **too high** all day, as in a polar summer, it is the bright case: the morning happens at "not before" and the evening at "not after".
 
-Two things have to fit together. "Not before" must not lie after "not after". And the morning always has to come before the evening: the latest possible morning ("not after", or the fixed time) has to lie before the earliest possible evening ("not before", or the fixed time). Settings that contradict each other in this way are not used; see [When a stored setting is faulty](#when-a-stored-setting-is-faulty).
+Two things have to fit together. "Not before" must not lie after "not after". And the morning always has to come before the evening: the latest possible morning ("not after", or the fixed time) has to lie before the earliest possible evening ("not before", or the fixed time). Settings that contradict each other in this way are not used; see [When a saved setting is faulty](#when-a-saved-setting-is-faulty).
 
 ## Closing earlier when it gets dark
 
@@ -115,9 +115,9 @@ If the summer entity is unavailable or unknown, the integration keeps using its 
 
 Every one of these settings can be made for the house, for a group or for a single window. A window uses its own setting if it has one, otherwise that of its group, otherwise that of the house. None of them needs a particular capability of the cover.
 
-## When a stored setting is faulty
+## When a saved setting is faulty
 
-A setting can be stored in a form the integration cannot read (after a failed migration or an edit by hand), or two settings can contradict each other: "not before" later than "not after", or a morning that would come after the evening. The integration then **suspends the daily routine for exactly the windows that would have used the faulty setting**, reports the setting and where it is saved, and moves nothing because of the routine until it is corrected. It does not fall back to another time or position on its own: a window must never open at a time you had deliberately moved. A window that overrides that setting with a sound one of its own is not affected, and settings that protect the shutters or limit their movements keep working for every window.
+A setting can be stored in a form the integration cannot read (after a failed migration or an edit by hand), or two settings can contradict each other: "not before" later than "not after", or a morning that would come after the evening. The integration then **suspends the daily routine for exactly the windows that would have used the faulty setting**, reports the setting and where it is saved, and moves nothing because of the routine until it is corrected. It does not fall back to another time or position on its own: a window must never open at a time you had deliberately moved. A window that overrides that setting with a sound one of its own is not affected, and settings that protect people or hardware or limit movements keep working for every window.
 
 ## What happens after a restart
 

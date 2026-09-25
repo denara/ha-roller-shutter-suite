@@ -32,7 +32,7 @@
       "level_unreadable": "The saved settings cannot be read at all.",
       "other": "Something is wrong with the saved setting \"{key}\", and this version of Roller Shutter Suite cannot say more precisely what."
     },
-    "fault_consequence": "Until this is repaired, settings that protect the shutters or limit their movements keep working: they use the same setting of the group or the house instead, and where neither has one, a cautious choice that may hold movements back more than usual. Comfort movements that depend on this setting, such as those of the daily routine, are suspended for the windows concerned, so that no shutter moves unexpectedly.",
+    "fault_consequence": "Until this is repaired, settings that protect people or hardware or limit movements keep working: they use the same setting of the group or the house instead, and where neither has one, a cautious choice that may hold movements back more than usual. Comfort movements that depend on this setting, such as those of the daily routine, are suspended for the windows concerned, so that no shutter moves unexpectedly.",
     "fault_repairs": {
       "global": "To repair this, open Roller Shutter Suite, choose \"Reconfigure\" and save the settings of the house.",
       "group": "To repair this, open the group, check its settings and save it, or delete the group.",
@@ -92,7 +92,7 @@
       "movement_taken_over": "Carries on with the movement already running",
       "min_change": "Change too small to be worth a movement",
       "min_interval": "Waiting for the minimum interval between two movements",
-      "trigger_time_missing": "Held back: it is not known since when the movement has been wanted",
+      "trigger_time_missing": "Held back: it is unknown when the reason for this movement began",
       "command_backoff": "Waiting before the next attempt",
       "staggered": "Waiting for its turn",
       "gate_rule_failed": "Held back because of an internal error",
@@ -234,7 +234,7 @@
     },
     "group_reference_unreadable": {
       "title": "The group of window \"{window}\" cannot be read",
-      "description": "The saved group of the window \"{window}\" cannot be read. Settings that protect the shutters or limit their movements use the settings of the house instead. The comfort movements of this window are suspended, because it is not known what the group would have set. To repair this, open the window, choose its group again and save it."
+      "description": "The saved group of the window \"{window}\" cannot be read. Settings that protect people or hardware or limit movements use the settings of the house instead. The comfort movements of this window are suspended, because it is not known what the group would have set. To repair this, open the window, choose its group again and save it."
     },
     "dry_run_unreadable": {
       "title": "Dry-run of window \"{window}\" cannot be read",
@@ -246,11 +246,11 @@
     },
     "setting_combination": {
       "title": "Saved settings contradict each other",
-      "description": "Each of these saved settings is fine on its own, but together they are not allowed: {settings}. The name in brackets says where each one is saved. Comfort movements that depend on them are suspended for the windows concerned; settings that protect the shutters or limit their movements keep working. To repair this, change one of the settings and save."
+      "description": "Each of these saved settings is fine on its own, but together they are not allowed: {settings}. The name in brackets says where each one is saved. Comfort movements that depend on them are suspended for the windows concerned; settings that protect people or hardware or limit movements keep working. To repair this, change one of the settings and save."
     },
     "rule_without_keys": {
       "title": "Saved settings were refused for an unknown reason",
-      "description": "The settings of at least one window were refused as a whole, and Roller Shutter Suite could not tell which settings are the cause. This is an error in the integration, not in your settings. Settings that protect the shutters or limit their movements keep working; comfort movements are suspended. Please report it to the author of the integration."
+      "description": "The settings of at least one window were refused as a whole, and Roller Shutter Suite could not tell which settings are the cause. This is an error in the integration, not in your settings. Settings that protect people or hardware or limit movements keep working; comfort movements are suspended. Please report it to the author of the integration."
     }
   },
   "entity": {

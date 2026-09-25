@@ -8,7 +8,7 @@
   "fields": {
     "motor_min_change": {
       "label": "Mindeständerung",
-      "description": "Eine kleinere Komfortbewegung fällt weg. 0 schaltet das aus. Ganz auf oder ganz zu fährt ein Rollladen trotzdem, wie klein der restliche Weg auch ist. Das funktioniert nur bei Rollläden, die ihre Position melden; ein Rollladen ohne Positionsmeldung wird immer bewegt."
+      "description": "Eine Komfortbewegung, die kleiner ist als dieser Wert, fällt weg. 0 schaltet das aus. Ganz auf oder ganz zu fährt ein Rollladen trotzdem, wie klein der restliche Weg auch ist. Das funktioniert nur bei Rollläden, die ihre Position melden; ein Rollladen ohne Positionsmeldung wird immer bewegt."
     },
     "motor_min_interval": {
       "label": "Mindestabstand",

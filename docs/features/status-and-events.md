@@ -2,7 +2,7 @@
 
 Every window explains itself: why it is where it is, where it should be, and what happens next. This page describes the entities that show it, the event the integration fires when it moves a shutter or holds a movement back, the entries in the logbook, and the diagnostics download.
 
-**Status: pilot.** The entities, the event and the diagnostics exist, and an armed window does send commands to its covers; but no window can be armed in the forms yet, so every window is in dry-run and records the command it would give. Manual operation is not detected yet, so the entity "Manual override" is always off.
+**Status: pilot.** The entities, the event and the diagnostics exist, and an armed window does send commands to its covers; but no window can be armed in the forms yet, so every window is in dry-run and records the command it would give. Manual operation is not detected yet, so the entity "Manual override" is always off. The pause and maintenance switches, the reactions to open doors and windows, protection from storms and hail, and the fire alarm arrive with later versions too; this page already describes their reasons and events, so that your automations can rely on them.
 
 ## The entities of a window
 
@@ -198,7 +198,7 @@ The reason entity and the events use these codes. The column "Shown as" is the E
 | `movement_taken_over` | Carries on with the movement already running |
 | `min_change` | Change too small to be worth a movement |
 | `min_interval` | Waiting for the minimum interval between two movements |
-| `trigger_time_missing` | Held back: it is not known since when the movement has been wanted |
+| `trigger_time_missing` | Held back: it is unknown when the reason for this movement began |
 | `command_backoff` | Waiting before the next attempt |
 | `staggered` | Waiting for its turn |
 | `gate_rule_failed` | Held back because of an internal error |

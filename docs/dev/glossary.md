@@ -12,12 +12,12 @@ The German texts address the reader informally, as the German interface of Home 
 | group | Gruppe | Several windows that share their settings, such as one side of the house or one floor. Not a cover group of Home Assistant. | forms, issues, pages |
 | window | Fenster | One window with its shutter or shutters, which are always moved together: what Roller Shutter Suite takes care of. It has one device and one status. | forms, status, issues, pages |
 | roller shutter, shutter | Rollladen (plural Rollläden) | The physical shutter in front of the glass. | forms, status, issues, pages |
-| cover | Abdeckung | The Home Assistant entity that controls a roller shutter (`cover.example_window`), as the interface of Home Assistant calls it. German uses this word only where the entity is selected (the field, its errors, the pages of the selection); everywhere else German says the word for roller shutter. | forms, status, issues, pages |
+| cover | Abdeckung | The Home Assistant entity that controls a roller shutter (`cover.example_window`), as the interface of Home Assistant calls it. German uses this word only where the entity is selected or its saved selection is meant: the field and its helper text, its errors, the page of the members of a cover group, the menu entries of the selection pages, and the repair issue about covers that cannot be read. Everywhere else, also in the title and text of the page for shutters that only open and close, German says the word for roller shutter. | forms, status, issues, pages |
 | cover group | Abdeckungsgruppe | A group helper of Home Assistant that combines several covers. A window uses its members instead of the group. | forms, pages |
 | member | Mitglied | A cover of a cover group of Home Assistant. For a window with several covers the texts say "one cover of the window", not "member". | forms |
 | setting | Einstellung | Anything you choose in the forms. "Value" is used only for what is typed into a field. | forms, issues, pages |
 | saved setting | gespeicherte Einstellung | A setting as Roller Shutter Suite has stored it; the repair issues speak of it. | issues, pages |
-| inherit | übernehmen | A group or window uses the setting of the group or house above it. The list entry is "Inherit" in English; in German it names the house or the group it takes the setting from. | forms, issues, pages |
+| inherit | übernehmen | A group or window uses the setting of the group or house above it. The list entry is "Inherit" in English and names both the house and the group in German; the helper text below the field names the actual source. | forms, issues, pages |
 | override | überschreiben | A group or window makes a setting of its own instead of inheriting it. | forms, issues, pages |
 | none | keine | The choice for an optional entity: no entity, although the group or the house names one. | forms |
 | own selection | eigene Auswahl | The choice for an optional entity: the entity chosen in the field below. | forms |
@@ -42,13 +42,22 @@ The German texts address the reader informally, as the German interface of Home 
 | dry-run | Probelauf | A window decides and records what it would do, and moves nothing. Every new window starts in dry-run. | forms, status, issues, pages |
 | arm | scharf schalten | Switching dry-run off for a window, so that it moves its shutters; a later version adds it. | pages |
 | comfort movement | Komfortbewegung | A movement for convenience, such as those of the daily routine, as opposed to protection. | forms, issues, pages |
+| shading | Beschattung | Lowering a shutter against the sun, at a fixed position or following the sun; a later version adds it. | status, pages (later version) |
+| sleep mode | Schlafmodus | Keeps shutters closed while someone sleeps; a later version adds it. | status, pages (later version) |
+| privacy | Sichtschutz | Lowers a shutter while the lights of the room are on; a later version adds it. | status, pages (later version) |
+| request from an automation | Anforderung einer Automation | A position that one of your automations asks for; a later version adds it. | status, pages (later version) |
+| frost protection, frost position | Frostschutz, Frostposition | In frost a shutter opens only up to the frost position, so that it does not run into a frozen end stop; a later version adds it. | status, pages (later version) |
+| ventilation position, rain position | Lüftungsposition, Regenposition | The lowest position of a shutter in front of an open window, and the one it is lowered to when it rains; a later version adds them. | status, pages (later version) |
+| door contact, tamper contact | Türkontakt, Sabotagekontakt | The contact that keeps a shutter in front of an open door from lowering, and the contact that overrides it; a later version adds them. | status, pages (later version) |
+| internal error | interner Fehler | An error in the integration itself, not in your settings; the reason names what it held back or skipped. | status, issues, pages |
+| Reconfigure | Neu konfigurieren | The menu entry of Home Assistant that opens the settings of the house again, as the repair issues quote it. | issues, pages |
 | protection | Schutz | Movements that protect people or the shutters, such as from storm or hail; later versions add them. | status, pages |
 | fire alarm, acknowledge | Feueralarm, quittieren | The fire alarm and the confirmation that it is over; later versions add them. | status, pages |
 | manual operation | Bedienung von Hand | Moving a shutter by hand: with a wall switch, a remote or an app. Later versions notice it. | status, pages |
 | manual override | Handbetrieb | The time after a manual operation during which automatic movements wait. Also the name of a status entity. | status, pages |
 | pause | Pause, pausiert | Holds back comfort movements of a window, a group or the house on purpose; a later version adds the switch. | status, pages |
 | suspended | ausgesetzt | A comfort feature does not move a window because a saved setting it needs is faulty. Not the same as a pause. | status, issues, pages |
-| cautious choice | vorsichtige Vorgabe | What a setting that protects the shutters or limits their movements uses while its saved setting is faulty and no group or house setting stands in. | issues, pages |
+| cautious choice | vorsichtige Vorgabe | What a setting that protects people or hardware or limits movements uses while its saved setting is faulty and no group or house setting stands in. | issues, pages |
 | maintenance lock | Wartungssperre | Nothing may move a shutter while somebody works on it; a later version adds the switch. | status, pages |
 | operating mode | Betriebsart | Off, protection only, or normal operation; a later version adds it. | status, pages |
 | movement (page) | Bewegung | The page with the settings that spare the motors. | forms, pages |
