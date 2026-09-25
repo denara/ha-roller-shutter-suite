@@ -2,11 +2,11 @@
   "_templates": {
     "inherit_hint_empty": "Leer lassen, um die Einstellung von {source} zu übernehmen (derzeit {inherited}).",
     "inherit_hint_choice": "Derzeit übernommen von {source}: {inherited}.",
-    "inherit_hint_switch": "„Übernehmen“ verwendet die Einstellung von {source}.",
-    "enumeration_inherit_option": "Übernehmen",
+    "inherit_hint_switch": "Beim Übernehmen gilt die Einstellung von {source}.",
+    "enumeration_inherit_option": "Vom Haus oder von der Gruppe übernehmen",
     "features_title": "Funktionen",
-    "features_description": "Lege fest, worum sich Roller Shutter Suite im ganzen Haus kümmern soll. Die folgenden Seiten fragen nur nach dem, was du hier einschaltest.",
-    "features_description_inheriting": "Lege fest, worum sich Roller Shutter Suite hier kümmern soll. Mit „Übernehmen“ gilt die Wahl des Hauses oder der Gruppe; die Liste zeigt, was das gerade ist. Die folgenden Seiten fragen nur nach dem, was eingeschaltet ist.",
+    "features_description": "Lege fest, worum sich Roller Shutter Suite im ganzen Haus kümmern soll. Weitere Seiten folgen nur für das, was du hier einschaltest.",
+    "features_description_inheriting": "Lege fest, worum sich Roller Shutter Suite hier kümmern soll. Mit „Vom Haus oder von der Gruppe übernehmen“ gilt, was dort gewählt ist; die Liste zeigt, was das gerade ist. Weitere Seiten folgen nur für das, was eingeschaltet ist.",
     "expert_name": "Erweiterte Einstellungen",
     "expert_description": "Die Voreinstellungen passen für die meisten Häuser. Ändere sie nur, wenn du einen Grund dafür hast.",
     "errors": {
@@ -14,7 +14,7 @@
       "fraction_not_allowed": "Gib eine ganze Zahl ein.",
       "invalid_day_of_year": "Gib den Tag als Monat und Tag mit je zwei Ziffern ein, zum Beispiel 05-01.",
       "leap_day_not_allowed": "Den 29. Februar gibt es nicht in jedem Jahr. Wähle den 28. Februar oder den 1. März.",
-      "reference_missing": "Wähle eine Entität, oder wähle oben „Keine“ oder „Übernehmen“.",
+      "reference_missing": "Wähle eine Entität, oder wähle oben „Keine“ oder „Vom Haus oder von der Gruppe übernehmen“.",
       "invalid_combination": "Diese Einstellungen widersprechen sich: {combination}. Jede für sich wäre in Ordnung."
     },
     "fault_title": "Eine Einstellung {level} kann nicht verwendet werden",
@@ -58,9 +58,9 @@
       "input_held_last_known": "Der letzte bekannte Zustand einer Entität wird verwendet",
       "waiting_for_delay": "Wartet die eingestellte Verzögerung ab",
       "outside_episode": "Bedingungen gerade nicht erfüllt",
-      "episode_locked": "Bleibt aus, bis die Bedingungen nicht mehr erfüllt sind",
+      "episode_locked": "Wartet, bis die Bedingung nicht mehr gilt",
       "watchdog_released": "Beendet, weil es unplausibel lange dauerte",
-      "capability_missing": "Die Abdeckung kann das nicht",
+      "capability_missing": "Der Rollladen kann das nicht",
       "day_type_fallback": "Art des Tages unbekannt, der Wochentag gilt",
       "function_disabled_by_fault": "Ausgesetzt, weil eine gespeicherte Einstellung fehlerhaft ist",
       "layer_failed": "Wegen eines internen Fehlers übersprungen",
@@ -80,7 +80,7 @@
       "sent": "Befehl gesendet",
       "maintenance_lock": "Wartungssperre",
       "dry_run": "Probelauf: Nichts bewegt sich",
-      "cover_unavailable": "Die Abdeckung ist nicht verfügbar",
+      "cover_unavailable": "Der Rollladen ist nicht verfügbar",
       "target_reached": "Steht bereits richtig",
       "mode_off": "Betriebsart: Aus",
       "mode_protection_only": "Betriebsart: Nur Schutz",
@@ -117,7 +117,7 @@
       "command_failed": "Befehl fehlgeschlagen",
       "actuator_no_reaction": "Der Rollladen hat nicht reagiert",
       "movement_not_finished": "Das Ende der Bewegung wurde nicht rechtzeitig gemeldet",
-      "member_unavailable": "Eine Abdeckung des Fensters ist nicht verfügbar",
+      "member_unavailable": "Ein Rollladen des Fensters ist nicht verfügbar",
       "button_refused_maintenance_lock": "Tastendruck wegen der Wartungssperre nicht beachtet"
     }
   },
@@ -185,8 +185,8 @@
           }
         },
         "degraded": {
-          "title": "Abdeckungen, die nur öffnen und schließen",
-          "description": "Diese Abdeckungen können keine Position anfahren oder melden keine: {covers}\n\nDu kannst sie trotzdem verwenden. Sie werden immer nur ganz geöffnet oder ganz geschlossen, nie auf eine Position dazwischen gefahren.",
+          "title": "Rollläden, die nur öffnen und schließen",
+          "description": "Diese Rollläden können keine Position anfahren oder melden keine: {covers}\n\nDu kannst sie trotzdem verwenden. Sie werden immer nur ganz geöffnet oder ganz geschlossen, nie auf eine Position dazwischen gefahren.",
           "menu_options": {
             "degraded_accept": "Mit diesen Abdeckungen fortfahren",
             "basics": "Andere Abdeckungen wählen"
@@ -208,16 +208,16 @@
   "selector": {
     "inherited_switch": {
       "options": {
-        "inherit_on": "Übernehmen (derzeit ein)",
-        "inherit_off": "Übernehmen (derzeit aus)",
+        "inherit_on": "Vom Haus oder von der Gruppe übernehmen (derzeit ein)",
+        "inherit_off": "Vom Haus oder von der Gruppe übernehmen (derzeit aus)",
         "on": "Ein",
         "off": "Aus"
       }
     },
     "reference_choice": {
       "options": {
-        "inherit_none": "Übernehmen (derzeit keine)",
-        "inherit_reference": "Übernehmen (derzeit die unten genannte Entität)",
+        "inherit_none": "Vom Haus oder von der Gruppe übernehmen (derzeit keine)",
+        "inherit_reference": "Vom Haus oder von der Gruppe übernehmen (derzeit die unten genannte Entität)",
         "none": "Keine",
         "own": "Eigene Auswahl"
       }
@@ -226,7 +226,7 @@
   "issues": {
     "window_covers_unreadable": {
       "title": "Fenster „{window}“ ist nicht eingerichtet",
-      "description": "Die gespeicherten Abdeckungen des Fensters „{window}“ lassen sich nicht lesen. Roller Shutter Suite kümmert sich deshalb überhaupt nicht um dieses Fenster. Alle anderen Fenster arbeiten wie gewohnt. Zum Beheben öffne das Fenster, wähle seine Abdeckungen neu und speichere es, oder lösche das Fenster."
+      "description": "Die gespeicherten Rollläden des Fensters „{window}“ lassen sich nicht lesen. Roller Shutter Suite kümmert sich deshalb überhaupt nicht um dieses Fenster. Alle anderen Fenster arbeiten wie gewohnt. Zum Beheben öffne das Fenster, wähle seine Rollläden neu und speichere es, oder lösche das Fenster."
     },
     "group_missing": {
       "title": "Die Gruppe von Fenster „{window}“ gibt es nicht mehr",
@@ -242,7 +242,7 @@
     },
     "option_unavailable": {
       "title": "Fenster „{window}“ kann die Einstellung „{key}“ nicht nutzen",
-      "description": "Das Fenster „{window}“ überschreibt die Einstellung „{key}“, aber diese Abdeckungen können nicht, was sie braucht: {covers}. Die Einstellung bleibt gespeichert und gilt wieder, sobald die Abdeckungen es können."
+      "description": "Das Fenster „{window}“ überschreibt die Einstellung „{key}“, aber diese Rollläden können nicht, was sie braucht: {covers}. Die Einstellung bleibt gespeichert und gilt wieder, sobald die Rollläden es können."
     },
     "setting_combination": {
       "title": "Gespeicherte Einstellungen widersprechen sich",

@@ -12,12 +12,12 @@ The German texts address the reader informally, as the German interface of Home 
 | group | Gruppe | Several windows that share their settings, such as one side of the house or one floor. Not a cover group of Home Assistant. | forms, issues, pages |
 | window | Fenster | One window with its shutter or shutters, which are always moved together: what Roller Shutter Suite takes care of. It has one device and one status. | forms, status, issues, pages |
 | roller shutter, shutter | Rollladen (plural Rollläden) | The physical shutter in front of the glass. | forms, status, issues, pages |
-| cover | Abdeckung | The Home Assistant entity that controls a roller shutter (`cover.example_window`), as the interface of Home Assistant calls it. Used where the entity is meant: choosing it, its state, what it can do. | forms, status, issues, pages |
+| cover | Abdeckung | The Home Assistant entity that controls a roller shutter (`cover.example_window`), as the interface of Home Assistant calls it. German uses this word only where the entity is selected (the field, its errors, the pages of the selection); everywhere else German says the word for roller shutter. | forms, status, issues, pages |
 | cover group | Abdeckungsgruppe | A group helper of Home Assistant that combines several covers. A window uses its members instead of the group. | forms, pages |
 | member | Mitglied | A cover of a cover group of Home Assistant. For a window with several covers the texts say "one cover of the window", not "member". | forms |
 | setting | Einstellung | Anything you choose in the forms. "Value" is used only for what is typed into a field. | forms, issues, pages |
 | saved setting | gespeicherte Einstellung | A setting as Roller Shutter Suite has stored it; the repair issues speak of it. | issues, pages |
-| inherit | übernehmen | A group or window uses the setting of the group or house above it. The list entry for it is called "Inherit". | forms, issues, pages |
+| inherit | übernehmen | A group or window uses the setting of the group or house above it. The list entry is "Inherit" in English; in German it names the house or the group it takes the setting from. | forms, issues, pages |
 | override | überschreiben | A group or window makes a setting of its own instead of inheriting it. | forms, issues, pages |
 | none | keine | The choice for an optional entity: no entity, although the group or the house names one. | forms |
 | own selection | eigene Auswahl | The choice for an optional entity: the entity chosen in the field below. | forms |
@@ -38,7 +38,7 @@ The German texts address the reader informally, as the German interface of Home 
 | random offset | zufälliger Versatz | Moves each morning and evening by a few minutes, differently for each window and day. | forms, pages |
 | position | Position | How far a shutter is open, as Home Assistant counts: 0 % is fully closed, 100 % fully open. A position is sent, never "arrived" or "confirmed". | forms, status, pages |
 | morning position, evening position | Morgenposition, Abendposition | How far the shutter opens in the morning and closes in the evening. | forms, pages |
-| target position | Zielposition | The position a window should have. The English name of the status entity stays "Computed position", because the entity IDs of new windows are formed from it. | status, pages |
+| target position | Zielposition | The position a window should have. Also the name of a status entity. | status, pages |
 | dry-run | Probelauf | A window decides and records what it would do, and moves nothing. Every new window starts in dry-run. | forms, status, issues, pages |
 | arm | scharf schalten | Switching dry-run off for a window, so that it moves its shutters; a later version adds it. | pages |
 | comfort movement | Komfortbewegung | A movement for convenience, such as those of the daily routine, as opposed to protection. | forms, issues, pages |

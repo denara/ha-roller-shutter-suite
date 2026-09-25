@@ -33,7 +33,7 @@ from custom_components.roller_shutter_suite.core.model import (
 from custom_components.roller_shutter_suite.core.reasons import ReasonCode
 
 REASON = "sensor.example_window_reason"
-TARGET = "sensor.example_window_computed_position"
+TARGET = "sensor.example_window_target_position"
 NEXT_ACTION = "sensor.example_window_next_planned_action"
 OVERRIDE = "binary_sensor.example_window_manual_override"
 DRY_RUN = "binary_sensor.example_window_dry_run"

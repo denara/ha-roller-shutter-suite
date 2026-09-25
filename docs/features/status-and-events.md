@@ -11,7 +11,7 @@ Each window has a device with the window's name. The device carries five entitie
 | Entity | Example | What it shows |
 |---|---|---|
 | Reason | `sensor.example_window_reason` | The one reason that explains best why the window is where it is, for example "Daily routine: night", "Paused" or "Dry-run: nothing moves". The full list is below. |
-| Computed position | `sensor.example_window_computed_position` | The position the window should have, in percent: 100 % is fully open, 0 % fully closed. It is unknown when nothing wants a position, or when the covers of a window with several covers should stand at different positions. |
+| Target position | `sensor.example_window_target_position` | The position the window should have, in percent: 100 % is fully open, 0 % fully closed. It is unknown when nothing wants a position, or when the covers of a window with several covers should stand at different positions. |
 | Next planned action | `sensor.example_window_next_planned_action` | When the daily routine wants something new next, for example the evening at 20:00. Its attributes say which position it will want (`target`) and why (`reason`). It is a plan, not a promise: something more important can apply at that time, and the evening never raises a shutter that is already lower. |
 | Manual override | `binary_sensor.example_window_manual_override` | On while a movement by hand holds the automatic movements back. Always off for now, see above. |
 | Dry-run | `binary_sensor.example_window_dry_run` | On while the window decides and records but moves nothing. You find it under the diagnostic entities of the device. New windows start in dry-run; arming a window arrives with a later version. |
@@ -154,7 +154,7 @@ The reason entity and the events use these codes. The column "Shown as" is the E
 | `input_held_last_known` | Using the last known state of an entity |
 | `waiting_for_delay` | Waiting for the set delay |
 | `outside_episode` | Conditions not met right now |
-| `episode_locked` | Stays off until its conditions are no longer met |
+| `episode_locked` | Waiting until the condition no longer applies |
 | `watchdog_released` | Ended because it lasted implausibly long |
 | `capability_missing` | The cover cannot do this |
 | `day_type_fallback` | Kind of day unknown, the day of the week is used |

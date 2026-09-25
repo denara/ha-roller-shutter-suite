@@ -11,7 +11,7 @@ What works:
 - the forms for the house, groups and windows, with values inherited from the house to groups to windows;
 - the daily routine: morning and evening on workdays, weekends and public holidays, fixed times or the sun with "not before" and "not after", a separate summer evening position, an outdoor brightness sensor, a random offset;
 - the settings of movement: minimum change, minimum interval, the gap between motors;
-- for every window: the entities Reason, Computed position, Next planned action, Manual override and Dry-run, the event `roller_shutter_suite_reason`, logbook entries and a diagnostics download.
+- for every window: the entities Reason, Target position, Next planned action, Manual override and Dry-run, the event `roller_shutter_suite_reason`, logbook entries and a diagnostics download.
 
 What does not work yet:
 

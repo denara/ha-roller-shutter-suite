@@ -8,7 +8,7 @@
   "fields": {
     "motor_min_change": {
       "label": "Mindeständerung",
-      "description": "Eine kleinere Komfortbewegung fällt weg. 0 schaltet das aus. Ganz auf oder ganz zu fährt ein Rollladen trotzdem, wie klein der restliche Weg auch ist. Das funktioniert nur bei Abdeckungen, die ihre Position melden; eine Abdeckung ohne Positionsmeldung wird immer bewegt."
+      "description": "Eine kleinere Komfortbewegung fällt weg. 0 schaltet das aus. Ganz auf oder ganz zu fährt ein Rollladen trotzdem, wie klein der restliche Weg auch ist. Das funktioniert nur bei Rollläden, die ihre Position melden; ein Rollladen ohne Positionsmeldung wird immer bewegt."
     },
     "motor_min_interval": {
       "label": "Mindestabstand",
@@ -16,11 +16,11 @@
     },
     "stagger_gap": {
       "label": "Abstand zwischen Motoren",
-      "description": "Wenn viele Rollläden gleichzeitig fahren, starten ihre Motoren nacheinander. Nach jedem Motor dieses Fensters wartet der nächste Motor, dieses oder eines anderen Fensters, so viele Sekunden. 0 schaltet das für dieses Fenster aus: Seine Abdeckungen starten gemeinsam, wenn es an der Reihe ist. Zwischen den Abdeckungen eines Fensters zählt der Abstand nur, wenn das Fenster mehrere hat."
+      "description": "Wenn viele Rollläden gleichzeitig fahren, starten ihre Motoren nacheinander. Nach jedem Motor dieses Fensters wartet der nächste Motor, dieses oder eines anderen Fensters, so viele Sekunden. 0 schaltet das für dieses Fenster aus: Seine Rollläden starten gemeinsam, wenn es an der Reihe ist. Zwischen den Rollläden eines Fensters zählt der Abstand nur, wenn das Fenster mehrere hat."
     },
     "reevaluate_after": {
       "label": "Spätestens erneut prüfen nach",
-      "description": "Muss eine Bewegung auf etwas warten, dessen Ende sich nicht absehen lässt, zum Beispiel darauf, dass eine Abdeckung wieder verfügbar ist, wird das Fenster spätestens nach dieser Zeit erneut geprüft."
+      "description": "Muss eine Bewegung auf etwas warten, dessen Ende sich nicht absehen lässt, zum Beispiel darauf, dass ein Rollladen wieder verfügbar ist, wird das Fenster spätestens nach dieser Zeit erneut geprüft."
     }
   }
 }

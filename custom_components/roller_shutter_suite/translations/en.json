@@ -7,7 +7,7 @@
       },
       "features": {
         "title": "Features",
-        "description": "Choose what Roller Shutter Suite takes care of in the whole house. The next pages only ask about what you turn on here.",
+        "description": "Choose what Roller Shutter Suite takes care of in the whole house. Further pages follow only for what you turn on here.",
         "data": {
           "schedule_enabled": "Daily routine"
         },
@@ -249,7 +249,7 @@
         },
         "features": {
           "title": "Features",
-          "description": "Choose what Roller Shutter Suite takes care of here. With \"Inherit\", the choice of the house or the group applies; the list shows what that is at the moment. The next pages only ask about what is turned on.",
+          "description": "Choose what Roller Shutter Suite takes care of here. With \"Inherit\", the choice of the house or the group applies; the list shows what that is at the moment. Further pages follow only for what is turned on.",
           "data": {
             "schedule_enabled": "Daily routine"
           },
@@ -514,7 +514,7 @@
         },
         "features": {
           "title": "Features",
-          "description": "Choose what Roller Shutter Suite takes care of here. With \"Inherit\", the choice of the house or the group applies; the list shows what that is at the moment. The next pages only ask about what is turned on.",
+          "description": "Choose what Roller Shutter Suite takes care of here. With \"Inherit\", the choice of the house or the group applies; the list shows what that is at the moment. Further pages follow only for what is turned on.",
           "data": {
             "schedule_enabled": "Daily routine"
           },
@@ -909,7 +909,7 @@
           "input_held_last_known": "Using the last known state of an entity",
           "waiting_for_delay": "Waiting for the set delay",
           "outside_episode": "Conditions not met right now",
-          "episode_locked": "Stays off until its conditions are no longer met",
+          "episode_locked": "Waiting until the condition no longer applies",
           "watchdog_released": "Ended because it lasted implausibly long",
           "capability_missing": "The cover cannot do this",
           "day_type_fallback": "Kind of day unknown, the day of the week is used",
@@ -973,7 +973,7 @@
         }
       },
       "target_position": {
-        "name": "Computed position"
+        "name": "Target position"
       },
       "next_action": {
         "name": "Next planned action",
@@ -1003,7 +1003,7 @@
               "input_held_last_known": "Using the last known state of an entity",
               "waiting_for_delay": "Waiting for the set delay",
               "outside_episode": "Conditions not met right now",
-              "episode_locked": "Stays off until its conditions are no longer met",
+              "episode_locked": "Waiting until the condition no longer applies",
               "watchdog_released": "Ended because it lasted implausibly long",
               "capability_missing": "The cover cannot do this",
               "day_type_fallback": "Kind of day unknown, the day of the week is used",

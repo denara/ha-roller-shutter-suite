@@ -5,8 +5,8 @@
     "inherit_hint_switch": "\"Inherit\" uses the setting of {source}.",
     "enumeration_inherit_option": "Inherit",
     "features_title": "Features",
-    "features_description": "Choose what Roller Shutter Suite takes care of in the whole house. The next pages only ask about what you turn on here.",
-    "features_description_inheriting": "Choose what Roller Shutter Suite takes care of here. With \"Inherit\", the choice of the house or the group applies; the list shows what that is at the moment. The next pages only ask about what is turned on.",
+    "features_description": "Choose what Roller Shutter Suite takes care of in the whole house. Further pages follow only for what you turn on here.",
+    "features_description_inheriting": "Choose what Roller Shutter Suite takes care of here. With \"Inherit\", the choice of the house or the group applies; the list shows what that is at the moment. Further pages follow only for what is turned on.",
     "expert_name": "Advanced settings",
     "expert_description": "The defaults suit most homes. Change them only if you have a reason to.",
     "errors": {
@@ -58,7 +58,7 @@
       "input_held_last_known": "Using the last known state of an entity",
       "waiting_for_delay": "Waiting for the set delay",
       "outside_episode": "Conditions not met right now",
-      "episode_locked": "Stays off until its conditions are no longer met",
+      "episode_locked": "Waiting until the condition no longer applies",
       "watchdog_released": "Ended because it lasted implausibly long",
       "capability_missing": "The cover cannot do this",
       "day_type_fallback": "Kind of day unknown, the day of the week is used",
@@ -259,7 +259,7 @@
         "name": "Reason"
       },
       "target_position": {
-        "name": "Computed position"
+        "name": "Target position"
       },
       "next_action": {
         "name": "Next planned action",

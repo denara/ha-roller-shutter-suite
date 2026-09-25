@@ -11,7 +11,7 @@ If you have not read [Concepts](concepts.md) yet: settings live on three levels,
 1. Open **Settings** > **Devices & services** and choose **Add integration**.
 2. Search for **Roller Shutter Suite** and select it.
 3. Confirm the first page.
-4. The page **Features** asks what is switched on for the house. Only a feature that is switched on gets pages of its own.
+4. The page **Features** asks what Roller Shutter Suite takes care of in the whole house. Further pages follow only for what you turn on there.
 5. The pages of the daily routine follow: one general page (positions, how workdays and public holidays are recognized, summer, outdoor brightness) and one page each for workdays, weekends and public holidays (when the morning and the evening begin). Every field is filled with a sensible value, so you can simply save each page and adjust things later.
 6. Save the last page. The integration appears in the list.
 
@@ -151,7 +151,7 @@ Entity for workdays        [                                   ]
 
 **Advanced settings** sit in a section that is folded shut at the bottom of a page. Sensible defaults apply, and you only open the section if you know why. For the daily routine these are the offset to sunrise or sunset, the elevation of the sun, "not before" and "not after", the duration of darkness and the random offset. All fields of a trigger are always shown; which of them count depends on the trigger you chose, and the text below each field says so.
 
-**Feature switches.** The first page after the name lists the feature switches, and only the features that are switched on get pages of their own. A feature switch is inherited like any other switch: the house can switch the daily routine on, a group can switch it off for its windows, and one window of that group can switch it on again. What you had entered for a feature stays stored while it is switched off.
+**Feature switches.** The first page after the name lists the feature switches; further pages follow only for what is turned on. A feature switch is inherited like any other switch: the house can switch the daily routine on, a group can switch it off for its windows, and one window of that group can switch it on again. What you had entered for a feature stays stored while it is switched off.
 
 **Values that do not fit together.** Some values are fine one by one and still contradict each other: a morning at 21:00 cannot come before an evening that begins at 17:00. The page then shows an error at the fields concerned and names the settings, and nothing is saved until they fit.
 
