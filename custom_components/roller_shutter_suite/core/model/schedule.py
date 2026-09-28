@@ -28,7 +28,8 @@ MAX_RANDOM_OFFSET: Final = timedelta(minutes=30)
 MAX_SUN_OFFSET_MINUTES: Final = 720
 """How far a trigger can lie before or after sunrise or sunset, in minutes."""
 
-_ZENITH: Final = 90.0
+MAX_TRIGGER_ELEVATION: Final = 90.0
+"""How far above or below the horizon a trigger elevation can lie, in degrees."""
 
 _YEAR_WITHOUT_LEAP_DAY: Final = 2001
 
@@ -146,7 +147,7 @@ class Trigger:
         if abs(self.offset_minutes) > MAX_SUN_OFFSET_MINUTES:
             raise ValueError("the offset of a trigger is within -720 and 720 minutes")
         _require_number(self.elevation, "the elevation of a trigger")
-        if not -_ZENITH <= self.elevation <= _ZENITH:
+        if not -MAX_TRIGGER_ELEVATION <= self.elevation <= MAX_TRIGGER_ELEVATION:
             raise ValueError("the elevation of a trigger is within -90 and 90 degrees")
 
     @property

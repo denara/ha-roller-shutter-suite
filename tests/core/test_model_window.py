@@ -403,6 +403,12 @@ def test_window_configuration_is_validated(
         _window(**changes)
 
 
+def test_staggering_gap_above_the_maximum_is_refused_by_the_model() -> None:
+    """The rule holds for every caller, also one that bypasses the reader."""
+    with pytest.raises(ValueError, match="within 0 and 10 seconds"):
+        _window(stagger_gap=timedelta(seconds=11))
+
+
 def test_window_members_are_unique() -> None:
     """A cover belongs to a window once."""
     with pytest.raises(ValueError, match="occurs twice"):

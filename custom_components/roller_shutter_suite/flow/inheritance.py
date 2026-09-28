@@ -29,6 +29,16 @@ The number selector delivers floats. Settings that are whole numbers are
 normalized in :func:`_normalized_number`, the single place for it: a whole
 float becomes an ``int``, and what the reader of the core then refuses because
 of a fraction is reported as such.
+
+**No refusal of the schema reaches the user.** Home Assistant validates the
+input of a form with the selectors of its schema before the step sees it, and
+a selector refuses with an English text of its own, which the frontend shows
+as it is because it is no translation key: the number selector answers a
+value outside its bounds with "Value -100.0 is too small", after turning the
+input into a float. The number box and the time field of the generated steps
+therefore hand every value on unchanged (:class:`NumberBox`,
+:class:`TimeOfDay`), and :func:`read_step_input` judges it with the rules of
+the core and answers with a translated error key.
 """
 
 import math
@@ -37,7 +47,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import date, time, timedelta
 from enum import Enum
-from typing import Any, Final
+from typing import Any, Final, cast, override
 
 import probatio
 from homeassistant.data_entry_flow import section
@@ -54,6 +64,8 @@ from homeassistant.helpers.selector import (
     SelectSelectorMode,
     TextSelector,
     TimeSelector,
+    TimeSelectorConfig,
+    make_selector_config_schema,
 )
 
 from custom_components.roller_shutter_suite.core.model import JsonValue, Position
@@ -101,6 +113,48 @@ PLACEHOLDER_COMBINATION: Final = "combination"
 _NO_REFERENCE: Final = "-"
 _DAY_OF_YEAR: Final = re.compile(r"([0-9]{2})-([0-9]{2})")
 _LEAP_YEAR: Final = 2000
+
+
+class NumberBox(NumberSelector):
+    """The number box of a generated step: it shows its bounds and judges nothing.
+
+    The frontend reads the bounds and the unit from the configuration. The
+    value is handed on unchanged, so a value outside the bounds reaches the
+    step, which refuses it with a translated error instead of the English
+    text of the check of Home Assistant.
+    """
+
+    @override
+    def __call__(self, data: Any) -> Any:
+        """Hand the value on; :func:`read_step_input` judges it."""
+        return data
+
+
+NO_SECOND: Final = "no_second"
+
+
+class TimeOfDay(TimeSelector):
+    """The time field of a generated step: hours and minutes, and it judges nothing.
+
+    The time selector of the frontend hides the seconds with ``no_second``
+    (``ha-selector-time``). The time selector of Home Assistant Core 2026.9
+    does not list that option in its configuration schema and would refuse
+    it, so this field extends the schema by exactly that option. A stored
+    time with seconds still loads: the reader of the core takes ``HH:MM`` and
+    ``HH:MM:SS``. The value is handed on unchanged, so the reader of the core
+    judges it and a refusal is a translated error.
+    """
+
+    CONFIG_SCHEMA = make_selector_config_schema({probatio.Optional(NO_SECOND): bool})
+
+    def __init__(self) -> None:
+        """Configure the field without seconds."""
+        super().__init__(cast("TimeSelectorConfig", {NO_SECOND: True}))
+
+    @override
+    def __call__(self, data: Any) -> Any:
+        """Hand the value on; the reader of the core judges it."""
+        return data
 
 
 def as_form_schema(schema: probatio.Schema) -> Any:
@@ -192,16 +246,21 @@ def stored_form(
     raise TypeError(f"the setting {definition.key!r} has no form value")
 
 
-def _shown(definition: SettingDefinition[Any], item: FieldForm, value: object) -> str:
-    """Return an inherited value as language-neutral text for a helper text."""
-    form_value = stored_form(definition, item, value)
+def _shown(catalog: Catalog, item: FieldForm, value: object) -> str:
+    """Return an inherited value as language-neutral text for a helper text.
+
+    A whole number has no fraction (``80 %``, never ``80.0 %``), and a time
+    without seconds has none either (``07:00``).
+    """
+    if isinstance(value, time) and not value.second:
+        return value.strftime("%H:%M")
+    form_value = stored_form(catalog.definitions[item.key], item, value)
     if form_value is None:
         return _NO_REFERENCE
     if isinstance(form_value, bool):
         return ON if form_value else OFF
     if isinstance(form_value, (int, float)):
-        text = f"{form_value:g}"
-        return text if item.unit is None else f"{text} {item.unit}"
+        return catalog.number_bounds(item).text(form_value)
     return str(form_value)
 
 
@@ -214,16 +273,18 @@ def _own_form_value(
     return own
 
 
-def _number_selector(item: FieldForm) -> NumberSelector:
+def _number_selector(catalog: Catalog, item: FieldForm) -> NumberBox:
+    """Return the number box with the bounds and the unit of the registry entry."""
+    box = catalog.number_bounds(item)
     # Box mode on purpose: a slider cannot be emptied, so it cannot say "inherit".
-    config = NumberSelectorConfig(step=item.step, mode=NumberSelectorMode.BOX)
-    if item.minimum is not None:
-        config["min"] = item.minimum
-    if item.maximum is not None:
-        config["max"] = item.maximum
-    if item.unit is not None:
-        config["unit_of_measurement"] = item.unit
-    return NumberSelector(config)
+    config = NumberSelectorConfig(step=box.step, mode=NumberSelectorMode.BOX)
+    if box.minimum is not None:
+        config["min"] = box.minimum
+    if box.maximum is not None:
+        config["max"] = box.maximum
+    if box.unit is not None:
+        config["unit_of_measurement"] = box.unit
+    return NumberBox(config)
 
 
 def _dropdown(options: list[str], translation_key: str) -> SelectSelector:
@@ -331,6 +392,7 @@ def _reference_field(
 
 
 def _field_schema(
+    catalog: Catalog,
     definition: SettingDefinition[Any],
     item: FieldForm,
     context: LevelContext,
@@ -344,10 +406,10 @@ def _field_schema(
     if kind is SettingKind.OPTIONAL_REFERENCE:
         return _reference_field(item, context, inherited)
     if kind is SettingKind.TIME:
-        return _value_field(definition, item, context, TimeSelector())
+        return _value_field(definition, item, context, TimeOfDay())
     if kind is SettingKind.DAY_OF_YEAR:
         return _value_field(definition, item, context, TextSelector())
-    return _value_field(definition, item, context, _number_selector(item))
+    return _value_field(definition, item, context, _number_selector(catalog, item))
 
 
 def build_schema(
@@ -373,7 +435,7 @@ def build_schema(
                 )
             ] = BooleanSelector(BooleanSelectorConfig(read_only=True))
             continue
-        entries = _field_schema(definitions[item.key], item, context, resolved)
+        entries = _field_schema(catalog, definitions[item.key], item, context, resolved)
         (expert if item.expert else top).update(entries)
     if expert:
         top[probatio.Required(SECTION_EXPERT)] = section(
@@ -396,7 +458,6 @@ def build_placeholders(
     placeholders: dict[str, str] = {}
     if not context.inherits:
         return placeholders
-    definitions = catalog.definitions
     for item in visible_fields(catalog, fields, context):
         resolved = inherited.values[item.key]
         if resolved.unavailable is not None:
@@ -408,9 +469,7 @@ def build_placeholders(
         source = context.house_title
         if resolved.level is Level.GROUP and context.group is not None:
             source = context.group.title
-        placeholders[f"{item.name}_inherited"] = _shown(
-            definitions[item.key], item, resolved.value
-        )
+        placeholders[f"{item.name}_inherited"] = _shown(catalog, item, resolved.value)
         placeholders[f"{item.name}_source"] = source
     return placeholders
 
@@ -430,21 +489,27 @@ def _is_sound(catalog: Catalog, key: str, value: JsonValue) -> bool:
 
 
 def _normalized_number(
-    catalog: Catalog, item: FieldForm, kind: SettingKind, raw: float
+    catalog: Catalog, item: FieldForm, kind: SettingKind, raw: object
 ) -> tuple[JsonValue, str | None]:
     """Turn what the number selector delivers into the stored value.
 
     The selector delivers floats: 80 arrives as ``80.0``. A whole float is
     stored as an ``int``. A duration is entered in its unit and stored in whole
-    seconds. A value with a fraction is kept only if the reader of the setting
-    accepts it; if the reader refuses it but accepts the whole number next to
-    it, the fraction is the problem, and the error says so.
+    seconds. A number outside the range of the registry entry is refused with
+    the error of that field, which names the range. A value with a fraction is
+    kept only if the reader of the setting accepts it; if the reader refuses
+    it but accepts the whole number next to it, the fraction is the problem,
+    and the error says so. Anything but a finite number is an invalid value.
     """
+    if isinstance(raw, bool) or not isinstance(raw, (int, float)):
+        return None, ERROR_INVALID_VALUE
     if not math.isfinite(raw):
         return None, ERROR_INVALID_VALUE
+    size = item.seconds_per_unit if kind is SettingKind.DURATION else 1
+    if catalog.definitions[item.key].out_of_range(raw * size):
+        return None, item.out_of_range_error
     if not isinstance(raw, float) or raw.is_integer():
-        factor = item.seconds_per_unit if kind is SettingKind.DURATION else 1
-        return int(raw) * factor, None
+        return int(raw) * size, None
     if kind is not SettingKind.DURATION and _is_sound(catalog, item.key, raw):
         return raw, None
     whole_is_sound = kind is SettingKind.DURATION or _is_sound(

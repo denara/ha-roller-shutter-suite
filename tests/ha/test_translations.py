@@ -32,6 +32,7 @@ from custom_components.roller_shutter_suite.features import CATALOG
 from custom_components.roller_shutter_suite.flow import (
     group_flow,
     inheritance,
+    steps,
     window_flow,
 )
 from custom_components.roller_shutter_suite.flow.model import (
@@ -101,13 +102,23 @@ def _context(level: Level) -> LevelContext:
 
 
 def _assert_step_is_translated(
-    step: dict[str, Any], catalog: Catalog, fields: Any, level: Level
+    step: dict[str, Any],
+    catalog: Catalog,
+    fields: Any,
+    level: Level,
+    *,
+    numbered: bool = False,
 ) -> None:
-    """Every field has a label and a helper text; every placeholder is supplied."""
+    """Every field has a label and a helper text; every placeholder is supplied.
+
+    A numbered page also gets the counter of its title from the flow.
+    """
     context = _context(level)
     inherited = inheritance.inherited_settings(catalog, context)
     schema = inheritance.build_schema(catalog, fields, context, inherited).schema
     supplied = set(inheritance.build_placeholders(catalog, fields, context, inherited))
+    if numbered:
+        supplied |= {steps.PLACEHOLDER_PAGE_NUMBER, steps.PLACEHOLDER_PAGE_COUNT}
 
     shown = [step["title"], step["description"]]
     for marker, selector in schema.items():
@@ -137,7 +148,11 @@ def test_every_field_the_forms_show_is_translated(path: str, level: Level) -> No
     for feature in CATALOG.features:
         for page in feature.steps:
             step = flow["step"][feature.step_id(page)]
-            _assert_step_is_translated(step, CATALOG, page.fields, level)
+            _assert_step_is_translated(
+                step, CATALOG, page.fields, level, numbered=page.numbered
+            )
+            titled = set(_PLACEHOLDER.findall(step["title"]))
+            assert bool(titled) is page.numbered, feature.step_id(page)
 
 
 @pytest.mark.parametrize("path", FILES)

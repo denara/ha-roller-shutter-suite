@@ -226,6 +226,8 @@ class WindowSubentryFlow(FeatureStepsMixin, ConfigSubentryFlow):
                 as_form_schema(probatio.Schema(schema)), suggested
             ),
             errors=errors,
+            # The pages of the settings always follow.
+            last_step=False,
             description_placeholders=placeholders,
         )
 

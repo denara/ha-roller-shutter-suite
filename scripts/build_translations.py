@@ -21,10 +21,14 @@ Which fields a step has, which of them sit in the section of expert values,
 and of which kind they are comes from the catalog of the integration
 (``features/`` and the registry of the core), never from a second list here.
 On the levels that inherit, the script appends the shared inheritance hint to
-the helper text of a field, with the placeholders of that field. It also fans
-out the repair issues about stored settings: one per level and problem, and
-the words for the reason codes (``_templates.reason_codes``) to the states of
-the reason sensor and to the attribute ``reason`` of the next planned action.
+the helper text of a field, with the placeholders of that field. It writes
+one error per number field with a range, ``out_of_range_<field>``, whose text
+names the range of the registry entry in the unit of the form
+(``_templates.range_errors``), so the range is written down nowhere else. It
+also fans out the repair issues about stored settings: one per level and
+problem, and the words for the reason codes (``_templates.reason_codes``) to
+the states of the reason sensor and to the attribute ``reason`` of the next
+planned action.
 
 **Languages** are the ``base.<language>.json`` files that exist. English is
 written to ``strings.json`` and ``translations/en.json``, every other language
@@ -287,6 +291,54 @@ def feature_step(
     return step
 
 
+def range_errors(
+    catalog: Any,
+    fragments: dict[str, dict[str, Any]],
+    templates: dict[str, Any],
+    level: str,
+) -> dict[str, str]:
+    """Return the error of every number field with a range that the level shows.
+
+    The text names the bounds of the number box, which come from the registry
+    entry. A field inside the section of expert values cannot show an error
+    of its own; its error stands on the form, so its text names the field.
+    """
+    definitions = catalog.definitions
+    errors: dict[str, str] = {}
+    for feature in catalog.features:
+        texts = field_texts(fragments[feature.feature_id])
+        for item in feature.fields:
+            definition = definitions[item.key]
+            if definition.kind.value not in ("number", "duration"):
+                continue
+            if not definition.inheritable and level != "window":
+                continue
+            bounds = catalog.number_bounds(item)
+            if bounds.minimum is None and bounds.maximum is None:
+                continue
+            if bounds.maximum is None:
+                shape = "at_least"
+            elif bounds.minimum is None:
+                shape = "at_most"
+            else:
+                shape = "between"
+            where = "section" if item.expert else "field"
+            text = templates["range_errors"][where][shape]
+            if bounds.minimum is not None:
+                # The lower bound carries its unit only where it stands alone.
+                lower = (
+                    bounds.text(bounds.minimum)
+                    if bounds.maximum is None
+                    else bounds.text(bounds.minimum, with_unit=False)
+                )
+                text = text.replace("{minimum}", lower)
+            if bounds.maximum is not None:
+                text = text.replace("{maximum}", bounds.text(bounds.maximum))
+            text = text.replace("{label}", texts[item.name]["label"])
+            errors[item.out_of_range_error] = text
+    return errors
+
+
 def features_step(
     catalog: Any,
     fragments: dict[str, dict[str, Any]],
@@ -362,6 +414,7 @@ def build(language: str, catalog: Any | None = None) -> dict[str, Any]:
                 flow = flow.setdefault(key, {})
             steps = flow.setdefault("step", {})
             flow.setdefault("error", {}).update(templates["errors"])
+            flow["error"].update(range_errors(catalog, fragments, templates, level))
             switches_step = features_step(catalog, fragments, templates, inherits)
             if switches_step is not None:
                 steps["features"] = switches_step

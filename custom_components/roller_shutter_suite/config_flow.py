@@ -62,7 +62,8 @@ class RollerShutterSuiteConfigFlow(FeatureStepsMixin, ConfigFlow, domain=DOMAIN)
     ) -> ConfigFlowResult:
         """Ask for confirmation, then for the values of the house."""
         if user_input is None:
-            return self.async_show_form(step_id="user")
+            # Pages of the house always follow.
+            return self.async_show_form(step_id="user", last_step=False)
         result: ConfigFlowResult = await self._async_start_feature_steps(
             LevelContext(level=Level.GLOBAL, own={}, house_title=ENTRY_TITLE)
         )

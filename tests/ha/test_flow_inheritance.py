@@ -5,7 +5,6 @@ of the feature; no flow class knows a setting. The last tests use the second
 catalog of ``helpers.py`` for the two things that have no real setting yet.
 """
 
-import dataclasses
 from typing import Any
 
 import probatio
@@ -299,39 +298,49 @@ async def test_number_that_is_not_finite_is_an_invalid_value(
     assert result["errors"] == {"schedule_brightness_threshold_lux": "invalid_value"}
 
 
-async def test_value_the_core_refuses_is_a_form_error(
-    hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """The value rules live in the core; a form whose bound is too wide still cannot save."""
-    general, *days = DAILY_ROUTINE.steps
-    too_wide = tuple(
-        dataclasses.replace(item, maximum=60)
-        if item.key == "schedule_random_offset"
-        else item
-        for item in general.fields
-    )
-    catalog = Catalog(
-        registry=features.CATALOG.registry,
-        features=(
-            FeatureForm(
-                DAILY_ROUTINE.feature_id,
-                (StepForm(general.name, too_wide), *days),
-                DAILY_ROUTINE.switch,
-            ),
-        ),
-        resolve=features.CATALOG.resolve,
-    )
-    monkeypatch.setattr(features, "CATALOG", catalog)
+async def test_value_the_core_refuses_is_a_form_error(hass: HomeAssistant) -> None:
+    """The value rules live in the core; a value inside the range can still be refused.
+
+    A delay has no upper bound of its own, but no duration is longer than 366
+    days, which the reader of the core refuses.
+    """
     entry = await _house(hass)
     result = await _window_page(hass, entry)
 
-    # The core allows a random offset of at most 30 minutes.
     result = await configure_subentry_flow(
-        hass, result, GENERAL_INHERIT | {"expert": {"schedule_random_offset": 45}}
+        hass,
+        result,
+        GENERAL_INHERIT | {"expert": {"schedule_brightness_delay": 600_000.0}},
     )
 
     # A section shows no field errors, so an expert value reports on the form.
     assert result["errors"] == {"base": "invalid_value"}
+
+
+async def test_value_outside_the_range_is_refused_with_the_range_of_the_field(
+    hass: HomeAssistant,
+) -> None:
+    """The number box does not judge; the step answers with the error of the field."""
+    entry = await _house(hass)
+    result = await _window_page(hass, entry)
+
+    result = await configure_subentry_flow(
+        hass,
+        result,
+        GENERAL_INHERIT
+        | {
+            "schedule_morning_position": -100.0,
+            "schedule_evening_position": 200.0,
+            "expert": {"schedule_random_offset": 45.0},
+        },
+    )
+
+    assert result["errors"] == {
+        "schedule_morning_position": "out_of_range_schedule_morning_position",
+        "schedule_evening_position": "out_of_range_schedule_evening_position",
+        # A section shows no field errors; this text names the field.
+        "base": "out_of_range_schedule_random_offset",
+    }
 
 
 async def test_combination_the_core_refuses_is_shown_on_the_fields_concerned(
@@ -514,7 +523,8 @@ async def test_time_duration_and_day_of_year_come_from_registry_and_form_data(
     expert = schema_of(result)["expert"].schema.schema
     assert isinstance(expert["schedule_workday_morning_not_after"], TimeSelector)
     placeholders = result["description_placeholders"]
-    assert placeholders["schedule_workday_morning_time_inherited"] == "07:00:00"
+    # The field shows no seconds, and neither does the inherited value.
+    assert placeholders["schedule_workday_morning_time_inherited"] == "07:00"
 
     result = await submit_steps(
         hass,
@@ -733,15 +743,16 @@ async def test_form_judges_its_own_page_and_level_only(hass: HomeAssistant) -> N
             subentry_data(
                 SUBENTRY_WINDOW,
                 "Kitchen",
-                # The reader accepts 3600 seconds; the value rules refuse them.
-                {"covers": [COVER], CONF_SETTINGS: {"schedule_random_offset": 3600}},
+                # The reader accepts 95 degrees; the value rules of the
+                # measurements refuse them. No page shows the setting.
+                {"covers": [COVER], CONF_SETTINGS: {"shading_min_elevation": 95}},
                 "w1",
             )
         ],
     )
 
     # The page of the switches passes, although the window holds a value that
-    # its own page will have to correct, and the house a faulty one.
+    # the core refuses, and the house a faulty one.
     result = await run_subentry_flow(
         hass,
         entry,
@@ -753,7 +764,9 @@ async def test_form_judges_its_own_page_and_level_only(hass: HomeAssistant) -> N
 
     result = await _save_general(hass, result, {})
     assert result["reason"] == "reconfigure_successful"
-    assert _own(entry, "w1") == {}
+    # A setting that no form shows keeps its stored value; its repair issue
+    # stays until it is corrected.
+    assert _own(entry, "w1") == {"shading_min_elevation": 95}
 
 
 @pytest.mark.usefixtures("example_catalog")

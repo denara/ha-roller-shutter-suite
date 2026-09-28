@@ -4,9 +4,8 @@ The settings are entries of the registry of the core: ``motor_min_change``
 and ``motor_min_interval`` (motor protection, E10), ``stagger_gap``
 (staggering between motors, E13) and ``reevaluate_after`` (the upper bound of
 a deferral whose end is not known). This package only says how they appear in
-the forms. The bounds are a convenience of the controls; the core decides
-what is valid, and a test fails if a bound is wider than what the core
-accepts.
+the forms. The range and the unit of a number are part of its registry
+entry, never of this description.
 
 The feature has no switch: motor protection is never switched off as a whole,
 because it restricts movement, and each part has its own "zero switches it
@@ -29,19 +28,15 @@ MOVEMENT: Final = FeatureForm(
         StepForm(
             name="general",
             fields=(
-                FieldForm("motor_min_change", minimum=0, maximum=100, unit="%"),
+                FieldForm("motor_min_change"),
                 FieldForm(
                     "motor_min_interval",
-                    minimum=0,
-                    unit="min",
                     seconds_per_unit=_MINUTE,
                 ),
-                FieldForm("stagger_gap", minimum=0, maximum=10, unit="s"),
+                FieldForm("stagger_gap"),
                 FieldForm(
                     "reevaluate_after",
                     expert=True,
-                    minimum=1,
-                    unit="min",
                     seconds_per_unit=_MINUTE,
                 ),
             ),

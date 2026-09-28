@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Roller Shutter Suite einrichten",
-        "description": "Möchtest du Roller Shutter Suite einrichten? Auf den nächsten Seiten legst du die übergeordneten Einstellungen für das ganze Haus fest. Gruppen und Fenster übernehmen sie, bis sie dort überschrieben werden."
+        "description": "Möchtest du Roller Shutter Suite einrichten? Auf den nächsten Seiten legst du die übergeordneten Einstellungen für das ganze Haus fest. Gruppen und Fenster übernehmen sie, bis sie dort überschrieben werden. Zurückblättern geht nicht, aber jede Einstellung kannst du später über „Neu konfigurieren“ ändern."
       },
       "features": {
         "title": "Funktionen",
@@ -48,7 +48,7 @@
           "schedule_summer_first_day": "Monat und Tag mit je zwei Ziffern, zum Beispiel 05-01 für den 1. Mai.",
           "schedule_summer_last_day": "Monat und Tag mit je zwei Ziffern, zum Beispiel 09-30 für den 30. September. Der Sommer darf über den Jahreswechsel reichen.",
           "schedule_evening_position_summer": "Gilt im Sommer statt der Abendposition, zum Beispiel 30 % für Sichtschutz mit etwas frischer Luft. Sie wirkt nur, wenn der Sommer über eine Entität oder nach Datum festgelegt ist.",
-          "schedule_brightness_source_choice": "Eine Entität, die die Außenhelligkeit in Lux meldet. Bleibt es für die eingestellte Dauer dunkler als die Schwelle, beginnt der Abend früher, aber nie früher als die Zeit unter „Abend: nicht vor“. Solange die Entität nicht verfügbar oder unbekannt ist, löst sie den Abend weder aus noch verzögert sie ihn.",
+          "schedule_brightness_source_choice": "Eine Entität, die die Außenhelligkeit in Lux meldet. Bleibt es für die eingestellte Dauer dunkler als die Schwelle, beginnt der Abend früher, aber nicht vor der Zeit unter „Abend: nicht vor“. Solange die Entität nicht verfügbar oder unbekannt ist, löst sie den Abend weder aus noch verzögert sie ihn.",
           "schedule_brightness_source": "Gilt nur mit „Eigene Auswahl“ oben.",
           "schedule_brightness_threshold_lux": "Unterhalb dieser Außenhelligkeit in Lux gilt es als dunkel."
         },
@@ -62,13 +62,13 @@
             },
             "data_description": {
               "schedule_brightness_delay": "Wie viele Minuten es dunkel sein muss, bevor der Abend beginnt.",
-              "schedule_random_offset": "Verschiebt jeden Morgen und jeden Abend um bis zu so viele Minuten nach vorn oder hinten, für jedes Fenster und jeden Tag anders. 0 schaltet das aus; höchstens 30."
+              "schedule_random_offset": "Verschiebt jeden Morgen und jeden Abend um bis zu so viele Minuten nach vorn oder hinten, für jedes Fenster und jeden Tag anders. 0 schaltet das aus."
             }
           }
         }
       },
       "feature_daily_routine_workday": {
-        "title": "Tagesablauf an Werktagen",
+        "title": "Tagesablauf: Werktage ({page_number}/{page_count})",
         "description": "Wann Morgen und Abend an einem Werktag beginnen.",
         "data": {
           "schedule_workday_morning_kind": "Morgen: Auslöser",
@@ -110,7 +110,7 @@
         }
       },
       "feature_daily_routine_weekend": {
-        "title": "Tagesablauf am Wochenende",
+        "title": "Tagesablauf: Wochenende ({page_number}/{page_count})",
         "description": "Wann Morgen und Abend an einem Samstag oder Sonntag beginnen oder an einem Tag, den die Werktag-Entität als frei meldet.",
         "data": {
           "schedule_weekend_morning_kind": "Morgen: Auslöser",
@@ -152,7 +152,7 @@
         }
       },
       "feature_daily_routine_holiday": {
-        "title": "Tagesablauf an Feiertagen",
+        "title": "Tagesablauf: Feiertage ({page_number}/{page_count})",
         "description": "Wann Morgen und Abend an einem Tag beginnen, den die Feiertag-Entität als Feiertag meldet.",
         "data": {
           "schedule_holiday_morning_kind": "Morgen: Auslöser",
@@ -229,7 +229,29 @@
       "invalid_day_of_year": "Gib den Tag als Monat und Tag mit je zwei Ziffern ein, zum Beispiel 05-01.",
       "leap_day_not_allowed": "Den 29. Februar gibt es nicht in jedem Jahr. Wähle den 28. Februar oder den 1. März.",
       "reference_missing": "Wähle eine Entität, oder wähle oben „Keine“ oder „Vom Haus oder von der Gruppe übernehmen“.",
-      "invalid_combination": "Diese Einstellungen widersprechen sich: {combination}. Jede für sich wäre in Ordnung."
+      "invalid_combination": "Diese Einstellungen widersprechen sich: {combination}. Jede für sich wäre in Ordnung.",
+      "out_of_range_schedule_morning_position": "Gib einen Wert von 0 bis 100 % ein.",
+      "out_of_range_schedule_evening_position": "Gib einen Wert von 0 bis 100 % ein.",
+      "out_of_range_schedule_evening_position_summer": "Gib einen Wert von 0 bis 100 % ein.",
+      "out_of_range_schedule_brightness_threshold_lux": "Gib einen Wert von mindestens 0 lx ein.",
+      "out_of_range_schedule_brightness_delay": "Gib für „Dauer der Dunkelheit“ einen Wert von mindestens 0 min ein.",
+      "out_of_range_schedule_random_offset": "Gib für „Zufälliger Versatz“ einen Wert von 0 bis 30 min ein.",
+      "out_of_range_schedule_workday_morning_offset_minutes": "Gib für „Morgen: Versatz zu Sonnenaufgang oder Sonnenuntergang“ einen Wert von -720 bis 720 min ein.",
+      "out_of_range_schedule_workday_morning_elevation": "Gib für „Morgen: Höhe der Sonne“ einen Wert von -90 bis 90 ° ein.",
+      "out_of_range_schedule_workday_evening_offset_minutes": "Gib für „Abend: Versatz zu Sonnenaufgang oder Sonnenuntergang“ einen Wert von -720 bis 720 min ein.",
+      "out_of_range_schedule_workday_evening_elevation": "Gib für „Abend: Höhe der Sonne“ einen Wert von -90 bis 90 ° ein.",
+      "out_of_range_schedule_weekend_morning_offset_minutes": "Gib für „Morgen: Versatz zu Sonnenaufgang oder Sonnenuntergang“ einen Wert von -720 bis 720 min ein.",
+      "out_of_range_schedule_weekend_morning_elevation": "Gib für „Morgen: Höhe der Sonne“ einen Wert von -90 bis 90 ° ein.",
+      "out_of_range_schedule_weekend_evening_offset_minutes": "Gib für „Abend: Versatz zu Sonnenaufgang oder Sonnenuntergang“ einen Wert von -720 bis 720 min ein.",
+      "out_of_range_schedule_weekend_evening_elevation": "Gib für „Abend: Höhe der Sonne“ einen Wert von -90 bis 90 ° ein.",
+      "out_of_range_schedule_holiday_morning_offset_minutes": "Gib für „Morgen: Versatz zu Sonnenaufgang oder Sonnenuntergang“ einen Wert von -720 bis 720 min ein.",
+      "out_of_range_schedule_holiday_morning_elevation": "Gib für „Morgen: Höhe der Sonne“ einen Wert von -90 bis 90 ° ein.",
+      "out_of_range_schedule_holiday_evening_offset_minutes": "Gib für „Abend: Versatz zu Sonnenaufgang oder Sonnenuntergang“ einen Wert von -720 bis 720 min ein.",
+      "out_of_range_schedule_holiday_evening_elevation": "Gib für „Abend: Höhe der Sonne“ einen Wert von -90 bis 90 ° ein.",
+      "out_of_range_motor_min_change": "Gib einen Wert von 0 bis 100 % ein.",
+      "out_of_range_motor_min_interval": "Gib einen Wert von mindestens 0 min ein.",
+      "out_of_range_stagger_gap": "Gib einen Wert von 0 bis 10 s ein.",
+      "out_of_range_reevaluate_after": "Gib für „Spätestens erneut prüfen nach“ einen Wert von mindestens 1 min ein."
     }
   },
   "config_subentries": {
@@ -290,7 +312,7 @@
             "schedule_summer_first_day": "Monat und Tag mit je zwei Ziffern, zum Beispiel 05-01 für den 1. Mai. Leer lassen, um die Einstellung von {schedule_summer_first_day_source} zu übernehmen (derzeit {schedule_summer_first_day_inherited}).",
             "schedule_summer_last_day": "Monat und Tag mit je zwei Ziffern, zum Beispiel 09-30 für den 30. September. Der Sommer darf über den Jahreswechsel reichen. Leer lassen, um die Einstellung von {schedule_summer_last_day_source} zu übernehmen (derzeit {schedule_summer_last_day_inherited}).",
             "schedule_evening_position_summer": "Gilt im Sommer statt der Abendposition, zum Beispiel 30 % für Sichtschutz mit etwas frischer Luft. Sie wirkt nur, wenn der Sommer über eine Entität oder nach Datum festgelegt ist. Leer lassen, um die Einstellung von {schedule_evening_position_summer_source} zu übernehmen (derzeit {schedule_evening_position_summer_inherited}).",
-            "schedule_brightness_source_choice": "Eine Entität, die die Außenhelligkeit in Lux meldet. Bleibt es für die eingestellte Dauer dunkler als die Schwelle, beginnt der Abend früher, aber nie früher als die Zeit unter „Abend: nicht vor“. Solange die Entität nicht verfügbar oder unbekannt ist, löst sie den Abend weder aus noch verzögert sie ihn. Derzeit übernommen von {schedule_brightness_source_source}: {schedule_brightness_source_inherited}.",
+            "schedule_brightness_source_choice": "Eine Entität, die die Außenhelligkeit in Lux meldet. Bleibt es für die eingestellte Dauer dunkler als die Schwelle, beginnt der Abend früher, aber nicht vor der Zeit unter „Abend: nicht vor“. Solange die Entität nicht verfügbar oder unbekannt ist, löst sie den Abend weder aus noch verzögert sie ihn. Derzeit übernommen von {schedule_brightness_source_source}: {schedule_brightness_source_inherited}.",
             "schedule_brightness_source": "Gilt nur mit „Eigene Auswahl“ oben.",
             "schedule_brightness_threshold_lux": "Unterhalb dieser Außenhelligkeit in Lux gilt es als dunkel. Leer lassen, um die Einstellung von {schedule_brightness_threshold_lux_source} zu übernehmen (derzeit {schedule_brightness_threshold_lux_inherited})."
           },
@@ -304,13 +326,13 @@
               },
               "data_description": {
                 "schedule_brightness_delay": "Wie viele Minuten es dunkel sein muss, bevor der Abend beginnt. Leer lassen, um die Einstellung von {schedule_brightness_delay_source} zu übernehmen (derzeit {schedule_brightness_delay_inherited}).",
-                "schedule_random_offset": "Verschiebt jeden Morgen und jeden Abend um bis zu so viele Minuten nach vorn oder hinten, für jedes Fenster und jeden Tag anders. 0 schaltet das aus; höchstens 30. Leer lassen, um die Einstellung von {schedule_random_offset_source} zu übernehmen (derzeit {schedule_random_offset_inherited})."
+                "schedule_random_offset": "Verschiebt jeden Morgen und jeden Abend um bis zu so viele Minuten nach vorn oder hinten, für jedes Fenster und jeden Tag anders. 0 schaltet das aus. Leer lassen, um die Einstellung von {schedule_random_offset_source} zu übernehmen (derzeit {schedule_random_offset_inherited})."
               }
             }
           }
         },
         "feature_daily_routine_workday": {
-          "title": "Tagesablauf an Werktagen",
+          "title": "Tagesablauf: Werktage ({page_number}/{page_count})",
           "description": "Wann Morgen und Abend an einem Werktag beginnen.",
           "data": {
             "schedule_workday_morning_kind": "Morgen: Auslöser",
@@ -352,7 +374,7 @@
           }
         },
         "feature_daily_routine_weekend": {
-          "title": "Tagesablauf am Wochenende",
+          "title": "Tagesablauf: Wochenende ({page_number}/{page_count})",
           "description": "Wann Morgen und Abend an einem Samstag oder Sonntag beginnen oder an einem Tag, den die Werktag-Entität als frei meldet.",
           "data": {
             "schedule_weekend_morning_kind": "Morgen: Auslöser",
@@ -394,7 +416,7 @@
           }
         },
         "feature_daily_routine_holiday": {
-          "title": "Tagesablauf an Feiertagen",
+          "title": "Tagesablauf: Feiertage ({page_number}/{page_count})",
           "description": "Wann Morgen und Abend an einem Tag beginnen, den die Feiertag-Entität als Feiertag meldet.",
           "data": {
             "schedule_holiday_morning_kind": "Morgen: Auslöser",
@@ -469,7 +491,29 @@
         "invalid_day_of_year": "Gib den Tag als Monat und Tag mit je zwei Ziffern ein, zum Beispiel 05-01.",
         "leap_day_not_allowed": "Den 29. Februar gibt es nicht in jedem Jahr. Wähle den 28. Februar oder den 1. März.",
         "reference_missing": "Wähle eine Entität, oder wähle oben „Keine“ oder „Vom Haus oder von der Gruppe übernehmen“.",
-        "invalid_combination": "Diese Einstellungen widersprechen sich: {combination}. Jede für sich wäre in Ordnung."
+        "invalid_combination": "Diese Einstellungen widersprechen sich: {combination}. Jede für sich wäre in Ordnung.",
+        "out_of_range_schedule_morning_position": "Gib einen Wert von 0 bis 100 % ein.",
+        "out_of_range_schedule_evening_position": "Gib einen Wert von 0 bis 100 % ein.",
+        "out_of_range_schedule_evening_position_summer": "Gib einen Wert von 0 bis 100 % ein.",
+        "out_of_range_schedule_brightness_threshold_lux": "Gib einen Wert von mindestens 0 lx ein.",
+        "out_of_range_schedule_brightness_delay": "Gib für „Dauer der Dunkelheit“ einen Wert von mindestens 0 min ein.",
+        "out_of_range_schedule_random_offset": "Gib für „Zufälliger Versatz“ einen Wert von 0 bis 30 min ein.",
+        "out_of_range_schedule_workday_morning_offset_minutes": "Gib für „Morgen: Versatz zu Sonnenaufgang oder Sonnenuntergang“ einen Wert von -720 bis 720 min ein.",
+        "out_of_range_schedule_workday_morning_elevation": "Gib für „Morgen: Höhe der Sonne“ einen Wert von -90 bis 90 ° ein.",
+        "out_of_range_schedule_workday_evening_offset_minutes": "Gib für „Abend: Versatz zu Sonnenaufgang oder Sonnenuntergang“ einen Wert von -720 bis 720 min ein.",
+        "out_of_range_schedule_workday_evening_elevation": "Gib für „Abend: Höhe der Sonne“ einen Wert von -90 bis 90 ° ein.",
+        "out_of_range_schedule_weekend_morning_offset_minutes": "Gib für „Morgen: Versatz zu Sonnenaufgang oder Sonnenuntergang“ einen Wert von -720 bis 720 min ein.",
+        "out_of_range_schedule_weekend_morning_elevation": "Gib für „Morgen: Höhe der Sonne“ einen Wert von -90 bis 90 ° ein.",
+        "out_of_range_schedule_weekend_evening_offset_minutes": "Gib für „Abend: Versatz zu Sonnenaufgang oder Sonnenuntergang“ einen Wert von -720 bis 720 min ein.",
+        "out_of_range_schedule_weekend_evening_elevation": "Gib für „Abend: Höhe der Sonne“ einen Wert von -90 bis 90 ° ein.",
+        "out_of_range_schedule_holiday_morning_offset_minutes": "Gib für „Morgen: Versatz zu Sonnenaufgang oder Sonnenuntergang“ einen Wert von -720 bis 720 min ein.",
+        "out_of_range_schedule_holiday_morning_elevation": "Gib für „Morgen: Höhe der Sonne“ einen Wert von -90 bis 90 ° ein.",
+        "out_of_range_schedule_holiday_evening_offset_minutes": "Gib für „Abend: Versatz zu Sonnenaufgang oder Sonnenuntergang“ einen Wert von -720 bis 720 min ein.",
+        "out_of_range_schedule_holiday_evening_elevation": "Gib für „Abend: Höhe der Sonne“ einen Wert von -90 bis 90 ° ein.",
+        "out_of_range_motor_min_change": "Gib einen Wert von 0 bis 100 % ein.",
+        "out_of_range_motor_min_interval": "Gib einen Wert von mindestens 0 min ein.",
+        "out_of_range_stagger_gap": "Gib einen Wert von 0 bis 10 s ein.",
+        "out_of_range_reevaluate_after": "Gib für „Spätestens erneut prüfen nach“ einen Wert von mindestens 1 min ein."
       },
       "abort": {
         "reconfigure_successful": "Die Gruppe wurde gespeichert.",
@@ -555,7 +599,7 @@
             "schedule_summer_first_day": "Monat und Tag mit je zwei Ziffern, zum Beispiel 05-01 für den 1. Mai. Leer lassen, um die Einstellung von {schedule_summer_first_day_source} zu übernehmen (derzeit {schedule_summer_first_day_inherited}).",
             "schedule_summer_last_day": "Monat und Tag mit je zwei Ziffern, zum Beispiel 09-30 für den 30. September. Der Sommer darf über den Jahreswechsel reichen. Leer lassen, um die Einstellung von {schedule_summer_last_day_source} zu übernehmen (derzeit {schedule_summer_last_day_inherited}).",
             "schedule_evening_position_summer": "Gilt im Sommer statt der Abendposition, zum Beispiel 30 % für Sichtschutz mit etwas frischer Luft. Sie wirkt nur, wenn der Sommer über eine Entität oder nach Datum festgelegt ist. Leer lassen, um die Einstellung von {schedule_evening_position_summer_source} zu übernehmen (derzeit {schedule_evening_position_summer_inherited}).",
-            "schedule_brightness_source_choice": "Eine Entität, die die Außenhelligkeit in Lux meldet. Bleibt es für die eingestellte Dauer dunkler als die Schwelle, beginnt der Abend früher, aber nie früher als die Zeit unter „Abend: nicht vor“. Solange die Entität nicht verfügbar oder unbekannt ist, löst sie den Abend weder aus noch verzögert sie ihn. Derzeit übernommen von {schedule_brightness_source_source}: {schedule_brightness_source_inherited}.",
+            "schedule_brightness_source_choice": "Eine Entität, die die Außenhelligkeit in Lux meldet. Bleibt es für die eingestellte Dauer dunkler als die Schwelle, beginnt der Abend früher, aber nicht vor der Zeit unter „Abend: nicht vor“. Solange die Entität nicht verfügbar oder unbekannt ist, löst sie den Abend weder aus noch verzögert sie ihn. Derzeit übernommen von {schedule_brightness_source_source}: {schedule_brightness_source_inherited}.",
             "schedule_brightness_source": "Gilt nur mit „Eigene Auswahl“ oben.",
             "schedule_brightness_threshold_lux": "Unterhalb dieser Außenhelligkeit in Lux gilt es als dunkel. Leer lassen, um die Einstellung von {schedule_brightness_threshold_lux_source} zu übernehmen (derzeit {schedule_brightness_threshold_lux_inherited})."
           },
@@ -569,13 +613,13 @@
               },
               "data_description": {
                 "schedule_brightness_delay": "Wie viele Minuten es dunkel sein muss, bevor der Abend beginnt. Leer lassen, um die Einstellung von {schedule_brightness_delay_source} zu übernehmen (derzeit {schedule_brightness_delay_inherited}).",
-                "schedule_random_offset": "Verschiebt jeden Morgen und jeden Abend um bis zu so viele Minuten nach vorn oder hinten, für jedes Fenster und jeden Tag anders. 0 schaltet das aus; höchstens 30. Leer lassen, um die Einstellung von {schedule_random_offset_source} zu übernehmen (derzeit {schedule_random_offset_inherited})."
+                "schedule_random_offset": "Verschiebt jeden Morgen und jeden Abend um bis zu so viele Minuten nach vorn oder hinten, für jedes Fenster und jeden Tag anders. 0 schaltet das aus. Leer lassen, um die Einstellung von {schedule_random_offset_source} zu übernehmen (derzeit {schedule_random_offset_inherited})."
               }
             }
           }
         },
         "feature_daily_routine_workday": {
-          "title": "Tagesablauf an Werktagen",
+          "title": "Tagesablauf: Werktage ({page_number}/{page_count})",
           "description": "Wann Morgen und Abend an einem Werktag beginnen.",
           "data": {
             "schedule_workday_morning_kind": "Morgen: Auslöser",
@@ -617,7 +661,7 @@
           }
         },
         "feature_daily_routine_weekend": {
-          "title": "Tagesablauf am Wochenende",
+          "title": "Tagesablauf: Wochenende ({page_number}/{page_count})",
           "description": "Wann Morgen und Abend an einem Samstag oder Sonntag beginnen oder an einem Tag, den die Werktag-Entität als frei meldet.",
           "data": {
             "schedule_weekend_morning_kind": "Morgen: Auslöser",
@@ -659,7 +703,7 @@
           }
         },
         "feature_daily_routine_holiday": {
-          "title": "Tagesablauf an Feiertagen",
+          "title": "Tagesablauf: Feiertage ({page_number}/{page_count})",
           "description": "Wann Morgen und Abend an einem Tag beginnen, den die Feiertag-Entität als Feiertag meldet.",
           "data": {
             "schedule_holiday_morning_kind": "Morgen: Auslöser",
@@ -737,7 +781,29 @@
         "invalid_day_of_year": "Gib den Tag als Monat und Tag mit je zwei Ziffern ein, zum Beispiel 05-01.",
         "leap_day_not_allowed": "Den 29. Februar gibt es nicht in jedem Jahr. Wähle den 28. Februar oder den 1. März.",
         "reference_missing": "Wähle eine Entität, oder wähle oben „Keine“ oder „Vom Haus oder von der Gruppe übernehmen“.",
-        "invalid_combination": "Diese Einstellungen widersprechen sich: {combination}. Jede für sich wäre in Ordnung."
+        "invalid_combination": "Diese Einstellungen widersprechen sich: {combination}. Jede für sich wäre in Ordnung.",
+        "out_of_range_schedule_morning_position": "Gib einen Wert von 0 bis 100 % ein.",
+        "out_of_range_schedule_evening_position": "Gib einen Wert von 0 bis 100 % ein.",
+        "out_of_range_schedule_evening_position_summer": "Gib einen Wert von 0 bis 100 % ein.",
+        "out_of_range_schedule_brightness_threshold_lux": "Gib einen Wert von mindestens 0 lx ein.",
+        "out_of_range_schedule_brightness_delay": "Gib für „Dauer der Dunkelheit“ einen Wert von mindestens 0 min ein.",
+        "out_of_range_schedule_random_offset": "Gib für „Zufälliger Versatz“ einen Wert von 0 bis 30 min ein.",
+        "out_of_range_schedule_workday_morning_offset_minutes": "Gib für „Morgen: Versatz zu Sonnenaufgang oder Sonnenuntergang“ einen Wert von -720 bis 720 min ein.",
+        "out_of_range_schedule_workday_morning_elevation": "Gib für „Morgen: Höhe der Sonne“ einen Wert von -90 bis 90 ° ein.",
+        "out_of_range_schedule_workday_evening_offset_minutes": "Gib für „Abend: Versatz zu Sonnenaufgang oder Sonnenuntergang“ einen Wert von -720 bis 720 min ein.",
+        "out_of_range_schedule_workday_evening_elevation": "Gib für „Abend: Höhe der Sonne“ einen Wert von -90 bis 90 ° ein.",
+        "out_of_range_schedule_weekend_morning_offset_minutes": "Gib für „Morgen: Versatz zu Sonnenaufgang oder Sonnenuntergang“ einen Wert von -720 bis 720 min ein.",
+        "out_of_range_schedule_weekend_morning_elevation": "Gib für „Morgen: Höhe der Sonne“ einen Wert von -90 bis 90 ° ein.",
+        "out_of_range_schedule_weekend_evening_offset_minutes": "Gib für „Abend: Versatz zu Sonnenaufgang oder Sonnenuntergang“ einen Wert von -720 bis 720 min ein.",
+        "out_of_range_schedule_weekend_evening_elevation": "Gib für „Abend: Höhe der Sonne“ einen Wert von -90 bis 90 ° ein.",
+        "out_of_range_schedule_holiday_morning_offset_minutes": "Gib für „Morgen: Versatz zu Sonnenaufgang oder Sonnenuntergang“ einen Wert von -720 bis 720 min ein.",
+        "out_of_range_schedule_holiday_morning_elevation": "Gib für „Morgen: Höhe der Sonne“ einen Wert von -90 bis 90 ° ein.",
+        "out_of_range_schedule_holiday_evening_offset_minutes": "Gib für „Abend: Versatz zu Sonnenaufgang oder Sonnenuntergang“ einen Wert von -720 bis 720 min ein.",
+        "out_of_range_schedule_holiday_evening_elevation": "Gib für „Abend: Höhe der Sonne“ einen Wert von -90 bis 90 ° ein.",
+        "out_of_range_motor_min_change": "Gib einen Wert von 0 bis 100 % ein.",
+        "out_of_range_motor_min_interval": "Gib einen Wert von mindestens 0 min ein.",
+        "out_of_range_stagger_gap": "Gib einen Wert von 0 bis 10 s ein.",
+        "out_of_range_reevaluate_after": "Gib für „Spätestens erneut prüfen nach“ einen Wert von mindestens 1 min ein."
       },
       "abort": {
         "reconfigure_successful": "Das Fenster wurde gespeichert.",

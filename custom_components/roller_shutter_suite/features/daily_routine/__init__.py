@@ -2,9 +2,8 @@
 
 The settings are entries of the registry of the core (``schedule_*``). This
 package only says how they appear in the forms: on which page, in the section
-of expert values or not, and how their input controls look. The bounds given
-here are a convenience of the controls; the core decides what is valid, and a
-test fails if a bound is wider than what the core accepts.
+of expert values or not, and how their input controls look. The range and the
+unit of a number are part of its registry entry, never of this description.
 
 The 36 settings of the triggers (day type, edge, field) are generated in the
 core in one place. Their form descriptions are generated here in the same way
@@ -44,37 +43,30 @@ TRIGGER_KIND_OPTIONS: Final = "schedule_trigger_kind"
 _GENERAL: Final = StepForm(
     name="general",
     fields=(
-        FieldForm("schedule_morning_position", minimum=0, maximum=100, unit="%"),
-        FieldForm("schedule_evening_position", minimum=0, maximum=100, unit="%"),
+        FieldForm("schedule_morning_position"),
+        FieldForm("schedule_evening_position"),
         FieldForm("schedule_workday_source", entity_domains=_SWITCH_DOMAINS),
         FieldForm("schedule_holiday_source", entity_domains=_DAY_DOMAINS),
         FieldForm("schedule_season_source", entity_domains=_SWITCH_DOMAINS),
         FieldForm("schedule_summer_by_date"),
         FieldForm("schedule_summer_first_day"),
         FieldForm("schedule_summer_last_day"),
-        FieldForm("schedule_evening_position_summer", minimum=0, maximum=100, unit="%"),
+        FieldForm("schedule_evening_position_summer"),
         FieldForm("schedule_brightness_source", entity_domains=_BRIGHTNESS_DOMAINS),
         FieldForm(
             "schedule_brightness_threshold",
-            minimum=0,
             step=0.1,
-            unit="lx",
             # The key leaves the unit to its documentation; the form names it.
             form_name="schedule_brightness_threshold_lux",
         ),
         FieldForm(
             "schedule_brightness_delay",
             expert=True,
-            minimum=0,
-            unit="min",
             seconds_per_unit=_MINUTE,
         ),
         FieldForm(
             "schedule_random_offset",
             expert=True,
-            minimum=0,
-            maximum=30,
-            unit="min",
             seconds_per_unit=_MINUTE,
         ),
     ),
@@ -90,17 +82,11 @@ def _trigger_fields(day_type: str, edge: str) -> tuple[FieldForm, ...]:
         FieldForm(
             f"{prefix}_offset_minutes",
             expert=True,
-            minimum=-720,
-            maximum=720,
-            unit="min",
         ),
         FieldForm(
             f"{prefix}_elevation",
             expert=True,
-            minimum=-90,
-            maximum=90,
             step=0.1,
-            unit="°",
         ),
         FieldForm(f"{prefix}_not_before", expert=True),
         FieldForm(f"{prefix}_not_after", expert=True),
@@ -113,6 +99,8 @@ def _day_type_step(day_type: str) -> StepForm:
         fields=tuple(
             item for edge in SCHEDULE_EDGES for item in _trigger_fields(day_type, edge)
         ),
+        # "Daily routine: workdays (1/3)": the pages of the kinds of day count.
+        numbered=True,
     )
 
 

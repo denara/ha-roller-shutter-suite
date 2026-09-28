@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Set up Roller Shutter Suite",
-        "description": "Do you want to set up Roller Shutter Suite? On the next pages you choose the settings for the whole house. Groups and windows inherit them until you override them there."
+        "description": "Do you want to set up Roller Shutter Suite? On the next pages you choose the settings for the whole house. Groups and windows inherit them until you override them there. The pages have no way back, but you can change every setting later with \"Reconfigure\"."
       },
       "features": {
         "title": "Features",
@@ -48,7 +48,7 @@
           "schedule_summer_first_day": "Month and day, two digits each, for example 05-01 for 1 May.",
           "schedule_summer_last_day": "Month and day, two digits each, for example 09-30 for 30 September. Summer may run across the turn of the year.",
           "schedule_evening_position_summer": "Used instead of the evening position in summer, for example 30 % for privacy with some fresh air. It only applies if summer is set by an entity or by date.",
-          "schedule_brightness_source_choice": "An entity that reports the outdoor brightness in lux. If it stays darker than the threshold for the set duration, the evening begins early, but never earlier than the time set in \"Evening: not before\". While the entity is unavailable or unknown, it neither starts nor delays the evening.",
+          "schedule_brightness_source_choice": "An entity that reports the outdoor brightness in lux. If it stays darker than the threshold for the set duration, the evening begins early, but not before the time set in \"Evening: not before\". While the entity is unavailable or unknown, it neither starts nor delays the evening.",
           "schedule_brightness_source": "Used only with \"Own selection\" above.",
           "schedule_brightness_threshold_lux": "Below this outdoor brightness, in lux, it counts as dark."
         },
@@ -62,13 +62,13 @@
             },
             "data_description": {
               "schedule_brightness_delay": "For how many minutes it has to be dark before the evening begins.",
-              "schedule_random_offset": "Moves each morning and evening by up to this many minutes, earlier or later, differently for each window and each day. 0 turns it off; 30 is the maximum."
+              "schedule_random_offset": "Moves each morning and evening by up to this many minutes, earlier or later, differently for each window and each day. 0 turns it off."
             }
           }
         }
       },
       "feature_daily_routine_workday": {
-        "title": "Daily routine on workdays",
+        "title": "Daily routine: workdays ({page_number}/{page_count})",
         "description": "When the morning and the evening begin on a workday.",
         "data": {
           "schedule_workday_morning_kind": "Morning: trigger",
@@ -110,7 +110,7 @@
         }
       },
       "feature_daily_routine_weekend": {
-        "title": "Daily routine on weekends",
+        "title": "Daily routine: weekends ({page_number}/{page_count})",
         "description": "When the morning and the evening begin on a Saturday or Sunday, or on a day that the workday entity reports as a day off.",
         "data": {
           "schedule_weekend_morning_kind": "Morning: trigger",
@@ -152,7 +152,7 @@
         }
       },
       "feature_daily_routine_holiday": {
-        "title": "Daily routine on public holidays",
+        "title": "Daily routine: public holidays ({page_number}/{page_count})",
         "description": "When the morning and the evening begin on a day that the holiday entity reports as a public holiday.",
         "data": {
           "schedule_holiday_morning_kind": "Morning: trigger",
@@ -229,7 +229,29 @@
       "invalid_day_of_year": "Enter the day as month and day, two digits each, for example 05-01.",
       "leap_day_not_allowed": "29 February does not exist every year. Choose 28 February or 1 March.",
       "reference_missing": "Choose an entity, or choose \"None\" or \"Inherit\" above.",
-      "invalid_combination": "These settings contradict each other: {combination}. Each one on its own would be fine."
+      "invalid_combination": "These settings contradict each other: {combination}. Each one on its own would be fine.",
+      "out_of_range_schedule_morning_position": "Enter a value from 0 to 100 %.",
+      "out_of_range_schedule_evening_position": "Enter a value from 0 to 100 %.",
+      "out_of_range_schedule_evening_position_summer": "Enter a value from 0 to 100 %.",
+      "out_of_range_schedule_brightness_threshold_lux": "Enter a value of at least 0 lx.",
+      "out_of_range_schedule_brightness_delay": "Enter a value of at least 0 min for \"Duration of darkness\".",
+      "out_of_range_schedule_random_offset": "Enter a value from 0 to 30 min for \"Random offset\".",
+      "out_of_range_schedule_workday_morning_offset_minutes": "Enter a value from -720 to 720 min for \"Morning: offset to sunrise or sunset\".",
+      "out_of_range_schedule_workday_morning_elevation": "Enter a value from -90 to 90 ° for \"Morning: elevation of the sun\".",
+      "out_of_range_schedule_workday_evening_offset_minutes": "Enter a value from -720 to 720 min for \"Evening: offset to sunrise or sunset\".",
+      "out_of_range_schedule_workday_evening_elevation": "Enter a value from -90 to 90 ° for \"Evening: elevation of the sun\".",
+      "out_of_range_schedule_weekend_morning_offset_minutes": "Enter a value from -720 to 720 min for \"Morning: offset to sunrise or sunset\".",
+      "out_of_range_schedule_weekend_morning_elevation": "Enter a value from -90 to 90 ° for \"Morning: elevation of the sun\".",
+      "out_of_range_schedule_weekend_evening_offset_minutes": "Enter a value from -720 to 720 min for \"Evening: offset to sunrise or sunset\".",
+      "out_of_range_schedule_weekend_evening_elevation": "Enter a value from -90 to 90 ° for \"Evening: elevation of the sun\".",
+      "out_of_range_schedule_holiday_morning_offset_minutes": "Enter a value from -720 to 720 min for \"Morning: offset to sunrise or sunset\".",
+      "out_of_range_schedule_holiday_morning_elevation": "Enter a value from -90 to 90 ° for \"Morning: elevation of the sun\".",
+      "out_of_range_schedule_holiday_evening_offset_minutes": "Enter a value from -720 to 720 min for \"Evening: offset to sunrise or sunset\".",
+      "out_of_range_schedule_holiday_evening_elevation": "Enter a value from -90 to 90 ° for \"Evening: elevation of the sun\".",
+      "out_of_range_motor_min_change": "Enter a value from 0 to 100 %.",
+      "out_of_range_motor_min_interval": "Enter a value of at least 0 min.",
+      "out_of_range_stagger_gap": "Enter a value from 0 to 10 s.",
+      "out_of_range_reevaluate_after": "Enter a value of at least 1 min for \"Check again at the latest after\"."
     }
   },
   "config_subentries": {
@@ -290,7 +312,7 @@
             "schedule_summer_first_day": "Month and day, two digits each, for example 05-01 for 1 May. Leave empty to inherit. Currently inherited: {schedule_summer_first_day_inherited} from {schedule_summer_first_day_source}.",
             "schedule_summer_last_day": "Month and day, two digits each, for example 09-30 for 30 September. Summer may run across the turn of the year. Leave empty to inherit. Currently inherited: {schedule_summer_last_day_inherited} from {schedule_summer_last_day_source}.",
             "schedule_evening_position_summer": "Used instead of the evening position in summer, for example 30 % for privacy with some fresh air. It only applies if summer is set by an entity or by date. Leave empty to inherit. Currently inherited: {schedule_evening_position_summer_inherited} from {schedule_evening_position_summer_source}.",
-            "schedule_brightness_source_choice": "An entity that reports the outdoor brightness in lux. If it stays darker than the threshold for the set duration, the evening begins early, but never earlier than the time set in \"Evening: not before\". While the entity is unavailable or unknown, it neither starts nor delays the evening. Currently inherited: {schedule_brightness_source_inherited} from {schedule_brightness_source_source}.",
+            "schedule_brightness_source_choice": "An entity that reports the outdoor brightness in lux. If it stays darker than the threshold for the set duration, the evening begins early, but not before the time set in \"Evening: not before\". While the entity is unavailable or unknown, it neither starts nor delays the evening. Currently inherited: {schedule_brightness_source_inherited} from {schedule_brightness_source_source}.",
             "schedule_brightness_source": "Used only with \"Own selection\" above.",
             "schedule_brightness_threshold_lux": "Below this outdoor brightness, in lux, it counts as dark. Leave empty to inherit. Currently inherited: {schedule_brightness_threshold_lux_inherited} from {schedule_brightness_threshold_lux_source}."
           },
@@ -304,13 +326,13 @@
               },
               "data_description": {
                 "schedule_brightness_delay": "For how many minutes it has to be dark before the evening begins. Leave empty to inherit. Currently inherited: {schedule_brightness_delay_inherited} from {schedule_brightness_delay_source}.",
-                "schedule_random_offset": "Moves each morning and evening by up to this many minutes, earlier or later, differently for each window and each day. 0 turns it off; 30 is the maximum. Leave empty to inherit. Currently inherited: {schedule_random_offset_inherited} from {schedule_random_offset_source}."
+                "schedule_random_offset": "Moves each morning and evening by up to this many minutes, earlier or later, differently for each window and each day. 0 turns it off. Leave empty to inherit. Currently inherited: {schedule_random_offset_inherited} from {schedule_random_offset_source}."
               }
             }
           }
         },
         "feature_daily_routine_workday": {
-          "title": "Daily routine on workdays",
+          "title": "Daily routine: workdays ({page_number}/{page_count})",
           "description": "When the morning and the evening begin on a workday.",
           "data": {
             "schedule_workday_morning_kind": "Morning: trigger",
@@ -352,7 +374,7 @@
           }
         },
         "feature_daily_routine_weekend": {
-          "title": "Daily routine on weekends",
+          "title": "Daily routine: weekends ({page_number}/{page_count})",
           "description": "When the morning and the evening begin on a Saturday or Sunday, or on a day that the workday entity reports as a day off.",
           "data": {
             "schedule_weekend_morning_kind": "Morning: trigger",
@@ -394,7 +416,7 @@
           }
         },
         "feature_daily_routine_holiday": {
-          "title": "Daily routine on public holidays",
+          "title": "Daily routine: public holidays ({page_number}/{page_count})",
           "description": "When the morning and the evening begin on a day that the holiday entity reports as a public holiday.",
           "data": {
             "schedule_holiday_morning_kind": "Morning: trigger",
@@ -469,7 +491,29 @@
         "invalid_day_of_year": "Enter the day as month and day, two digits each, for example 05-01.",
         "leap_day_not_allowed": "29 February does not exist every year. Choose 28 February or 1 March.",
         "reference_missing": "Choose an entity, or choose \"None\" or \"Inherit\" above.",
-        "invalid_combination": "These settings contradict each other: {combination}. Each one on its own would be fine."
+        "invalid_combination": "These settings contradict each other: {combination}. Each one on its own would be fine.",
+        "out_of_range_schedule_morning_position": "Enter a value from 0 to 100 %.",
+        "out_of_range_schedule_evening_position": "Enter a value from 0 to 100 %.",
+        "out_of_range_schedule_evening_position_summer": "Enter a value from 0 to 100 %.",
+        "out_of_range_schedule_brightness_threshold_lux": "Enter a value of at least 0 lx.",
+        "out_of_range_schedule_brightness_delay": "Enter a value of at least 0 min for \"Duration of darkness\".",
+        "out_of_range_schedule_random_offset": "Enter a value from 0 to 30 min for \"Random offset\".",
+        "out_of_range_schedule_workday_morning_offset_minutes": "Enter a value from -720 to 720 min for \"Morning: offset to sunrise or sunset\".",
+        "out_of_range_schedule_workday_morning_elevation": "Enter a value from -90 to 90 ° for \"Morning: elevation of the sun\".",
+        "out_of_range_schedule_workday_evening_offset_minutes": "Enter a value from -720 to 720 min for \"Evening: offset to sunrise or sunset\".",
+        "out_of_range_schedule_workday_evening_elevation": "Enter a value from -90 to 90 ° for \"Evening: elevation of the sun\".",
+        "out_of_range_schedule_weekend_morning_offset_minutes": "Enter a value from -720 to 720 min for \"Morning: offset to sunrise or sunset\".",
+        "out_of_range_schedule_weekend_morning_elevation": "Enter a value from -90 to 90 ° for \"Morning: elevation of the sun\".",
+        "out_of_range_schedule_weekend_evening_offset_minutes": "Enter a value from -720 to 720 min for \"Evening: offset to sunrise or sunset\".",
+        "out_of_range_schedule_weekend_evening_elevation": "Enter a value from -90 to 90 ° for \"Evening: elevation of the sun\".",
+        "out_of_range_schedule_holiday_morning_offset_minutes": "Enter a value from -720 to 720 min for \"Morning: offset to sunrise or sunset\".",
+        "out_of_range_schedule_holiday_morning_elevation": "Enter a value from -90 to 90 ° for \"Morning: elevation of the sun\".",
+        "out_of_range_schedule_holiday_evening_offset_minutes": "Enter a value from -720 to 720 min for \"Evening: offset to sunrise or sunset\".",
+        "out_of_range_schedule_holiday_evening_elevation": "Enter a value from -90 to 90 ° for \"Evening: elevation of the sun\".",
+        "out_of_range_motor_min_change": "Enter a value from 0 to 100 %.",
+        "out_of_range_motor_min_interval": "Enter a value of at least 0 min.",
+        "out_of_range_stagger_gap": "Enter a value from 0 to 10 s.",
+        "out_of_range_reevaluate_after": "Enter a value of at least 1 min for \"Check again at the latest after\"."
       },
       "abort": {
         "reconfigure_successful": "The group was saved.",
@@ -555,7 +599,7 @@
             "schedule_summer_first_day": "Month and day, two digits each, for example 05-01 for 1 May. Leave empty to inherit. Currently inherited: {schedule_summer_first_day_inherited} from {schedule_summer_first_day_source}.",
             "schedule_summer_last_day": "Month and day, two digits each, for example 09-30 for 30 September. Summer may run across the turn of the year. Leave empty to inherit. Currently inherited: {schedule_summer_last_day_inherited} from {schedule_summer_last_day_source}.",
             "schedule_evening_position_summer": "Used instead of the evening position in summer, for example 30 % for privacy with some fresh air. It only applies if summer is set by an entity or by date. Leave empty to inherit. Currently inherited: {schedule_evening_position_summer_inherited} from {schedule_evening_position_summer_source}.",
-            "schedule_brightness_source_choice": "An entity that reports the outdoor brightness in lux. If it stays darker than the threshold for the set duration, the evening begins early, but never earlier than the time set in \"Evening: not before\". While the entity is unavailable or unknown, it neither starts nor delays the evening. Currently inherited: {schedule_brightness_source_inherited} from {schedule_brightness_source_source}.",
+            "schedule_brightness_source_choice": "An entity that reports the outdoor brightness in lux. If it stays darker than the threshold for the set duration, the evening begins early, but not before the time set in \"Evening: not before\". While the entity is unavailable or unknown, it neither starts nor delays the evening. Currently inherited: {schedule_brightness_source_inherited} from {schedule_brightness_source_source}.",
             "schedule_brightness_source": "Used only with \"Own selection\" above.",
             "schedule_brightness_threshold_lux": "Below this outdoor brightness, in lux, it counts as dark. Leave empty to inherit. Currently inherited: {schedule_brightness_threshold_lux_inherited} from {schedule_brightness_threshold_lux_source}."
           },
@@ -569,13 +613,13 @@
               },
               "data_description": {
                 "schedule_brightness_delay": "For how many minutes it has to be dark before the evening begins. Leave empty to inherit. Currently inherited: {schedule_brightness_delay_inherited} from {schedule_brightness_delay_source}.",
-                "schedule_random_offset": "Moves each morning and evening by up to this many minutes, earlier or later, differently for each window and each day. 0 turns it off; 30 is the maximum. Leave empty to inherit. Currently inherited: {schedule_random_offset_inherited} from {schedule_random_offset_source}."
+                "schedule_random_offset": "Moves each morning and evening by up to this many minutes, earlier or later, differently for each window and each day. 0 turns it off. Leave empty to inherit. Currently inherited: {schedule_random_offset_inherited} from {schedule_random_offset_source}."
               }
             }
           }
         },
         "feature_daily_routine_workday": {
-          "title": "Daily routine on workdays",
+          "title": "Daily routine: workdays ({page_number}/{page_count})",
           "description": "When the morning and the evening begin on a workday.",
           "data": {
             "schedule_workday_morning_kind": "Morning: trigger",
@@ -617,7 +661,7 @@
           }
         },
         "feature_daily_routine_weekend": {
-          "title": "Daily routine on weekends",
+          "title": "Daily routine: weekends ({page_number}/{page_count})",
           "description": "When the morning and the evening begin on a Saturday or Sunday, or on a day that the workday entity reports as a day off.",
           "data": {
             "schedule_weekend_morning_kind": "Morning: trigger",
@@ -659,7 +703,7 @@
           }
         },
         "feature_daily_routine_holiday": {
-          "title": "Daily routine on public holidays",
+          "title": "Daily routine: public holidays ({page_number}/{page_count})",
           "description": "When the morning and the evening begin on a day that the holiday entity reports as a public holiday.",
           "data": {
             "schedule_holiday_morning_kind": "Morning: trigger",
@@ -737,7 +781,29 @@
         "invalid_day_of_year": "Enter the day as month and day, two digits each, for example 05-01.",
         "leap_day_not_allowed": "29 February does not exist every year. Choose 28 February or 1 March.",
         "reference_missing": "Choose an entity, or choose \"None\" or \"Inherit\" above.",
-        "invalid_combination": "These settings contradict each other: {combination}. Each one on its own would be fine."
+        "invalid_combination": "These settings contradict each other: {combination}. Each one on its own would be fine.",
+        "out_of_range_schedule_morning_position": "Enter a value from 0 to 100 %.",
+        "out_of_range_schedule_evening_position": "Enter a value from 0 to 100 %.",
+        "out_of_range_schedule_evening_position_summer": "Enter a value from 0 to 100 %.",
+        "out_of_range_schedule_brightness_threshold_lux": "Enter a value of at least 0 lx.",
+        "out_of_range_schedule_brightness_delay": "Enter a value of at least 0 min for \"Duration of darkness\".",
+        "out_of_range_schedule_random_offset": "Enter a value from 0 to 30 min for \"Random offset\".",
+        "out_of_range_schedule_workday_morning_offset_minutes": "Enter a value from -720 to 720 min for \"Morning: offset to sunrise or sunset\".",
+        "out_of_range_schedule_workday_morning_elevation": "Enter a value from -90 to 90 ° for \"Morning: elevation of the sun\".",
+        "out_of_range_schedule_workday_evening_offset_minutes": "Enter a value from -720 to 720 min for \"Evening: offset to sunrise or sunset\".",
+        "out_of_range_schedule_workday_evening_elevation": "Enter a value from -90 to 90 ° for \"Evening: elevation of the sun\".",
+        "out_of_range_schedule_weekend_morning_offset_minutes": "Enter a value from -720 to 720 min for \"Morning: offset to sunrise or sunset\".",
+        "out_of_range_schedule_weekend_morning_elevation": "Enter a value from -90 to 90 ° for \"Morning: elevation of the sun\".",
+        "out_of_range_schedule_weekend_evening_offset_minutes": "Enter a value from -720 to 720 min for \"Evening: offset to sunrise or sunset\".",
+        "out_of_range_schedule_weekend_evening_elevation": "Enter a value from -90 to 90 ° for \"Evening: elevation of the sun\".",
+        "out_of_range_schedule_holiday_morning_offset_minutes": "Enter a value from -720 to 720 min for \"Morning: offset to sunrise or sunset\".",
+        "out_of_range_schedule_holiday_morning_elevation": "Enter a value from -90 to 90 ° for \"Morning: elevation of the sun\".",
+        "out_of_range_schedule_holiday_evening_offset_minutes": "Enter a value from -720 to 720 min for \"Evening: offset to sunrise or sunset\".",
+        "out_of_range_schedule_holiday_evening_elevation": "Enter a value from -90 to 90 ° for \"Evening: elevation of the sun\".",
+        "out_of_range_motor_min_change": "Enter a value from 0 to 100 %.",
+        "out_of_range_motor_min_interval": "Enter a value of at least 0 min.",
+        "out_of_range_stagger_gap": "Enter a value from 0 to 10 s.",
+        "out_of_range_reevaluate_after": "Enter a value of at least 1 min for \"Check again at the latest after\"."
       },
       "abort": {
         "reconfigure_successful": "The window was saved.",
