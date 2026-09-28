@@ -28,7 +28,7 @@ The integration is installed through [HACS](https://hacs.xyz) as a custom reposi
 1. Open HACS in Home Assistant.
 2. Open the menu in the top right corner and choose **Custom repositories**.
 3. Enter `https://github.com/denara/ha-roller-shutter-suite` as the repository, choose **Integration** as the type and select **Add**.
-4. Search for **Roller Shutter Suite** in HACS, open it and select **Download**; choose the version **v0.1.0** in the dialog.
+4. Search for **Roller Shutter Suite** in HACS, open it and select **Download**; choose the version **0.1.0** in the dialog.
 5. Restart Home Assistant.
 6. Go to **Settings** > **Devices & services** > **Add integration** and choose **Roller Shutter Suite**.
 
