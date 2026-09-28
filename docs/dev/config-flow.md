@@ -169,7 +169,7 @@ The house and every group are also judged through an imaginary window, so a faul
 ## Carried over to later blocks
 
 - **Travel times.** The capability profile of the core needs them, and they are per-member configuration values of a later block. Until then every member carries `PROVISIONAL_TRAVEL_TIME` (60 seconds). It exists in memory only, is never stored and nothing acts on it; the block that introduces per-member values replaces it and must not treat it as a value a user set.
-- **Seconds of a time.** The time field hides the seconds with the frontend's option `no_second`. The time selector of Home Assistant Core 2026.9 does not list that option, so `TimeOfDay` extends its configuration schema by it; when Core lists it, the extension goes.
+- **Seconds of a time.** The time field hides the seconds with the frontend's option `no_second`. The time selector of Home Assistant Core 2026.9 does not list that option, so `TimeOfDay` extends its configuration schema by it; when Core lists it, the extension goes. Check path, set by the project owner: after every jump of the frontend version, open a time field of the house flow on a throw-away instance and see that it shows no seconds; nothing in the tests can see a frontend that stopped reading the option.
 - **Ranges of settings without a form.** The positions of frost protection and of shading carry their range already; the other measurements of shading and the numbers of frost protection get theirs with the block that gives them a form.
 - **Fields by trigger kind.** See above: all fields of a trigger are shown.
 - **Durations in minutes.** A duration that was stored by hand with seconds that are no whole minutes is shown with a fraction, and saving it unchanged is refused as a fraction.
