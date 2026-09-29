@@ -9,8 +9,8 @@ it: through the page "dry-run or armed" of its reconfigure flow and the page
 of the checks that follows; the update listener reloads the entry once, as
 after every change, and the window starts armed with a clean state. This
 version refuses to arm (maintenance item X10) until block H10 lets the runtime
-notice a movement by hand; the test arms the control window as that block
-will allow it, with the flag set for that one form only.
+notice a movement by hand; the tests arm the control window as that block
+will allow it, with the fact set for the form and the runtime of every test.
 
 No cover platform is loaded. The three cover actions are stand-ins that
 record every call (``runtime_kit.register_cover_services``), and the covers
@@ -44,7 +44,6 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.event import async_track_state_change_event
 
-from custom_components.roller_shutter_suite import const
 from custom_components.roller_shutter_suite import controller as controller_module
 from custom_components.roller_shutter_suite.actuator import (
     ACTUATOR_KEY,
@@ -107,6 +106,13 @@ TUESDAY = date(2026, 9, 22)
 
 EVENING_POSITION = 20
 """The evening position the reconfigure gives the window in dry-run."""
+
+# This version refuses to arm, in the form and in operation, until block H10
+# lets the runtime notice a movement by hand (maintenance item X10). The
+# control window is armed as it will be once H10 sets the fact, so the fact is
+# set for every test here, for the form and the runtime. The window in dry-run
+# does not depend on it: it is stored in dry-run.
+pytestmark = pytest.mark.usefixtures("movement_detection")
 
 
 @pytest.fixture(autouse=True)
@@ -223,29 +229,21 @@ async def _install(hass: HomeAssistant, freezer: Any) -> ConfigEntry:
             assert subentry.data[CONF_DRY_RUN] is True
 
     # Arm the control window through its form: dry-run or armed, then the checks.
-    # This version refuses to arm any window until block H10 lets the runtime
-    # notice a movement by hand (maintenance item X10). The control window is
-    # armed as it will be once H10 sets the flag, and only while this form is
-    # submitted; the window in dry-run is never touched by the flag.
+    # The fact that movements by hand are noticed is set for this whole module
+    # (``pytestmark``), for the form and the runtime alike, as block H10 will.
     control_id = _subentry_id(entry, "Control window")
-    with pytest.MonkeyPatch.context() as patch:
-        patch.setattr(const, "MOVEMENT_DETECTION_WIRED", True)
-        armed = await _subentry_flow(
-            hass,
-            entry,
-            SUBENTRY_WINDOW,
-            [
-                {
-                    "name": "Control window",
-                    "covers": [CONTROL_COVER],
-                    "group_id": group_id,
-                },
-                *routine_inherit(),
-                {"operation": "armed"},
-                dict.fromkeys(ARMING_CHECKS, True),
-            ],
-            reconfigure=control_id,
-        )
+    armed = await _subentry_flow(
+        hass,
+        entry,
+        SUBENTRY_WINDOW,
+        [
+            {"name": "Control window", "covers": [CONTROL_COVER], "group_id": group_id},
+            *routine_inherit(),
+            {"operation": "armed"},
+            dict.fromkeys(ARMING_CHECKS, True),
+        ],
+        reconfigure=control_id,
+    )
     assert armed["reason"] == "reconfigure_successful"
     assert entry.subentries[control_id].data[CONF_DRY_RUN] is False
     await settle(hass, freezer)

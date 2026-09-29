@@ -20,6 +20,7 @@ from typing import Final, cast
 from homeassistant.config_entries import ConfigEntry, ConfigSubentry
 from homeassistant.core import HomeAssistant
 
+from . import const
 from .capabilities import member_configs
 from .const import SUBENTRY_GROUP, SUBENTRY_WINDOW
 from .core.model import MemberConfig
@@ -44,6 +45,7 @@ ISSUE_COVERS_UNREADABLE: Final = "window_covers_unreadable"
 ISSUE_GROUP_MISSING: Final = "group_missing"
 ISSUE_GROUP_REFERENCE_UNREADABLE: Final = "group_reference_unreadable"
 ISSUE_DRY_RUN_UNREADABLE: Final = "dry_run_unreadable"
+ISSUE_ARMED_WITHOUT_DETECTION: Final = "armed_without_movement_detection"
 ISSUE_OPTION_UNAVAILABLE: Final = "option_unavailable"
 ISSUE_SETTING_FAULT: Final = "setting_fault"
 ISSUE_COMBINATION: Final = "setting_combination"
@@ -183,6 +185,19 @@ def _report_faults(
         )
 
 
+def _runs_in_dry_run(stored_dry_run: bool) -> bool:
+    """Return whether a window runs in dry-run, given what its stored data says.
+
+    While the runtime does not notice a movement by hand
+    (``const.MOVEMENT_DETECTION_WIRED``), every window runs in dry-run, as the
+    page of the checks refuses to arm one: a fact of the version holds in the
+    form and in operation alike. The stored value is not rewritten. Loading
+    never writes, which would reload the entry once more, and the window the
+    user armed in a later version is armed again when that version runs.
+    """
+    return stored_dry_run or not const.MOVEMENT_DETECTION_WIRED
+
+
 def _resolve_window(
     hass: HomeAssistant,
     catalog: Catalog,
@@ -209,6 +224,18 @@ def _resolve_window(
             Issue(
                 f"{ISSUE_DRY_RUN_UNREADABLE}_{window_id}",
                 ISSUE_DRY_RUN_UNREADABLE,
+                placeholders,
+            )
+        )
+    # This version cannot arm (maintenance item X10): a window stored as armed,
+    # after a downgrade or by a test, runs in dry-run until block H10 sets the
+    # fact. The stored data is left as it is; see ``_runs_in_dry_run``.
+    dry_run = _runs_in_dry_run(identity.dry_run)
+    if dry_run and not identity.dry_run:
+        result.report(
+            Issue(
+                f"{ISSUE_ARMED_WITHOUT_DETECTION}_{window_id}",
+                ISSUE_ARMED_WITHOUT_DETECTION,
                 placeholders,
             )
         )
@@ -254,7 +281,7 @@ def _resolve_window(
     result.windows[window_id] = WindowRuntime(
         subentry_id=window_id,
         title=subentry.title,
-        dry_run=identity.dry_run,
+        dry_run=dry_run,
         resolution=resolution,
     )
 

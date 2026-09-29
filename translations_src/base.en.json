@@ -281,6 +281,10 @@
       "title": "Dry-run of window \"{window}\" cannot be read",
       "description": "The saved settings do not show whether the window \"{window}\" is in dry-run. It is treated as being in dry-run, so it does not move. To repair this, open the window and save it."
     },
+    "armed_without_movement_detection": {
+      "title": "Window \"{window}\" runs in dry-run",
+      "description": "The saved settings say that the window \"{window}\" is armed. This version cannot yet notice when you move a shutter by hand, and an armed window would move it back within a few seconds. So the window runs in dry-run: it decides and records what it would do, and moves nothing, until a later version notices a movement by hand. To remove this message, open the window, choose \"Reconfigure\" and select \"Dry-run\" on the page \"Operation\"."
+    },
     "option_unavailable": {
       "title": "Window \"{window}\" cannot use the setting \"{key}\"",
       "description": "The window \"{window}\" overrides the setting \"{key}\", but these covers cannot do what it needs: {covers}. The setting stays saved and applies again as soon as the covers can do it."

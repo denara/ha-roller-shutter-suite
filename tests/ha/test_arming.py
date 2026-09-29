@@ -11,8 +11,10 @@ Two facts refuse arming whatever is ticked (maintenance item X10): this
 version does not notice a movement by hand (``MOVEMENT_DETECTION_WIRED`` is
 false until block H10 sets it), and a cover whose profile states a report
 delay could have a movement by hand undone. The tests of the arming path set
-the flag with the fixture ``movement_detection``, as block H10 will; the
-tests of the refusal run with the flag as this version ships it.
+the flag with the fixture ``movement_detection`` (``conftest.py``), as block
+H10 will; the tests of the refusal fix it as this version ships it. The same
+fact holds in operation: a window stored as armed runs in dry-run and gets a
+repair issue while the flag is false.
 """
 
 import json
@@ -27,12 +29,17 @@ from homeassistant.config_entries import ConfigEntry, ConfigSubentry
 from homeassistant.const import STATE_OFF, STATE_ON
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
+from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.selector import BooleanSelector, SelectSelector
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.roller_shutter_suite import const
 from custom_components.roller_shutter_suite.capabilities import member_configs
-from custom_components.roller_shutter_suite.const import CONF_DRY_RUN, SUBENTRY_WINDOW
+from custom_components.roller_shutter_suite.const import (
+    CONF_DRY_RUN,
+    DOMAIN,
+    SUBENTRY_WINDOW,
+)
 from custom_components.roller_shutter_suite.core.model import (
     ManualOverrideDam,
     MemberConfig,
@@ -68,18 +75,6 @@ _monday_morning = pytest.fixture(autouse=True)(monday_morning)
 ROOT = Path(__file__).parents[2]
 BASICS = {"name": "Example window", "covers": [COVER]}
 ALL_CHECKS = dict.fromkeys(ARMING_CHECKS, True)
-
-
-@pytest.fixture
-def movement_detection(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Let the flow arm, as block H10 will once the runtime notices a movement by hand."""
-    monkeypatch.setattr(const, "MOVEMENT_DETECTION_WIRED", True)
-
-
-@pytest.fixture
-def no_movement_detection(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Refuse arming as this version does, whatever the flag says later."""
-    monkeypatch.setattr(const, "MOVEMENT_DETECTION_WIRED", False)
 
 
 @pytest.fixture
@@ -396,6 +391,90 @@ async def test_a_cover_that_reports_late_refuses_arming_by_name(
     assert result["last_step"] is False
     result = await configure_subentry_flow(hass, result, KEEP_ARMED)
     assert result["errors"] == {"base": "report_delay"}
+
+
+# ---------------------------------------------------------------------------
+# The same fact in operation: a window stored as armed
+# ---------------------------------------------------------------------------
+
+ARMED_ISSUE = f"armed_without_movement_detection_{WINDOW_ID}"
+
+
+def _issue_ids(hass: HomeAssistant) -> set[str]:
+    return {
+        issue_id for domain, issue_id in ir.async_get(hass).issues if domain == DOMAIN
+    }
+
+
+async def _window_stored_as_armed(hass: HomeAssistant, freezer: Any) -> MockConfigEntry:
+    """Return the entry with the window stored as armed, half open at 07:00."""
+    entry = await setup_window(hass, window_data(dry_run=False), freezer=freezer)
+    hass.states.async_set(
+        COVER, "open", {"supported_features": 15, "current_position": 50}
+    )
+    await settle(hass, freezer)
+    return entry
+
+
+@pytest.mark.usefixtures("no_movement_detection")
+async def test_a_window_stored_as_armed_runs_in_dry_run_with_an_issue(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """Stored as armed (a downgrade, a test): it moves nothing and says why.
+
+    The stored data is left as it is. Setting the window to dry-run in its
+    form removes the issue.
+    """
+    entry = await _window_stored_as_armed(hass, freezer)
+
+    assert entry.subentries[WINDOW_ID].data[CONF_DRY_RUN] is False
+    assert entry.runtime_data.windows[WINDOW_ID].dry_run is True
+    assert cover_calls(hass) == []
+    assert state_of(hass, DRY_RUN).state == STATE_ON
+    assert controller_of(entry).state.simulated is not None
+    assert _issue_ids(hass) == {ARMED_ISSUE}
+    issue = ir.async_get(hass).async_get_issue(DOMAIN, ARMED_ISSUE)
+    assert issue is not None
+    assert issue.translation_key == "armed_without_movement_detection"
+    assert issue.translation_placeholders == {"window": "Example window"}
+
+    result = await _to_the_last_page(hass, entry)
+    result = await configure_subentry_flow(hass, result, KEEP_DRY_RUN)
+    assert result["reason"] == "reconfigure_successful"
+    await settle(hass, freezer)
+    assert entry.subentries[WINDOW_ID].data[CONF_DRY_RUN] is True
+    assert _issue_ids(hass) == set()
+    assert cover_calls(hass) == []
+
+
+@pytest.mark.usefixtures("movement_detection")
+async def test_once_movements_by_hand_are_noticed_a_stored_armed_window_moves(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """With the fact true, as block H10 sets it: armed, it moves, no issue."""
+    entry = await _window_stored_as_armed(hass, freezer)
+
+    assert entry.runtime_data.windows[WINDOW_ID].dry_run is False
+    assert state_of(hass, DRY_RUN).state == STATE_OFF
+    assert [call.target.value for call in cover_calls(hass)] == [100]
+    assert _issue_ids(hass) == set()
+
+
+@pytest.mark.parametrize("language", ["en", "de"])
+def test_the_issue_of_a_window_stored_as_armed_has_its_text(language: str) -> None:
+    """Both languages explain the issue and name the window."""
+    strings = json.loads(
+        (
+            ROOT
+            / "custom_components"
+            / "roller_shutter_suite"
+            / "translations"
+            / f"{language}.json"
+        ).read_text(encoding="utf-8")
+    )
+    issue = strings["issues"]["armed_without_movement_detection"]
+    assert "{window}" in issue["title"]
+    assert "{window}" in issue["description"]
 
 
 # ---------------------------------------------------------------------------

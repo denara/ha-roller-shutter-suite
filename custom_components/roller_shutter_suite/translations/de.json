@@ -919,6 +919,10 @@
       "title": "Probelauf von Fenster „{window}“ lässt sich nicht lesen",
       "description": "Aus den gespeicherten Einstellungen geht nicht hervor, ob das Fenster „{window}“ im Probelauf ist. Es wird behandelt, als wäre es im Probelauf, und bewegt sich also nicht. Zum Beheben öffne das Fenster und speichere es."
     },
+    "armed_without_movement_detection": {
+      "title": "Fenster „{window}“ läuft im Probelauf",
+      "description": "Laut den gespeicherten Einstellungen ist das Fenster „{window}“ scharf geschaltet. Diese Version bemerkt aber noch nicht, wenn du einen Rollladen von Hand bewegst, und ein scharfes Fenster würde ihn nach wenigen Sekunden zurückfahren. Deshalb läuft das Fenster im Probelauf: Es entscheidet und hält fest, was es tun würde, bewegt aber nichts, bis eine spätere Version eine Bedienung von Hand bemerkt. Um diesen Hinweis zu entfernen, öffne das Fenster, wähle „Neu konfigurieren“ und auf der Seite „Betrieb“ den Probelauf."
+    },
     "option_unavailable": {
       "title": "Fenster „{window}“ kann die Einstellung „{key}“ nicht nutzen",
       "description": "Das Fenster „{window}“ überschreibt die Einstellung „{key}“, aber diese Rollläden unterstützen das nicht: {covers}. Die Einstellung bleibt gespeichert und wirkt wieder, sobald die Rollläden es unterstützen."

@@ -19,7 +19,7 @@ import pytest
 # this file before any test of this folder is set up, so the repository's
 # folder wins. An empty ``custom_components/__init__.py`` would not change the
 # outcome; ``test_harness.py`` guards the result.
-from custom_components.roller_shutter_suite import features, location
+from custom_components.roller_shutter_suite import const, features, location
 from custom_components.roller_shutter_suite.const import DOMAIN
 from tests.ha.helpers import EXAMPLE_CATALOG
 from tests.ha.runtime_kit import SunFactory
@@ -118,6 +118,24 @@ def example_catalog(monkeypatch: pytest.MonkeyPatch) -> None:
     this is all it takes; no flow class is touched.
     """
     monkeypatch.setattr(features, "CATALOG", EXAMPLE_CATALOG)
+
+
+@pytest.fixture
+def movement_detection(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Let windows be armed, as block H10 will once movements by hand are noticed.
+
+    This version refuses to arm (maintenance item X10): the form refuses, and
+    a window stored as armed runs in dry-run. The tests of what an armed window
+    does request this fixture; the flow and the set-up read the fact each time
+    they need it.
+    """
+    monkeypatch.setattr(const, "MOVEMENT_DETECTION_WIRED", True)
+
+
+@pytest.fixture
+def no_movement_detection(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Refuse arming as this version does, whatever the fact says later."""
+    monkeypatch.setattr(const, "MOVEMENT_DETECTION_WIRED", False)
 
 
 @pytest.fixture(autouse=True)

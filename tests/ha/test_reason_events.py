@@ -31,6 +31,10 @@ from tests.ha.runtime_kit import (
 from tests.ha.status_kit import FireAlarm, collect_reason_events, controls
 
 _monday_morning = pytest.fixture(autouse=True)(monday_morning)
+# These tests watch armed windows at work. This version runs every window in
+# dry-run until block H10 notices movements by hand (maintenance item X10);
+# the fixture sets that fact as H10 will.
+pytestmark = pytest.mark.usefixtures("movement_detection")
 
 
 async def _tick(hass: HomeAssistant, freezer: Any, times: int, minutes: int) -> None:
