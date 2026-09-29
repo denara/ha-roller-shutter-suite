@@ -1,0 +1,74 @@
+# H10 — Wiring: manual detection and override, per-member configuration, the count
+
+| | |
+|---|---|
+| Kind | Implementation, Home Assistant layer |
+| Depends on | C06 (the tracker, the dams, the count, the tolerance), H03, H06 (the controls, the arming step, the guard of X10); H05 is listed in the index as a dependency, but this block does not need persistence to disk: the tracker state lives in the window state that the storage already keeps across a reload |
+| Blocks | Arming a window in a released version (the guard of X10 is lifted here); H14, H15; milestone M2 |
+| Parallel with | C07 |
+
+## Goal and reason
+
+Block C06 built the tracker, the two dams, the daily count and the tolerance in the core, and the time-lapse simulation drives them. In the released integration none of it acts: the runtime controller does not feed observations to the tracker, arms no timer of the tracker, puts none of its events on the bus, and offers no form for the values the tracker needs per member. That is why version 0.2.0 refuses to arm a window (maintenance item X10): an armed window would move a shutter opened by hand back within seconds. This block connects the runtime to the core, brings the per-member configuration, and lifts the guard. After it, the project owner arms his pilot window; this block is therefore the one that turns the pilot from watching into moving, and the checklist of section 8 of the pilot guide is its most read deliverable.
+
+## Read first
+
+- `tasks/README.md`
+- `docs/dev/tracking.md` in full: what the runtime feeds in and what comes back (`Engine.observe`, `elapse`, `after_send`, `on_command_result`, `resume`, `wake_ups`), the state machine, the dams, the count, the self-measurement
+- `docs/dev/runtime.md`: "The recompute, step by step", "Moving covers", "What the runtime does not do yet", "Controls", "Testing the runtime"
+- `docs/dev/config-flow.md`: adding settings to an existing feature, ranges in the registry, the arming pages and the guard of X10 (`MOVEMENT_DETECTION_WIRED`, the confirmation page, the repair issue for a window stored as armed)
+- `docs/architecture.md`: sections 2.3 (gate rules 3, 7, 8, 9), 3, 8 (all subsections; 8.1 for the capability profile and the report delay "stated by the user, with a default per platform type where one is known"), 9, 11
+- `tasks/C06-movement-tracking-and-dams.md` (the rulings), `tasks/H06-control-entities.md` ("The pilot after this block", the rulings), the rows H10, X10, H15 and C06a of `TASKS.md`
+- `docs/pilot.md` section 8, `docs/features/dry-run.md`, `docs/features/controls.md`, `docs/features/status-and-events.md`, `docs/dev/glossary.md`
+- `docs/project-brief.md`: E1, E2, E3, E10, guardrails 6 and 8, section 6 "Home Assistant specifics" (late position feedback, `for:` durations after a restart)
+
+## Verify before you build
+
+- Read how the controller records a send today (`Engine.after_send` versus `state_after_send`) and what the runtime writes into the tracker without ever advancing it: since C06 every send sets the tracker of an addressed member to `expecting`, and nothing in the runtime calls `elapse`. Windows set up on 0.2.0 therefore carry stale `expecting` phases in their state (in memory until the next restart, on disk once H05 exists). Decide how the first `elapse` after this block treats them (see scope item 1) before you wire anything.
+- The current way to fire events on the bus and to describe them in the logbook is the one H04 built (`events.py`, `logbook.py`, `record.py`); read it before adding the tracker's events.
+- The per-member forms: `docs/dev/config-flow.md` describes how a feature contributes a page; members are part of the window subentry (section 9 of the specification: "members are listed only where they differ"); read how H01 stores members and how H03's `stagger_gap` got its page, and verify the subentry flow can show one page per member or one page with a section per member without nesting sections.
+
+## Scope
+
+1. **The wiring.** For every state change of a member the controller reduces the state to an observation (`members.py`, as today) and calls `Engine.observe` with the last decision, the dry-run flag and the user of the context as a hint; before every recompute and at every wake-up it calls `Engine.elapse`; after a send `Engine.after_send`; the wake-ups of `Engine.wake_ups` join the controller's one timer next to the existing instants, under the loop rule of `docs/dev/runtime.md`; the controller computes no time of its own. **The leftover of 0.2.0:** a tracker phase `expecting` whose command predates this block, or whose deadline lies in the past at the first `elapse` after a start or reload, must not raise `actuator_no_reaction` for a movement that happened long ago and must not arm a dam: treat such a member as `idle` with its last observation once, log it once at debug level, and say in `docs/dev/runtime.md` that the restart reconciliation of C12 takes this over when it exists. A test sets up a window from a state with a stale `expecting` phase and shows that the first recompute raises no event and sends nothing wrong.
+2. **The events on the bus and in the logbook.** Every `TrackerEvent` of C06 (`manual_detected`, `manual_detected_member`, `external_movement_observed`, `moved_during_downtime`, `override_started`, `override_ended`, `person_at_window_started`, `person_at_window_ended`, `position_may_be_inaccurate`, `actuator_no_reaction`, `movement_not_finished`, `comfort_movements_threshold`) becomes a reason event with the window, the member and the position as attributes where the event carries them (the events raised while a movement is under way carry no position, ruling of C06), the count and the threshold for the threshold event, and the dashboard user as a hint; one logbook line per event in both languages; no event storm (an unchanged outcome is not repeated). The manual override entity of H04 (always off until now) follows the dam; the reason sensor shows `manual_override` and `person_at_window` with the end of the dam and the remembered position as attributes.
+3. **Per-member configuration.** A page per member in the window's form (or one page with one section per member, whichever the flow allows without nesting), with the values the tracker reads: position source (`measured` or `calculated`, default `calculated`), tolerance (1 to 20 percent, default from the position source, with the user text that it is for a cover that settles a little off and shall be as small as needed), report delay (the time a report may lag behind reality: 0 for a platform that pushes its state, in the order of a minute for a polled one; a default per platform type where one is known, else 0; the diagnostics show the measured latency of the self-measurement next to it so that a user can tune it), and the travel times upwards and downwards (the provisional 60 seconds of H02 go away; a value per member; a default that the block states with its reason; both are configuration values, never learned). The registry of the core already holds `position_source` and `tolerance` in `CAPABILITY_SETTINGS`; the report delay and the travel times join it, with ranges and units as X09 made binding, and the capability profile reads them.
+4. **The daily count** in the diagnostics with its threshold as a setting of the house, a group or a window (default 40), and the threshold event (item 2).
+5. **The resume button** of H06 on `Engine.resume`, on the window's device, and the same call for the action of H07 if H07 is merged by then.
+6. **Lifting the guard of X10.** `MOVEMENT_DETECTION_WIRED` becomes `True`, the test that pins the shipped value changes with it, the repair issue for a window stored as armed disappears, and the arming step of H06 works as its rulings say. **The event-driven precondition becomes a fact** (ruling of the project owner, 2026-09-29): once the report delay per member is known (item 3), the confirmation page checks it and refuses to arm while any member's report delay is above zero, naming the member; the checkbox `reports_at_once` of X10 goes away, and section 8 of the pilot guide follows (the marker test binds it). The refusal stays until block H15 lifts it.
+7. **Section 8 of the pilot guide and the user page.** Section 8 is rewritten for a version that notices movements by hand: what happens when the user moves the shutter (the override, its default end at the next part of the day, the "resume automation" button, that Pause is no longer needed for a hand movement), what the first hour and the first day look like, what to do if the window moves when it should not. A new user page `docs/features/manual-operation.md` in the style of the language pass: how the integration tells its movements from yours, the override and its end rules, the person-at-the-window rule (before protection events exist: what it will do), the tolerance and the report delay in plain words, the self-measurement in the diagnostics and how to use it, the daily count. The X08 carry-over: the page for covers that only open and close says again that the detection of manual operation is inactive for them.
+8. **Carry-over from the review of C06:** narrow the rule "a return at the own target after a gap is nothing" to gaps in which a deadline ended an expectation (one flag next to `before_gap`), in the core, with the tests of C06 extended; it is a small core change this block is allowed to make, named under "model changes" in the pull request.
+
+## Out of scope
+
+- Command verification, retries, backoff and the repair issue of a stalled actuator (H15); the mitigation for an invisible reversal on a polled platform (H15). Persistence to disk (H05, C12). The settle band for measured positions (C06a). Protection events and the return after them (C07, H08). Buttons (H14). Sleep mode ending the override (C11, H16).
+
+## Deliverables
+
+The wiring in `controller.py` and `runtime.py`, the events and logbook lines, the per-member form page with its translations, the settings in the registry, the button, the constant flipped, tests, `docs/dev/runtime.md` (the wiring, the leftover, "what the runtime does not do yet" shortened), `docs/dev/config-flow.md` (the member page, the guard lifted, the fact of the report delay), `docs/features/manual-operation.md`, `docs/pilot.md` section 8, `docs/features/dry-run.md` and `docs/features/controls.md` where they say a later version notices movements by hand, `docs/features/status-and-events.md` (the new events and attributes), the glossary.
+
+## Acceptance criteria
+
+- An armed window in the test harness: a hand movement of its cover arms the override, the reason reads `manual_override`, the entity "Manual override" is on, the events `manual_detected` and `override_started` are on the bus once each with a logbook line, and the window sends nothing until the dam ends; at its end `override_ended` and the recompute move the window. The same on a window with two members, one moved by hand (decision 8).
+- An own command is followed to its end without any event of a movement by hand, on a live platform and on a platform that reports the position only at the end; a stop in mid-travel raises `position_may_be_inaccurate` once.
+- The first recompute of a window whose state carries a stale `expecting` phase raises no event and arms no dam.
+- The wake-ups of the tracker are armed by the controller's timer and fire `elapse`: a member that never reports after a command reads `actuator_no_reaction` at its deadline, exactly once, and no dam is armed.
+- The per-member page stores position source, tolerance, report delay and travel times; the capability profile and the deadline read them; the provisional 60 seconds are gone from the code.
+- The daily count appears in the diagnostics; above the threshold the event fires once per day.
+- With every member's report delay at zero the arming step works as H06 built it; with one member's report delay above zero the confirmation page refuses and names the member; the checkbox `reports_at_once` no longer exists; the marker test binds section 8 and the page.
+- `MOVEMENT_DETECTION_WIRED` is `True`; the repair issue for a window stored as armed is gone; the pilot safety test runs without a monkeypatch of the fact, and its dry-run window still causes zero calls with every movement by hand the test can make.
+- The resume button ends an armed override and recomputes.
+- No code outside `actuator.py` calls a cover action; both translations complete; coverage of `flow/` 100 %, the Home Assistant side at its threshold; no deprecation.
+
+## Required tests
+
+Under `tests/ha/`: the wiring (observe, elapse, wake-ups, after_send) on fake covers of the profiles the simulation knows, the stale-phase start, the events and logbook lines, the member page, the guard lifted and the report-delay fact, the button, the extension of `test_pilot_safety.py`; under `tests/core/` the narrowed own-target rule.
+
+## Open questions
+
+None blocks the start; each has a recommendation, and the project owner answers in the pull request or before.
+
+1. **Defaults of the travel times.** Recommendation: 60 seconds each direction as the default of the setting (the value H02 used provisionally), shown on the member page with the sentence that a wrong value makes the integration wait too long or too short before it judges a movement, and the self-measurement in the diagnostics as the way to find the right one. *Rejected:* no default (every user would have to measure before the first window works).
+2. **Default report delay per platform type.** Recommendation: 0 for every platform, because the integration cannot detect polling and a wrong non-zero default would let a hand movement be judged a minute late; the member page says which platforms are known to poll, in words, without vendor names in code. *Rejected:* a table of platform types in code (source-neutral rule G6).
+3. **One page per member or one page with sections.** Recommendation: one page per member, "Member 1 of 2: cover.example_left", because sections cannot be nested and a member already has several fields; a window with one member gets one page. *Rejected:* one page with one section per member.
+4. **Version.** After this block the project owner arms his pilot window: recommendation to release it as 0.3.0 together with C07 if C07 is done, otherwise alone.
