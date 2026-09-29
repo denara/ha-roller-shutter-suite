@@ -174,6 +174,28 @@ def _referenced(
     return replace(member, position_reference=reference), events
 
 
+def _idle_keeping_the_gap(tracking: MemberTracking) -> MemberTracking:
+    """Return the idle tracking after a deadline, keeping what was seen before a gap.
+
+    A deadline that passes while the member is unavailable ends the
+    expectation, but not the gap: the observation before it is what the
+    return is compared with, so a movement during the gap still reads
+    ``moved_during_downtime`` (section 8.3, "Unavailable gap").
+    """
+    return MemberTracking(before_gap=tracking.before_gap)
+
+
+def _without_position(events: tuple[TrackerEvent, ...]) -> tuple[TrackerEvent, ...]:
+    """Return the events without a position: raised at the start of a movement.
+
+    At its start a movement has not reached the position the person chooses,
+    and a platform that reports the transit state before the position still
+    reports where the movement began. The dam's remembered position is set
+    when the movement comes to rest.
+    """
+    return tuple(replace(event, position=None) for event in events)
+
+
 def _at_an_end(position: Position | None) -> bool:
     return position in (FULLY_OPEN, FULLY_CLOSED)
 
@@ -226,7 +248,14 @@ def _detected(
     an armed window ``manual_detected`` (the window) and
     ``manual_detected_member`` (the member, with the hint of a user if there
     was one), and the dam the movement arms. ``tracking`` is what the tracker
-    follows afterwards: nothing, or the rest of a reversed movement.
+    follows afterwards: nothing, or the rest of a movement that is detected
+    while it is still under way (its start, or a reversal).
+
+    The events of a movement that is detected while under way carry no
+    position: it is not yet the position the person chooses, and a platform
+    that reports the transit state first still reports where the movement
+    began. The dam remembers the position once the movement has come to
+    rest; the decision record shows it from then on. No second event.
 
     One movement of the window by hand arms its dam once (decision 8; the
     window is moving from the first member that moves until the last one has
@@ -237,11 +266,12 @@ def _detected(
     member with a report delay the movement may have begun up to that delay
     before it was seen.
     """
+    under_way = tracking.detected
     hint = member.tracking.user_hint
     member_event = TrackerEvent(
         ReasonCode.MANUAL_DETECTED_MEMBER,
         member_id=member.member_id,
-        position=position,
+        position=None if under_way else position,
         user_id=hint,
     )
     others_moving = replace(
@@ -267,14 +297,12 @@ def _detected(
     armed = arm_after_external_movement(
         context.config, state, context.now, context.last_decision, at
     )
-    return Transition(
-        armed.state,
-        (
-            TrackerEvent(ReasonCode.MANUAL_DETECTED, position=at),
-            member_event,
-            *armed.events,
-        ),
+    events = (
+        TrackerEvent(ReasonCode.MANUAL_DETECTED, position=at),
+        member_event,
+        *armed.events,
     )
+    return Transition(armed.state, _without_position(events) if under_way else events)
 
 
 def _settled_external(
@@ -472,14 +500,20 @@ def _returned(
 ) -> Transition | None:
     """Judge the return of an idle member from an unavailable gap; ``None``: go on.
 
-    The same observation is nothing. Another position is
-    ``moved_during_downtime``: the movement counts as external, and the
-    position may be inaccurate. A member that returns moving is judged like
-    any movement that starts in ``idle``.
+    The same observation is nothing. So is a return at the target of the
+    last own command, as in the restart reconciliation (section 11): an own
+    movement whose deadline passed during the gap may have finished in it.
+    Another position is ``moved_during_downtime``: the movement counts as
+    external, and the position may be inaccurate. A member that returns
+    moving is judged like any movement that starts in ``idle``.
     """
     if observation.moving:
         return None
-    if not _differs(before.position, observation.position, context.tolerance):
+    command = member.last_own_command
+    if not _differs(before.position, observation.position, context.tolerance) or (
+        command is not None
+        and _near(observation.position, command.target, context.tolerance)
+    ):
         return Transition(state.with_member(member))
     if context.dry_run:
         return _detected(context, state, member, observation.position)
@@ -613,7 +647,9 @@ def _due(context: _Context, state: WindowState, member: MemberState) -> Transiti
     observation = member.last_observation
     if tracking.phase is TrackerPhase.EXPECTING:
         return Transition(
-            state.with_member(replace(member, tracking=_IDLE)),
+            state.with_member(
+                replace(member, tracking=_idle_keeping_the_gap(tracking))
+            ),
             (
                 TrackerEvent(
                     ReasonCode.ACTUATOR_NO_REACTION, member_id=member.member_id
@@ -638,7 +674,9 @@ def _not_finished(
     """Say ``movement_not_finished``: no rest that can be judged by the deadline."""
     member, events = _referenced(context.member, member, PositionReference.UNCERTAIN)
     return Transition(
-        state.with_member(replace(member, tracking=_IDLE)),
+        state.with_member(
+            replace(member, tracking=_idle_keeping_the_gap(member.tracking))
+        ),
         (
             TrackerEvent(ReasonCode.MOVEMENT_NOT_FINISHED, member_id=member.member_id),
             *events,

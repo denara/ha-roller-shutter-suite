@@ -61,15 +61,18 @@ from .model import (
     MAX_DAM_DURATION,
     MAX_RANDOM_OFFSET,
     MAX_STAGGER_GAP,
+    MAX_STATED_TOLERANCE,
     MAX_SUN_OFFSET_MINUTES,
     MAX_TOLERANCE,
     MAX_TRIGGER_ELEVATION,
     MEMBER_MEASUREMENT_FIELDS,
     MIN_DAM_DURATION,
+    MIN_TOLERANCE,
     SCHEDULE_DAY_TYPES,
     SCHEDULE_EDGES,
     TRIGGER_FIELDS,
     BlindSource,
+    CapabilityProfile,
     CapabilityState,
     CoveringType,
     FaultBehavior,
@@ -2003,18 +2006,36 @@ CAPABILITY_SETTINGS: Final = SettingsRegistry(
             parse=as_enum(PositionSource),
             inheritable=False,
         ),
+        SettingDefinition[int | None](
+            key="tolerance",
+            kind=SettingKind.NUMBER,
+            # A value of the capability profile too. Unset, the position
+            # source decides it (2 calculated, 3 measured).
+            function=None,
+            default=None,
+            parse=as_int,
+            inheritable=False,
+            value_range=ValueRange(MIN_TOLERANCE, MAX_STATED_TOLERANCE),
+            unit=PERCENT,
+        ),
     )
 )
 """What a user states about one member that no entity can report (section 8.1).
 
 The position source (``measured`` by the drive, or ``calculated`` from run
 time) cannot be detected, so the user states it per member; the default is
-``calculated``. It decides the default tolerance of the tracker (2 for a
-calculated, 3 for a measured position). Block H10 builds the per-member form
-from this registry and hands the value into ``CapabilityProfile``. A faulty
-stored value is read as ``calculated``, the cautious default
-(:func:`position_source_from_stored`): a smaller tolerance never lets a
-movement by hand pass as the integration's own.
+``calculated``. The tolerance compares a reported position with a target; a
+user widens it for a cover that settles off its target. Unset, it follows
+the position source: 2 for a calculated, 3 for a measured position. A stated
+tolerance lies within 1 and 20 percent (``MAX_STATED_TOLERANCE``). Block H10
+builds the per-member form from this registry and hands the values into
+``CapabilityProfile``.
+
+Neither has a fault value (ruling 4 of block C06). A faulty stored position
+source is read as ``calculated`` (:func:`position_source_from_stored`), and a
+faulty stored tolerance as none stated (:func:`stated_tolerance_from_stored`),
+so the default of the position source applies: a smaller tolerance never
+lets a movement by hand pass as the integration's own.
 """
 
 
@@ -2029,6 +2050,32 @@ def position_source_from_stored(data: object) -> PositionSource:
     if isinstance(value, PositionSource):
         return value
     return PositionSource.CALCULATED
+
+
+def stated_tolerance_from_stored(data: object) -> int | None:
+    """Return the tolerance the user stated for one member, or ``None``.
+
+    ``data`` is the stored mapping of the member's capability settings. What
+    is absent, faulty, outside 1 to 20 or unreadable is read as none stated:
+    ``CapabilityProfile.stated_tolerance`` takes the result as it is.
+    """
+    settings = settings_from_stored(data, CAPABILITY_SETTINGS)
+    value = settings.get("tolerance")
+    if isinstance(value, int) and not isinstance(value, bool):
+        return value
+    return None
+
+
+def tolerance_from_stored(data: object) -> int:
+    """Return the tolerance that applies to one member, from its stored settings.
+
+    The stated one; if none is stated (or it is faulty), the default of the
+    position source, which is itself read with its own rule.
+    """
+    stated = stated_tolerance_from_stored(data)
+    if stated is not None:
+        return stated
+    return CapabilityProfile.default_tolerance(position_source_from_stored(data))
 
 
 _UNKNOWN_MEMBER_FAULT: Final = "the window has no member with this identifier"

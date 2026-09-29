@@ -603,6 +603,104 @@ def test_rest_without_a_position_cannot_be_judged_and_is_not_finished_at_the_dea
     assert subject.state.manual_override is None
 
 
+def _gap_spanning_the_deadline(subject: Driver, gone_at: float) -> float:
+    """Let the member go away at ``gone_at`` and the deadline pass in the gap."""
+    subject.at(gone_at).report(UNAVAILABLE)
+    deadline = _deadline(subject)
+    subject.at(deadline).recompute()
+    return deadline
+
+
+@pytest.mark.parametrize(
+    ("phase", "deadline_event"),
+    [
+        (TrackerPhase.EXPECTING, ReasonCode.ACTUATOR_NO_REACTION),
+        (TrackerPhase.MOVING, ReasonCode.MOVEMENT_NOT_FINISHED),
+    ],
+    ids=["expecting", "moving"],
+)
+def test_a_gap_that_spans_the_deadline_still_sees_a_movement_by_hand(
+    phase: TrackerPhase, deadline_event: ReasonCode
+) -> None:
+    """The deadline ends the expectation, not the gap (section 8.3, "Unavailable gap").
+
+    A wall button with a local link moves the cover while its link to the
+    house is down: on its return the person is seen, and the next decision
+    does not overrule them.
+    """
+    subject = driver()
+    _opening(subject)
+    if phase is TrackerPhase.MOVING:
+        subject.at(0.7).report(moving_up(4))
+    before = subject.observed[LEFT]
+    assert _tracking(subject).phase is phase
+    deadline = _gap_spanning_the_deadline(subject, 3)
+    assert deadline_event in codes(subject.events)
+    assert _tracking(subject) == MemberTracking(before_gap=before)
+
+    raised = subject.at(deadline + 60).report(resting(40))
+
+    assert ReasonCode.MOVED_DURING_DOWNTIME in codes(raised)
+    assert codes(raised)[-3:] == DETECTED
+    assert subject.state.manual_override is not None
+    assert subject.state.owner is PositionOwner.USER
+    decision = subject.at(deadline + 61).recompute()
+    assert decision.addressed is None
+
+
+def test_a_gap_that_spans_the_settle_time_judges_the_movement_on_return() -> None:
+    """While settling the member waits for its return, deadline or not."""
+    subject = driver()
+    _opening(subject)
+    subject.at(0.7).report(moving_up(4))
+    subject.at(20).report(resting(100))
+    deadline = _gap_spanning_the_deadline(subject, 20.5)
+    assert subject.events == []
+    assert _tracking(subject).phase is TrackerPhase.SETTLING
+
+    subject.at(deadline + 60).report(resting(40))
+    _settle(subject, deadline + 60)
+
+    assert codes(subject.events)[-3:] == DETECTED
+    assert subject.state.manual_override is not None
+    assert subject.state.owner is PositionOwner.USER
+
+
+@pytest.mark.parametrize("moved", [False, True], ids=["expecting", "moving"])
+def test_a_return_at_the_own_target_after_the_deadline_is_nothing(
+    *, moved: bool
+) -> None:
+    """The own movement may have finished during the gap, as at a restart."""
+    subject = driver()
+    _opening(subject)
+    if moved:
+        subject.at(0.7).report(moving_up(4))
+    deadline = _gap_spanning_the_deadline(subject, 3)
+    before = list(subject.events)
+
+    assert subject.at(deadline + 60).report(resting(100)) == ()
+    assert subject.events == before
+    assert subject.state.manual_override is None
+    assert subject.state.owner is PositionOwner.ENGINE
+
+
+def test_a_gap_that_starts_in_idle_is_unchanged_by_a_deadline() -> None:
+    """The control case: no expectation, the return is compared with before."""
+    subject = driver()
+    subject.report(resting(100))
+    subject.recompute()
+    subject.at(10).report(UNAVAILABLE)
+    subject.at(200).recompute()
+    raised = subject.at(300).report(resting(40))
+
+    assert codes(raised) == [
+        ReasonCode.MOVED_DURING_DOWNTIME,
+        ReasonCode.POSITION_MAY_BE_INACCURATE,
+        *DETECTED,
+    ]
+    assert subject.state.owner is PositionOwner.USER
+
+
 def test_a_gap_that_began_before_anything_was_seen_judges_nothing() -> None:
     """The member was never seen available: its first value is recorded."""
     subject = driver()

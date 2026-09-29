@@ -69,7 +69,14 @@ MIN_TOLERANCE: Final = 1
 DEFAULT_TOLERANCE_CALCULATED: Final = 2
 DEFAULT_TOLERANCE_MEASURED: Final = 3
 MAX_TOLERANCE: Final = 100
-"""The largest tolerance and minimum change of a position, in percent."""
+"""The largest minimum change of a position, in percent."""
+MAX_STATED_TOLERANCE: Final = 20
+"""The largest tolerance a user can state for a member, in percent.
+
+Wide enough for a cover that settles several percent off its target; any
+wider, and a movement by hand of that size would pass as the integration's
+own.
+"""
 _DEFAULT_FROST_POSITION: Final = Position(90)
 _DEFAULT_REEVALUATE_AFTER: Final = timedelta(minutes=5)
 _DEFAULT_MIN_INTERVAL: Final = timedelta(minutes=10)
@@ -167,7 +174,8 @@ class CapabilityProfile:
     reported position with a target, or ``None``. :attr:`tolerance` is the one
     that applies: the stated one, else 2 for a calculated position (the report
     equals the command, so a deviation means an intervention) and 3 for a
-    measured one. The minimum is 1.
+    measured one. A stated tolerance lies within 1 and
+    :data:`MAX_STATED_TOLERANCE`.
 
     ``capabilities_known`` is ``False`` only when **nothing** is known about
     what the member can do, not even a last state: a member that was never
@@ -224,15 +232,27 @@ class CapabilityProfile:
                 self.stated_tolerance, int
             ):
                 raise TypeError("the tolerance must be an integer")
-            if not MIN_TOLERANCE <= self.stated_tolerance <= MAX_TOLERANCE:
-                raise ValueError("the tolerance must be within 1 and 100")
+            if not MIN_TOLERANCE <= self.stated_tolerance <= MAX_STATED_TOLERANCE:
+                raise ValueError(
+                    f"the tolerance must be within {MIN_TOLERANCE} and "
+                    f"{MAX_STATED_TOLERANCE}"
+                )
 
     @property
     def tolerance(self) -> int:
         """Return the tolerance that applies to this member."""
         if self.stated_tolerance is not None:
             return self.stated_tolerance
-        if self.position_source is PositionSource.MEASURED:
+        return self.default_tolerance(self.position_source)
+
+    @staticmethod
+    def default_tolerance(source: PositionSource) -> int:
+        """Return the tolerance of a member whose user stated none.
+
+        2 for a calculated position: the report equals the command, so a
+        deviation means an intervention. 3 for a measured one.
+        """
+        if source is PositionSource.MEASURED:
             return DEFAULT_TOLERANCE_MEASURED
         return DEFAULT_TOLERANCE_CALCULATED
 

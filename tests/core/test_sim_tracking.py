@@ -124,6 +124,33 @@ def test_a_hand_movement_arms_the_override_with_the_persons_position(
     assert len(record.sends(WINDOW)) == 1  # the morning; the override holds
 
 
+def test_events_raised_at_the_start_of_a_movement_carry_no_position() -> None:
+    """``end_only`` keeps the old position during the travel (section 8.3).
+
+    The movement is detected at its first transit state, when the cover
+    still reports 100: the events carry no position rather than the one the
+    person left. The dam remembers the position once the movement has come
+    to rest.
+    """
+    simulation = profile_case("end_only", "hand")
+    record = _run(simulation, FIVE_HOURS)
+    override = simulation.window(WINDOW).state.manual_override
+
+    positions = [e.event.position for e in _arming(record) if e.event is not None]
+    assert positions == [None, None, None]
+    assert override is not None
+    assert override.remembered_position == Position(40)
+
+
+def test_events_raised_at_rest_carry_the_position_the_person_chose() -> None:
+    """Without transit states a movement is judged at rest, where it stands."""
+    simulation = profile_case("no_transit", "hand")
+    record = _run(simulation, FIVE_HOURS)
+
+    positions = [e.event.position for e in _arming(record) if e.event is not None]
+    assert positions == [Position(40)] * 3
+
+
 @pytest.mark.parametrize("profile", sorted(set(PROFILES) - {"no_position"}))
 def test_a_stop_in_mid_travel_is_external_and_the_position_uncertain(
     profile: str,
