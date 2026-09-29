@@ -218,6 +218,18 @@
             }
           }
         }
+      },
+      "feature_operation_pause": {
+        "title": "Operation",
+        "description": "An entity of your own can pause the comfort movements, for example a helper you turn on for a party or while you are away. While it is on, comfort movements wait as if the switch \"Pause\" were on; protection and the fire alarm still move the shutters. If the entity is unavailable or its state is unknown, comfort movements wait too, and after an hour a repair issue says so.",
+        "data": {
+          "pause_source_choice": "Pause entity",
+          "pause_source": "Entity that pauses"
+        },
+        "data_description": {
+          "pause_source_choice": "While this entity is on, comfort movements are paused. With \"None\", only the switch \"Pause\" pauses. A pause entity of the house or of a group always applies to its windows as well.",
+          "pause_source": "Used only with \"Own selection\" above."
+        }
       }
     },
     "abort": {
@@ -482,6 +494,18 @@
               }
             }
           }
+        },
+        "feature_operation_pause": {
+          "title": "Operation",
+          "description": "An entity of your own can pause the comfort movements, for example a helper you turn on for a party or while you are away. While it is on, comfort movements wait as if the switch \"Pause\" were on; protection and the fire alarm still move the shutters. If the entity is unavailable or its state is unknown, comfort movements wait too, and after an hour a repair issue says so.",
+          "data": {
+            "pause_source_choice": "Pause entity",
+            "pause_source": "Entity that pauses"
+          },
+          "data_description": {
+            "pause_source_choice": "While this entity is on, comfort movements are paused. With \"None\", only the switch \"Pause\" pauses. A pause entity of the house or of a group always applies to its windows as well. Currently inherited: {pause_source_inherited} from {pause_source_source}.",
+            "pause_source": "Used only with \"Own selection\" above."
+          }
         }
       },
       "error": {
@@ -554,6 +578,25 @@
           "menu_options": {
             "degraded_accept": "Continue with these covers",
             "basics": "Choose other covers"
+          }
+        },
+        "operation": {
+          "title": "Operation: dry-run or armed",
+          "description": "In dry-run the window decides and records what it would do, and moves nothing. Armed, it moves its shutters. Arm a window only after you have compared its decisions with your old control; the next page asks you to confirm the checks. You can switch back to dry-run here at any time, without a confirmation.",
+          "data": {
+            "operation": "Operation"
+          }
+        },
+        "arm": {
+          "title": "Arm the window",
+          "description": "From now on this window moves its shutters. Confirm each point below. If one of them is not true yet, close this dialog: the window stays in dry-run, and nothing is saved.",
+          "data": {
+            "one_controller": "Nothing else moves this shutter: no automation, script, scene, blueprint, schedule of another integration and no app of the vendor.",
+            "old_control_off": "I have switched the old control off and checked that it no longer moves the shutter.",
+            "compared": "I have compared the last days: after each movement of the old control the reason read \"Already where it should be\", or I understand every difference.",
+            "controls_checked": "I have looked at the operating mode, the pause and the maintenance lock of the house, the group and this window.",
+            "fresh_start": "I know that the window starts fresh: what it would have sent in dry-run counts as never sent, so if the shutter is not where the daily routine wants it, it moves within a few seconds after I save.",
+            "way_back": "I know the way back: with the maintenance lock the window sends no further command, and this form switches it back to dry-run."
           }
         },
         "features": {
@@ -769,6 +812,18 @@
               }
             }
           }
+        },
+        "feature_operation_pause": {
+          "title": "Operation",
+          "description": "An entity of your own can pause the comfort movements, for example a helper you turn on for a party or while you are away. While it is on, comfort movements wait as if the switch \"Pause\" were on; protection and the fire alarm still move the shutters. If the entity is unavailable or its state is unknown, comfort movements wait too, and after an hour a repair issue says so.",
+          "data": {
+            "pause_source_choice": "Pause entity",
+            "pause_source": "Entity that pauses"
+          },
+          "data_description": {
+            "pause_source_choice": "While this entity is on, comfort movements are paused. With \"None\", only the switch \"Pause\" pauses. A pause entity of the house or of a group always applies to its windows as well. Currently inherited: {pause_source_inherited} from {pause_source_source}.",
+            "pause_source": "Used only with \"Own selection\" above."
+          }
         }
       },
       "error": {
@@ -776,6 +831,7 @@
         "group_removed": "The group you chose was deleted while this form was open. Choose another group, or save without one; the window then inherits the settings of the house.",
         "no_covers": "Your selection contains no cover.",
         "cover_in_use": "{cover} already belongs to the window \"{window}\". A cover can belong to one window only.",
+        "confirm_every_check": "Confirm every point. If one of them is not true yet, close this dialog: the window stays in dry-run.",
         "invalid_value": "This value is not allowed here.",
         "fraction_not_allowed": "Enter a whole number.",
         "invalid_day_of_year": "Enter the day as month and day, two digits each, for example 05-01.",
@@ -828,6 +884,12 @@
         "own": "Own selection"
       }
     },
+    "operation": {
+      "options": {
+        "dry_run": "Dry-run: decide and record, move nothing",
+        "armed": "Armed: move the shutters"
+      }
+    },
     "schedule_trigger_kind": {
       "options": {
         "inherit": "Inherit",
@@ -865,6 +927,18 @@
     "rule_without_keys": {
       "title": "Saved settings were refused for an unknown reason",
       "description": "The settings of at least one window were refused as a whole, and Roller Shutter Suite could not tell which settings are the cause. This is an error in the integration, not in your settings. Settings that protect people or hardware or limit movements keep working; comfort movements are suspended. Please report it to the author of the integration."
+    },
+    "pause_source_blind_global": {
+      "title": "The pause entity of the house reports neither on nor off",
+      "description": "The pause entity {entity} of the house has reported neither on nor off for more than an hour: it is unavailable, its state is unknown, or it has another state. Until it reports on or off again, comfort movements of every window are paused; protection and the fire alarm still move the shutters. This message disappears by itself when the entity reports again. To stop using the entity, choose \"None\" on the page \"Operation\" of the house."
+    },
+    "pause_source_blind_group": {
+      "title": "The pause entity of group \"{name}\" reports neither on nor off",
+      "description": "The pause entity {entity} of the group \"{name}\" has reported neither on nor off for more than an hour: it is unavailable, its state is unknown, or it has another state. Until it reports on or off again, comfort movements of the windows of this group are paused; protection and the fire alarm still move the shutters. This message disappears by itself when the entity reports again. To stop using the entity, choose \"None\" on the page \"Operation\" of the group."
+    },
+    "pause_source_blind_window": {
+      "title": "The pause entity of window \"{name}\" reports neither on nor off",
+      "description": "The pause entity {entity} of the window \"{name}\" has reported neither on nor off for more than an hour: it is unavailable, its state is unknown, or it has another state. Until it reports on or off again, comfort movements of this window are paused; protection and the fire alarm still move the shutter. This message disappears by itself when the entity reports again. To stop using the entity, choose \"None\" on the page \"Operation\" of the window."
     },
     "setting_fault_global_unreadable": {
       "title": "A setting of the house cannot be used",
@@ -1143,6 +1217,24 @@
       },
       "dry_run": {
         "name": "Dry-run"
+      }
+    },
+    "select": {
+      "operating_mode": {
+        "name": "Operating mode",
+        "state": {
+          "automatic": "Automatic",
+          "protection_only": "Protection only",
+          "off": "Off"
+        }
+      }
+    },
+    "switch": {
+      "pause": {
+        "name": "Pause"
+      },
+      "maintenance_lock": {
+        "name": "Maintenance lock"
       }
     }
   },

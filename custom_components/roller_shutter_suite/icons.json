@@ -37,6 +37,30 @@
           "on": "mdi:test-tube"
         }
       }
+    },
+    "switch": {
+      "pause": {
+        "default": "mdi:play-circle-outline",
+        "state": {
+          "on": "mdi:pause-circle-outline"
+        }
+      },
+      "maintenance_lock": {
+        "default": "mdi:lock-open-variant-outline",
+        "state": {
+          "on": "mdi:wrench-clock"
+        }
+      }
+    },
+    "select": {
+      "operating_mode": {
+        "default": "mdi:cog-outline",
+        "state": {
+          "automatic": "mdi:auto-mode",
+          "protection_only": "mdi:shield-half-full",
+          "off": "mdi:power-off"
+        }
+      }
     }
   }
 }

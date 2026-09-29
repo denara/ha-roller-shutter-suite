@@ -4,11 +4,10 @@ The integration is set up the way a user sets it up: the house through the
 config flow, one group and two windows through their subentry flows. Every
 new window starts in dry-run. The window "Example window" stays in dry-run;
 the window "Control window" is armed, which is the proof that the test would
-notice a call: it does move. No form can arm a window yet (block H06 builds
-the control entities), so the control window is armed the only way that
-exists, by writing ``dry_run`` into the stored data of its subentry with
-``async_update_subentry``; the update listener reloads the entry once, as
-after every change.
+notice a call: it does move. The control window is armed the way a user arms
+it: through the page "dry-run or armed" of its reconfigure flow and the page
+of the checks that follows; the update listener reloads the entry once, as
+after every change, and the window starts armed with a clean state.
 
 No cover platform is loaded. The three cover actions are stand-ins that
 record every call (``runtime_kit.register_cover_services``), and the covers
@@ -22,6 +21,7 @@ the next morning. The sun is the invented sun of ``runtime_kit`` (sunrise
 workdays open at 07:00, the evening begins at sunset, not before 17:00.
 """
 
+import itertools
 from datetime import date, datetime
 from typing import Any
 
@@ -53,6 +53,7 @@ from custom_components.roller_shutter_suite.const import (
     SUBENTRY_WINDOW,
 )
 from custom_components.roller_shutter_suite.controller import WindowController
+from custom_components.roller_shutter_suite.controls import BLIND_MEMORY_KEY
 from custom_components.roller_shutter_suite.core.arbiter import (
     Arbiter,
     LayerRegistration,
@@ -68,6 +69,7 @@ from custom_components.roller_shutter_suite.core.model import (
     WindowState,
 )
 from custom_components.roller_shutter_suite.events import HISTORY_KEY, forget_history
+from custom_components.roller_shutter_suite.flow.window_flow import ARMING_CHECKS
 from custom_components.roller_shutter_suite.storage import STORAGE_KEY, forget_storage
 from tests.ha.helpers import ROUTINE_HOUSE, routine_inherit, set_cover
 from tests.ha.runtime_kit import (
@@ -216,14 +218,29 @@ async def _install(hass: HomeAssistant, freezer: Any) -> ConfigEntry:
         if subentry.subentry_type == SUBENTRY_WINDOW:
             assert subentry.data[CONF_DRY_RUN] is True
 
-    # Arm the control window by its stored data, the only way that exists yet.
-    control = entry.subentries[_subentry_id(entry, "Control window")]
-    hass.config_entries.async_update_subentry(
-        entry, control, data={**control.data, CONF_DRY_RUN: False}
+    # Arm the control window through its form: dry-run or armed, then the checks.
+    control_id = _subentry_id(entry, "Control window")
+    armed = await _subentry_flow(
+        hass,
+        entry,
+        SUBENTRY_WINDOW,
+        [
+            {"name": "Control window", "covers": [CONTROL_COVER], "group_id": group_id},
+            *routine_inherit(),
+            {"operation": "armed"},
+            dict.fromkeys(ARMING_CHECKS, True),
+        ],
+        reconfigure=control_id,
     )
-    await hass.async_block_till_done()
+    assert armed["reason"] == "reconfigure_successful"
+    assert entry.subentries[control_id].data[CONF_DRY_RUN] is False
     await settle(hass, freezer)
     assert entry.state is ConfigEntryState.LOADED
+    # Armed with a clean state: no dam, nothing simulated, nobody owns the position.
+    control_state = _controller(entry, "Control window").state
+    assert control_state.simulated is None
+    assert control_state.manual_override is None
+    assert control_state.person_at_window is None
     return entry
 
 
@@ -395,7 +412,7 @@ async def test_a_window_in_dry_run_moves_nothing_through_a_whole_pilot_day(  # n
     assert _record_of(hass) == before
 
     # 15:00, reconfigure: the window gets an evening position of its own.
-    # The form neither asks for dry-run nor changes it.
+    # The last page offers dry-run or armed; the window stays in dry-run.
     freezer.move_to(local(15, 0))
     group_id = _subentry_id(entry, "Example group")
     result = await _subentry_flow(
@@ -405,6 +422,7 @@ async def test_a_window_in_dry_run_moves_nothing_through_a_whole_pilot_day(  # n
         [
             {"name": "Example window", "covers": [DRY_COVER], "group_id": group_id},
             *routine_inherit({"schedule_evening_position": float(EVENING_POSITION)}),
+            {"operation": "dry_run"},
         ],
         reconfigure=dry,
     )
@@ -555,8 +573,77 @@ async def test_removing_the_integration_leaves_no_trace(
     assert dr.async_entries_for_config_entry(dr.async_get(hass), entry.entry_id) == []
     assert [i for i in ir.async_get(hass).issues.values() if i.domain == DOMAIN] == []
     assert all(hass.states.get(entity_id) is None for entity_id in entity_ids)
-    for key in (STORAGE_KEY, HISTORY_KEY, ACTUATOR_KEY):
+    for key in (STORAGE_KEY, HISTORY_KEY, ACTUATOR_KEY, BLIND_MEMORY_KEY):
         assert key not in hass.data
     # The integration writes no storage file of its own; nothing names it.
     assert [key for key in hass_storage if DOMAIN in key] == []
     assert _calls_to(hass, DRY_COVER) == []
+
+
+# ---------------------------------------------------------------------------
+# Every control of every level, in every combination
+# ---------------------------------------------------------------------------
+
+_LEVELS = ("roller_shutter_suite", "example_group", "example_window")
+"""The house, the group and the window in dry-run, as their entity IDs begin."""
+
+_STATES = ("neutral", "paused", "locked", "protection_only", "off")
+"""What one level can say: nothing, pause, maintenance lock, or a mode."""
+
+
+async def _set_level(hass: HomeAssistant, level: str, state: str) -> None:
+    """Switch the controls of one level through their entities, as a user does."""
+    await hass.services.async_call(
+        "switch",
+        "turn_on" if state == "paused" else "turn_off",
+        {"entity_id": f"switch.{level}_pause"},
+        blocking=True,
+    )
+    await hass.services.async_call(
+        "switch",
+        "turn_on" if state == "locked" else "turn_off",
+        {"entity_id": f"switch.{level}_maintenance_lock"},
+        blocking=True,
+    )
+    mode = state if state in ("protection_only", "off") else "automatic"
+    await hass.services.async_call(
+        "select",
+        "select_option",
+        {"entity_id": f"select.{level}_operating_mode", "option": mode},
+        blocking=True,
+    )
+
+
+async def test_no_combination_of_the_controls_moves_the_window_in_dry_run(
+    hass: HomeAssistant, freezer: Any, fire_alarm: FireAlarm
+) -> None:
+    """Pause, lock and mode on the house, the group and the window, each combination.
+
+    At 07:00 the daily routine wants the shutters open. Every combination of
+    the five states of the three levels is set through the entities, with the
+    stub fire alarm off and on. The window in dry-run records what it would
+    do and never calls its cover, and no change reloads the entry. The armed
+    control window is commanded at least once during the combinations, which
+    shows that the test would notice a call.
+
+    """
+    entry = await _install(hass, freezer)
+    await _at(hass, freezer, local(7, 0, second=1))
+    reloads = entry.runtime_data
+    combinations = list(itertools.product(_STATES, repeat=len(_LEVELS)))
+    assert len(combinations) == 125  # noqa: PLR2004 - five states, three levels
+
+    for alarm in (False, True):
+        fire_alarm.active = alarm
+        for combination in combinations:
+            for level, state in zip(_LEVELS, combination, strict=True):
+                await _set_level(hass, level, state)
+            await settle(hass, freezer)
+            assert _calls_to(hass, DRY_COVER) == [], (alarm, combination)
+            assert state_of(hass, REASON).state != STATE_UNAVAILABLE
+
+    # No change of a control reloaded the entry.
+    assert entry.runtime_data is reloads
+    assert _calls_to(hass, DRY_COVER) == []
+    assert _calls_to(hass, CONTROL_COVER)
+    _clean_state(_controller(entry, "Example window").state)

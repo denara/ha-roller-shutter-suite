@@ -52,6 +52,7 @@ EXPECTED = {
     ),
     "override_room_empty_after": (SettingKind.DURATION, FunctionId.MANUAL_OVERRIDE),
     "person_at_window_duration": (SettingKind.DURATION, FunctionId.MANUAL_OVERRIDE),
+    "pause_source": (SettingKind.OPTIONAL_REFERENCE, FunctionId.PAUSE),
 }
 
 
@@ -222,14 +223,19 @@ FAULT_VALUES = {
     "override_presence_source": BLIND_SOURCE,
     "override_room_empty_after": timedelta(minutes=30),
     "person_at_window_duration": timedelta(minutes=15),
+    "pause_source": BLIND_SOURCE,
 }
-"""Confirmed by the project owner; the reasons stand at the entries of the registry."""
+"""Confirmed by the project owner; the reasons stand at the entries of the registry.
+
+``pause_source`` follows ruling 4 of block H06: an external pause entity
+without a value pauses its level, and a faulty stored reference is blind.
+"""
 
 
 def test_fault_values_are_the_confirmed_ones_and_stated_for_exactly_these_settings() -> (
     None
 ):
-    """Three differ from the default: the two blind sources, "hold closed" switched on."""
+    """Four differ from the default: three blind sources, and "hold closed" on."""
     stated = {
         definition.key: definition.fault_value
         for definition in WINDOW_SETTINGS.definitions
@@ -245,6 +251,7 @@ def test_fault_values_are_the_confirmed_ones_and_stated_for_exactly_these_settin
         "frost_source",
         "frost_hold_closed",
         "override_presence_source",
+        "pause_source",
     }
 
 

@@ -1892,6 +1892,20 @@ WINDOW_SETTINGS: Final = SettingsRegistry(
             parse=as_duration,
             value_range=_DAM_DURATION,
         ),
+        # The external pause entity (E4). A pause holds back comfort only, so
+        # the cautious side is the pause: an entity without a value pauses its
+        # level, and so does a faulty stored reference.
+        SettingDefinition[str | BlindSource | None](
+            key="pause_source",
+            kind=SettingKind.OPTIONAL_REFERENCE,
+            function=FunctionId.PAUSE,
+            default=None,
+            # "None" means "no external pause entity" and would let comfort
+            # run. Configured, but blind: the level stays paused until
+            # somebody repairs the setting or removes the entity.
+            fault_value=BLIND_SOURCE,
+            parse=as_str,
+        ),
         *_schedule_settings(),
         *_shading_geometry_settings(),
     )

@@ -572,6 +572,12 @@ class WindowConfig:
     - ``comfort_movements_threshold``: from how many own comfort movements
       on one local day the count is reported once (E10, default 40). It
       belongs to motor protection and blocks nothing.
+    - ``pause_source``: the external pause entity of the window level (E4),
+      its own or inherited; its ``on`` state pauses the window level in
+      addition to the pause switch. ``None``: no such entity.
+      :data:`BLIND_SOURCE`: configured, but faulty, which pauses, as a
+      source without a value does. The core only carries it; the Home
+      Assistant layer reads it into the controls.
     - ``schedule_enabled`` and the other ``schedule_*`` fields: the settings of
       the schedule, one field per setting; :attr:`schedule` is the view over
       them and describes them. Per day type (workday, weekend, holiday) and
@@ -617,6 +623,7 @@ class WindowConfig:
     override_room_empty_after: timedelta = DEFAULT_ROOM_EMPTY_AFTER
     person_at_window_duration: timedelta = DEFAULT_PERSON_AT_WINDOW
     comfort_movements_threshold: int = DEFAULT_COMFORT_MOVEMENTS_THRESHOLD
+    pause_source: str | BlindSource | None = None
     schedule_enabled: bool = _SCHEDULE_ENABLED
     schedule_workday_morning_kind: TriggerKind = _MORNING_KIND
     schedule_workday_morning_time: time = _MORNING_TIME_WORKDAY
@@ -718,6 +725,8 @@ class WindowConfig:
             raise ValueError("the staggering gap must be within 0 and 10 seconds")
         _ = self.manual_override
         _require_threshold(self.comfort_movements_threshold)
+        if self.pause_source is not None and self.pause_source is not BLIND_SOURCE:
+            require_identifier(self.pause_source, "the external pause entity")
         given: object = self.disabled_functions
         if isinstance(given, str):
             raise TypeError("the disabled functions must be a set of identifiers")

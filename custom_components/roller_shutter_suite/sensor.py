@@ -28,8 +28,10 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from . import RollerShutterSuiteConfigEntry
+from .controls import ControlBoard
 from .entity import WindowStatusEntity
 from .record import REASON_OPTIONS, active_reason, decision_attributes
+from .runtime import SuiteRuntime
 
 KEY_ACTIVE_REASON = "active_reason"
 KEY_TARGET_POSITION = "target_position"
@@ -64,7 +66,9 @@ async def async_setup_entry(
     for window_id in entry.runtime_data.windows:
         async_add_entities(
             [
-                ReasonSensor(runtime, window_id, ACTIVE_REASON),
+                ReasonSensor(
+                    runtime, window_id, ACTIVE_REASON, entry.runtime_data.board
+                ),
                 TargetSensor(runtime, window_id, TARGET_POSITION),
                 NextActionSensor(runtime, window_id, NEXT_ACTION),
             ],
@@ -74,6 +78,17 @@ async def async_setup_entry(
 
 class ReasonSensor(WindowStatusEntity, SensorEntity):
     """The reason that explains best why the window is where it is."""
+
+    def __init__(
+        self,
+        runtime: SuiteRuntime,
+        window_id: str,
+        description: SensorEntityDescription,
+        board: ControlBoard,
+    ) -> None:
+        """Create the sensor; it reads the pauses of the window from the board."""
+        super().__init__(runtime, window_id, description)
+        self.board = board
 
     @property
     def native_value(self) -> str | None:
@@ -85,13 +100,23 @@ class ReasonSensor(WindowStatusEntity, SensorEntity):
 
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:
-        """Return the decision record, compact and stable."""
+        """Return the decision record and what pauses the window, compact and stable.
+
+        ``paused_by`` lists every level that pauses the window at the moment
+        of the last recompute, with its external entity and that entity's
+        state where the pause comes from one; empty while nothing pauses.
+        """
         controller = self.controller
         if controller is None or controller.status.decision is None:
             return None
-        return decision_attributes(
-            controller.status.decision, dry_run=controller.controls().dry_run
-        )
+        return {
+            **decision_attributes(
+                controller.status.decision, dry_run=controller.controls().dry_run
+            ),
+            "paused_by": [
+                cause.as_data() for cause in self.board.pause_causes(self.window_id)
+            ],
+        }
 
 
 class TargetSensor(WindowStatusEntity, SensorEntity):

@@ -83,6 +83,14 @@ EVENT_REASON: Final = f"{DOMAIN}_reason"
 # How many decisions the diagnostics keep per window, the newest first.
 RECENT_DECISIONS: Final = 10
 
+# The controls (``controls.py``).
+#
+# An external pause entity without a value pauses its level at once; after
+# this long without a value a repair issue names the level and the entity.
+# One hour, the default of a blind protection source (section 10.3 of the
+# specification).
+PAUSE_SOURCE_BLIND_AFTER: Final = timedelta(hours=1)
+
 
 def status_signal(window_id: str) -> str:
     """Return the dispatcher signal that says the status of a window changed."""

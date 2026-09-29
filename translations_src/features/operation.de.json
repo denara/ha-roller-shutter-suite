@@ -1,0 +1,16 @@
+{
+  "steps": {
+    "pause": {
+      "title": "Betrieb",
+      "description": "Eine Entität deiner Wahl kann die Komfortbewegungen pausieren, zum Beispiel ein Helfer, den du für eine Feier oder während deiner Abwesenheit einschaltest. Solange sie eingeschaltet ist, warten die Komfortbewegungen, als wäre der Schalter „Pause“ eingeschaltet; Schutz und Feueralarm bewegen die Rollläden weiterhin. Ist die Entität nicht verfügbar oder ihr Zustand unbekannt, warten die Komfortbewegungen ebenfalls, und nach einer Stunde weist ein Reparaturhinweis darauf hin."
+    }
+  },
+  "fields": {
+    "pause_source": {
+      "label": "Pausen-Entität",
+      "description": "Solange diese Entität eingeschaltet ist, sind die Komfortbewegungen pausiert. Mit „Keine“ pausiert nur der Schalter „Pause“. Eine Pausen-Entität des Hauses oder einer Gruppe gilt immer auch für ihre Fenster.",
+      "entity_label": "Entität, die pausiert",
+      "entity_description": "Gilt nur mit „Eigene Auswahl“ oben."
+    }
+  }
+}

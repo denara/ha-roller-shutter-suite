@@ -1,6 +1,17 @@
 # serializer version: 1
 # name: test_diagnostics_of_the_entry_match_the_snapshot
   dict({
+    'controls': list([
+      dict({
+        'level': 'global',
+        'maintenance_lock': False,
+        'mode': 'automatic',
+        'name': 'Roller Shutter Suite',
+        'pause_source': None,
+        'pause_source_pauses': None,
+        'paused': False,
+      }),
+    ]),
     'entry': dict({
       'minor_version': 2,
       'version': 1,
@@ -281,6 +292,16 @@
               'level': 'built_in',
               'unavailable': None,
               'value': 900.0,
+            }),
+            dict({
+              'capability': None,
+              'cautious': False,
+              'effective': None,
+              'group_id': None,
+              'key': 'pause_source',
+              'level': 'built_in',
+              'unavailable': None,
+              'value': None,
             }),
             dict({
               'capability': None,
@@ -944,6 +965,36 @@
               'unavailable': None,
               'value': 100,
             }),
+          ]),
+        }),
+        'controls': dict({
+          'effective': dict({
+            'dry_run': True,
+            'maintenance_lock': False,
+            'mode': 'automatic',
+            'paused': False,
+          }),
+          'levels': list([
+            dict({
+              'level': 'global',
+              'maintenance_lock': False,
+              'mode': 'automatic',
+              'name': 'Roller Shutter Suite',
+              'pause_source': None,
+              'pause_source_pauses': None,
+              'paused': False,
+            }),
+            dict({
+              'level': 'window',
+              'maintenance_lock': False,
+              'mode': 'automatic',
+              'name': 'Example window',
+              'pause_source': None,
+              'pause_source_pauses': None,
+              'paused': False,
+            }),
+          ]),
+          'paused_by': list([
           ]),
         }),
         'dry_run': True,

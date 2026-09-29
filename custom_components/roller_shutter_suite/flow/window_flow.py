@@ -1,6 +1,14 @@
-"""Subentry flow of a window: its covers, its group, and what it sets itself."""
+"""Subentry flow of a window: its covers, its group, what it sets itself, and arming.
 
-from typing import Any
+A new window always starts in dry-run. Its reconfigure flow ends with the
+page "dry-run or armed" (E11); the step from dry-run to armed leads to a page
+of its own that repeats the checks of the pilot guide and saves only when
+every one is confirmed. Going back to dry-run needs no confirmation. Saving
+reloads the entry as every change does; the controller then starts the armed
+window with a clean state (``Engine.arm``).
+"""
+
+from typing import Any, Final
 
 import probatio
 from homeassistant.config_entries import (
@@ -9,6 +17,7 @@ from homeassistant.config_entries import (
     SubentryFlowResult,
 )
 from homeassistant.helpers.selector import (
+    BooleanSelector,
     EntitySelector,
     EntitySelectorConfig,
     SelectOptionDict,
@@ -51,6 +60,27 @@ STEP_MEMBERS_ACCEPT = "members_accept"
 STEP_DEGRADED = "degraded"
 STEP_DEGRADED_ACCEPT = "degraded_accept"
 
+STEP_OPERATION = "operation"
+STEP_ARM = "arm"
+
+CONF_OPERATION = "operation"
+OPERATION_DRY_RUN = "dry_run"
+OPERATION_ARMED = "armed"
+
+ARMING_CHECKS: Final = (
+    "one_controller",
+    "old_control_off",
+    "compared",
+    "controls_checked",
+    "fresh_start",
+    "way_back",
+)
+"""The checks the page of arming repeats, in the order of section 8 of the pilot guide.
+
+``tests/ha/test_arming.py`` compares them with the markers of that list.
+"""
+
+ERROR_CONFIRM_EVERY_CHECK = "confirm_every_check"
 ERROR_NO_COVERS = "no_covers"
 ERROR_COVER_IN_USE = "cover_in_use"
 ERROR_NAME_BLANK = "name_blank"
@@ -306,7 +336,81 @@ class WindowSubentryFlow(FeatureStepsMixin, ConfigSubentryFlow):
             members=self._members,
         )
 
+    def _pages_follow_the_features(self) -> bool:
+        """Return whether the page "dry-run or armed" follows: in a reconfigure only."""
+        return self.source == SOURCE_RECONFIGURE
+
     async def _async_finish(self) -> SubentryFlowResult:
+        if self.source == SOURCE_RECONFIGURE:
+            return await self.async_step_operation()
+        # New windows start in dry-run (architecture document, decision 12).
+        return await self._async_save(dry_run=True)
+
+    def _stored_dry_run(self) -> bool:
+        """Return whether the window is in dry-run now; unreadable counts as dry-run."""
+        return read_window_identity(self._get_reconfigure_subentry().data).dry_run
+
+    async def async_step_operation(
+        self, user_input: dict[str, Any] | None = None
+    ) -> SubentryFlowResult:
+        """Ask for dry-run or armed (E11); arming needs the confirmation that follows.
+
+        Going back to dry-run needs no confirmation. A window that is armed
+        already stays armed without one.
+        """
+        if self._own_subentry_is_gone():
+            return self.async_abort(reason=ABORT_SUBENTRY_REMOVED)
+        in_dry_run = self._stored_dry_run()
+        if user_input is None:
+            schema = probatio.Schema(
+                {
+                    probatio.Required(
+                        CONF_OPERATION,
+                        default=OPERATION_DRY_RUN if in_dry_run else OPERATION_ARMED,
+                    ): SelectSelector(
+                        SelectSelectorConfig(
+                            options=[OPERATION_DRY_RUN, OPERATION_ARMED],
+                            mode=SelectSelectorMode.LIST,
+                            translation_key=CONF_OPERATION,
+                        )
+                    )
+                }
+            )
+            return self.async_show_form(
+                step_id=STEP_OPERATION,
+                data_schema=as_form_schema(schema),
+                # From dry-run, "armed" leads to the confirmation.
+                last_step=not in_dry_run,
+            )
+        if user_input[CONF_OPERATION] == OPERATION_DRY_RUN:
+            return await self._async_save(dry_run=True)
+        if in_dry_run:
+            return await self.async_step_arm()
+        return await self._async_save(dry_run=False)
+
+    async def async_step_arm(
+        self, user_input: dict[str, Any] | None = None
+    ) -> SubentryFlowResult:
+        """Repeat the checks before arming; save only when every one is confirmed."""
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            if all(user_input.get(check) is True for check in ARMING_CHECKS):
+                return await self._async_save(dry_run=False)
+            errors["base"] = ERROR_CONFIRM_EVERY_CHECK
+        schema = probatio.Schema(
+            {
+                probatio.Required(check, default=False): BooleanSelector()
+                for check in ARMING_CHECKS
+            }
+        )
+        return self.async_show_form(
+            step_id=STEP_ARM,
+            data_schema=as_form_schema(schema),
+            errors=errors,
+            last_step=True,
+        )
+
+    async def _async_save(self, *, dry_run: bool) -> SubentryFlowResult:
         # The flow was open for a while. What it took from the first page is
         # checked again right before saving: the window itself and its group
         # may have been removed, and another flow may have taken a cover.
@@ -319,15 +423,15 @@ class WindowSubentryFlow(FeatureStepsMixin, ConfigSubentryFlow):
         data: dict[str, Any] = {
             CONF_COVERS: list(self._resolved.members),
             CONF_SETTINGS: dict(self._context.own),
+            CONF_DRY_RUN: dry_run,
         }
         if self._group_id is not None:
             data[CONF_GROUP_ID] = self._group_id
         if self.source == SOURCE_RECONFIGURE:
-            subentry = self._get_reconfigure_subentry()
-            data[CONF_DRY_RUN] = read_window_identity(subentry.data).dry_run
             return self.async_update_and_abort(
-                self._get_entry(), subentry, title=self._name, data=data
+                self._get_entry(),
+                self._get_reconfigure_subentry(),
+                title=self._name,
+                data=data,
             )
-        # New windows start in dry-run (architecture document, decision 12).
-        data[CONF_DRY_RUN] = True
         return self.async_create_entry(title=self._name, data=data)
