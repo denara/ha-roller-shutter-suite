@@ -142,7 +142,7 @@ def test_a_decision_that_did_not_send_leaves_the_state_alone() -> None:
 
     assert engine().state_after_send(reached, decision, IDS) is reached.state
     nothing = Decision(winning_wish=None)
-    assert record_sent_commands(reached, nothing, IDS) is reached.state
+    assert record_sent_commands(window(), reached, nothing, IDS) is reached.state
 
 
 @pytest.mark.parametrize(

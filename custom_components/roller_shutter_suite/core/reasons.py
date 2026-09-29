@@ -131,6 +131,8 @@ class ReasonCode(StrEnum):
     MOVEMENT_NOT_FINISHED = "movement_not_finished"
     MEMBER_UNAVAILABLE = "member_unavailable"
     BUTTON_REFUSED_MAINTENANCE_LOCK = "button_refused_maintenance_lock"
+    COMFORT_MOVEMENTS_THRESHOLD = "comfort_movements_threshold"
+    """More own comfort movements on one day than the threshold; reported once."""
 
     @property
     def category(self) -> ReasonCategory:
@@ -229,6 +231,7 @@ _GROUPS: Final = MappingProxyType(
             ReasonCode.MOVEMENT_NOT_FINISHED,
             ReasonCode.MEMBER_UNAVAILABLE,
             ReasonCode.BUTTON_REFUSED_MAINTENANCE_LOCK,
+            ReasonCode.COMFORT_MOVEMENTS_THRESHOLD,
         ),
     }
 )

@@ -5,7 +5,7 @@ datetime is kept in UTC, so a state that went through plain data compares
 equal to the one that was written, also in the repeated hour of a clock change.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 from datetime import date, datetime
 from enum import StrEnum, unique
 from typing import Final, Self
@@ -35,7 +35,9 @@ from ._validation import (
     to_utc_or_none,
 )
 from .observation import MemberCommand, MissedCommand, Observation, OwnCommand
+from .tracking import MemberTracking, SelfMeasurement, TrackerEvent, TrackerPhase
 from .values import Position, _as_position, _position_data
+from .window import OverrideEndRule
 
 WINDOW_STATE_SCHEMA_VERSION: Final = 1
 """Version of the plain data layout written by :meth:`WindowState.to_data`."""
@@ -58,16 +60,6 @@ class PositionOwner(StrEnum):
     ENGINE = "engine"
     USER = "user"
     UNKNOWN = "unknown"
-
-
-@unique
-class OverrideEndRule(StrEnum):
-    """How a manual override ends by itself."""
-
-    FIXED_MINUTES = "fixed_minutes"
-    SHADING_EPISODE_END = "shading_episode_end"
-    NEXT_PART_OF_DAY = "next_part_of_day"
-    ROOM_EMPTY = "room_empty"
 
 
 @unique
@@ -104,8 +96,14 @@ class MemberState:
 
     ``missed_command`` is the command the other members received while this
     one was unavailable (:class:`MissedCommand`); its return completes it.
-    Within schema version 1 the key is optional when data is read, and a
-    missing key means that nothing was missed.
+    ``tracking`` is what the movement tracker follows (:class:`MemberTracking`),
+    ``self_measurement`` what it measured about the own movements of the
+    member, persisted so that a restart keeps the only numbers a user has for
+    the report delay and the travel times (ruling of the project owner for
+    block C06). ``last_observation`` is the observation the tracker saw last;
+    a report that does not change it is dropped. Within schema version 1 the
+    three keys are optional when data is read, and a missing key has its
+    default.
     """
 
     member_id: str
@@ -115,6 +113,8 @@ class MemberState:
     command_attempts: int = 0
     last_attempt_at: datetime | None = None
     missed_command: MissedCommand | None = None
+    tracking: MemberTracking = field(default_factory=MemberTracking)
+    self_measurement: SelfMeasurement = field(default_factory=SelfMeasurement)
 
     def __post_init__(self) -> None:
         """Validate the member identifier and the types."""
@@ -122,6 +122,17 @@ class MemberState:
         require_optional_type(
             self.missed_command, MissedCommand, "the missed command of a member"
         )
+        require_type(self.tracking, MemberTracking, "the tracking of a member")
+        require_type(
+            self.self_measurement, SelfMeasurement, "the self-measurement of a member"
+        )
+        if self.tracking.command_id is not None and (
+            self.last_own_command is None
+            or self.last_own_command.command_id != self.tracking.command_id
+        ):
+            raise ValueError(
+                "the tracker follows the last own command of the member, or none"
+            )
         if self.last_own_command is not None:
             require_type(self.last_own_command, OwnCommand, "the last own command")
         if self.last_observation is not None:
@@ -171,6 +182,8 @@ class MemberState:
             "missed_command": (
                 None if self.missed_command is None else self.missed_command.to_data()
             ),
+            "tracking": self.tracking.to_data(),
+            "self_measurement": self.self_measurement.to_data(),
         }
 
     @classmethod
@@ -190,6 +203,8 @@ class MemberState:
             "command_attempts",
             "last_attempt_at",
             "missed_command",
+            "tracking",
+            "self_measurement",
         )
         return cls(
             member_id=read(content, "member_id", as_str),
@@ -207,6 +222,15 @@ class MemberState:
             missed_command=read_optional(
                 content, "missed_command", optional(MissedCommand.from_data), None
             ),
+            tracking=read_optional(
+                content, "tracking", MemberTracking.from_data, MemberTracking()
+            ),
+            self_measurement=read_optional(
+                content,
+                "self_measurement",
+                SelfMeasurement.from_data,
+                SelfMeasurement(),
+            ),
         )
 
 
@@ -214,14 +238,21 @@ class MemberState:
 class ManualOverrideDam:
     """The armed manual override dam.
 
-    ``ends_at`` is the absolute end if the end rule has one. The remembered
-    position is ``None`` if the position the person chose is not known.
+    ``ends_at`` is the absolute end if the end rule has one: the end of the
+    fixed minutes, or the next boundary between parts of the day once the
+    schedule has named it (``core/dams``). The remembered position is
+    ``None`` if the position the person chose is not known.
+    ``room_empty_since`` is, for the end rule "the room has been empty", the
+    first moment at which the presence source was seen saying "empty"
+    without interruption since; ``None`` while it is not. The key is optional
+    within schema version 1.
     """
 
     armed_at: datetime
     end_rule: OverrideEndRule
     ends_at: datetime | None = None
     remembered_position: Position | None = None
+    room_empty_since: datetime | None = None
 
     def __post_init__(self) -> None:
         """Validate the types and reject naive datetimes."""
@@ -238,6 +269,11 @@ class ManualOverrideDam:
         )
         if self.remembered_position is not None:
             require_type(self.remembered_position, Position, "the remembered position")
+        object.__setattr__(
+            self,
+            "room_empty_since",
+            to_utc_or_none(self.room_empty_since, "the start of an empty room"),
+        )
 
     def to_data(self) -> JsonObject:
         """Return plain data for persistence."""
@@ -246,13 +282,19 @@ class ManualOverrideDam:
             "end_rule": self.end_rule.value,
             "ends_at": datetime_data(self.ends_at),
             "remembered_position": _position_data(self.remembered_position),
+            "room_empty_since": datetime_data(self.room_empty_since),
         }
 
     @classmethod
     def from_data(cls, data: JsonValue) -> Self:
         """Rebuild the dam from plain data."""
         content = as_object(
-            data, "armed_at", "end_rule", "ends_at", "remembered_position"
+            data,
+            "armed_at",
+            "end_rule",
+            "ends_at",
+            "remembered_position",
+            "room_empty_since",
         )
         return cls(
             armed_at=read(content, "armed_at", as_datetime),
@@ -261,14 +303,24 @@ class ManualOverrideDam:
             remembered_position=read(
                 content, "remembered_position", optional(_as_position)
             ),
+            room_empty_since=read_optional(
+                content, "room_empty_since", optional(as_datetime), None
+            ),
         )
 
 
 @dataclass(frozen=True, slots=True)
 class PersonAtWindowDam:
-    """The armed person-at-the-window dam; it ends by itself."""
+    """The armed person-at-the-window dam; it ends by itself.
+
+    ``remembered_position`` is the position the person chose, if it is known:
+    when the dam ends after the protection event has ended, it turns into a
+    manual override dam with this position (section 3.2). The key is
+    optional within schema version 1.
+    """
 
     ends_at: datetime
+    remembered_position: Position | None = None
 
     def __post_init__(self) -> None:
         """Reject a naive datetime."""
@@ -277,15 +329,72 @@ class PersonAtWindowDam:
             "ends_at",
             to_utc(self.ends_at, "the end of the person-at-the-window dam"),
         )
+        require_optional_type(
+            self.remembered_position, Position, "the position the person chose"
+        )
 
     def to_data(self) -> JsonObject:
         """Return plain data for persistence."""
-        return {"ends_at": self.ends_at.isoformat()}
+        return {
+            "ends_at": self.ends_at.isoformat(),
+            "remembered_position": _position_data(self.remembered_position),
+        }
 
     @classmethod
     def from_data(cls, data: JsonValue) -> Self:
         """Rebuild the dam from plain data."""
-        return cls(ends_at=read(as_object(data, "ends_at"), "ends_at", as_datetime))
+        content = as_object(data, "ends_at", "remembered_position")
+        return cls(
+            ends_at=read(content, "ends_at", as_datetime),
+            remembered_position=read_optional(
+                content, "remembered_position", optional(_as_position), None
+            ),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class ComfortMovementCount:
+    """The own comfort movements of one window on one local day (E10, rule 9).
+
+    ``day`` is the local date, ``count`` the number of comfort movements sent
+    on it, ``reported`` whether the threshold was already reported for it. A
+    movement is one send, whatever the number of members. A take-over counts
+    nothing, protection and fire never count, and neither does the
+    completion of a command for a member that returns.
+    """
+
+    day: date
+    count: int = 0
+    reported: bool = False
+
+    def __post_init__(self) -> None:
+        """Validate the date, the count and the flag."""
+        if isinstance(self.day, datetime):
+            raise TypeError("the movements are counted per date, not per datetime")
+        require_type(self.day, date, "the date of the count")
+        if isinstance(self.count, bool) or not isinstance(self.count, int):
+            raise TypeError("the count of comfort movements is a whole number")
+        if self.count < 0:
+            raise ValueError("the count of comfort movements is not negative")
+        require_type(self.reported, bool, "the flag 'reported'")
+
+    def to_data(self) -> JsonObject:
+        """Return plain data for persistence."""
+        return {
+            "day": self.day.isoformat(),
+            "count": self.count,
+            "reported": self.reported,
+        }
+
+    @classmethod
+    def from_data(cls, data: JsonValue) -> Self:
+        """Rebuild the count from plain data."""
+        content = as_object(data, "day", "count", "reported")
+        return cls(
+            day=read(content, "day", as_date),
+            count=read(content, "count", as_int),
+            reported=read(content, "reported", as_bool),
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -652,6 +761,10 @@ class WindowState:
     counts for the local date it lies on and is kept until the morning trigger
     of the next date, as the start of that night. Without it, the evening
     would end again when the brightness rises or its source drops out.
+
+    ``comfort_movements`` is the count of own comfort movements of the
+    current local day (:class:`ComfortMovementCount`); the key is optional
+    within schema version 1.
     """
 
     owner: PositionOwner = PositionOwner.UNKNOWN
@@ -671,6 +784,7 @@ class WindowState:
     simulated: SimulatedState | None = None
     brightness_below_since: datetime | None = None
     evening_brightness_at: datetime | None = None
+    comfort_movements: ComfortMovementCount | None = None
 
     def __post_init__(self) -> None:
         """Validate the lists and reject naive datetimes."""
@@ -700,6 +814,7 @@ class WindowState:
             ("held_frost", HeldInput),
             ("held_season", HeldInput),
             ("simulated", SimulatedState),
+            ("comfort_movements", ComfortMovementCount),
         ):
             require_optional_type(getattr(self, name), expected, f"the field {name!r}")
         for latch in self.latched_day_types:
@@ -735,6 +850,39 @@ class WindowState:
             to_utc_or_none(
                 self.evening_brightness_at, "the evening begun by the brightness"
             ),
+        )
+
+    def member_state(self, member_id: str) -> MemberState:
+        """Return the state of a member; a fresh one if nothing is kept for it."""
+        for member in self.members:
+            if member.member_id == member_id:
+                return member
+        return MemberState(member_id)
+
+    def with_member(self, member: MemberState) -> Self:
+        """Return the state with the state of one member replaced or added."""
+        members = [m for m in self.members if m.member_id != member.member_id]
+        if len(members) == len(self.members):
+            return replace(self, members=(*self.members, member))
+        return replace(
+            self,
+            members=tuple(
+                member if m.member_id == member.member_id else m for m in self.members
+            ),
+        )
+
+    @property
+    def moving(self) -> bool:
+        """Return whether the tracker sees the window moving (section 9).
+
+        The window is moving from the first member that moves until the last
+        one has settled: while any member's tracker is ``moving`` or
+        ``settling``. This is the tracker's knowledge; it also covers a member
+        that reports no transit state.
+        """
+        return any(
+            member.tracking.phase in (TrackerPhase.MOVING, TrackerPhase.SETTLING)
+            for member in self.members
         )
 
     @property
@@ -790,6 +938,11 @@ class WindowState:
             "simulated": None if self.simulated is None else self.simulated.to_data(),
             "brightness_below_since": datetime_data(self.brightness_below_since),
             "evening_brightness_at": datetime_data(self.evening_brightness_at),
+            "comfort_movements": (
+                None
+                if self.comfort_movements is None
+                else self.comfort_movements.to_data()
+            ),
         }
 
     @classmethod
@@ -819,6 +972,7 @@ class WindowState:
             "simulated",
             "brightness_below_since",
             "evening_brightness_at",
+            "comfort_movements",
         )
         version = read(content, "schema_version", as_int)
         if version != WINDOW_STATE_SCHEMA_VERSION:
@@ -868,4 +1022,32 @@ class WindowState:
             evening_brightness_at=read(
                 content, "evening_brightness_at", optional(as_datetime)
             ),
+            comfort_movements=read_optional(
+                content,
+                "comfort_movements",
+                optional(ComfortMovementCount.from_data),
+                None,
+            ),
         )
+
+
+@dataclass(frozen=True, slots=True)
+class Transition:
+    """What a call of the engine returns that changes the state: it, and the events.
+
+    ``state`` is the window state after the call; ``events`` are the events
+    the call raised, in order (:class:`TrackerEvent`). The caller persists
+    the state and hands the events to the Home Assistant layer (the bus, the
+    logbook). A call that changes nothing returns the state it got, and no
+    event.
+    """
+
+    state: WindowState
+    events: tuple[TrackerEvent, ...] = ()
+
+    def __post_init__(self) -> None:
+        """Validate the state and the events."""
+        require_type(self.state, WindowState, "the state of a transition")
+        object.__setattr__(self, "events", tuple(self.events))
+        for event in self.events:
+            require_type(event, TrackerEvent, "an event of a transition")

@@ -10,7 +10,9 @@ Position``. The modules exist so that blocks that work in parallel edit
 different files. Their dependencies run one way:
 
 ``_validation`` ← ``_data`` ← ``values`` ← ``decision`` ← ``observation`` ←
-``state`` ← ``snapshot``. ``functions`` depends on nothing; ``window`` depends
+``tracking`` ← ``state`` ← ``snapshot``. ``tracking`` holds what the movement
+tracker keeps per member, what it measures and the events it reports;
+``state`` also uses ``window`` (the end rule of the manual override). ``functions`` depends on nothing; ``window`` depends
 on ``_validation``, ``functions`` and ``values``, ``controls`` on
 ``_validation`` only; ``decision`` also uses ``functions``, and ``snapshot``
 also uses ``controls`` and ``almanac``. ``schedule`` (the settings of the
@@ -98,13 +100,13 @@ from .schedule import (
 from .snapshot import WorldSnapshot
 from .state import (
     WINDOW_STATE_SCHEMA_VERSION,
+    ComfortMovementCount,
     DayType,
     ExternalRequest,
     HeldInput,
     LatchedDayType,
     ManualOverrideDam,
     MemberState,
-    OverrideEndRule,
     PersonAtWindowDam,
     PositionOwner,
     PositionReference,
@@ -113,7 +115,16 @@ from .state import (
     ShadingEpisodeState,
     SimulatedState,
     SolarHeatingEpisodeState,
+    Transition,
     WindowState,
+)
+from .tracking import (
+    SELF_MEASUREMENT_SAMPLES,
+    MemberTracking,
+    SampleStatistic,
+    SelfMeasurement,
+    TrackerEvent,
+    TrackerPhase,
 )
 from .values import (
     FULLY_CLOSED,
@@ -128,11 +139,18 @@ from .values import (
 )
 from .window import (
     BLIND_SOURCE,
+    DEFAULT_COMFORT_MOVEMENTS_THRESHOLD,
+    DEFAULT_OVERRIDE_MINUTES,
+    DEFAULT_PERSON_AT_WINDOW,
+    DEFAULT_ROOM_EMPTY_AFTER,
     DEFAULT_STAGGER_GAP,
     DEFAULT_TOLERANCE_CALCULATED,
     DEFAULT_TOLERANCE_MEASURED,
+    MAX_COMFORT_MOVEMENTS_THRESHOLD,
+    MAX_DAM_DURATION,
     MAX_STAGGER_GAP,
     MAX_TOLERANCE,
+    MIN_DAM_DURATION,
     MIN_TOLERANCE,
     SCHEDULE_DAY_TYPES,
     SCHEDULE_EDGES,
@@ -141,8 +159,10 @@ from .window import (
     CapabilityState,
     CoveringType,
     FrostSettings,
+    ManualOverrideSettings,
     MemberConfig,
     MotorProtectionSettings,
+    OverrideEndRule,
     PositionSource,
     PositionUpdates,
     SettingsCombinationError,
@@ -156,6 +176,10 @@ from .window import (
 __all__ = [
     "BLIND_SOURCE",
     "CONSTRAINT_REASONS",
+    "DEFAULT_COMFORT_MOVEMENTS_THRESHOLD",
+    "DEFAULT_OVERRIDE_MINUTES",
+    "DEFAULT_PERSON_AT_WINDOW",
+    "DEFAULT_ROOM_EMPTY_AFTER",
     "DEFAULT_STAGGER_GAP",
     "DEFAULT_TOLERANCE_CALCULATED",
     "DEFAULT_TOLERANCE_MEASURED",
@@ -165,6 +189,8 @@ __all__ = [
     "GEOMETRY_FIELDS",
     "GEOMETRY_PREFIX",
     "MAX_AMPLIFICATION_CAP",
+    "MAX_COMFORT_MOVEMENTS_THRESHOLD",
+    "MAX_DAM_DURATION",
     "MAX_MEASURED_LENGTH",
     "MAX_RANDOM_OFFSET",
     "MAX_STAGGER_GAP",
@@ -173,17 +199,20 @@ __all__ = [
     "MAX_TRIGGER_ELEVATION",
     "MEMBER_MEASUREMENT_FIELDS",
     "MIN_CALIBRATION_SPAN",
+    "MIN_DAM_DURATION",
     "MIN_TOLERANCE",
     "NO_CALIBRATION",
     "NO_MEASUREMENTS",
     "SCHEDULE_DAY_TYPES",
     "SCHEDULE_EDGES",
+    "SELF_MEASUREMENT_SAMPLES",
     "TRIGGER_FIELDS",
     "WINDOW_STATE_SCHEMA_VERSION",
     "AnySourceValue",
     "BlindSource",
     "CapabilityProfile",
     "CapabilityState",
+    "ComfortMovementCount",
     "CommandResult",
     "Constraint",
     "ConstraintResult",
@@ -213,6 +242,7 @@ __all__ = [
     "Layer",
     "LayerReason",
     "ManualOverrideDam",
+    "ManualOverrideSettings",
     "MemberCommand",
     "MemberConfig",
     "MemberGlass",
@@ -221,6 +251,7 @@ __all__ = [
     "MemberObservation",
     "MemberState",
     "MemberTarget",
+    "MemberTracking",
     "MembersAtTargets",
     "MissedCommand",
     "MissingSourceValueError",
@@ -238,10 +269,12 @@ __all__ = [
     "PositionUpdates",
     "ProtectionEventState",
     "ProtectionEventStatus",
+    "SampleStatistic",
     "ScheduleProfile",
     "ScheduleRuleError",
     "ScheduleSettings",
     "ScheduleTargets",
+    "SelfMeasurement",
     "SettingsCombinationError",
     "ShadingEpisodeState",
     "ShadingGeometrySettings",
@@ -254,7 +287,10 @@ __all__ = [
     "SunDay",
     "SunPosition",
     "TemperatureTier",
+    "TrackerEvent",
+    "TrackerPhase",
     "TransitReporting",
+    "Transition",
     "TravelDirection",
     "Trigger",
     "TriggerKind",

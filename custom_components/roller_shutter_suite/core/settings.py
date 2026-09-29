@@ -49,16 +49,23 @@ from typing import Any, Final
 
 from .model import (
     BLIND_SOURCE,
+    DEFAULT_COMFORT_MOVEMENTS_THRESHOLD,
+    DEFAULT_OVERRIDE_MINUTES,
+    DEFAULT_PERSON_AT_WINDOW,
+    DEFAULT_ROOM_EMPTY_AFTER,
     FULLY_CLOSED,
     FULLY_OPEN,
     GEOMETRY_FIELDS,
     GEOMETRY_PREFIX,
+    MAX_COMFORT_MOVEMENTS_THRESHOLD,
+    MAX_DAM_DURATION,
     MAX_RANDOM_OFFSET,
     MAX_STAGGER_GAP,
     MAX_SUN_OFFSET_MINUTES,
     MAX_TOLERANCE,
     MAX_TRIGGER_ELEVATION,
     MEMBER_MEASUREMENT_FIELDS,
+    MIN_DAM_DURATION,
     SCHEDULE_DAY_TYPES,
     SCHEDULE_EDGES,
     TRIGGER_FIELDS,
@@ -71,7 +78,9 @@ from .model import (
     MemberConfig,
     MemberGlassError,
     MemberMeasurements,
+    OverrideEndRule,
     Position,
+    PositionSource,
     ScheduleProfile,
     SettingsCombinationError,
     TemperatureTier,
@@ -1465,6 +1474,9 @@ POSITION_RANGE: Final = ValueRange(FULLY_CLOSED.value, FULLY_OPEN.value)
 PERCENT: Final = "%"
 
 _NOT_NEGATIVE: Final = ValueRange(minimum=0)
+_DAM_DURATION: Final = ValueRange(
+    MIN_DAM_DURATION.total_seconds(), MAX_DAM_DURATION.total_seconds()
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -1806,6 +1818,77 @@ WINDOW_SETTINGS: Final = SettingsRegistry(
             parse=as_duration,
             value_range=ValueRange(0, MAX_STAGGER_GAP.total_seconds()),
         ),
+        # The report of many comfort movements on one day (E10). It blocks
+        # nothing; it belongs to motor protection, which falls back.
+        SettingDefinition(
+            key="comfort_movements_threshold",
+            kind=SettingKind.NUMBER,
+            function=FunctionId.MOTOR_PROTECTION,
+            default=DEFAULT_COMFORT_MOVEMENTS_THRESHOLD,
+            # The default, stated on purpose. Neither direction is "more
+            # restrictive": the threshold never holds a movement back, it
+            # only says from when the count is reported once a day.
+            fault_value=DEFAULT_COMFORT_MOVEMENTS_THRESHOLD,
+            parse=as_int,
+            value_range=ValueRange(1, MAX_COMFORT_MOVEMENTS_THRESHOLD),
+        ),
+        # Manual operation detection and the two dams (E1 to E3, section 3).
+        # A fault there must never make the integration overrule a person
+        # earlier than the default would (ruling 4 of the project owner for
+        # block C06), so the function falls back and the cautious values are
+        # the default end rule and the default durations.
+        SettingDefinition(
+            key="override_end_rule",
+            kind=SettingKind.ENUMERATION,
+            function=FunctionId.MANUAL_OVERRIDE,
+            default=OverrideEndRule.NEXT_PART_OF_DAY,
+            # The default rule, stated on purpose: a room darkened by hand
+            # stays dark until the next boundary between parts of the day.
+            fault_value=OverrideEndRule.NEXT_PART_OF_DAY,
+            parse=as_enum(OverrideEndRule),
+        ),
+        SettingDefinition(
+            key="override_minutes",
+            kind=SettingKind.DURATION,
+            function=FunctionId.MANUAL_OVERRIDE,
+            default=DEFAULT_OVERRIDE_MINUTES,
+            # The default, stated on purpose: never shorter than approved.
+            fault_value=DEFAULT_OVERRIDE_MINUTES,
+            parse=as_duration,
+            value_range=_DAM_DURATION,
+        ),
+        SettingDefinition[str | BlindSource | None](
+            key="override_presence_source",
+            kind=SettingKind.OPTIONAL_REFERENCE,
+            function=FunctionId.MANUAL_OVERRIDE,
+            default=None,
+            # Configured, but blind: the room is never known to be empty, so
+            # a faulty source never ends an override early.
+            fault_value=BLIND_SOURCE,
+            parse=as_str,
+        ),
+        SettingDefinition(
+            key="override_room_empty_after",
+            kind=SettingKind.DURATION,
+            function=FunctionId.MANUAL_OVERRIDE,
+            default=DEFAULT_ROOM_EMPTY_AFTER,
+            # The default, stated on purpose: never shorter than approved.
+            fault_value=DEFAULT_ROOM_EMPTY_AFTER,
+            parse=as_duration,
+            value_range=_DAM_DURATION,
+        ),
+        SettingDefinition(
+            key="person_at_window_duration",
+            kind=SettingKind.DURATION,
+            function=FunctionId.MANUAL_OVERRIDE,
+            default=DEFAULT_PERSON_AT_WINDOW,
+            # The default, stated on purpose. Longer would hold a protection
+            # wish back longer, shorter would let protection reassert itself
+            # against a person earlier: a fault on its own does neither.
+            fault_value=DEFAULT_PERSON_AT_WINDOW,
+            parse=as_duration,
+            value_range=_DAM_DURATION,
+        ),
         *_schedule_settings(),
         *_shading_geometry_settings(),
     )
@@ -1907,6 +1990,46 @@ Assistant side stores them is its own decision; the core takes one mapping
 per member. The default of an entry is what applies while no level sets the
 window's value either.
 """
+
+CAPABILITY_SETTINGS: Final = SettingsRegistry(
+    (
+        SettingDefinition(
+            key="position_source",
+            kind=SettingKind.ENUMERATION,
+            # A value of the capability profile of one member, not of a
+            # function: it cannot be inherited and it has no fault value.
+            function=None,
+            default=PositionSource.CALCULATED,
+            parse=as_enum(PositionSource),
+            inheritable=False,
+        ),
+    )
+)
+"""What a user states about one member that no entity can report (section 8.1).
+
+The position source (``measured`` by the drive, or ``calculated`` from run
+time) cannot be detected, so the user states it per member; the default is
+``calculated``. It decides the default tolerance of the tracker (2 for a
+calculated, 3 for a measured position). Block H10 builds the per-member form
+from this registry and hands the value into ``CapabilityProfile``. A faulty
+stored value is read as ``calculated``, the cautious default
+(:func:`position_source_from_stored`): a smaller tolerance never lets a
+movement by hand pass as the integration's own.
+"""
+
+
+def position_source_from_stored(data: object) -> PositionSource:
+    """Return the position source of one member from its stored settings.
+
+    ``data`` is the stored mapping of the member's capability settings. What
+    is absent, faulty or unreadable is read as ``calculated``.
+    """
+    settings = settings_from_stored(data, CAPABILITY_SETTINGS)
+    value = settings.get("position_source")
+    if isinstance(value, PositionSource):
+        return value
+    return PositionSource.CALCULATED
+
 
 _UNKNOWN_MEMBER_FAULT: Final = "the window has no member with this identifier"
 

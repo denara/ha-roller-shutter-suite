@@ -15,6 +15,7 @@ from custom_components.roller_shutter_suite.core.model import (
     MovementState,
     Observation,
     Position,
+    TrackerEvent,
     Wish,
     WishClass,
 )
@@ -23,6 +24,7 @@ from tests.core.schedule_kit import config, fixed, sun_event
 from tests.sim.assertions import (
     ScenarioAssertionError,
     assert_at_most_movements_per_day,
+    assert_dams_follow_foreign_movements,
     assert_min_interval,
     assert_no_command_loop,
     assert_no_commands,
@@ -301,3 +303,75 @@ def test_an_entry_is_recorded_at_an_aware_instant() -> None:
     entry = Entry(at(6, 30), EntryKind.EVENT, "x")
     assert entry.at.tzinfo is UTC
     assert entry.at == at(6, 30)
+
+
+# --- Dams follow foreign movements -------------------------------------------------
+
+
+def foreign(moment: datetime) -> Entry:
+    """Return what a person did to the cover."""
+    return Entry(
+        moment,
+        EntryKind.EVENT,
+        "moved by hand to 40",
+        window_id=WINDOW,
+        member_id=MEMBER,
+        foreign=True,
+    )
+
+
+def tracker(moment: datetime, code: ReasonCode) -> Entry:
+    """Return an event of the tracker or the dams."""
+    return Entry(
+        moment,
+        EntryKind.TRACKER,
+        code.value,
+        window_id=WINDOW,
+        event=TrackerEvent(code),
+    )
+
+
+def test_a_dam_after_a_movement_by_hand_is_what_it_should_be() -> None:
+    """The detection follows the person within the bound; an end needs nothing."""
+    assert_dams_follow_foreign_movements(
+        record(
+            foreign(at(12, 0)),
+            tracker(at(12, 1), ReasonCode.MANUAL_DETECTED),
+            tracker(at(12, 1), ReasonCode.OVERRIDE_STARTED),
+            tracker(at(19, 0), ReasonCode.OVERRIDE_ENDED),
+            Entry(at(19, 0), EntryKind.TRACKER, "no event", window_id=WINDOW),
+        )
+    )
+
+
+def test_a_dam_without_a_foreign_movement_is_found() -> None:
+    """An own movement that armed a dam: the message names the code and the moment."""
+    with pytest.raises(ScenarioAssertionError) as caught:
+        assert_dams_follow_foreign_movements(
+            record(*send(at(7, 0), 100), tracker(at(7, 1), ReasonCode.OVERRIDE_STARTED))
+        )
+
+    assert "override_started without a movement by somebody else" in str(caught.value)
+    assert caught.value.moment == at(7, 1)
+
+
+def test_a_detection_long_after_the_foreign_movement_is_found() -> None:
+    """Beyond the bound the detection belongs to something else."""
+    with pytest.raises(ScenarioAssertionError):
+        assert_dams_follow_foreign_movements(
+            record(foreign(at(12, 0)), tracker(at(12, 11), ReasonCode.MANUAL_DETECTED))
+        )
+
+
+def test_the_override_a_person_at_the_window_dam_turns_into_needs_no_new_movement() -> (
+    None
+):
+    """It follows the end of that dam at the same instant."""
+    assert_dams_follow_foreign_movements(
+        record(
+            foreign(at(14, 10)),
+            tracker(at(14, 10), ReasonCode.PERSON_AT_WINDOW_STARTED),
+            tracker(at(14, 25), ReasonCode.PERSON_AT_WINDOW_ENDED),
+            tracker(at(14, 25), ReasonCode.OVERRIDE_STARTED),
+        )
+    )

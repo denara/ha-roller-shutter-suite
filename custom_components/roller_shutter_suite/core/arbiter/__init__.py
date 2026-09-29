@@ -23,6 +23,7 @@ from .gate import (
     END_ALLOWANCE,
     MANUAL_OVERRIDE_DAM,
     PERSON_AT_WINDOW_DAM,
+    SETTLE_TIME,
     START_ALLOWANCE,
     TRAVEL_SLACK,
     ArmedDam,
@@ -31,6 +32,10 @@ from .gate import (
     completing_members,
     expectation_window_end,
     member_expectation_end,
+    override_ended_by_condition,
+    room_empty_long_enough,
+    settle_time,
+    wake_ups,
 )
 from .layers import disabled_functions, wish_for_missing_input
 from .registry import (
@@ -59,6 +64,7 @@ __all__ = [
     "MODE_TABLE",
     "NEVER_BYPASSED",
     "PERSON_AT_WINDOW_DAM",
+    "SETTLE_TIME",
     "START_ALLOWANCE",
     "TRAVEL_SLACK",
     "Arbiter",
@@ -87,11 +93,15 @@ __all__ = [
     "is_standing",
     "member_expectation_end",
     "outranks",
+    "override_ended_by_condition",
     "record_command_result",
     "record_sent_commands",
     "remember_would_be_send",
     "reported_positions",
+    "room_empty_long_enough",
+    "settle_time",
     "simulated_state",
     "skips",
+    "wake_ups",
     "wish_for_missing_input",
 ]

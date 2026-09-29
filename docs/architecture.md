@@ -236,7 +236,7 @@ A closed enumeration in the core. Adding a code requires an English and a German
 
 **Gate:** `sent`, `maintenance_lock`, `dry_run`, `cover_unavailable`, `target_reached`, `mode_off`, `mode_protection_only`, `paused`, `person_at_window`, `manual_override`, `movement_in_flight`, `duplicate_command`, `movement_taken_over`, `min_change`, `min_interval`, `trigger_time_missing`, `command_backoff`, `staggered`, `gate_rule_failed`.
 
-**Tracker and life cycle (events only):** `manual_detected`, `manual_detected_member`, `external_movement_observed` (dry-run), `moved_during_downtime`, `person_at_window_started`, `person_at_window_ended`, `override_started`, `override_ended`, `protection_started`, `protection_ended`, `protection_source_blind`, `lockout_contact_blind`, `fire_acknowledged`, `frost_protection_waived`, `frost_waiver_ended`, `frost_released_by_sun`, `frost_source_blind`, `position_may_be_inaccurate`, `command_failed`, `actuator_no_reaction`, `movement_not_finished`, `member_unavailable`, `button_refused_maintenance_lock`.
+**Tracker and life cycle (events only):** `manual_detected`, `manual_detected_member`, `external_movement_observed` (dry-run), `moved_during_downtime`, `person_at_window_started`, `person_at_window_ended`, `override_started`, `override_ended`, `protection_started`, `protection_ended`, `protection_source_blind`, `lockout_contact_blind`, `fire_acknowledged`, `frost_protection_waived`, `frost_waiver_ended`, `frost_released_by_sun`, `frost_source_blind`, `position_may_be_inaccurate`, `command_failed`, `actuator_no_reaction`, `movement_not_finished`, `member_unavailable`, `button_refused_maintenance_lock`, `comfort_movements_threshold`.
 
 No code claims that a curtain has arrived ([section 8.4](#84-calculated-positions-and-drift)).
 
@@ -444,6 +444,7 @@ Persisted per window, versioned, all timestamps timezone-aware (naive ones are r
 - the number of own comfort movements of the current local day, with that day's date, and whether the threshold was already reported for it;
 - last known values of inputs that are held (frost state, season, protection triggers);
 - frost waiver: active until; per member the position reference flag (`referenced` / `uncertain`);
+- per member the self-measurement of the tracker ([section 8.3](#83-the-tracker)): the last twenty samples of each measured value, kept only for members whose position is reported event-driven (report delay zero), so that a restart keeps the numbers a user tunes the report delay and the travel times by;
 - in dry-run only: the simulated commands of [section 2.3](#23-the-gate), kept apart from the real state and discarded when the window is armed.
 
 Per installation: the seed for random offsets.

@@ -23,10 +23,14 @@ from custom_components.roller_shutter_suite.core.model import (
     GateOutcome,
     GateRule,
     MemberConfig,
+    MemberTracking,
+    OverrideEndRule,
     OwnCommand,
     TravelDirection,
+    WindowConfig,
     WindowState,
     WishClass,
+    WorldSnapshot,
 )
 from custom_components.roller_shutter_suite.core.reasons import ReasonCode
 
@@ -206,8 +210,11 @@ class Dam:
     - ``holds_back``: the wish classes it holds back; never fire.
     - ``lets_pass``: reason codes of wishes that pass although their class is
       held back.
-    - ``armed``: reads the dam from the persisted state; ``None`` if it is not
-      armed. Arming and ending a dam is not the gate's business.
+    - ``armed``: reads the dam from what the gate sees (the persisted state,
+      and for a dam that ends with a condition the configuration and the
+      sources); ``None`` if it is not armed or its condition has ended it.
+      Arming and ending a dam is not the gate's business (``core/dams``);
+      the gate only never lets a dam hold longer than its end.
 
     A dam whose end lies in the past has no effect. A dam with a known end
     defers until that end; a dam without one suppresses.
@@ -217,7 +224,7 @@ class Dam:
     reason: ReasonCode
     holds_back: frozenset[WishClass]
     lets_pass: frozenset[ReasonCode]
-    armed: Callable[[WindowState], ArmedDam | None]
+    armed: Callable[[GateInput], ArmedDam | None]
 
     def __post_init__(self) -> None:
         """Refuse a dam that would hold back fire."""
@@ -226,7 +233,7 @@ class Dam:
 
     def evaluate(self, gate: GateInput) -> GateOutcome | None:
         """Return the outcome of the dam for the wish at the gate."""
-        armed = self.armed(gate.snapshot.state)
+        armed = self.armed(gate)
         if armed is None or gate.wish.reason in self.lets_pass:
             return None
         if armed.ends_at is None:
@@ -242,14 +249,60 @@ class Dam:
         )
 
 
-def _person_at_window(state: WindowState) -> ArmedDam | None:
-    dam = state.person_at_window
+def _person_at_window(gate: GateInput) -> ArmedDam | None:
+    dam = gate.snapshot.state.person_at_window
     return None if dam is None else ArmedDam(dam.ends_at)
 
 
-def _manual_override(state: WindowState) -> ArmedDam | None:
-    dam = state.manual_override
-    return None if dam is None else ArmedDam(dam.ends_at)
+def room_empty_long_enough(config: WindowConfig, snapshot: WorldSnapshot) -> bool:
+    """Return whether the room of an override has been empty for the configured time.
+
+    Only for an override with the end rule "the room has been empty". The
+    presence source has to be configured (a reference, neither "none" nor
+    blind) and to say "empty" (off) now, and the dam has to have seen it say
+    so without interruption for ``override_room_empty_after``
+    (``ManualOverrideDam.room_empty_since``, kept by ``core/dams``). A
+    source without a value never counts as "empty": missing data is not
+    good news.
+    """
+    dam = snapshot.state.manual_override
+    if dam is None or dam.end_rule is not OverrideEndRule.ROOM_EMPTY:
+        return False
+    source = config.override_presence_source
+    if not isinstance(source, str):
+        return False
+    value = snapshot.sources.get(source)
+    if value is None or not value.has_value or value.value is not False:
+        return False
+    since = dam.room_empty_since
+    return (
+        since is not None and since + config.override_room_empty_after <= snapshot.time
+    )
+
+
+def override_ended_by_condition(config: WindowConfig, snapshot: WorldSnapshot) -> bool:
+    """Return whether the condition of the armed manual override has ended it.
+
+    The two end rules without a known end: the room has been empty for the
+    configured time, or the shading episode it was armed during has ended.
+    ``core/dams`` ends such a dam and raises the event; the gate reads the
+    same function, so the dam never holds a moment longer than its rule
+    says, whether or not the dam was ended already.
+    """
+    dam = snapshot.state.manual_override
+    if dam is None:
+        return False
+    if dam.end_rule is OverrideEndRule.SHADING_EPISODE_END:
+        episode = snapshot.state.shading_episode
+        return episode is None or episode.active_since is None
+    return room_empty_long_enough(config, snapshot)
+
+
+def _manual_override(gate: GateInput) -> ArmedDam | None:
+    dam = gate.snapshot.state.manual_override
+    if dam is None or override_ended_by_condition(gate.config, gate.snapshot):
+        return None
+    return ArmedDam(dam.ends_at)
 
 
 PERSON_AT_WINDOW_DAM: Final = Dam(
@@ -335,6 +388,76 @@ def member_expectation_end(member: MemberConfig, command: OwnCommand) -> datetim
         + travel_time * (command.share_of_travel * TRAVEL_SLACK)
         + END_ALLOWANCE
     )
+
+
+SETTLE_TIME: Final = timedelta(seconds=2)
+"""How long after a report of rest a movement is judged (section 8.3)."""
+
+
+def settle_time(member: MemberConfig, tracking: MemberTracking) -> timedelta:
+    """Return how long the tracker waits after a report of rest before it judges.
+
+    The settle time of section 8.3 (2 s) covers platforms that write the
+    position shortly before or after the resting state. A movement nobody
+    commanded on a member that showed no transit state is seen only through
+    its reports of rest, and on a platform with a report delay the next one
+    comes up to that delay later: the settle time grows by the report delay,
+    so a person's movement on a polled platform is judged once, at its end.
+    """
+    if tracking.external and not tracking.transit_seen:
+        return SETTLE_TIME + member.capabilities.report_delay
+    return SETTLE_TIME
+
+
+def wake_ups(
+    config: WindowConfig, state: WindowState, now: datetime, *, dry_run: bool
+) -> tuple[datetime, ...]:
+    """Return every instant after ``now`` at which the caller has to wake the window.
+
+    The one source of the timers of the runtime and of the time-lapse
+    simulation, next to ``member_expectation_end``, so that neither computes
+    a time of its own:
+
+    - the deadline of every pending own command (the simulated ones for a
+      window in dry-run), where the gate stops counting it as pending and
+      the tracker judges "no reaction" or "not finished";
+    - the end of the settle time of every member that has come to rest;
+    - the end of the person-at-the-window dam and of the manual override,
+      and for the rule "the room has been empty" the instant the configured
+      time has passed since the room was seen empty.
+
+    The caller hands the window to ``Engine.elapse`` at each, and then
+    recomputes it. Deferrals and the planned actions of the schedule come
+    from the decision and the schedule as before.
+    """
+    times: set[datetime] = set()
+    commands: dict[str, OwnCommand] = (
+        {c.member_id: c.command for c in state.simulated.commands}
+        if dry_run and state.simulated is not None
+        else {
+            m.member_id: m.last_own_command
+            for m in state.members
+            if m.last_own_command is not None
+        }
+    )
+    by_id = {member.member_id: member for member in config.members}
+    for member_id, command in commands.items():
+        if member_id in by_id:
+            times.add(member_expectation_end(by_id[member_id], command))
+    for member_state in state.members:
+        tracking = member_state.tracking
+        member = by_id.get(member_state.member_id)
+        if member is not None and tracking.rested_at is not None:
+            times.add(tracking.rested_at + settle_time(member, tracking))
+    if state.person_at_window is not None:
+        times.add(state.person_at_window.ends_at)
+    override = state.manual_override
+    if override is not None:
+        if override.ends_at is not None:
+            times.add(override.ends_at)
+        if override.room_empty_since is not None:
+            times.add(override.room_empty_since + config.override_room_empty_after)
+    return tuple(sorted(time for time in times if time > now))
 
 
 def expectation_window_end(
@@ -442,12 +565,17 @@ def _wait_for_rest(gate: GateInput) -> GateOutcome | None:
     """Hold back a comfort wish while another movement is under way.
 
     A pending own command with other targets counts, and for an armed window
-    a movement that a member reports, whoever started it, so a comfort
-    movement never interrupts a person. What moves a window in dry-run is
-    another controller; such a window is judged by its simulated commands.
+    a movement that a member reports, whoever started it, or that the
+    tracker sees (``WindowState.moving``: from the first member that moves
+    until the last one has settled, also for a member without transit
+    states), so a comfort movement never interrupts a person. What moves a
+    window in dry-run is another controller; such a window is judged by its
+    simulated commands.
     """
     pending = _pending(gate)
-    moving = not gate.controls.dry_run and gate.snapshot.observation.reports_movement
+    moving = not gate.controls.dry_run and (
+        gate.snapshot.observation.reports_movement or gate.snapshot.state.moving
+    )
     if (not pending and not moving) or _repeats(gate, pending):
         return None
     return GateOutcome.defer(

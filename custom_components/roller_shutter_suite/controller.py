@@ -80,7 +80,7 @@ from .const import (
     STARTUP_GRACE,
     status_signal,
 )
-from .core.arbiter import member_expectation_end
+from .core.arbiter import member_expectation_end, record_sent_commands
 from .core.engine import Engine, build_arbiter
 from .core.model import (
     AnySourceValue,
@@ -530,8 +530,9 @@ class WindowController:
         the available members that do not stand at their target, and a member
         without position feedback. The controller filters nothing itself.
         Every addressed member gets a fresh command identifier. The core
-        records the send (``Engine.state_after_send``, the one recorder of own
-        commands), and it is called right after each member's call returned,
+        records the send (``record_sent_commands``, the one recorder of own
+        commands, which ``Engine.state_after_send`` is too), and it is called
+        right after each member's call returned,
         with the identifiers of every member sent so far: if the actuator
         raises for a later member, the commands that were given stay recorded
         and are not sent a second time by the next recompute.
@@ -551,7 +552,9 @@ class WindowController:
             command_id = uuid4().hex
             self.actuator.move_to(command_id, member_id, position, decision=decision)
             command_ids[member_id] = command_id
-            self._store(Engine.state_after_send(snapshot, decision, command_ids))
+            self._store(
+                record_sent_commands(self.config, snapshot, decision, command_ids)
+            )
         return tuple(
             MemberCommand(member.member_id, member.last_own_command)
             for member in self.state.members

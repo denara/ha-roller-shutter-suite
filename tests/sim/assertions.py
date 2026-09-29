@@ -12,7 +12,9 @@ place where something went wrong instead of at a number. The checks:
 - **no intermediate position** in a span of time (a storm): every command
   targets an end position;
 - **inside the clamps**: every command of the schedule falls inside the
-  window of its trigger, on the local clock.
+  window of its trigger, on the local clock;
+- **dams follow foreign movements**: no own movement arms a dam; every
+  manual detection follows an action from outside the integration.
 """
 
 import itertools
@@ -218,6 +220,64 @@ def assert_schedule_commands_inside_clamps(
                 f"{not_before.isoformat(timespec='minutes')} to "
                 f"{not_after.isoformat(timespec='minutes')}",
                 window_id=config.window_id,
+            )
+
+
+ARMING: tuple[ReasonCode, ...] = (
+    ReasonCode.MANUAL_DETECTED,
+    ReasonCode.MANUAL_DETECTED_MEMBER,
+    ReasonCode.OVERRIDE_STARTED,
+    ReasonCode.PERSON_AT_WINDOW_STARTED,
+)
+"""What only a movement by somebody else may raise."""
+
+FOREIGN_BOUND: timedelta = timedelta(minutes=10)
+"""How long after a foreign action its detection may come (a polled platform)."""
+
+
+def assert_dams_follow_foreign_movements(
+    record: Record, *, within: timedelta = FOREIGN_BOUND
+) -> None:
+    """Fail if a manual detection or a dam is not preceded by a foreign action.
+
+    No own movement may ever arm a dam. So every ``manual_detected``,
+    ``manual_detected_member``, ``override_started`` and
+    ``person_at_window_started`` of a window must follow, within ``within``, an
+    action from outside the integration on that window: a movement or a stop
+    by hand, another controller, a dropout (``Entry.foreign``). The one
+    exception is an override that a person-at-the-window dam turns into when
+    it ends: that arming follows ``person_at_window_ended`` at the same
+    instant, and the dam before it followed a foreign action.
+    """
+    last_foreign: dict[str, datetime] = {}
+    ended_at: dict[str, datetime] = {}
+    for entry in record.entries:
+        if entry.window_id is None:
+            continue
+        if entry.kind is EntryKind.EVENT and entry.foreign:
+            last_foreign[entry.window_id] = entry.at
+            continue
+        if entry.kind is not EntryKind.TRACKER or entry.event is None:
+            continue
+        code = entry.event.code
+        if code is ReasonCode.PERSON_AT_WINDOW_ENDED:
+            ended_at[entry.window_id] = entry.at
+            continue
+        if code not in ARMING:
+            continue
+        if (
+            code is ReasonCode.OVERRIDE_STARTED
+            and ended_at.get(entry.window_id) == entry.at
+        ):
+            continue
+        foreign = last_foreign.get(entry.window_id)
+        if foreign is None or not foreign <= entry.at <= foreign + within:
+            raise ScenarioAssertionError(
+                record,
+                entry.at,
+                f"{entry.window_id} raised {code.value} without a movement by "
+                f"somebody else in the {within} before",
+                window_id=entry.window_id,
             )
 
 

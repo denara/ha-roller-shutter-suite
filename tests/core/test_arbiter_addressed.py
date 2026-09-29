@@ -207,7 +207,7 @@ def test_a_hand_built_send_without_addressed_members_addresses_every_target() ->
 
     assert decision.addressed_targets == ((LEFT, Position(40)), (RIGHT, Position(60)))
     world = snapshot(sources=day(), observation=observed(left=0, right=0))
-    state = record_sent_commands(world, decision, IDS)
+    state = record_sent_commands(PAIR, world, decision, IDS)
     assert {m.member_id for m in state.members} == {LEFT, RIGHT}
 
 
@@ -224,7 +224,7 @@ def test_a_pinned_member_is_neither_addressed_nor_recorded() -> None:
     )
     world = snapshot(sources=day(), observation=observed(left=0, right=0))
 
-    state = record_sent_commands(world, decision, IDS)
+    state = record_sent_commands(PAIR, world, decision, IDS)
 
     assert decision.addressed_targets == ((RIGHT, Position(60)),)
     assert [m.member_id for m in state.members] == [RIGHT]
