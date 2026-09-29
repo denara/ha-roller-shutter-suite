@@ -107,7 +107,6 @@ Open the menu of the window and choose **Reconfigure**. The pages show what is s
 
 On the last page of the window's **Reconfigure**, choose **Armed: move the shutters**. A page of checks follows, **Arm the window**, which saves only when you have ticked every point; if one of them is not true yet, close the dialog and nothing is saved. To go back to dry-run, choose **Dry-run** on the same page; that needs no confirmation. Read the [checklist of the pilot guide](pilot.md#8-before-you-arm-a-window) before you arm your first window, and [Arming a window](features/dry-run.md#arming-a-window) for what arming changes.
 
-
 ## How inherited values look
 
 On the pages of a group and of a window every value can be inherited. What "inherit" looks like depends on the kind of field.

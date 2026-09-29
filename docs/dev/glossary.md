@@ -64,7 +64,6 @@ The German texts address the reader informally, as the German interface of Home 
 | operating mode | Betriebsart | Automatic, protection only, or off; the name of a select. "Protection only" holds back comfort movements, "off" also protection; the fire alarm always opens. | status, pages |
 | automatic, protection only, off | Automatisch, Nur Schutz, Aus | The three operating modes. | status, pages |
 | strictest wins | das Strengste gilt | Of the pause, the maintenance lock and the operating mode of the house, the group and the window, the strictest applies to the window. | pages |
-
 | movement (page) | Bewegung | The page with the settings that spare the motors. | forms, pages |
 | motor protection | Motorschutz | The minimum change and the minimum interval together: they leave out small comfort movements and space them out. | pages |
 | minimum change, minimum interval | Mindeständerung, Mindestabstand | The two settings of motor protection. | forms, status, pages |

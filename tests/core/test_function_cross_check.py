@@ -60,14 +60,6 @@ The functions with settings come from ``functions_with_settings()`` of the
 settings registry (``core/settings``), which is the one place this test is
 connected to.
 """
-HEARD_THROUGH_THE_CONTROLS: frozenset[FunctionId] = frozenset({FunctionId.PAUSE})
-"""Functions whose settings the Home Assistant layer reads into the controls.
-
-The external pause entity (``pause_source``) pauses a level of the controls;
-the gate rule of the pause, which declares no function, acts on the result.
-Its listener is therefore the gate rule of the pause, which a test below
-requires to exist.
-"""
 BELONGS_TO_THE_WISH = frozenset({Constraint.DIRECTION})
 """Constraints that state no function: they belong to the function of the wish.
 
@@ -183,35 +175,32 @@ def test_no_function_of_a_constraint_or_a_gate_rule_can_be_paused() -> None:
         FunctionId.FROST,
         FunctionId.MOTOR_PROTECTION,
         FunctionId.MANUAL_OVERRIDE,
+        FunctionId.PAUSE,
     }
 
 
 def test_every_function_with_settings_has_a_listener() -> None:
     """For the arbiter of the integration and the settings that are registered."""
-    check_listeners(
-        build_arbiter(),
-        functions_with_settings() - HEARD_THROUGH_THE_CONTROLS,
-        NOT_BUILT_YET,
-    )
+    check_listeners(build_arbiter(), functions_with_settings(), NOT_BUILT_YET)
     assert functions_with_settings() >= {
         FunctionId.FROST,
         FunctionId.MOTOR_PROTECTION,
-        *HEARD_THROUGH_THE_CONTROLS,
+        FunctionId.PAUSE,
     }
 
 
-def test_what_is_heard_through_the_controls_reaches_the_gate_rule_of_the_pause() -> (
-    None
-):
-    """The pause rule is registered, for comfort, and it is no fallback of a fault."""
+def test_the_pause_rule_holds_back_comfort_and_belongs_to_the_pause() -> None:
+    """The listener of ``pause_source``: the gate rule of the pause, for comfort only.
+
+    The Home Assistant layer reads the external pause entity into the
+    controls; the pause rule acts on the result and states its function.
+    """
     (pause,) = [
         entry for entry in build_arbiter().gate_rules if entry.rule is GateRule.PAUSE
     ]
     assert pause.applies_to == frozenset({WishClass.COMFORT})
-    assert all(
-        function.fault_behavior is FaultBehavior.FALL_BACK
-        for function in HEARD_THROUGH_THE_CONTROLS
-    )
+    assert pause.function is FunctionId.PAUSE
+    assert FunctionId.PAUSE.fault_behavior is FaultBehavior.FALL_BACK
 
 
 # --- The checks themselves, shown with stubs ----------------------------------------

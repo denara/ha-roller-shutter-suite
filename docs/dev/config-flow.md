@@ -137,7 +137,6 @@ The feature pages of a reconfigure of a window are therefore never the last ones
 
 ## Next or Submit
 
-
 A flow has no way back, so every page passes `last_step` to `async_show_form`, and the frontend labels its button "Next" or "Submit" by it (`show-dialog-config-flow.ts` and `show-dialog-sub-config-flow.ts` read a translated `step.<id>.submit` first, then fall back to the flag). The first page of every flow (the confirmation of the house, the basics of a group or a window) is never the last one. A feature page is the last one when no other page is queued after it; the page of the switches only when no feature page can follow on the level at all, because which pages follow depends on the switches being chosen. No page has a `submit` text of its own: the last page is not fixed by its step ID, and the frontend shows a `submit` text whatever the flag says.
 
 ## What a flow took from an earlier page may be gone

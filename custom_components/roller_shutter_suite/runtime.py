@@ -10,7 +10,6 @@ window; the config entry is loaded as long as Home Assistant itself is.
 The controls of a window (pause, operating mode, maintenance lock on three
 levels, and dry-run) are read through ``controls_of``: the set-up of the
 entry hands in the control board of the entry (``controls.py``).
-
 """
 
 import logging

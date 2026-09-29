@@ -138,7 +138,6 @@ Pause, maintenance lock and operating mode exist on three levels: the house, eve
 
 **Where they live.** `ControlBoard` (`controls.py`) is created by the set-up of the entry, before the runtime, and holds `LevelSwitches` (pause, lock, mode) for the house, every group and every window. It is the controls provider of the runtime: `SuiteRuntime(controls_of=board.controls_of)`, and every controller reads `Controls` through it at every recompute. The house is keyed by the ID of the entry, a group and a window by their subentry ID. It replaces `runtime.neutral_controls`, the neutral levels of the time before the controls existed.
 
-
 **The entities.** `switch.py` (Pause, Maintenance lock) and `select.py` (Operating mode) add three configuration entities per level, on the device of the level: the house device belongs to the entry and to no subentry, a group device to the group's subentry, both are service devices (`DeviceEntryType.SERVICE`) and are created by the set-up like the window devices. `entity.ControlEntity` is their base: unique ID `<level>_<key>`, `has_entity_name`, translation keys, no polling; the controls of a window are unavailable while the window has no controller and follow its status signal, those of the house and the groups are always available.
 
 **A change never reloads the entry.** An entity writes the new value into the board (`ControlBoard.async_set`), and the board asks every window the level concerns for a recompute (`SuiteRuntime.async_request_recompute`, which goes through the debouncer of the controller). A house-level change therefore reaches every window within the coalescing time. When a pause ends the window is recomputed; nothing is replayed.
@@ -152,7 +151,6 @@ Pause, maintenance lock and operating mode exist on three levels: the house, eve
 **A group reference that cannot be read** leaves it unknown whose controls apply; the window then takes the strictest combination of every group.
 
 ## Deviations
-
 
 **The start-up grace of two minutes.** Section 11 of the specification says that no decision is made before the members of a window are available. Taken by the letter, one member that never reports would keep the whole window, and every member that is there, without a decision for ever, which contradicts section 9 (a member that is unavailable: the others are commanded). The runtime therefore waits for all members, but at most `STARTUP_GRACE` (two minutes, `const.py`, the one place) after the start, and only once at least one member is available. The two minutes come from the S1 measurement: covers that Home Assistant polls report with a delay of up to 60 seconds, so a member that is merely slow has reported within the grace. After the grace the window decides with what is known. A member that is still silent stays unknown: no position is assumed and no capability; the gate addresses only the members that are available and defers with `cover_unavailable` when none of them is; the status shows the member as unavailable. The wake-up at the end of the grace is shown in the status. The project owner records this in the specification with the next documentation change.
 

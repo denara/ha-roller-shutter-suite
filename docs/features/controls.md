@@ -17,7 +17,7 @@ Four controls decide how much a window may move. Three of them are switches you 
 
 **The maintenance lock is the only control that also holds back the fire alarm.** It exists for the moment somebody works on a shutter: a shutter that starts to move could hurt them. The fire alarm is still reported at once, as an event and in the logbook, with the reason "Maintenance lock".
 
-A pause and the operating mode are for comfort. Use them when you do not want the daily routine to move the shutters for a while; storms and the fire alarm still do their job.
+A pause and the operating mode are for comfort. Use them when you do not want the daily routine to move the shutters for a while; storms and the fire alarm still do their job. A pause is also the way to keep a position you set by hand: this version does not notice a movement by hand yet, and an armed window that is not paused moves the shutter back within a few seconds.
 
 ## The entities
 

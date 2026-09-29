@@ -219,7 +219,7 @@
             "old_control_off": "Ich habe die bisherige Steuerung ausgeschaltet und geprüft, dass sie den Rollladen nicht mehr bewegt.",
             "compared": "Ich habe die letzten Tage verglichen: Nach jeder Bewegung der bisherigen Steuerung stand als Grund „Steht bereits richtig“, oder ich verstehe jeden Unterschied.",
             "controls_checked": "Ich habe mir Betriebsart, Pause und Wartungssperre des Hauses, der Gruppe und dieses Fensters angesehen.",
-            "fresh_start": "Ich weiß, dass das Fenster frisch beginnt: Was es im Probelauf gesendet hätte, gilt als nie gesendet.",
+            "fresh_start": "Ich weiß, dass das Fenster frisch beginnt: Was es im Probelauf gesendet hätte, gilt als nie gesendet. Steht der Rollladen nicht dort, wo der Tagesablauf ihn haben will, fährt er wenige Sekunden nach dem Speichern los.",
             "way_back": "Ich kenne den Weg zurück: Mit der Wartungssperre sendet das Fenster keinen Befehl mehr, und dieses Formular schaltet es zurück in den Probelauf."
           }
         }
@@ -291,16 +291,16 @@
       "description": "Die Einstellungen mindestens eines Fensters wurden als Ganzes abgelehnt, und Roller Shutter Suite konnte nicht sagen, welche Einstellungen der Grund sind. Das ist ein Fehler in der Integration, nicht in deinen Einstellungen. Einstellungen, die Menschen oder Technik schützen oder Bewegungen begrenzen, wirken weiter; Komfortbewegungen sind ausgesetzt. Bitte melde das dem Autor der Integration."
     },
     "pause_source_blind_global": {
-      "title": "Die Pausen-Entität des Hauses hat keinen Zustand",
-      "description": "Die Pausen-Entität {entity} des Hauses ist seit mehr als einer Stunde nicht verfügbar oder ihr Zustand ist unbekannt. Bis sie wieder ein oder aus meldet, sind die Komfortbewegungen aller Fenster pausiert; Schutz und Feueralarm bewegen die Rollläden weiterhin. Dieser Hinweis verschwindet von selbst, sobald die Entität wieder meldet. Um die Entität nicht mehr zu verwenden, wähle auf der Seite „Betrieb“ des Hauses „Keine“."
+      "title": "Die Pausen-Entität des Hauses meldet weder ein noch aus",
+      "description": "Die Pausen-Entität {entity} des Hauses meldet seit mehr als einer Stunde weder ein noch aus: Sie ist nicht verfügbar, ihr Zustand ist unbekannt, oder sie hat einen anderen Zustand. Bis sie wieder ein oder aus meldet, sind die Komfortbewegungen aller Fenster pausiert; Schutz und Feueralarm bewegen die Rollläden weiterhin. Dieser Hinweis verschwindet von selbst, sobald die Entität wieder meldet. Um die Entität nicht mehr zu verwenden, wähle auf der Seite „Betrieb“ des Hauses „Keine“."
     },
     "pause_source_blind_group": {
-      "title": "Die Pausen-Entität der Gruppe „{name}“ hat keinen Zustand",
-      "description": "Die Pausen-Entität {entity} der Gruppe „{name}“ ist seit mehr als einer Stunde nicht verfügbar oder ihr Zustand ist unbekannt. Bis sie wieder ein oder aus meldet, sind die Komfortbewegungen der Fenster dieser Gruppe pausiert; Schutz und Feueralarm bewegen die Rollläden weiterhin. Dieser Hinweis verschwindet von selbst, sobald die Entität wieder meldet. Um die Entität nicht mehr zu verwenden, wähle auf der Seite „Betrieb“ der Gruppe „Keine“."
+      "title": "Die Pausen-Entität der Gruppe „{name}“ meldet weder ein noch aus",
+      "description": "Die Pausen-Entität {entity} der Gruppe „{name}“ meldet seit mehr als einer Stunde weder ein noch aus: Sie ist nicht verfügbar, ihr Zustand ist unbekannt, oder sie hat einen anderen Zustand. Bis sie wieder ein oder aus meldet, sind die Komfortbewegungen der Fenster dieser Gruppe pausiert; Schutz und Feueralarm bewegen die Rollläden weiterhin. Dieser Hinweis verschwindet von selbst, sobald die Entität wieder meldet. Um die Entität nicht mehr zu verwenden, wähle auf der Seite „Betrieb“ der Gruppe „Keine“."
     },
     "pause_source_blind_window": {
-      "title": "Die Pausen-Entität des Fensters „{name}“ hat keinen Zustand",
-      "description": "Die Pausen-Entität {entity} des Fensters „{name}“ ist seit mehr als einer Stunde nicht verfügbar oder ihr Zustand ist unbekannt. Bis sie wieder ein oder aus meldet, sind die Komfortbewegungen dieses Fensters pausiert; Schutz und Feueralarm bewegen den Rollladen weiterhin. Dieser Hinweis verschwindet von selbst, sobald die Entität wieder meldet. Um die Entität nicht mehr zu verwenden, wähle auf der Seite „Betrieb“ des Fensters „Keine“."
+      "title": "Die Pausen-Entität des Fensters „{name}“ meldet weder ein noch aus",
+      "description": "Die Pausen-Entität {entity} des Fensters „{name}“ meldet seit mehr als einer Stunde weder ein noch aus: Sie ist nicht verfügbar, ihr Zustand ist unbekannt, oder sie hat einen anderen Zustand. Bis sie wieder ein oder aus meldet, sind die Komfortbewegungen dieses Fensters pausiert; Schutz und Feueralarm bewegen den Rollladen weiterhin. Dieser Hinweis verschwindet von selbst, sobald die Entität wieder meldet. Um die Entität nicht mehr zu verwenden, wähle auf der Seite „Betrieb“ des Fensters „Keine“."
     }
   },
   "entity": {

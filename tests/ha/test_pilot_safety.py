@@ -622,9 +622,10 @@ async def test_no_combination_of_the_controls_moves_the_window_in_dry_run(
     At 07:00 the daily routine wants the shutters open. Every combination of
     the five states of the three levels is set through the entities, with the
     stub fire alarm off and on. The window in dry-run records what it would
-    do and never calls its cover; the armed control window shows that the
-    controls reach the windows: it is commanded only when no level holds its
-    wish back.
+    do and never calls its cover, and no change reloads the entry. The armed
+    control window is commanded at least once during the combinations, which
+    shows that the test would notice a call.
+
     """
     entry = await _install(hass, freezer)
     await _at(hass, freezer, local(7, 0, second=1))

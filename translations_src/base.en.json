@@ -219,7 +219,7 @@
             "old_control_off": "I have switched the old control off and checked that it no longer moves the shutter.",
             "compared": "I have compared the last days: after each movement of the old control the reason read \"Already where it should be\", or I understand every difference.",
             "controls_checked": "I have looked at the operating mode, the pause and the maintenance lock of the house, the group and this window.",
-            "fresh_start": "I know that the window starts fresh: what it would have sent in dry-run counts as never sent.",
+            "fresh_start": "I know that the window starts fresh: what it would have sent in dry-run counts as never sent, so if the shutter is not where the daily routine wants it, it moves within a few seconds after I save.",
             "way_back": "I know the way back: with the maintenance lock the window sends no further command, and this form switches it back to dry-run."
           }
         }
@@ -291,16 +291,16 @@
       "description": "The settings of at least one window were refused as a whole, and Roller Shutter Suite could not tell which settings are the cause. This is an error in the integration, not in your settings. Settings that protect people or hardware or limit movements keep working; comfort movements are suspended. Please report it to the author of the integration."
     },
     "pause_source_blind_global": {
-      "title": "The pause entity of the house has no state",
-      "description": "The pause entity {entity} of the house has been unavailable or its state unknown for more than an hour. Until it reports on or off again, comfort movements of every window are paused; protection and the fire alarm still move the shutters. This message disappears by itself when the entity reports again. To stop using the entity, choose \"None\" on the page \"Operation\" of the house."
+      "title": "The pause entity of the house reports neither on nor off",
+      "description": "The pause entity {entity} of the house has reported neither on nor off for more than an hour: it is unavailable, its state is unknown, or it has another state. Until it reports on or off again, comfort movements of every window are paused; protection and the fire alarm still move the shutters. This message disappears by itself when the entity reports again. To stop using the entity, choose \"None\" on the page \"Operation\" of the house."
     },
     "pause_source_blind_group": {
-      "title": "The pause entity of group \"{name}\" has no state",
-      "description": "The pause entity {entity} of the group \"{name}\" has been unavailable or its state unknown for more than an hour. Until it reports on or off again, comfort movements of the windows of this group are paused; protection and the fire alarm still move the shutters. This message disappears by itself when the entity reports again. To stop using the entity, choose \"None\" on the page \"Operation\" of the group."
+      "title": "The pause entity of group \"{name}\" reports neither on nor off",
+      "description": "The pause entity {entity} of the group \"{name}\" has reported neither on nor off for more than an hour: it is unavailable, its state is unknown, or it has another state. Until it reports on or off again, comfort movements of the windows of this group are paused; protection and the fire alarm still move the shutters. This message disappears by itself when the entity reports again. To stop using the entity, choose \"None\" on the page \"Operation\" of the group."
     },
     "pause_source_blind_window": {
-      "title": "The pause entity of window \"{name}\" has no state",
-      "description": "The pause entity {entity} of the window \"{name}\" has been unavailable or its state unknown for more than an hour. Until it reports on or off again, comfort movements of this window are paused; protection and the fire alarm still move the shutter. This message disappears by itself when the entity reports again. To stop using the entity, choose \"None\" on the page \"Operation\" of the window."
+      "title": "The pause entity of window \"{name}\" reports neither on nor off",
+      "description": "The pause entity {entity} of the window \"{name}\" has reported neither on nor off for more than an hour: it is unavailable, its state is unknown, or it has another state. Until it reports on or off again, comfort movements of this window are paused; protection and the fire alarm still move the shutter. This message disappears by itself when the entity reports again. To stop using the entity, choose \"None\" on the page \"Operation\" of the window."
     }
   },
   "entity": {

@@ -4,7 +4,6 @@ The daily routine opens your shutters in the morning and closes them in the even
 
 **Status: pilot.** The forms for these settings exist; [Configuration](../configuration.md) shows them. Every new window starts in [dry-run](dry-run.md), where the routine decides and records and moves no shutter; once you have [armed](dry-run.md#arming-a-window) a window, the routine moves its shutter.
 
-
 ## Day and night
 
 The routine knows two parts of the day:
