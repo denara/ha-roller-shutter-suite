@@ -7,7 +7,10 @@ the window "Control window" is armed, which is the proof that the test would
 notice a call: it does move. The control window is armed the way a user arms
 it: through the page "dry-run or armed" of its reconfigure flow and the page
 of the checks that follows; the update listener reloads the entry once, as
-after every change, and the window starts armed with a clean state.
+after every change, and the window starts armed with a clean state. This
+version refuses to arm (maintenance item X10) until block H10 lets the runtime
+notice a movement by hand; the tests arm the control window as that block
+will allow it, with the fact set for the form and the runtime of every test.
 
 No cover platform is loaded. The three cover actions are stand-ins that
 record every call (``runtime_kit.register_cover_services``), and the covers
@@ -103,6 +106,13 @@ TUESDAY = date(2026, 9, 22)
 
 EVENING_POSITION = 20
 """The evening position the reconfigure gives the window in dry-run."""
+
+# This version refuses to arm, in the form and in operation, until block H10
+# lets the runtime notice a movement by hand (maintenance item X10). The
+# control window is armed as it will be once H10 sets the fact, so the fact is
+# set for every test here, for the form and the runtime. The window in dry-run
+# does not depend on it: it is stored in dry-run.
+pytestmark = pytest.mark.usefixtures("movement_detection")
 
 
 @pytest.fixture(autouse=True)
@@ -219,6 +229,8 @@ async def _install(hass: HomeAssistant, freezer: Any) -> ConfigEntry:
             assert subentry.data[CONF_DRY_RUN] is True
 
     # Arm the control window through its form: dry-run or armed, then the checks.
+    # The fact that movements by hand are noticed is set for this whole module
+    # (``pytestmark``), for the form and the runtime alike, as block H10 will.
     control_id = _subentry_id(entry, "Control window")
     armed = await _subentry_flow(
         hass,

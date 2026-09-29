@@ -595,6 +595,7 @@
             "old_control_off": "I have switched the old control off and checked that it no longer moves the shutter.",
             "compared": "I have compared the last days: after each movement of the old control the reason read \"Already where it should be\", or I understand every difference.",
             "controls_checked": "I have looked at the operating mode, the pause and the maintenance lock of the house, the group and this window.",
+            "reports_at_once": "Every cover of this window reports its movements at once, not on a polling schedule: while the shutter moves, its state and position change in Home Assistant, not only a minute later. Until a later version checks every command, a movement by hand between two reports could be undone.",
             "fresh_start": "I know that the window starts fresh: what it would have sent in dry-run counts as never sent, so if the shutter is not where the daily routine wants it, it moves within a few seconds after I save.",
             "way_back": "I know the way back: with the maintenance lock the window sends no further command, and this form switches it back to dry-run."
           }
@@ -832,6 +833,8 @@
         "no_covers": "Your selection contains no cover.",
         "cover_in_use": "{cover} already belongs to the window \"{window}\". A cover can belong to one window only.",
         "confirm_every_check": "Confirm every point. If one of them is not true yet, close this dialog: the window stays in dry-run.",
+        "no_movement_detection": "This version cannot arm a window yet: it does not notice when you move a shutter by hand, and an armed window would move it back within a few seconds. A later version brings this. This page saves nothing: close this dialog, and the window stays as it was. To save your other changes, choose \"Reconfigure\" again and select \"Dry-run\" on the page \"Operation\".",
+        "report_delay": "These covers report their movements late, not at once: {covers}. Until a later version checks every command, a window with such a cover cannot be armed, because a movement by hand between two reports could be undone. This page saves nothing: close this dialog, and the window stays as it was. To save your other changes, choose \"Reconfigure\" again and select \"Dry-run\" on the page \"Operation\".",
         "invalid_value": "This value is not allowed here.",
         "fraction_not_allowed": "Enter a whole number.",
         "invalid_day_of_year": "Enter the day as month and day, two digits each, for example 05-01.",
@@ -915,6 +918,10 @@
     "dry_run_unreadable": {
       "title": "Dry-run of window \"{window}\" cannot be read",
       "description": "The saved settings do not show whether the window \"{window}\" is in dry-run. It is treated as being in dry-run, so it does not move. To repair this, open the window and save it."
+    },
+    "armed_without_movement_detection": {
+      "title": "Window \"{window}\" runs in dry-run",
+      "description": "The saved settings say that the window \"{window}\" is armed. This version cannot yet notice when you move a shutter by hand, and an armed window would move it back within a few seconds. So the window runs in dry-run: it decides and records what it would do, and moves nothing, until a later version notices a movement by hand. To remove this message, open the window, choose \"Reconfigure\" and select \"Dry-run\" on the page \"Operation\"."
     },
     "option_unavailable": {
       "title": "Window \"{window}\" cannot use the setting \"{key}\"",
