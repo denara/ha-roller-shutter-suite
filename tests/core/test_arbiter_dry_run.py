@@ -203,6 +203,7 @@ def test_a_would_be_send_is_remembered_as_a_simulated_command() -> None:
         time=NOW,
         wish_class=WishClass.COMFORT,
         reason=ReasonCode.SCHEDULE_NIGHT,
+        start_position=Position(70),
     )
     assert state.simulated.last_comfort_movement == NOW
     assert replace(state, simulated=None) == world.state
@@ -295,7 +296,11 @@ def test_a_new_comfort_wish_is_judged_by_the_simulated_clock() -> None:
 
 
 def test_a_new_comfort_wish_waits_for_the_simulated_movement() -> None:
-    """Twelve seconds after a would-be opening, another target is in flight."""
+    """Twelve seconds after a would-be opening, another target is in flight.
+
+    From 50 up to 100 is half the travel of 20 seconds: the deadline lies
+    10 + 20 * 0.5 * 1.5 + 5 = 30 seconds after the would-be send.
+    """
     no_interval = MotorProtectionSettings(min_interval=timedelta(0))
     subject = engine(window(motor_protection=no_interval))
     morning = snapshot(sources=day(), position=50, controls=DRY_RUN)
@@ -307,7 +312,7 @@ def test_a_new_comfort_wish_waits_for_the_simulated_movement() -> None:
     assert _gate(subject.recompute(evening)) == GateOutcome.defer(
         GateRule.MOVEMENT_IN_FLIGHT,
         ReasonCode.MOVEMENT_IN_FLIGHT,
-        reevaluate_no_later_than=NOW + timedelta(seconds=20),
+        reevaluate_no_later_than=NOW + timedelta(seconds=30),
         dry_run=True,
     )
 

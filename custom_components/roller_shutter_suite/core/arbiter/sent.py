@@ -105,6 +105,7 @@ def record_sent_commands(
             time=snapshot.time,
             wish_class=wish.wish_class if completed is None else completed.wish_class,
             reason=wish.reason if completed is None else completed.reason,
+            start_position=reported.get(target.member_id),
         )
         members[target.member_id] = replace(
             existing,

@@ -923,6 +923,7 @@
                   'direction': 'up',
                   'failed': False,
                   'reason': 'schedule_day',
+                  'start_position': 50,
                   'target': 100,
                   'time': '2026-09-21T08:00:01.500000+00:00',
                   'wish_class': 'comfort',

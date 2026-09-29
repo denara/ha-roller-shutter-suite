@@ -63,6 +63,7 @@ def test_a_send_records_the_command_the_owner_and_the_comfort_clock() -> None:
         time=NOW,
         wish_class=WishClass.COMFORT,
         reason=ReasonCode.SCHEDULE_DAY,
+        start_position=Position(0),
     )
 
 

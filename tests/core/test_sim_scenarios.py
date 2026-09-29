@@ -13,7 +13,12 @@ from typing import Final
 
 import pytest
 
-from custom_components.roller_shutter_suite.core.arbiter import member_expectation_end
+from custom_components.roller_shutter_suite.core.arbiter import (
+    END_ALLOWANCE,
+    START_ALLOWANCE,
+    TRAVEL_SLACK,
+    member_expectation_end,
+)
 from custom_components.roller_shutter_suite.core.model import (
     FULLY_CLOSED,
     FULLY_OPEN,
@@ -31,7 +36,7 @@ from tests.sim.assertions import (
     assert_schedule_commands_inside_clamps,
     movements_per_day,
 )
-from tests.sim.cover import CoverProfile, SimulatedCover
+from tests.sim.cover import CoverProfile, Reporting, SimulatedCover
 from tests.sim.record import EntryKind, Record
 from tests.sim.runner import Simulation
 from tests.sim.scenarios import (
@@ -316,11 +321,15 @@ def test_a_restart_in_mid_movement_does_not_send_again() -> None:
 def test_the_runner_wakes_a_window_up_at_the_deadline_of_the_gate() -> None:
     """The wake-up is the core's own deadline, report delay included, and nothing more.
 
-    The cover settles short of the target, so the target is never reached,
-    and its end stop takes longer than the travel time the user states, so
-    its last report comes after the deadline: the recompute at the deadline
-    is the runner's wake-up alone. Before it the gate reads the command as
-    pending; at the deadline itself it does not any more (``time < end``).
+    The deadline is the formula of section 8.3: report delay, start
+    allowance, the travel time times the share of the travel times the
+    slack, end allowance. The cover reports its position at the end only and
+    settles short of the target, so the target is never reached, and its end
+    stop takes much longer than the travel time the user states, so its last
+    report comes after the deadline: the recompute at the deadline is the
+    runner's wake-up alone.
+    Before it the gate reads the command as pending; at the deadline itself
+    it does not any more (``time < end``).
     """
     start = local(MONDAY, time(6, 55))
     world = World(start, seed=1, script=calm_sources(start))
@@ -331,8 +340,9 @@ def test_the_runner_wakes_a_window_up_at_the_deadline_of_the_gate() -> None:
                 "late_and_short",
                 position_source=PROFILES["settles_off"].position_source,
                 settle_offset_up=-6,
-                end_stop_extra=timedelta(seconds=4),
+                end_stop_extra=timedelta(seconds=30),
                 report_delay=REPORT_DELAY,
+                reporting=Reporting.END_ONLY,
             ),
             position=0,
             available_since=start,
@@ -348,7 +358,16 @@ def test_the_runner_wakes_a_window_up_at_the_deadline_of_the_gate() -> None:
     deadline = member_expectation_end(member, command)
 
     assert member.capabilities.report_delay == REPORT_DELAY
-    assert deadline == command.time + member.capabilities.travel_time_up + REPORT_DELAY
+    assert command.share_of_travel == 1.0
+    assert deadline == (
+        command.time
+        + REPORT_DELAY
+        + START_ALLOWANCE
+        + member.capabilities.travel_time_up * TRAVEL_SLACK
+        + END_ALLOWANCE
+    )
+    last_report = command.time + timedelta(seconds=20 + 30) + REPORT_DELAY
+    assert last_report > deadline
     assert deadline in window.wake_ups
     simulation.run(deadline + timedelta(seconds=30))
     reasons = {

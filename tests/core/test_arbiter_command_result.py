@@ -187,7 +187,12 @@ def test_an_accepted_result_moves_the_command_to_the_time_of_the_call() -> None:
     assert member.command_attempts == 1
     assert after.last_comfort_movement == handed_over
     end = member_expectation_end(window().members[0], member.last_own_command)
-    assert end == called + profile().travel_time_up
+    before_command = before.members[0].last_own_command
+    assert before_command is not None
+    assert end == member_expectation_end(window().members[0], before_command) + (
+        called - handed_over
+    )
+    assert end > called + profile().travel_time_up
 
 
 def test_a_failed_result_keeps_the_times_of_the_command() -> None:

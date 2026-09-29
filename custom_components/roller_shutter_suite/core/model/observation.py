@@ -21,6 +21,7 @@ from ._data import (
     as_str,
     optional,
     read,
+    read_optional,
 )
 from ._validation import (
     require_identifier,
@@ -31,7 +32,7 @@ from ._validation import (
     to_utc_or_none,
 )
 from .decision import WishClass
-from .values import Position, _as_position, _position_data
+from .values import FULLY_OPEN, Position, _as_position, _position_data
 from .window import MIN_TOLERANCE
 
 # ---------------------------------------------------------------------------
@@ -279,6 +280,11 @@ class OwnCommand:
       attempt and its expectation window), but "target reached" never
       counts it: a member without position feedback whose command failed is
       not taken to stand at its target.
+    - ``start_position``: the position the member reported when the command
+      was given, or ``None`` if it reported none. The deadline of the
+      expectation (``member_expectation_end``) takes the share of the travel
+      from it; without it the whole travel counts. Within schema version 1
+      the key is optional when data is read.
 
     The time is an instant and is kept in UTC.
     """
@@ -291,6 +297,7 @@ class OwnCommand:
     reason: ReasonCode
     context_id: str | None = None
     failed: bool = False
+    start_position: Position | None = None
 
     def __post_init__(self) -> None:
         """Validate the types, reject a naive time and keep the instant in UTC."""
@@ -308,6 +315,20 @@ class OwnCommand:
             )
         require_optional_type(self.context_id, str, "the context of a command")
         require_type(self.failed, bool, "the flag 'failed' of a command")
+        require_optional_type(
+            self.start_position, Position, "the start position of a command"
+        )
+
+    @property
+    def share_of_travel(self) -> float:
+        """Return the share of the full travel the command asks for, 0 to 1.
+
+        From the start position to the target; the whole travel if the start
+        position is not known.
+        """
+        if self.start_position is None:
+            return 1.0
+        return abs(self.target.value - self.start_position.value) / FULLY_OPEN.value
 
     def to_data(self) -> JsonObject:
         """Return plain data for persistence."""
@@ -320,6 +341,7 @@ class OwnCommand:
             "reason": self.reason.value,
             "context_id": self.context_id,
             "failed": self.failed,
+            "start_position": _position_data(self.start_position),
         }
 
     @classmethod
@@ -335,6 +357,7 @@ class OwnCommand:
             "reason",
             "context_id",
             "failed",
+            "start_position",
         )
         return cls(
             command_id=read(content, "command_id", as_str),
@@ -348,6 +371,9 @@ class OwnCommand:
             # existed has no failed command. The schema step, with a
             # migration, belongs to the persistence block (C12).
             failed=(read(content, "failed", as_bool) if "failed" in content else False),
+            start_position=read_optional(
+                content, "start_position", optional(_as_position), None
+            ),
         )
 
 

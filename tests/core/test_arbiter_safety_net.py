@@ -26,6 +26,9 @@ import pytest
 
 from custom_components.roller_shutter_suite.core.arbiter import (
     BUILT_IN_GATE_RULES,
+    END_ALLOWANCE,
+    START_ALLOWANCE,
+    TRAVEL_SLACK,
     Arbiter,
     ConstraintInput,
     ConstraintRegistration,
@@ -681,7 +684,12 @@ FAILED_RULES_THAT_SEND_FIRE = [
 ]
 """Every rule a fire wish is asked, except the maintenance lock."""
 
-EXPECTATION_WINDOW = window().members[0].capabilities.travel_time_up
+EXPECTATION_WINDOW = (
+    START_ALLOWANCE
+    + window().members[0].capabilities.travel_time_up * TRAVEL_SLACK
+    + END_ALLOWANCE
+)
+"""The deadline of a command upwards that states no start position (section 8.3)."""
 
 
 def test_only_the_maintenance_lock_is_missing_from_the_rules_that_send_fire() -> None:

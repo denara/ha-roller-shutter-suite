@@ -13,7 +13,7 @@ commands and marks the outcome as hypothetical.
 
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Final
 
 from custom_components.roller_shutter_suite.core.model import (
@@ -293,14 +293,34 @@ passed) is the decision of the protection layer.
 #   the members have come to rest. Protection and fire retarget at once.
 
 
-def member_expectation_end(member: MemberConfig, command: OwnCommand) -> datetime:
-    """Return until when an own command to a member counts as pending.
+START_ALLOWANCE: Final = timedelta(seconds=10)
+"""How long a movement may take to start before the deadline counts (section 8.3)."""
 
-    It is the time of the command plus the full travel time of its direction
-    plus the report delay of the member; an upper bound. The tracker knows
-    more about a movement than the gate; this is the one place to change when
-    it does. The gate reads it through ``expectation_window_end``, and so does
-    everything outside the gate that waits for the same instant.
+TRAVEL_SLACK: Final = 1.5
+"""The factor on the share of the travel time: travel is not linear in percent."""
+
+END_ALLOWANCE: Final = timedelta(seconds=5)
+"""What a movement into an end stop takes beyond its share of the travel."""
+
+
+def member_expectation_end(member: MemberConfig, command: OwnCommand) -> datetime:
+    """Return the deadline of the expectation of an own command to a member.
+
+    The formula of section 8.3 of the specification: the time of the command
+    plus ``report delay + start allowance + travel time of the direction *
+    share of the travel * slack + end allowance``, with a start allowance of
+    10 s, a slack of 1.5 and an end allowance of 5 s. The share of the travel
+    runs from the position the member reported when the command was given
+    (``OwnCommand.start_position``) to the target; without a start position
+    the whole travel counts. The proportional share alone underestimates a
+    movement that ends in an end stop, and a fixed allowance alone would
+    raise a false "did not react" on a polled platform.
+
+    This is the one deadline: the gate reads it through
+    ``expectation_window_end`` (a command counts as pending until then), the
+    tracker judges "no reaction" and "not finished" at it, and the runtime
+    and the time-lapse simulation wake the window up at it. A later change of
+    the formula reaches every waiter at once.
     """
     profile = member.capabilities
     travel_time = (
@@ -308,7 +328,13 @@ def member_expectation_end(member: MemberConfig, command: OwnCommand) -> datetim
         if command.direction is TravelDirection.UP
         else profile.travel_time_down
     )
-    return command.time + travel_time + profile.report_delay
+    return (
+        command.time
+        + profile.report_delay
+        + START_ALLOWANCE
+        + travel_time * (command.share_of_travel * TRAVEL_SLACK)
+        + END_ALLOWANCE
+    )
 
 
 def expectation_window_end(

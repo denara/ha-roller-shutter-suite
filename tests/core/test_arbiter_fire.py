@@ -288,7 +288,11 @@ def test_fire_is_not_sent_twice_while_its_own_command_is_pending() -> None:
 def test_fire_is_sent_again_as_soon_as_the_window_of_an_unfinished_command_has_closed(
     paused: bool,
 ) -> None:
-    """Up takes 20 seconds here. No backoff, no waiting: at once."""
+    """Up takes 20 seconds here, so the deadline lies 45 seconds on. No backoff.
+
+    The command states no start position, so the whole travel counts:
+    10 + 20 * 1.5 + 5 seconds. At the deadline it is sent again at once.
+    """
     controls = Controls(
         dry_run=False,
         window_level=ControlLevel(paused=paused, mode=OperatingMode.OFF),
@@ -303,10 +307,10 @@ def test_fire_is_sent_again_as_soon_as_the_window_of_an_unfinished_command_has_c
         world = snapshot(sources=fire(), position=40, state=state, controls=controls)
         return engine().recompute(world).gate
 
-    assert gate(19.9) == GateOutcome.suppress(
+    assert gate(44.9) == GateOutcome.suppress(
         GateRule.MOVEMENT_IN_FLIGHT, ReasonCode.DUPLICATE_COMMAND
     )
-    assert gate(20) == GateOutcome.send()
+    assert gate(45) == GateOutcome.send()
     assert gate(3600) == GateOutcome.send()
 
 
