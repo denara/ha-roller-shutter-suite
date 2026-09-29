@@ -80,7 +80,7 @@ from .const import (
     STARTUP_GRACE,
     status_signal,
 )
-from .core.arbiter import member_expectation_end
+from .core.arbiter import member_expectation_end, record_sent_commands
 from .core.engine import Engine, build_arbiter
 from .core.model import (
     AnySourceValue,
@@ -89,10 +89,8 @@ from .core.model import (
     Decision,
     EvaluationFault,
     FunctionId,
-    GateKind,
     MemberCommand,
     OwnCommand,
-    Position,
     ScheduleSettings,
     SunAlmanac,
     WindowConfig,
@@ -527,15 +525,19 @@ class WindowController:
     ) -> tuple[MemberCommand, ...]:
         """Hand a "send" outcome to the actuator port, after the second dry-run check.
 
-        ``snapshot.state`` is the state the decision left behind. Every member
-        with a target gets a fresh command identifier. The core records the
-        send (``Engine.state_after_send``, the one recorder of own commands),
-        and it is called right after each member's call returned, with the
-        identifiers of every member sent so far: if the actuator raises for a
-        later member, the commands that were given stay recorded and are not
-        sent a second time by the next recompute.
+        ``snapshot.state`` is the state the decision left behind. The core
+        names the members a send addresses (``Decision.addressed_targets``):
+        the available members that do not stand at their target, and a member
+        without position feedback. The controller filters nothing itself.
+        Every addressed member gets a fresh command identifier. The core
+        records the send (``record_sent_commands``, the one recorder of own
+        commands, which ``Engine.state_after_send`` is too), and it is called
+        right after each member's call returned,
+        with the identifiers of every member sent so far: if the actuator
+        raises for a later member, the commands that were given stay recorded
+        and are not sent a second time by the next recompute.
         """
-        targets = _targets_to_send(self.config, snapshot, decision)
+        targets = decision.addressed_targets
         if not targets or self.actuator is None:
             return ()
         if snapshot.controls.dry_run and not fire_passed_failed_dry_run(decision):
@@ -550,7 +552,9 @@ class WindowController:
             command_id = uuid4().hex
             self.actuator.move_to(command_id, member_id, position, decision=decision)
             command_ids[member_id] = command_id
-            self._store(Engine.state_after_send(snapshot, decision, command_ids))
+            self._store(
+                record_sent_commands(self.config, snapshot, decision, command_ids)
+            )
         return tuple(
             MemberCommand(member.member_id, member.last_own_command)
             for member in self.state.members
@@ -670,53 +674,6 @@ class WindowController:
                 "Window %s: the recompute runs without a fault again", self.title
             )
         self._logged_faults = current
-
-
-def _targets_to_send(
-    config: WindowConfig, snapshot: WorldSnapshot, decision: Decision
-) -> tuple[tuple[str, Position], ...]:
-    """Return the member targets of a "send" outcome; none for any other outcome.
-
-    A send commands only the members that are available (section 9 of the
-    specification: the others are commanded, the unavailable one is not)
-    and that do not stand at their target within their tolerance. A member
-    that reports no position cannot be judged and is commanded. A member
-    that is not commanded gets no record; the core leaves a member without a
-    command identifier alone. The duplicate part of the gate rule "movement
-    in flight" judges the same members, so a member that already stands
-    where it should does not make a pending command look like a new one.
-    Until the core names the commanded members itself (block C06), this
-    filter lives here.
-    """
-    if (
-        decision.gate is None
-        or decision.gate.kind is not GateKind.SEND
-        or decision.winning_wish is None
-    ):
-        return ()
-    reported = {
-        member.member_id: member.observation.position
-        for member in snapshot.observation.members
-        if member.observation.available
-    }
-    tolerances = {
-        member.member_id: member.capabilities.tolerance for member in config.members
-    }
-    return tuple(
-        (target.member_id, target.position)
-        for target in decision.targets
-        if target.position is not None
-        and target.member_id in reported
-        and not _stands_at(
-            reported[target.member_id],
-            target.position,
-            tolerances.get(target.member_id, 0),
-        )
-    )
-
-
-def _stands_at(position: Position | None, target: Position, tolerance: int) -> bool:
-    return position is not None and abs(position.value - target.value) <= tolerance
 
 
 def _next_wake_up(

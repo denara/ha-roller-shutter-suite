@@ -28,10 +28,12 @@ from custom_components.roller_shutter_suite.core.model import (
     GateRule,
     MemberCommand,
     MemberTarget,
+    MemberTracking,
     OwnCommand,
     Position,
     PositionOwner,
     SimulatedState,
+    TrackerPhase,
     TravelDirection,
     WindowState,
     WishClass,
@@ -117,6 +119,7 @@ def remember_would_be_send(snapshot: WorldSnapshot, decision: Decision) -> Windo
                 time=snapshot.time,
                 wish_class=wish_class,
                 reason=decision.winning_wish.reason,
+                start_position=reported.get(member_id),
             ),
         )
     clock = (
@@ -135,8 +138,10 @@ def remember_would_be_send(snapshot: WorldSnapshot, decision: Decision) -> Windo
 def arm(state: WindowState) -> WindowState:
     """Return the state a window starts with when it is armed.
 
-    The simulated state is discarded, and the window starts clean: no dam, and
-    nobody is known to own the position.
+    The simulated state is discarded, and the window starts clean: no dam,
+    nobody is known to own the position, and the tracker follows no movement
+    (a movement of the other controller that is still under way is not taken
+    for a person once the window is armed). What was last observed stays.
     """
     return replace(
         state,
@@ -144,4 +149,12 @@ def arm(state: WindowState) -> WindowState:
         manual_override=None,
         person_at_window=None,
         owner=PositionOwner.UNKNOWN,
+        members=tuple(
+            replace(
+                member, tracking=MemberTracking(before_gap=member.tracking.before_gap)
+            )
+            if member.tracking.phase is not TrackerPhase.IDLE
+            else member
+            for member in state.members
+        ),
     )

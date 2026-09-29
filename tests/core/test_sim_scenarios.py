@@ -13,17 +13,24 @@ from typing import Final
 
 import pytest
 
-from custom_components.roller_shutter_suite.core.arbiter import member_expectation_end
+from custom_components.roller_shutter_suite.core.arbiter import (
+    END_ALLOWANCE,
+    START_ALLOWANCE,
+    TRAVEL_SLACK,
+    member_expectation_end,
+)
 from custom_components.roller_shutter_suite.core.model import (
     FULLY_CLOSED,
     FULLY_OPEN,
     GateRule,
     OperatingMode,
+    OverrideEndRule,
+    Position,
 )
 from custom_components.roller_shutter_suite.core.reasons import ReasonCode
 from tests.sim.assertions import (
-    ScenarioAssertionError,
     assert_at_most_movements_per_day,
+    assert_dams_follow_foreign_movements,
     assert_min_interval,
     assert_no_command_loop,
     assert_no_commands,
@@ -31,7 +38,7 @@ from tests.sim.assertions import (
     assert_schedule_commands_inside_clamps,
     movements_per_day,
 )
-from tests.sim.cover import CoverProfile, SimulatedCover
+from tests.sim.cover import CoverProfile, Reporting, SimulatedCover
 from tests.sim.record import EntryKind, Record
 from tests.sim.runner import Simulation
 from tests.sim.scenarios import (
@@ -230,6 +237,56 @@ def test_the_year_crosses_both_clock_changes(
         assert opened[0].at.astimezone(record.zone).time() == time(7, 0)
 
 
+def test_in_the_year_no_own_movement_ever_arms_a_dam(
+    year_run: tuple[Simulation, float],
+) -> None:
+    """Every detection follows the person's movement at noon; nothing else raises one."""
+    simulation, _ = year_run
+    record = simulation.record
+
+    assert_dams_follow_foreign_movements(record)
+    codes = {entry.event.code for entry in record.events() if entry.event is not None}
+    assert codes == {
+        ReasonCode.MANUAL_DETECTED,
+        ReasonCode.MANUAL_DETECTED_MEMBER,
+        ReasonCode.OVERRIDE_STARTED,
+        ReasonCode.OVERRIDE_ENDED,
+    }
+
+
+def test_in_the_year_every_hand_movement_arms_the_window_once_until_the_evening(
+    year_run: tuple[Simulation, float],
+) -> None:
+    """One override per window and day, ended at the evening boundary.
+
+    The window without position feedback has no manual detection (section
+    8.1); the windows with several members are armed once per movement of
+    the window (decision 8).
+    """
+    simulation, _ = year_run
+    record = simulation.record
+    for window in simulation.windows:
+        started = record.events(window.window_id, ReasonCode.OVERRIDE_STARTED)
+        ended = record.events(window.window_id, ReasonCode.OVERRIDE_ENDED)
+        if window.window_id == "window_6":
+            assert started == []
+            continue
+        assert len(started) == DAYS_OF_THE_YEAR
+        assert len(ended) == DAYS_OF_THE_YEAR
+        for start, end in zip(started, ended, strict=True):
+            assert record.local_date(start) == record.local_date(end)
+            assert start.at.astimezone(record.zone).time() < time(12, 5)
+            evening = [
+                entry
+                for entry in record.sends(window.window_id)
+                if entry.at == end.at
+                and entry.decision is not None
+                and entry.decision.winning_wish is not None
+                and entry.decision.winning_wish.reason is ReasonCode.SCHEDULE_NIGHT
+            ]
+            assert evening, end.at
+
+
 def test_every_profile_is_exercised_in_the_year(
     year_run: tuple[Simulation, float],
 ) -> None:
@@ -316,11 +373,15 @@ def test_a_restart_in_mid_movement_does_not_send_again() -> None:
 def test_the_runner_wakes_a_window_up_at_the_deadline_of_the_gate() -> None:
     """The wake-up is the core's own deadline, report delay included, and nothing more.
 
-    The cover settles short of the target, so the target is never reached,
-    and its end stop takes longer than the travel time the user states, so
-    its last report comes after the deadline: the recompute at the deadline
-    is the runner's wake-up alone. Before it the gate reads the command as
-    pending; at the deadline itself it does not any more (``time < end``).
+    The deadline is the formula of section 8.3: report delay, start
+    allowance, the travel time times the share of the travel times the
+    slack, end allowance. The cover reports its position at the end only and
+    settles short of the target, so the target is never reached, and its end
+    stop takes much longer than the travel time the user states, so its last
+    report comes after the deadline: the recompute at the deadline is the
+    runner's wake-up alone.
+    Before it the gate reads the command as pending; at the deadline itself
+    it does not any more (``time < end``).
     """
     start = local(MONDAY, time(6, 55))
     world = World(start, seed=1, script=calm_sources(start))
@@ -331,8 +392,9 @@ def test_the_runner_wakes_a_window_up_at_the_deadline_of_the_gate() -> None:
                 "late_and_short",
                 position_source=PROFILES["settles_off"].position_source,
                 settle_offset_up=-6,
-                end_stop_extra=timedelta(seconds=4),
+                end_stop_extra=timedelta(seconds=30),
                 report_delay=REPORT_DELAY,
+                reporting=Reporting.END_ONLY,
             ),
             position=0,
             available_since=start,
@@ -348,7 +410,16 @@ def test_the_runner_wakes_a_window_up_at_the_deadline_of_the_gate() -> None:
     deadline = member_expectation_end(member, command)
 
     assert member.capabilities.report_delay == REPORT_DELAY
-    assert deadline == command.time + member.capabilities.travel_time_up + REPORT_DELAY
+    assert command.share_of_travel == 1.0
+    assert deadline == (
+        command.time
+        + REPORT_DELAY
+        + START_ALLOWANCE
+        + member.capabilities.travel_time_up * TRAVEL_SLACK
+        + END_ALLOWANCE
+    )
+    last_report = command.time + timedelta(seconds=20 + 30) + REPORT_DELAY
+    assert last_report > deadline
     assert deadline in window.wake_ups
     simulation.run(deadline + timedelta(seconds=30))
     reasons = {
@@ -362,6 +433,78 @@ def test_the_runner_wakes_a_window_up_at_the_deadline_of_the_gate() -> None:
     before = [reason for at, reason in reasons.items() if at < deadline]
     assert before
     assert all(reason is ReasonCode.DUPLICATE_COMMAND for reason in before)
+
+
+def test_the_runner_commands_exactly_the_members_the_decision_addresses() -> None:
+    """The core names the commanded members; the runner filters nothing of its own.
+
+    The left member already stands open at the morning trigger, the right one
+    is closed: the decision addresses the right one, and only it is commanded.
+    """
+    start = local(MONDAY, time(7, 0))
+    world = World(start, seed=1, script=calm_sources(start))
+    world.add_cover(
+        SimulatedCover("cover.example_left", PROFILES["live"], available_since=start)
+    )
+    world.add_cover(
+        SimulatedCover(
+            "cover.example_right", PROFILES["live"], position=0, available_since=start
+        )
+    )
+    simulation = Simulation(world)
+    simulation.add_window(
+        world.window(WINDOW, "cover.example_left", "cover.example_right"), ARMED
+    )
+    record = simulation.run(local(MONDAY, time(7, 1)))
+
+    (send,) = record.sends(WINDOW)
+    assert send.decision is not None
+    assert send.decision.addressed == ("cover.example_right",)
+    assert [entry.member_id for entry in record.commands(WINDOW)] == [
+        "cover.example_right"
+    ]
+    assert world.cover("cover.example_left").commands == []
+
+
+def test_a_member_that_returns_completes_the_command_it_missed() -> None:
+    """The right member is away at the morning opening and comes back five minutes later.
+
+    Its return completes the morning command: it alone is commanded, as the
+    schedule's day movement, inside the minimum interval, and the motor
+    protection clock stays at the morning opening.
+    """
+    start = local(MONDAY, time(6, 50))
+    world = World(start, seed=1, script=calm_sources(start))
+    for member in ("cover.example_left", "cover.example_right"):
+        world.add_cover(
+            SimulatedCover(member, PROFILES["live"], position=0, available_since=start)
+        )
+    simulation = Simulation(world)
+    simulation.add_window(
+        world.window(WINDOW, "cover.example_left", "cover.example_right"), ARMED
+    )
+    simulation.at(
+        local(MONDAY, time(6, 59)),
+        "the right member drops out",
+        lambda sim: sim.dropout(WINDOW, "cover.example_right", timedelta(minutes=6)),
+    )
+    record = simulation.run(local(MONDAY, time(7, 10)))
+
+    commands = [
+        (entry.at.astimezone(record.zone).time(), entry.member_id, entry.summary)
+        for entry in record.commands(WINDOW)
+    ]
+    assert commands == [
+        (time(7, 0), "cover.example_left", "send 100 (comfort, schedule_day)"),
+        (time(7, 5), "cover.example_right", "send 100 (comfort, schedule_day)"),
+    ]
+    completion = record.sends(WINDOW)[1].decision
+    assert completion is not None
+    assert completion.completes_command
+    assert completion.addressed == ("cover.example_right",)
+    assert simulation.window(WINDOW).state.last_comfort_movement == local(
+        MONDAY, time(7, 0)
+    )
 
 
 # --- Dry-run and maintenance lock ----------------------------------------------------------
@@ -561,8 +704,16 @@ def test_manual_movements_are_observed_and_the_run_stays_clean() -> None:
         and not e.observation.available
     ]
     assert len(gone) == 1
-    # The tracker of a later block arms dams; today nothing does.
+    # The tracker (block C06) takes the left member for a person at its first
+    # transit state: the override holds the window until the evening
+    # boundary, where it ends.
+    (started,) = record.events(WINDOW, ReasonCode.OVERRIDE_STARTED)
+    assert local(MONDAY, time(12, 0)) < started.at < stop
+    (ended,) = record.events(WINDOW, ReasonCode.OVERRIDE_ENDED)
+    assert ended.at.astimezone(record.zone).time() > time(19, 0)
     assert simulation.window(WINDOW).state.manual_override is None
+    # The dropout of the right member ended with the same observation.
+    assert not record.events(WINDOW, ReasonCode.MOVED_DURING_DOWNTIME)
 
 
 def test_a_calculated_position_reports_the_target_while_the_curtain_is_blocked() -> (
@@ -599,14 +750,21 @@ def test_a_calculated_position_reports_the_target_while_the_curtain_is_blocked()
 # --- The assertions catch a broken run ---------------------------------------------------------
 
 
-def test_a_cover_that_settles_beyond_its_tolerance_is_sent_every_interval() -> None:
-    """A member that settles 6 short of the target is sent again every ten minutes.
+def test_a_cover_that_settles_beyond_its_tolerance_is_taken_for_an_intervention() -> (
+    None
+):
+    """A measured member that settles 6 short of the target: the tracker says "a person".
 
-    Command verification and the backoff (N1) are not built yet, so this is
-    what the core does today with such a cover: the target is never reached,
-    the wish is not fresh, and motor protection lets the command through once
-    per minimum interval. The assertion on the movements per day finds it,
-    and its message shows the timeline around the third movement.
+    This was the pin test of block C05
+    (``test_a_cover_that_settles_beyond_its_tolerance_is_sent_every_interval``):
+    without a tracker the target was never reached and the command went out
+    again every minimum interval. The tracker changes that outcome, by the
+    rule of section 8.3: a measured position has a tolerance of 3, and a
+    movement that ends outside it was stopped or redirected by somebody.
+    The movement is external, the manual override holds the window until the
+    next part of the day, and nothing is sent again. The command loop is
+    gone; a cover that really settles this far off needs a larger tolerance,
+    which its user states.
     """
     start = local(MONDAY, time(6, 55))
     world = World(start, seed=1, script=calm_sources(start))
@@ -624,18 +782,19 @@ def test_a_cover_that_settles_beyond_its_tolerance_is_sent_every_interval() -> N
     )
     simulation = Simulation(world)
     simulation.add_window(world.window(WINDOW, MEMBER), ARMED)
-    simulation.run(start + timedelta(hours=1))
+    record = simulation.run(start + timedelta(hours=1))
 
-    with pytest.raises(ScenarioAssertionError) as caught:
-        assert_at_most_movements_per_day(simulation.record, 2)
-    message = str(caught.value)
-    assert "more than 2" in message
-    assert "timeline around that moment" in message
-    assert "send 100" in message
-    assert caught.value.moment.astimezone(simulation.record.zone).time() > time(7, 15)
-    sends = simulation.record.sends(WINDOW)
-    for earlier, later in itertools.pairwise(sends):
-        assert later.at - earlier.at >= timedelta(minutes=10)
+    assert_at_most_movements_per_day(record, 1)
+    (send,) = record.sends(WINDOW)
+    assert send.at == local(MONDAY, time(7, 0))
+    detected = record.events(WINDOW, ReasonCode.MANUAL_DETECTED_MEMBER)
+    assert len(detected) == 1
+    assert detected[0].event is not None
+    assert detected[0].event.position == Position(94)
+    override = simulation.window(WINDOW).state.manual_override
+    assert override is not None
+    assert override.end_rule is OverrideEndRule.NEXT_PART_OF_DAY
+    assert override.remembered_position == Position(94)
 
 
 def test_every_named_scenario_runs() -> None:

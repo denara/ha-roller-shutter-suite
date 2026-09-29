@@ -84,6 +84,8 @@ For a rule of the domain core:
 
 For a situation of the arbiter (which layer wins, what a constraint limits, what the gate answers), `tests/core/arbiter_kit.py` has the building blocks: a window, snapshots, controls, and stub layers that answer from plain sources of the snapshot. `tests/core/test_arbiter_situations.py` holds the reference situations of the design specification as a table; a new situation is a new row.
 
+For the movement tracker and the dams, `tests/core/tracking_kit.py` has a driver that walks one window through reports and time the way the runtime does (`observe` for every report, `elapse` before every recompute); see [The movement tracker and the dams](tracking.md).
+
 For a whole day or a whole year of one or several windows against a synthetic world (scripted sources, simulated covers with behaviour profiles, restarts, injected events), the time-lapse simulation under `tests/sim/` is the harness; its scenario tests stand in `tests/core/test_sim_scenarios.py`, and [The time-lapse simulation](simulation.md) explains how to write a scenario and how to read its timeline.
 
 For behavior of the Home Assistant layer:

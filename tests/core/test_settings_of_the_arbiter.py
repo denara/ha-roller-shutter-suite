@@ -15,6 +15,7 @@ from custom_components.roller_shutter_suite.core.model import (
     FrostSettings,
     FunctionId,
     MotorProtectionSettings,
+    OverrideEndRule,
     Position,
 )
 from custom_components.roller_shutter_suite.core.settings import (
@@ -42,6 +43,15 @@ EXPECTED = {
     "motor_min_interval": (SettingKind.DURATION, FunctionId.MOTOR_PROTECTION),
     "reevaluate_after": (SettingKind.DURATION, FunctionId.COMMAND_VERIFICATION),
     "stagger_gap": (SettingKind.DURATION, FunctionId.MOTOR_PROTECTION),
+    "comfort_movements_threshold": (SettingKind.NUMBER, FunctionId.MOTOR_PROTECTION),
+    "override_end_rule": (SettingKind.ENUMERATION, FunctionId.MANUAL_OVERRIDE),
+    "override_minutes": (SettingKind.DURATION, FunctionId.MANUAL_OVERRIDE),
+    "override_presence_source": (
+        SettingKind.OPTIONAL_REFERENCE,
+        FunctionId.MANUAL_OVERRIDE,
+    ),
+    "override_room_empty_after": (SettingKind.DURATION, FunctionId.MANUAL_OVERRIDE),
+    "person_at_window_duration": (SettingKind.DURATION, FunctionId.MANUAL_OVERRIDE),
     "pause_source": (SettingKind.OPTIONAL_REFERENCE, FunctionId.PAUSE),
 }
 
@@ -204,6 +214,15 @@ FAULT_VALUES = {
     "motor_min_interval": timedelta(minutes=10),
     "reevaluate_after": timedelta(minutes=5),
     "stagger_gap": timedelta(seconds=2),
+    "comfort_movements_threshold": 40,
+    # Ruling 4 of the project owner for block C06: the default end rule and
+    # the default durations, so that a faulty setting never lets the
+    # automation overrule a person earlier than the default would.
+    "override_end_rule": OverrideEndRule.NEXT_PART_OF_DAY,
+    "override_minutes": timedelta(minutes=60),
+    "override_presence_source": BLIND_SOURCE,
+    "override_room_empty_after": timedelta(minutes=30),
+    "person_at_window_duration": timedelta(minutes=15),
     "pause_source": BLIND_SOURCE,
 }
 """Confirmed by the project owner; the reasons stand at the entries of the registry.
@@ -216,7 +235,7 @@ without a value pauses its level, and a faulty stored reference is blind.
 def test_fault_values_are_the_confirmed_ones_and_stated_for_exactly_these_settings() -> (
     None
 ):
-    """Three differ from the default: two blind sources, and "hold closed" on."""
+    """Four differ from the default: three blind sources, and "hold closed" on."""
     stated = {
         definition.key: definition.fault_value
         for definition in WINDOW_SETTINGS.definitions
@@ -231,6 +250,7 @@ def test_fault_values_are_the_confirmed_ones_and_stated_for_exactly_these_settin
     assert {key for key, value in stated.items() if value != defaults[key]} == {
         "frost_source",
         "frost_hold_closed",
+        "override_presence_source",
         "pause_source",
     }
 

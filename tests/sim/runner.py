@@ -7,17 +7,25 @@ expectation window. The runner does exactly that, and nothing on a fixed
 grid: time jumps from one due instant to the next, which is what makes a
 year run in seconds.
 
+Every report of a member goes to the movement tracker of the core
+(``Engine.observe``) with the decision of the last recompute; the core drops
+a report that changes nothing, and what it raised is recorded.
+
 One recompute, as the runtime performs it:
 
 1. build the world snapshot: the time of the clock, the sun position, every
    source, the members as last observed, the persisted state, the controls,
    the almanac (built once per local date) and the seed;
-2. ``engine.recompute`` gives the decision;
-3. the state after the decision: what the schedule remembers, what a dry-run
+2. ``engine.elapse`` judges the settle times and deadlines that have passed
+   and ends or turns the dams whose time has come;
+3. ``engine.recompute`` gives the decision;
+4. the state after the decision: what the schedule remembers, what a dry-run
    or a take-over leaves behind, and, if the gate said "send", the commands
-   handed to the actuator and written down (``Engine.state_after_send``);
-4. the state is persisted if it changed;
-5. the next wake-ups are planned from the decision and the schedule.
+   handed to the actuator and written down (``Engine.after_send``);
+5. the state is persisted if it changed;
+6. the next wake-ups are planned from the decision, the schedule and
+   ``Engine.wake_ups``, the one source of every other instant: the runner
+   computes no time of its own.
 
 A **restart** throws the engines away, reads every window state back from
 the storage and continues; the covers keep their state, as real covers do.
@@ -29,10 +37,7 @@ from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime, timedelta
 
-from custom_components.roller_shutter_suite.core.arbiter import (
-    LayerRegistration,
-    member_expectation_end,
-)
+from custom_components.roller_shutter_suite.core.arbiter import LayerRegistration
 from custom_components.roller_shutter_suite.core.engine import Engine, build_arbiter
 from custom_components.roller_shutter_suite.core.model import (
     Controls,
@@ -41,8 +46,9 @@ from custom_components.roller_shutter_suite.core.model import (
     GateKind,
     MemberObservation,
     Observation,
-    OwnCommand,
     SunAlmanac,
+    TrackerEvent,
+    Transition,
     WindowConfig,
     WindowObservation,
     WindowState,
@@ -85,6 +91,8 @@ class SimWindow:
         self.state = WindowState()
         self.observations: dict[str, Observation] = {}
         self.wake_ups: set[datetime] = set()
+        self.last_decision: Decision | None = None
+        """The decision of the last recompute; the tracker judges by it."""
         self._almanac: tuple[date, SunAlmanac] | None = None
 
     @property
@@ -190,19 +198,45 @@ class Simulation:
         self._recompute(window)
 
     def move_by_hand(
-        self, window_id: str, target: int, *, member_id: str | None = None
+        self,
+        window_id: str,
+        target: int,
+        *,
+        member_id: str | None = None,
+        user_id: str | None = None,
     ) -> None:
-        """Move a window, or one of its members, by hand at its own control."""
+        """Move a window, or one of its members, by hand at its own control.
+
+        ``user_id`` stands for a movement from a dashboard: the first reports
+        carry the user in their context, as Home Assistant's do.
+        """
         window = self._windows[window_id]
         members = window.member_ids if member_id is None else (member_id,)
         for member in members:
-            self.world.cover(member).move_to(target, self.now, by="user")
+            self.world.cover(member).move_to(
+                target, self.now, by="user", user_id=user_id
+            )
             self._note(
                 EntryKind.EVENT,
                 f"moved by hand to {target}",
                 window_id=window_id,
                 member_id=member,
+                foreign=True,
             )
+
+    def resume(self, window_id: str) -> None:
+        """Press "resume automation" for a window: the manual override ends."""
+        window = self._windows[window_id]
+        self._note(EntryKind.EVENT, "resume automation", window_id=window_id)
+        self._apply(window, window.engine.resume(window.state))
+        self._recompute(window)
+
+    def sleep_mode_switched_on(self, window_id: str) -> None:
+        """Switch sleep mode on for a window: the manual override ends."""
+        window = self._windows[window_id]
+        self._note(EntryKind.EVENT, "sleep mode switched on", window_id=window_id)
+        self._apply(window, window.engine.sleep_mode_switched_on(window.state))
+        self._recompute(window)
 
     def other_controller_moves(self, window_id: str, target: int) -> None:
         """Let a scripted second controller move the same covers."""
@@ -214,13 +248,18 @@ class Simulation:
                 f"another controller sends {target}",
                 window_id=window_id,
                 member_id=member,
+                foreign=True,
             )
 
     def stop_by_hand(self, window_id: str, member_id: str) -> None:
         """Stop a member in mid-travel, by hand."""
         self.world.cover(member_id).stop(self.now)
         self._note(
-            EntryKind.EVENT, "stopped by hand", window_id=window_id, member_id=member_id
+            EntryKind.EVENT,
+            "stopped by hand",
+            window_id=window_id,
+            member_id=member_id,
+            foreign=True,
         )
 
     def dropout(self, window_id: str, member_id: str, duration: timedelta) -> None:
@@ -231,6 +270,7 @@ class Simulation:
             f"connectivity dropout for {duration}",
             window_id=window_id,
             member_id=member_id,
+            foreign=True,
         )
 
     def restart(self) -> None:
@@ -240,12 +280,10 @@ class Simulation:
         for window in self._windows.values():
             window.engine = self._engine(window.config)
             window.wake_ups.clear()
+            window.last_decision = None
             self._load(window)
             # The entities are read once at start, as the runtime reads them.
-            window.observations = {
-                member_id: self.world.cover(member_id).current_observation()
-                for member_id in window.member_ids
-            }
+            self._read_members(window)
         for window in self._windows.values():
             if window.observation().available:
                 self._recompute(window)
@@ -288,11 +326,31 @@ class Simulation:
         for window in self._windows.values():
             if not window.observations:
                 for member_id in window.member_ids:
-                    cover = self.world.cover(member_id)
-                    cover.reports_due(self.now)
-                    window.observations[member_id] = cover.current_observation()
+                    self.world.cover(member_id).reports_due(self.now)
+                self._read_members(window)
                 if window.observation().available:
                     self._recompute(window)
+
+    def _read_members(self, window: SimWindow) -> None:
+        """Read the state of every member once, and hand it to the tracker.
+
+        What the tracker already knows (after a restart, the persisted last
+        observation) changes nothing; a first observation is only recorded.
+        """
+        for member_id in window.member_ids:
+            observation = self.world.cover(member_id).current_observation()
+            window.observations[member_id] = observation
+            self._apply(
+                window,
+                window.engine.observe(
+                    window.state,
+                    member_id,
+                    observation,
+                    self.now,
+                    window.last_decision,
+                    dry_run=window.controls.dry_run,
+                ),
+            )
 
     def _next_due(self) -> datetime | None:
         now = self.now.astimezone(UTC)
@@ -310,13 +368,27 @@ class Simulation:
         return min(candidates, default=None)
 
     def _deliver_reports(self, window: SimWindow) -> bool:
-        """Normalize the reports of the members; say whether an observation changed."""
+        """Hand the reports of the members to the tracker; say whether one changed.
+
+        The core normalizes: a report whose observation changes nothing
+        (a repeated write, a rewrite with a new change time) comes back as
+        the same state, and the runner counts it as dropped.
+        """
         changed = False
         for member_id in window.member_ids:
             cover = self.world.cover(member_id)
             for report in cover.reports_due(self.now):
                 observation = report.observation()
-                if observation == window.observations.get(member_id):
+                transition = window.engine.observe(
+                    window.state,
+                    member_id,
+                    observation,
+                    report.at,
+                    window.last_decision,
+                    dry_run=window.controls.dry_run,
+                    user_id=report.user_id,
+                )
+                if transition.state is window.state:
                     self.record.dropped_reports += 1
                     continue
                 window.observations[member_id] = observation
@@ -334,7 +406,27 @@ class Simulation:
                         observation=observation,
                     )
                 )
+                self._apply(window, transition, at=report.at)
         return changed
+
+    def _apply(
+        self, window: SimWindow, transition: Transition, *, at: datetime | None = None
+    ) -> None:
+        """Take the state of a transition, persist it, and record its events."""
+        for event in transition.events:
+            self.record.add(
+                Entry(
+                    self.now if at is None else at,
+                    EntryKind.TRACKER,
+                    _event_text(event),
+                    window_id=window.window_id,
+                    member_id=event.member_id,
+                    event=event,
+                )
+            )
+        if transition.state is not window.state and transition.state != window.state:
+            window.state = transition.state
+            self._persist(window)
 
     # --- One recompute -------------------------------------------------------------------
 
@@ -364,7 +456,10 @@ class Simulation:
     def _recompute(self, window: SimWindow) -> Decision:
         self.recomputes += 1
         snapshot = self._snapshot(window)
+        self._apply(window, window.engine.elapse(snapshot, window.last_decision))
+        snapshot = replace(snapshot, state=window.state)
         decision = window.engine.recompute(snapshot)
+        window.last_decision = decision
         state = snapshot.state
         wake_ups: set[datetime] = set()
         schedule = self._schedule(window, snapshot)
@@ -402,8 +497,10 @@ class Simulation:
         if state != window.state:
             window.state = state
             self._persist(window)
-        wake_ups.update(self._expectation_ends(window))
-        now = self.now.astimezone(UTC)
+        now = self.now
+        wake_ups.update(
+            window.engine.wake_ups(window.state, now, dry_run=window.controls.dry_run)
+        )
         window.wake_ups = {wake.astimezone(UTC) for wake in wake_ups if wake > now}
         return decision
 
@@ -433,56 +530,45 @@ class Simulation:
     ) -> WindowState:
         if window.controls.dry_run:
             raise AssertionError("the runner never sends for a window in dry-run")
-        wish = decision.winning_wish
-        assert wish is not None
         command_ids: dict[str, str] = {}
         stamp = self.now.astimezone(UTC).isoformat(timespec="milliseconds")
-        for target in decision.targets:
-            if target.position is None:
-                continue
-            command_id = f"{window.window_id}/{target.member_id}/{stamp}"
-            self.world.actuator.move_to(command_id, target.member_id, target.position)
-            command_ids[target.member_id] = command_id
+        # The core names the members a send addresses; the runner filters
+        # nothing of its own, exactly as the runtime.
+        for member_id, position in decision.addressed_targets:
+            command_id = f"{window.window_id}/{member_id}/{stamp}"
+            self.world.actuator.move_to(command_id, member_id, position)
+            command_ids[member_id] = command_id
+        sent = window.engine.after_send(snapshot, decision, command_ids)
+        state = sent.state
+        for event in sent.events:
+            self.record.add(
+                Entry(
+                    self.now,
+                    EntryKind.TRACKER,
+                    _event_text(event),
+                    window_id=window.window_id,
+                    event=event,
+                )
+            )
+        recorded = {
+            member.member_id: member.last_own_command for member in state.members
+        }
+        for member_id, position in decision.addressed_targets:
+            command = recorded[member_id]
+            assert command is not None
             self.record.add(
                 Entry(
                     self.now,
                     EntryKind.COMMAND,
-                    f"send {target.position.value} ({wish.wish_class.value}, {wish.reason.value})",
+                    f"send {position.value} "
+                    f"({command.wish_class.value}, {command.reason.value})",
                     window_id=window.window_id,
-                    member_id=target.member_id,
-                    target=target.position,
-                    wish_class=wish.wish_class,
+                    member_id=member_id,
+                    target=position,
+                    wish_class=command.wish_class,
                 )
             )
-        return window.engine.state_after_send(snapshot, decision, command_ids)
-
-    def _expectation_ends(self, window: SimWindow) -> set[datetime]:
-        """Return the ends of the expectation windows of the pending commands.
-
-        The gate reads them from the state; the runner wakes the window up at
-        each, so a command that the cover did not answer is judged again. For
-        a window in dry-run the simulated commands count. The end is the one
-        the gate computes, ``member_expectation_end`` of the core, and the
-        runner adds nothing of its own: the gate counts a command as pending
-        while the time is before the end, so at the end itself it is closed.
-        """
-        state = window.state
-        commands: dict[str, OwnCommand] = (
-            {c.member_id: c.command for c in state.simulated.commands}
-            if window.controls.dry_run and state.simulated is not None
-            else {
-                m.member_id: m.last_own_command
-                for m in state.members
-                if m.last_own_command is not None
-            }
-        )
-        ends: set[datetime] = set()
-        for member in window.config.members:
-            command = commands.get(member.member_id)
-            if command is None:
-                continue
-            ends.add(member_expectation_end(member, command))
-        return ends
+        return state
 
     # --- Recording ---------------------------------------------------------------------
 
@@ -493,10 +579,30 @@ class Simulation:
         *,
         window_id: str | None = None,
         member_id: str | None = None,
+        foreign: bool = False,
     ) -> None:
         self.record.add(
-            Entry(self.now, kind, summary, window_id=window_id, member_id=member_id)
+            Entry(
+                self.now,
+                kind,
+                summary,
+                window_id=window_id,
+                member_id=member_id,
+                foreign=foreign,
+            )
         )
+
+
+def _event_text(event: TrackerEvent) -> str:
+    """Return one readable line for an event of the tracker or the dams."""
+    parts = [event.code.value]
+    if event.position is not None:
+        parts.append(f"at {event.position.value}")
+    if event.count is not None:
+        parts.append(f"count {event.count} of {event.threshold}")
+    if event.user_id is not None:
+        parts.append(f"(user {event.user_id})")
+    return " ".join(parts)
 
 
 def _controls_text(controls: Controls) -> str:

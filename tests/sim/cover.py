@@ -61,6 +61,8 @@ FULL_TRAVEL: Final = 100
 _HALFWAY: Final = 50
 _ATTRIBUTE_WRITE_BEFORE_REST: Final = timedelta(milliseconds=20)
 _REPEATED_WRITE_AFTER: Final = timedelta(milliseconds=10)
+_CONTEXT_CARRIED: Final = timedelta(seconds=5)
+"""How long the context of a state change carries its caller (section 8)."""
 
 
 @unique
@@ -156,11 +158,17 @@ class CoverProfile:
 
 @dataclass(frozen=True, slots=True)
 class RawReport:
-    """One state write of a cover entity, as the runtime would receive it."""
+    """One state write of a cover entity, as the runtime would receive it.
+
+    ``user_id`` is the user in the context of the write: the context of a
+    state change carries the caller for about five seconds (section 8), so
+    the first writes of a movement started from a dashboard carry it.
+    """
 
     at: datetime
     state: str
     position: int | None = None
+    user_id: str | None = None
 
     def __post_init__(self) -> None:
         """Keep the instant in UTC."""
@@ -300,12 +308,20 @@ class SimulatedCover:
 
     # --- Commands and events ------------------------------------------------------------
 
-    def move_to(self, target: int, at: datetime, by: str = "engine") -> None:
+    def move_to(
+        self,
+        target: int,
+        at: datetime,
+        by: str = "engine",
+        *,
+        user_id: str | None = None,
+    ) -> None:
         """Command the motor to a position; a running movement is reversed or retargeted.
 
         A cover without "set position" only knows open and close: a target
         from 50 upwards opens, a lower one closes. A target equal to the
-        counted position does nothing and writes nothing.
+        counted position does nothing and writes nothing. ``user_id`` is the
+        user a dashboard names in the context of the first writes.
         """
         if not 0 <= target <= FULL_TRAVEL:
             raise ValueError("a target is a percentage")
@@ -357,6 +373,13 @@ class SimulatedCover:
             up=up,
         )
         self._schedule_reports(self._motion)
+        if user_id is not None:
+            self._pending = [
+                replace(report, user_id=user_id)
+                if report.at <= at + _CONTEXT_CARRIED and report.state != "unavailable"
+                else report
+                for report in self._pending
+            ]
 
     def stop(self, at: datetime) -> None:
         """Stop the motor where it is; a cover without stop ignores it."""

@@ -9,9 +9,12 @@ import pytest
 from custom_components.roller_shutter_suite.core.arbiter import (
     ALL_CLASSES,
     BUILT_IN_GATE_RULES,
+    END_ALLOWANCE,
     MANUAL_OVERRIDE_DAM,
     MODE_TABLE,
     PERSON_AT_WINDOW_DAM,
+    START_ALLOWANCE,
+    TRAVEL_SLACK,
     Arbiter,
     ConstraintInput,
     ConstraintRegistration,
@@ -544,19 +547,49 @@ def test_the_same_target_as_the_pending_own_command_is_a_duplicate() -> None:
     )
 
 
-def test_the_deadline_is_the_travel_time_of_the_direction_plus_the_report_delay() -> (
-    None
-):
-    """One formula for the gate and for everything that waits for the same instant."""
+def test_the_deadline_follows_the_formula_of_the_specification() -> None:
+    """Section 8.3: report delay + 10 s + travel * share * 1.5 + 5 s.
+
+    One formula for the gate and for everything that waits for the same
+    instant. Without a start position the whole travel counts.
+    """
     config = window(profiles={LEFT: profile(report_delay=timedelta(seconds=60))})
     member = next(m for m in config.members if m.member_id == LEFT)
     down = _commanded(30, 5).last_own_command
     up = _commanded(80, 5, direction=TravelDirection.UP).last_own_command
     assert down is not None
     assert up is not None
+    partial = replace(down, start_position=Position(50))
 
-    assert member_expectation_end(member, down) == NOW + timedelta(seconds=-5 + 18 + 60)
-    assert member_expectation_end(member, up) == NOW + timedelta(seconds=-5 + 20 + 60)
+    assert member_expectation_end(member, down) == NOW + timedelta(
+        seconds=-5 + 60 + 10 + 18 * 1.5 + 5
+    )
+    assert member_expectation_end(member, up) == NOW + timedelta(
+        seconds=-5 + 60 + 10 + 20 * 1.5 + 5
+    )
+    # From 50 down to 30 is a fifth of the travel.
+    assert member_expectation_end(member, partial) == NOW + timedelta(
+        seconds=-5 + 60 + 10 + 18 * 0.2 * 1.5 + 5
+    )
+    assert timedelta(seconds=10) == START_ALLOWANCE
+    assert TRAVEL_SLACK == 1.5  # noqa: PLR2004 - the slack of section 8.3
+    assert timedelta(seconds=5) == END_ALLOWANCE
+
+
+def test_the_start_position_of_a_command_goes_through_plain_data() -> None:
+    """Optional within schema version 1: data without it is read as "not known"."""
+    command = _commanded(30, 5).last_own_command
+    assert command is not None
+    known = replace(command, start_position=Position(80))
+
+    assert OwnCommand.from_data(known.to_data()) == known
+    assert known.share_of_travel == 0.5  # noqa: PLR2004 - from 80 to 30
+    data = command.to_data()
+    del data["start_position"]
+    assert OwnCommand.from_data(data) == command
+    assert command.share_of_travel == 1.0
+    with pytest.raises(TypeError, match="start position"):
+        replace(command, start_position=80)  # type: ignore[arg-type]
 
 
 def test_another_target_waits_until_the_members_have_come_to_rest() -> None:
@@ -573,14 +606,14 @@ def test_another_target_waits_until_the_members_have_come_to_rest() -> None:
     assert gate == GateOutcome.defer(
         GateRule.MOVEMENT_IN_FLIGHT,
         ReasonCode.MOVEMENT_IN_FLIGHT,
-        reevaluate_no_later_than=NOW + timedelta(seconds=-5 + 18 + 60),
+        reevaluate_no_later_than=NOW + timedelta(seconds=-5 + 60 + 10 + 27 + 5),
     )
 
 
 def test_the_travel_time_of_a_command_follows_its_direction() -> None:
-    """Up takes 20 seconds here, down 18; afterwards the command is not pending."""
-    up = WindowState(members=(_commanded(100, 19, direction=TravelDirection.UP),))
-    down = WindowState(members=(_commanded(100, 19),))
+    """Up takes 20 seconds here, down 18: the deadlines lie 45 and 42 seconds on."""
+    up = WindowState(members=(_commanded(100, 43, direction=TravelDirection.UP),))
+    down = WindowState(members=(_commanded(100, 43),))
 
     def reason(state: WindowState) -> ReasonCode:
         return _gate(
@@ -619,7 +652,7 @@ def test_a_duplicate_needs_every_member_to_be_commanded_to_its_target() -> None:
     )
 
     assert gate.reason is ReasonCode.MOVEMENT_IN_FLIGHT
-    assert gate.reevaluate_no_later_than == NOW + timedelta(seconds=13)
+    assert gate.reevaluate_no_later_than == NOW + timedelta(seconds=-5 + 42)
 
 
 def test_protection_and_fire_retarget_at_once() -> None:
@@ -641,7 +674,7 @@ def test_a_pending_command_with_the_same_target_is_not_sent_again_for_any_class(
 ):
     """Protection during its own closing: a duplicate, until the window closes."""
     pending = WindowState(members=(_commanded(0, 5, wish_class=WishClass.PROTECTION),))
-    closed = WindowState(members=(_commanded(0, 18, wish_class=WishClass.PROTECTION),))
+    closed = WindowState(members=(_commanded(0, 42, wish_class=WishClass.PROTECTION),))
 
     def gate(state: WindowState) -> GateOutcome:
         return _gate(

@@ -1109,7 +1109,8 @@
           "actuator_no_reaction": "The cover did not react",
           "movement_not_finished": "The end of the movement was not reported in time",
           "member_unavailable": "One cover of the window is unavailable",
-          "button_refused_maintenance_lock": "Button press ignored because of the maintenance lock"
+          "button_refused_maintenance_lock": "Button press ignored because of the maintenance lock",
+          "comfort_movements_threshold": "More comfort movements today than the threshold"
         }
       },
       "target_position": {
@@ -1203,7 +1204,8 @@
               "actuator_no_reaction": "The cover did not react",
               "movement_not_finished": "The end of the movement was not reported in time",
               "member_unavailable": "One cover of the window is unavailable",
-              "button_refused_maintenance_lock": "Button press ignored because of the maintenance lock"
+              "button_refused_maintenance_lock": "Button press ignored because of the maintenance lock",
+              "comfort_movements_threshold": "More comfort movements today than the threshold"
             }
           }
         }

@@ -154,6 +154,7 @@ def test_every_function_with_settings_that_fall_back_has_a_situation() -> None:
         FunctionId.FROST,
         FunctionId.MOTOR_PROTECTION,
         FunctionId.COMMAND_VERIFICATION,
+        FunctionId.MANUAL_OVERRIDE,
         FunctionId.PAUSE,
     }
 

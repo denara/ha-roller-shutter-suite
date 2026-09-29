@@ -130,7 +130,8 @@
       "actuator_no_reaction": "Der Rollladen hat nicht reagiert",
       "movement_not_finished": "Das Ende der Bewegung wurde nicht rechtzeitig gemeldet",
       "member_unavailable": "Ein Rollladen des Fensters ist nicht verfügbar",
-      "button_refused_maintenance_lock": "Tastendruck wegen der Wartungssperre nicht beachtet"
+      "button_refused_maintenance_lock": "Tastendruck wegen der Wartungssperre nicht beachtet",
+      "comfort_movements_threshold": "Heute mehr Komfortfahrten als der Schwellwert"
     }
   },
   "config": {

@@ -4,6 +4,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import time, timedelta
 from enum import Enum, StrEnum, unique
+from functools import cached_property
 from typing import Final
 
 from ._validation import (
@@ -68,15 +69,41 @@ MIN_TOLERANCE: Final = 1
 DEFAULT_TOLERANCE_CALCULATED: Final = 2
 DEFAULT_TOLERANCE_MEASURED: Final = 3
 MAX_TOLERANCE: Final = 100
-"""The largest tolerance and minimum change of a position, in percent."""
+"""The largest minimum change of a position, in percent."""
+MAX_STATED_TOLERANCE: Final = 20
+"""The largest tolerance a user can state for a member, in percent.
+
+Wide enough for a cover that settles several percent off its target; any
+wider, and a movement by hand of that size would pass as the integration's
+own.
+"""
 _DEFAULT_FROST_POSITION: Final = Position(90)
 _DEFAULT_REEVALUATE_AFTER: Final = timedelta(minutes=5)
 _DEFAULT_MIN_INTERVAL: Final = timedelta(minutes=10)
+DEFAULT_OVERRIDE_MINUTES: Final = timedelta(minutes=60)
+DEFAULT_ROOM_EMPTY_AFTER: Final = timedelta(minutes=30)
+DEFAULT_PERSON_AT_WINDOW: Final = timedelta(minutes=15)
+"""The person-at-the-window dam ends by itself after 15 minutes *(decided)*."""
+DEFAULT_COMFORT_MOVEMENTS_THRESHOLD: Final = 40
+MIN_DAM_DURATION: Final = timedelta(minutes=1)
+MAX_DAM_DURATION: Final = timedelta(hours=24)
+"""The range of the durations of the dams: one minute to one day."""
+MAX_COMFORT_MOVEMENTS_THRESHOLD: Final = 1000
 DEFAULT_STAGGER_GAP: Final = timedelta(seconds=2)
 MAX_STAGGER_GAP: Final = timedelta(seconds=10)
 """Staggering between motors (E13): default gap and its upper end (section 6.5)."""
 _GEOMETRY: Final = ShadingGeometrySettings()
 """The built-in defaults of the measurements of shading stand at the view."""
+
+
+@unique
+class OverrideEndRule(StrEnum):
+    """How a manual override ends by itself (E2)."""
+
+    FIXED_MINUTES = "fixed_minutes"
+    SHADING_EPISODE_END = "shading_episode_end"
+    NEXT_PART_OF_DAY = "next_part_of_day"
+    ROOM_EMPTY = "room_empty"
 
 
 @unique
@@ -147,7 +174,8 @@ class CapabilityProfile:
     reported position with a target, or ``None``. :attr:`tolerance` is the one
     that applies: the stated one, else 2 for a calculated position (the report
     equals the command, so a deviation means an intervention) and 3 for a
-    measured one. The minimum is 1.
+    measured one. A stated tolerance lies within 1 and
+    :data:`MAX_STATED_TOLERANCE`.
 
     ``capabilities_known`` is ``False`` only when **nothing** is known about
     what the member can do, not even a last state: a member that was never
@@ -204,15 +232,27 @@ class CapabilityProfile:
                 self.stated_tolerance, int
             ):
                 raise TypeError("the tolerance must be an integer")
-            if not MIN_TOLERANCE <= self.stated_tolerance <= MAX_TOLERANCE:
-                raise ValueError("the tolerance must be within 1 and 100")
+            if not MIN_TOLERANCE <= self.stated_tolerance <= MAX_STATED_TOLERANCE:
+                raise ValueError(
+                    f"the tolerance must be within {MIN_TOLERANCE} and "
+                    f"{MAX_STATED_TOLERANCE}"
+                )
 
     @property
     def tolerance(self) -> int:
         """Return the tolerance that applies to this member."""
         if self.stated_tolerance is not None:
             return self.stated_tolerance
-        if self.position_source is PositionSource.MEASURED:
+        return self.default_tolerance(self.position_source)
+
+    @staticmethod
+    def default_tolerance(source: PositionSource) -> int:
+        """Return the tolerance of a member whose user stated none.
+
+        2 for a calculated position: the report equals the command, so a
+        deviation means an intervention. 3 for a measured one.
+        """
+        if source is PositionSource.MEASURED:
             return DEFAULT_TOLERANCE_MEASURED
         return DEFAULT_TOLERANCE_CALCULATED
 
@@ -404,6 +444,65 @@ class FrostSettings:
         require_type(self.hold_closed, bool, "the flag 'hold closed'")
 
 
+def _require_threshold(threshold: object) -> None:
+    """Validate the threshold of the comfort movements of one day."""
+    if isinstance(threshold, bool) or not isinstance(threshold, int):
+        raise TypeError("the threshold of the comfort movements is a whole number")
+    if not 1 <= threshold <= MAX_COMFORT_MOVEMENTS_THRESHOLD:
+        raise ValueError(
+            "the threshold of the comfort movements must be within 1 and "
+            f"{MAX_COMFORT_MOVEMENTS_THRESHOLD}"
+        )
+
+
+def _require_dam_duration(value: timedelta, what: str) -> None:
+    require_type(value, timedelta, what)
+    if not MIN_DAM_DURATION <= value <= MAX_DAM_DURATION:
+        raise ValueError(f"{what} must be within one minute and one day")
+
+
+@dataclass(frozen=True, slots=True)
+class ManualOverrideSettings:
+    """Manual operation detection and the two dams (E1 to E3, section 3).
+
+    A view over the ``override_*`` and ``person_at_window_duration`` fields
+    of ``WindowConfig``, which are inherited one by one; it holds their value
+    rules. They belong to the function ``manual_override``, which falls back
+    on a fault (ruling 4 of the project owner for block C06).
+
+    - ``end_rule``: how the manual override ends by itself (default: at the
+      next boundary between parts of the day).
+    - ``minutes``: the duration of the rule "fixed minutes".
+    - ``presence_source``: the presence source of the rule "the room has been
+      empty" (on means occupied); ``None``: not configured;
+      :data:`BLIND_SOURCE`: configured, but blind. Without a source the room
+      is never known to be empty, and the rule acts like the default rule.
+    - ``room_empty_after``: how long the room has to be empty.
+    - ``person_at_window``: how long the person-at-the-window dam holds
+      (default 15 minutes, decided).
+    """
+
+    end_rule: OverrideEndRule = OverrideEndRule.NEXT_PART_OF_DAY
+    minutes: timedelta = DEFAULT_OVERRIDE_MINUTES
+    presence_source: str | BlindSource | None = None
+    room_empty_after: timedelta = DEFAULT_ROOM_EMPTY_AFTER
+    person_at_window: timedelta = DEFAULT_PERSON_AT_WINDOW
+
+    def __post_init__(self) -> None:
+        """Validate the rule, the durations and the source."""
+        require_type(self.end_rule, OverrideEndRule, "the end rule of the override")
+        _require_dam_duration(self.minutes, "the minutes of the override")
+        if (
+            self.presence_source is not None
+            and self.presence_source is not BLIND_SOURCE
+        ):
+            require_identifier(self.presence_source, "the presence source")
+        _require_dam_duration(self.room_empty_after, "the time of an empty room")
+        _require_dam_duration(
+            self.person_at_window, "the duration of the person-at-the-window dam"
+        )
+
+
 @dataclass(frozen=True, slots=True)
 class MemberConfig:
     """One cover of a window as the core sees it.
@@ -429,7 +528,7 @@ class MemberConfig:
         )
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class WindowConfig:
     """The configuration of one window after inheritance has been resolved.
 
@@ -464,6 +563,15 @@ class WindowConfig:
       (0 to 10 seconds; zero switches staggering off for the motors of this
       window). Fire is never staggered. The core only carries it; the
       actuator adapter of the Home Assistant layer applies it.
+    - ``override_end_rule``, ``override_minutes``,
+      ``override_presence_source``, ``override_room_empty_after`` and
+      ``person_at_window_duration``: the settings of manual operation
+      detection and the two dams; :attr:`manual_override` is the view over
+      them. ``override_presence_source`` can be :data:`BLIND_SOURCE`, as
+      the frost source can.
+    - ``comfort_movements_threshold``: from how many own comfort movements
+      on one local day the count is reported once (E10, default 40). It
+      belongs to motor protection and blocks nothing.
     - ``pause_source``: the external pause entity of the window level (E4),
       its own or inherited; its ``on`` state pauses the window level in
       addition to the pause switch. ``None``: no such entity.
@@ -509,6 +617,12 @@ class WindowConfig:
     motor_min_interval: timedelta = _DEFAULT_MIN_INTERVAL
     reevaluate_after: timedelta = _DEFAULT_REEVALUATE_AFTER
     stagger_gap: timedelta = DEFAULT_STAGGER_GAP
+    override_end_rule: OverrideEndRule = OverrideEndRule.NEXT_PART_OF_DAY
+    override_minutes: timedelta = DEFAULT_OVERRIDE_MINUTES
+    override_presence_source: str | BlindSource | None = None
+    override_room_empty_after: timedelta = DEFAULT_ROOM_EMPTY_AFTER
+    person_at_window_duration: timedelta = DEFAULT_PERSON_AT_WINDOW
+    comfort_movements_threshold: int = DEFAULT_COMFORT_MOVEMENTS_THRESHOLD
     pause_source: str | BlindSource | None = None
     schedule_enabled: bool = _SCHEDULE_ENABLED
     schedule_workday_morning_kind: TriggerKind = _MORNING_KIND
@@ -609,6 +723,8 @@ class WindowConfig:
         require_type(self.stagger_gap, timedelta, "the staggering gap")
         if not timedelta(0) <= self.stagger_gap <= MAX_STAGGER_GAP:
             raise ValueError("the staggering gap must be within 0 and 10 seconds")
+        _ = self.manual_override
+        _require_threshold(self.comfort_movements_threshold)
         if self.pause_source is not None and self.pause_source is not BLIND_SOURCE:
             require_identifier(self.pause_source, "the external pause entity")
         given: object = self.disabled_functions
@@ -666,12 +782,15 @@ class WindowConfig:
         }
         return Trigger(**values)
 
-    @property
+    @cached_property
     def schedule(self) -> ScheduleSettings:
         """Return the settings of the schedule as one value.
 
         The targets are filed under the profile key of the window; the key
-        has one value.
+        has one value. The view is built once per configuration: the
+        configuration is immutable, and every evaluation of the schedule
+        reads it (``functools.cached_property``; the cache takes no part in
+        comparing two configurations).
         """
         workday, weekend, holiday = (
             DayTriggers(
@@ -734,6 +853,17 @@ class WindowConfig:
             position=self.frost_position,
             applies_to_protection=self.frost_applies_to_protection,
             hold_closed=self.frost_hold_closed,
+        )
+
+    @property
+    def manual_override(self) -> ManualOverrideSettings:
+        """Return the settings of manual operation detection and the dams."""
+        return ManualOverrideSettings(
+            end_rule=self.override_end_rule,
+            minutes=self.override_minutes,
+            presence_source=self.override_presence_source,
+            room_empty_after=self.override_room_empty_after,
+            person_at_window=self.person_at_window_duration,
         )
 
     @property

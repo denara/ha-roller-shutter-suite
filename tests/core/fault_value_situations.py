@@ -54,6 +54,8 @@ from custom_components.roller_shutter_suite.core.model import (
     GateKind,
     HeldInput,
     Layer,
+    ManualOverrideDam,
+    OverrideEndRule,
     Position,
     SourceValue,
     WindowConfig,
@@ -84,6 +86,7 @@ from tests.core.arbiter_kit import (
 )
 
 FROST_SOURCE: Final = "sensor.example_outdoor_temperature"
+PRESENCE_SOURCE: Final = "binary_sensor.example_room_presence"
 _HERE: Final = "tests/core/fault_value_situations.py"
 
 
@@ -206,6 +209,34 @@ SITUATIONS: Final = (
         day(hail=_HAIL),
         position=96,
         state=_MOVED_RECENTLY,
+    ),
+    # --- Manual operation detection and the dams -------------------------------------
+    Situation(
+        "an override that ends with an empty room; the room has been empty for hours",
+        FunctionId.MANUAL_OVERRIDE,
+        WishClass.COMFORT,
+        day(**{PRESENCE_SOURCE: SourceValue.of(False)}),
+        settings={"override_presence_source": PRESENCE_SOURCE},
+        state=WindowState(
+            manual_override=ManualOverrideDam(
+                armed_at=NOW - timedelta(hours=3),
+                end_rule=OverrideEndRule.ROOM_EMPTY,
+                room_empty_since=NOW - timedelta(hours=2),
+            )
+        ),
+    ),
+    Situation(
+        "an override until the next part of the day, a wish to open",
+        FunctionId.MANUAL_OVERRIDE,
+        WishClass.COMFORT,
+        day(),
+        state=WindowState(
+            manual_override=ManualOverrideDam(
+                armed_at=NOW - timedelta(hours=1),
+                end_rule=OverrideEndRule.NEXT_PART_OF_DAY,
+                ends_at=NOW + timedelta(hours=10),
+            )
+        ),
     ),
     # --- Command verification: the bound of a deferral without a known end --------
     Situation(

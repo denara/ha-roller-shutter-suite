@@ -18,8 +18,10 @@ from custom_components.roller_shutter_suite.core.model import (
     GateKind,
     Observation,
     Position,
+    TrackerEvent,
     WishClass,
 )
+from custom_components.roller_shutter_suite.core.reasons import ReasonCode
 
 
 @unique
@@ -31,6 +33,7 @@ class EntryKind(StrEnum):
     REPORT = "report"
     SOURCE = "source"
     EVENT = "event"
+    TRACKER = "tracker"
     RESTART = "restart"
 
 
@@ -46,6 +49,10 @@ class Entry:
     - ``wish_class``: the class of the wish behind a command.
     - ``decision``: the whole decision, for a decision entry.
     - ``observation``: the normalized observation, for a report entry.
+    - ``event``: what the tracker or the dams raised, for a tracker entry.
+    - ``foreign``: the event entry is something done to a cover from outside
+      the integration: a movement or a stop by hand, another controller, a
+      dropout. The assertion that dams follow such actions reads it.
     """
 
     at: datetime
@@ -57,6 +64,8 @@ class Entry:
     wish_class: WishClass | None = None
     decision: Decision | None = field(default=None, repr=False)
     observation: Observation | None = field(default=None, repr=False)
+    event: TrackerEvent | None = field(default=None, repr=False)
+    foreign: bool = False
 
     def __post_init__(self) -> None:
         """Keep the instant in UTC."""
@@ -152,6 +161,14 @@ class Record:
     def decisions(self, window_id: str | None = None) -> list[Entry]:
         """Return the decisions."""
         return self.of_kind(EntryKind.DECISION, window_id)
+
+    def events(self, window_id: str | None = None, *codes: ReasonCode) -> list[Entry]:
+        """Return what the tracker and the dams raised, of the given codes if any."""
+        return [
+            entry
+            for entry in self.of_kind(EntryKind.TRACKER, window_id)
+            if entry.event is not None and (not codes or entry.event.code in codes)
+        ]
 
     def sends(self, window_id: str | None = None) -> list[Entry]:
         """Return the decisions whose gate said "send": one per movement."""
