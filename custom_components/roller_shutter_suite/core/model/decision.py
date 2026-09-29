@@ -741,6 +741,21 @@ class Decision:
       whether the current position violates a constraint (no exemption from
       the minimum change is granted then), and a dry-run rule that failed
       with a fire wish pending (the command is sent).
+    - ``addressed``: for a decision whose gate outcome is ``send``, the
+      members the send commands, in the order of ``targets``: every member
+      that has a target, is available and does not stand at that target
+      within its tolerance; a member without position feedback cannot be
+      judged and is addressed. A member that is not addressed gets no
+      command and no record. The arbiter always states it for a send;
+      ``None`` means that the decision does not state it (a decision built
+      by hand), and then every member with a target is addressed. It is
+      ``None`` for every other outcome. The runtime and the simulation read
+      :attr:`addressed_targets` and filter nothing themselves.
+    - ``completes_command``: the send completes a command the other members
+      received while the addressed members were unavailable. It is no fresh
+      wish: the addressed members are commanded with the class and the
+      reason of that command, the minimum interval of motor protection does
+      not apply, and it counts no comfort movement.
 
     The member positions of the wish, the targets of every constraint result
     and ``targets`` name the same members in the same order.
@@ -753,6 +768,8 @@ class Decision:
     gate: GateOutcome | None = None
     winning_function: FunctionId | None = None
     faults: tuple[EvaluationFault, ...] = ()
+    addressed: tuple[str, ...] | None = None
+    completes_command: bool = False
 
     def __post_init__(self) -> None:
         """Reject records whose parts contradict each other."""
@@ -760,6 +777,8 @@ class Decision:
         object.__setattr__(self, "constraints", tuple(self.constraints))
         object.__setattr__(self, "targets", tuple(self.targets))
         object.__setattr__(self, "faults", tuple(self.faults))
+        if self.addressed is not None:
+            object.__setattr__(self, "addressed", tuple(self.addressed))
         for fault in self.faults:
             require_type(fault, EvaluationFault, "a fault of a decision")
         self._validate_layers()
@@ -831,12 +850,50 @@ class Decision:
         if self.gate is None:
             if to_send:
                 raise ValueError("a target that is not pinned reaches the gate")
+            self._validate_addressed(to_send)
             return
         require_type(self.gate, GateOutcome, "the gate outcome of a decision")
         if not to_send:
             raise ValueError("nothing reaches the gate without a target to send")
         if self.gate.would_send and self.gate.would_send != to_send:
             raise ValueError("the would-be command consists of the decision's targets")
+        self._validate_addressed(to_send)
+
+    def _validate_addressed(self, to_send: tuple[MemberTarget, ...]) -> None:
+        require_type(self.completes_command, bool, "the flag 'completes command'")
+        if self.addressed is None:
+            if self.completes_command:
+                raise ValueError("a send that completes a command names its members")
+            return
+        if self.gate is None or self.gate.kind is not GateKind.SEND:
+            raise ValueError("only a decision that sends addresses members")
+        for member_id in self.addressed:
+            require_identifier(member_id, "an addressed member")
+        require_unique(self.addressed, "the addressed members")
+        if not self.addressed:
+            raise ValueError("a send addresses at least one member")
+        order = [target.member_id for target in to_send]
+        if any(member_id not in order for member_id in self.addressed):
+            raise ValueError("an addressed member is a member with a target")
+        if list(self.addressed) != [m for m in order if m in self.addressed]:
+            raise ValueError("the addressed members stand in the order of the targets")
+
+    @property
+    def addressed_targets(self) -> tuple[tuple[str, Position], ...]:
+        """Return (member, target) of what a send hands to the actuator.
+
+        Empty for every outcome but ``send``. Every member with a target if
+        the decision does not state its addressed members (``addressed`` is
+        ``None``), otherwise exactly those, in the order of ``targets``.
+        """
+        if self.gate is None or self.gate.kind is not GateKind.SEND:
+            return ()
+        return tuple(
+            (target.member_id, target.position)
+            for target in self.targets
+            if target.position is not None
+            and (self.addressed is None or target.member_id in self.addressed)
+        )
 
     @property
     def target(self) -> Position | None:

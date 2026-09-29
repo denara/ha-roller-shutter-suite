@@ -364,6 +364,78 @@ def test_the_runner_wakes_a_window_up_at_the_deadline_of_the_gate() -> None:
     assert all(reason is ReasonCode.DUPLICATE_COMMAND for reason in before)
 
 
+def test_the_runner_commands_exactly_the_members_the_decision_addresses() -> None:
+    """The core names the commanded members; the runner filters nothing of its own.
+
+    The left member already stands open at the morning trigger, the right one
+    is closed: the decision addresses the right one, and only it is commanded.
+    """
+    start = local(MONDAY, time(7, 0))
+    world = World(start, seed=1, script=calm_sources(start))
+    world.add_cover(
+        SimulatedCover("cover.example_left", PROFILES["live"], available_since=start)
+    )
+    world.add_cover(
+        SimulatedCover(
+            "cover.example_right", PROFILES["live"], position=0, available_since=start
+        )
+    )
+    simulation = Simulation(world)
+    simulation.add_window(
+        world.window(WINDOW, "cover.example_left", "cover.example_right"), ARMED
+    )
+    record = simulation.run(local(MONDAY, time(7, 1)))
+
+    (send,) = record.sends(WINDOW)
+    assert send.decision is not None
+    assert send.decision.addressed == ("cover.example_right",)
+    assert [entry.member_id for entry in record.commands(WINDOW)] == [
+        "cover.example_right"
+    ]
+    assert world.cover("cover.example_left").commands == []
+
+
+def test_a_member_that_returns_completes_the_command_it_missed() -> None:
+    """The right member is away at the morning opening and comes back five minutes later.
+
+    Its return completes the morning command: it alone is commanded, as the
+    schedule's day movement, inside the minimum interval, and the motor
+    protection clock stays at the morning opening.
+    """
+    start = local(MONDAY, time(6, 50))
+    world = World(start, seed=1, script=calm_sources(start))
+    for member in ("cover.example_left", "cover.example_right"):
+        world.add_cover(
+            SimulatedCover(member, PROFILES["live"], position=0, available_since=start)
+        )
+    simulation = Simulation(world)
+    simulation.add_window(
+        world.window(WINDOW, "cover.example_left", "cover.example_right"), ARMED
+    )
+    simulation.at(
+        local(MONDAY, time(6, 59)),
+        "the right member drops out",
+        lambda sim: sim.dropout(WINDOW, "cover.example_right", timedelta(minutes=6)),
+    )
+    record = simulation.run(local(MONDAY, time(7, 10)))
+
+    commands = [
+        (entry.at.astimezone(record.zone).time(), entry.member_id, entry.summary)
+        for entry in record.commands(WINDOW)
+    ]
+    assert commands == [
+        (time(7, 0), "cover.example_left", "send 100 (comfort, schedule_day)"),
+        (time(7, 5), "cover.example_right", "send 100 (comfort, schedule_day)"),
+    ]
+    completion = record.sends(WINDOW)[1].decision
+    assert completion is not None
+    assert completion.completes_command
+    assert completion.addressed == ("cover.example_right",)
+    assert simulation.window(WINDOW).state.last_comfort_movement == local(
+        MONDAY, time(7, 0)
+    )
+
+
 # --- Dry-run and maintenance lock ----------------------------------------------------------
 
 

@@ -23,6 +23,7 @@ from ._data import (
     datetime_data,
     optional,
     read,
+    read_optional,
     tuple_of,
 )
 from ._validation import (
@@ -33,7 +34,7 @@ from ._validation import (
     to_utc,
     to_utc_or_none,
 )
-from .observation import MemberCommand, Observation, OwnCommand
+from .observation import MemberCommand, MissedCommand, Observation, OwnCommand
 from .values import Position, _as_position, _position_data
 
 WINDOW_STATE_SCHEMA_VERSION: Final = 1
@@ -100,6 +101,11 @@ class MemberState:
     from these two facts with the settings that apply then, so a reload right
     after a failed attempt does not trigger an immediate second command. The
     two belong together: no attempt, no time; at least one attempt, a time.
+
+    ``missed_command`` is the command the other members received while this
+    one was unavailable (:class:`MissedCommand`); its return completes it.
+    Within schema version 1 the key is optional when data is read, and a
+    missing key means that nothing was missed.
     """
 
     member_id: str
@@ -108,10 +114,14 @@ class MemberState:
     position_reference: PositionReference = PositionReference.REFERENCED
     command_attempts: int = 0
     last_attempt_at: datetime | None = None
+    missed_command: MissedCommand | None = None
 
     def __post_init__(self) -> None:
         """Validate the member identifier and the types."""
         require_identifier(self.member_id, "the member of a member state")
+        require_optional_type(
+            self.missed_command, MissedCommand, "the missed command of a member"
+        )
         if self.last_own_command is not None:
             require_type(self.last_own_command, OwnCommand, "the last own command")
         if self.last_observation is not None:
@@ -158,11 +168,19 @@ class MemberState:
             "position_reference": self.position_reference.value,
             "command_attempts": self.command_attempts,
             "last_attempt_at": datetime_data(self.last_attempt_at),
+            "missed_command": (
+                None if self.missed_command is None else self.missed_command.to_data()
+            ),
         }
 
     @classmethod
     def from_data(cls, data: JsonValue) -> Self:
-        """Rebuild a member state from plain data."""
+        """Rebuild a member state from plain data.
+
+        The keys that later blocks added within schema version 1 are optional;
+        a missing one has its default. The schema step with a migration
+        belongs to the persistence block (C12).
+        """
         content = as_object(
             data,
             "member_id",
@@ -171,6 +189,7 @@ class MemberState:
             "position_reference",
             "command_attempts",
             "last_attempt_at",
+            "missed_command",
         )
         return cls(
             member_id=read(content, "member_id", as_str),
@@ -185,6 +204,9 @@ class MemberState:
             ),
             command_attempts=read(content, "command_attempts", as_int),
             last_attempt_at=read(content, "last_attempt_at", optional(as_datetime)),
+            missed_command=read_optional(
+                content, "missed_command", optional(MissedCommand.from_data), None
+            ),
         )
 
 

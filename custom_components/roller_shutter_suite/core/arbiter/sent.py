@@ -10,7 +10,10 @@ same command again while the cover is still travelling.
 This module is that record, as one pure function from a state to a state. It
 knows nothing about tracking: the tracker of a later block evaluates the
 movement and consumes the expectation; here the command is only remembered.
-Per commanded member the last own command is replaced as a whole (a new own
+Only the members the decision addresses are recorded (``Decision.addressed``);
+a member left out because it is unavailable remembers the command it missed,
+and its return completes that command. Per commanded member the last own
+command is replaced as a whole (a new own
 command resets the expectation), with one attempt at the time of the send;
 the owner of the position becomes the integration; and for a comfort wish
 the motor protection clock is set to the time of the send. A window in
@@ -25,6 +28,7 @@ from custom_components.roller_shutter_suite.core.model import (
     Decision,
     GateKind,
     MemberState,
+    MissedCommand,
     OwnCommand,
     PositionOwner,
     WindowState,
@@ -42,9 +46,19 @@ def record_sent_commands(
     """Return the state after the targets of a decision were really sent.
 
     ``command_ids`` maps every member that was commanded to the identifier
-    the actuator received; a member that has a target in the decision and no
-    identifier here was not commanded and is left alone. A decision whose
-    gate outcome is not ``send`` leaves the state as it is.
+    the actuator received. Only an addressed member of the decision
+    (``Decision.addressed_targets``) is recorded, and only once it has an
+    identifier here: the runtime records after each member, with the
+    identifiers of every member handed over so far. A decision whose gate
+    outcome is not ``send`` leaves the state as it is.
+
+    A member with a target that was not addressed because it is unavailable
+    remembers the command it missed (``MemberState.missed_command``); its
+    return completes that command. A member that was not addressed because
+    it stands at its target has missed nothing. A send that completes a
+    missed command (``Decision.completes_command``) records the command with
+    the class and the reason of the missed one and does not touch the motor
+    protection clock.
     """
     state = snapshot.state
     gate = decision.gate
@@ -52,28 +66,56 @@ def record_sent_commands(
     if gate is None or gate.kind is not GateKind.SEND or wish is None:
         return state
     reported = reported_positions(snapshot)
+    available = {
+        member.member_id
+        for member in snapshot.observation.members
+        if member.observation.available
+    }
+    addressed = {member_id for member_id, _ in decision.addressed_targets}
     members = {member.member_id: member for member in state.members}
     for target in decision.targets:
-        if target.position is None or target.member_id not in command_ids:
+        if target.position is None:
             continue
+        existing = members.get(target.member_id, MemberState(target.member_id))
+        if target.member_id not in addressed:
+            if target.member_id in available:
+                # It stands at its target: nothing was missed.
+                updated = replace(existing, missed_command=None)
+            elif decision.completes_command:
+                # Still away: what it missed stays as it is.
+                updated = existing
+            else:
+                updated = replace(
+                    existing,
+                    missed_command=MissedCommand(
+                        target.position, wish.wish_class, wish.reason, snapshot.time
+                    ),
+                )
+            if updated != existing:
+                members[target.member_id] = updated
+            continue
+        if target.member_id not in command_ids:
+            continue
+        missed = existing.missed_command
+        completed = missed if decision.completes_command else None
         command = OwnCommand(
             command_id=command_ids[target.member_id],
             target=target.position,
             direction=direction_of(target.position, reported.get(target.member_id)),
             time=snapshot.time,
-            wish_class=wish.wish_class,
-            reason=wish.reason,
+            wish_class=wish.wish_class if completed is None else completed.wish_class,
+            reason=wish.reason if completed is None else completed.reason,
         )
-        existing = members.get(target.member_id, MemberState(target.member_id))
         members[target.member_id] = replace(
             existing,
             last_own_command=command,
             command_attempts=1,
             last_attempt_at=snapshot.time,
+            missed_command=None,
         )
     clock = (
         snapshot.time
-        if wish.wish_class is WishClass.COMFORT
+        if wish.wish_class is WishClass.COMFORT and not decision.completes_command
         else state.last_comfort_movement
     )
     return replace(

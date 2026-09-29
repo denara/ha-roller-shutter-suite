@@ -38,7 +38,7 @@ One recompute:
 
 1. The world snapshot is built: the time of the clock, the sun position, every source as a source value, the members as last observed, the persisted state, the controls, the almanac (built once per local date through `build_sun_almanac`) and the seed from the storage.
 2. `Engine.recompute` gives the decision.
-3. The state after the decision is assembled: what the schedule remembers (one evaluation of `evaluate_schedule`, which also gives the next planned action), what a dry-run or a take-over leaves behind (`Engine.state_after`), and, if the gate said "send", the commands are handed to the actuator under an identifier and written down (`Engine.state_after_send`).
+3. The state after the decision is assembled: what the schedule remembers (one evaluation of `evaluate_schedule`, which also gives the next planned action), what a dry-run or a take-over leaves behind (`Engine.state_after`), and, if the gate said "send", the targets of the members the decision addresses (`Decision.addressed_targets`) are handed to the actuator under an identifier and written down (`Engine.state_after_send`). The runner filters nothing of its own, exactly as the runtime.
 4. The state is persisted if it changed. The storage keeps JSON text, so every save is a real round trip.
 5. The next wake-ups are planned.
 

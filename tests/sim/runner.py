@@ -433,28 +433,34 @@ class Simulation:
     ) -> WindowState:
         if window.controls.dry_run:
             raise AssertionError("the runner never sends for a window in dry-run")
-        wish = decision.winning_wish
-        assert wish is not None
         command_ids: dict[str, str] = {}
         stamp = self.now.astimezone(UTC).isoformat(timespec="milliseconds")
-        for target in decision.targets:
-            if target.position is None:
-                continue
-            command_id = f"{window.window_id}/{target.member_id}/{stamp}"
-            self.world.actuator.move_to(command_id, target.member_id, target.position)
-            command_ids[target.member_id] = command_id
+        # The core names the members a send addresses; the runner filters
+        # nothing of its own, exactly as the runtime.
+        for member_id, position in decision.addressed_targets:
+            command_id = f"{window.window_id}/{member_id}/{stamp}"
+            self.world.actuator.move_to(command_id, member_id, position)
+            command_ids[member_id] = command_id
+        state = window.engine.state_after_send(snapshot, decision, command_ids)
+        recorded = {
+            member.member_id: member.last_own_command for member in state.members
+        }
+        for member_id, position in decision.addressed_targets:
+            command = recorded[member_id]
+            assert command is not None
             self.record.add(
                 Entry(
                     self.now,
                     EntryKind.COMMAND,
-                    f"send {target.position.value} ({wish.wish_class.value}, {wish.reason.value})",
+                    f"send {position.value} "
+                    f"({command.wish_class.value}, {command.reason.value})",
                     window_id=window.window_id,
-                    member_id=target.member_id,
-                    target=target.position,
-                    wish_class=wish.wish_class,
+                    member_id=member_id,
+                    target=position,
+                    wish_class=command.wish_class,
                 )
             )
-        return window.engine.state_after_send(snapshot, decision, command_ids)
+        return state
 
     def _expectation_ends(self, window: SimWindow) -> set[datetime]:
         """Return the ends of the expectation windows of the pending commands.

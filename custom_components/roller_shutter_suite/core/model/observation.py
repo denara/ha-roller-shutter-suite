@@ -414,3 +414,63 @@ class MemberCommand:
             member_id=read(content, "member_id", as_str),
             command=read(content, "command", OwnCommand.from_data),
         )
+
+
+@dataclass(frozen=True, slots=True)
+class MissedCommand:
+    """A command the other members of a window received while this one was away.
+
+    A send addresses only the members that are available. A member that had
+    a target in that send and was unavailable remembers what it missed: the
+    target, the wish class and the reason of the command, and when it was
+    given. When the member returns and the window still wants that target
+    of it, with a wish of the same class, bringing it there is the
+    **completion** of the command, not a fresh wish (ruling of the project
+    owner for block C06): only the returning member is addressed, with this
+    class and reason; the minimum interval of motor protection does not
+    apply to it, and it counts no comfort movement. The record is dropped as
+    soon as the member is commanded, or stands at its target when the window
+    sends again.
+
+    The time is an instant and is kept in UTC.
+    """
+
+    target: Position
+    wish_class: WishClass
+    reason: ReasonCode
+    time: datetime
+
+    def __post_init__(self) -> None:
+        """Validate the types, reject a naive time and keep the instant in UTC."""
+        require_type(self.target, Position, "the target of a missed command")
+        require_type(self.wish_class, WishClass, "the wish class of a missed command")
+        require_type(self.reason, ReasonCode, "the reason of a missed command")
+        if self.reason.category is not ReasonCategory.LAYER:
+            raise ValueError(
+                "the reason of a missed command is the reason of the wish that "
+                f"caused it; {self.reason.value!r} belongs to "
+                f"{self.reason.category.value!r}"
+            )
+        object.__setattr__(
+            self, "time", to_utc(self.time, "the time of a missed command")
+        )
+
+    def to_data(self) -> JsonObject:
+        """Return plain data for persistence."""
+        return {
+            "target": self.target.value,
+            "wish_class": self.wish_class.value,
+            "reason": self.reason.value,
+            "time": self.time.isoformat(),
+        }
+
+    @classmethod
+    def from_data(cls, data: JsonValue) -> Self:
+        """Rebuild a missed command from plain data."""
+        content = as_object(data, "target", "wish_class", "reason", "time")
+        return cls(
+            target=read(content, "target", _as_position),
+            wish_class=read(content, "wish_class", as_enum(WishClass)),
+            reason=read(content, "reason", as_enum(ReasonCode)),
+            time=read(content, "time", as_datetime),
+        )

@@ -234,6 +234,68 @@ async def test_a_send_is_recorded_as_the_core_records_it(
     )
 
 
+class AddressesOneMember:
+    """An engine whose send has a target for two members and addresses one of them."""
+
+    def __init__(self, addressed: str) -> None:
+        """Remember the member the decision addresses."""
+        self.addressed = addressed
+
+    def recompute(self, snapshot: WorldSnapshot) -> Decision:
+        """Lower both members to 30; the decision addresses one."""
+        members = tuple(
+            MemberTarget(member.member_id, Position(30))
+            for member in snapshot.observation.members
+        )
+        return Decision(
+            winning_wish=Wish.target_per_member(
+                Layer.SHADING, ReasonCode.SHADING_GEOMETRIC, members
+            ),
+            targets=members,
+            gate=GateOutcome.send(),
+            addressed=(self.addressed,),
+        )
+
+    def state_after(self, snapshot: WorldSnapshot, decision: Decision) -> WindowState:
+        """Change nothing."""
+        del decision
+        return snapshot.state
+
+
+async def test_the_controller_commands_the_members_the_decision_addresses(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The core names the commanded members; the controller filters nothing itself.
+
+    Both members stand at 100 and have a target of 30, so a filter of the
+    controller's own would command both. The decision addresses the right one
+    only, and only the right one is commanded and recorded.
+    """
+    left, right = "cover.example_left", "cover.example_right"
+    set_cover(hass, left, position=100)
+    set_cover(hass, right, position=100)
+    entry = await setup_window(
+        hass, window_data([left, right]), covers_present=False, freezer=freezer
+    )
+    controller = controller_of(entry)
+    before = len(commands_sent(entry))
+    recorded_before = {
+        m.member_id: m.last_own_command for m in controller.state.members
+    }
+
+    controller.engine = AddressesOneMember(right)  # type: ignore[assignment]
+    controller.async_request_recompute()
+    await settle(hass, freezer)
+
+    new = commands_sent(entry)[before:]
+    assert [(c.member_id, c.target.value) for c in new] == [(right, 30)]
+    recorded = {m.member_id: m.last_own_command for m in controller.state.members}
+    assert recorded.get(left) == recorded_before.get(left)
+    command = recorded[right]
+    assert command is not None
+    assert command.target == Position(30)
+
+
 async def test_a_dam_and_a_deferral_survive_the_reload(
     hass: HomeAssistant, freezer: Any
 ) -> None:

@@ -212,6 +212,10 @@ class GateInput:
       that depends on own commands reads them here and not from
       ``snapshot.state``; that is what keeps the real and the simulated state
       apart.
+    - ``completes_command``: a send now would complete a command the other
+      members received while the addressed members were unavailable
+      (``completing_members`` of the gate). It is no fresh wish, and the
+      minimum interval of motor protection does not apply to it.
     """
 
     config: WindowConfig
@@ -222,6 +226,7 @@ class GateInput:
     own_commands: Mapping[str, OwnCommand]
     last_comfort_movement: datetime | None
     restores_constraint: bool = False
+    completes_command: bool = False
 
     def __post_init__(self) -> None:
         """Copy and freeze the commands."""

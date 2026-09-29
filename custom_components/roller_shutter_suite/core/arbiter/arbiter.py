@@ -43,7 +43,7 @@ from custom_components.roller_shutter_suite.core.reasons import ReasonCode
 from .controls import effective_controls
 from .dry_run import is_standing, simulated_state
 from .fire_bypass import skips
-from .gate import fire_command_pending
+from .gate import addressed_members, completing_members, fire_command_pending
 from .layers import disabled_functions
 from .registry import (
     ConstraintFunction,
@@ -55,6 +55,14 @@ from .registry import (
 )
 
 _REQUIRED_GATE_RULES = (GateRule.MAINTENANCE_LOCK, GateRule.DRY_RUN)
+
+
+@dataclass(frozen=True, slots=True)
+class _Addressed:
+    """The members a send addresses, and whether it completes a missed command."""
+
+    members: tuple[str, ...]
+    completes: bool
 
 
 def _in_order[R](
@@ -294,8 +302,12 @@ class Arbiter:
         faults: list[EvaluationFault],
         *,
         restores: bool = False,
-    ) -> GateOutcome:
+    ) -> tuple[GateOutcome, _Addressed | None]:
         """Evaluate the gate rules in order; the first rule that applies decides.
+
+        For a send it also names the members the send addresses
+        (``addressed_members`` of the gate), and whether it completes a
+        command those members missed while they were unavailable.
 
         **A rule that raises holds the wish back** (``gate_rule_failed``), for
         every wish class it was asked for: the restriction applies. It is a
@@ -349,6 +361,34 @@ class Arbiter:
             last_comfort_movement=clock,
             restores_constraint=restores,
         )
+        completing = completing_members(gate_input)
+        gate_input = replace(gate_input, completes_command=bool(completing))
+        outcome = self._first_rule(gate_input, faults)
+        if outcome is not None:
+            if controls.dry_run:
+                outcome = replace(outcome, dry_run=True)
+            return outcome, None
+        addressed = completing or frozenset(
+            member.member_id for member in addressed_members(gate_input)
+        )
+        if not addressed:
+            # Only a fire wish that passed a failed rule gets here: the rule
+            # that failed may be the one that knows the members. Every member
+            # with a target is commanded; a command to a member that cannot
+            # execute it costs nothing.
+            addressed = frozenset(target.member_id for target in to_send)
+        order = tuple(
+            target.member_id for target in to_send if target.member_id in addressed
+        )
+        return GateOutcome.send(), _Addressed(order, completes=bool(completing))
+
+    def _first_rule(
+        self, gate_input: GateInput, faults: list[EvaluationFault]
+    ) -> GateOutcome | None:
+        """Return the outcome of the first rule that applies; ``None``: send."""
+        wish = gate_input.wish
+        config = gate_input.config
+        snapshot = gate_input.snapshot
         passed_a_failed_rule = False
         outcome: GateOutcome | None = None
         for registration in self.gate_rules:
@@ -382,9 +422,7 @@ class Arbiter:
             outcome = GateOutcome.suppress(
                 GateRule.MOVEMENT_IN_FLIGHT, ReasonCode.DUPLICATE_COMMAND
             )
-        if outcome is None:
-            return GateOutcome.send()
-        return replace(outcome, dry_run=True) if controls.dry_run else outcome
+        return outcome
 
     # --- Recompute ----------------------------------------------------------
 
@@ -424,10 +462,10 @@ class Arbiter:
         restores = self._violated_by_position(config, snapshot, winner, targets, faults)
         results, targets = self._constrain(config, snapshot, winner, targets, faults)
         to_send = tuple(target for target in targets if target.position is not None)
-        gate = (
+        gate, addressed = (
             self._gate(config, snapshot, winner, to_send, faults, restores=restores)
             if to_send
-            else None
+            else (None, None)
         )
         return Decision(
             winning_wish=winner,
@@ -437,6 +475,8 @@ class Arbiter:
             gate=gate,
             winning_function=winning_function,
             faults=tuple(faults),
+            addressed=None if addressed is None else addressed.members,
+            completes_command=addressed is not None and addressed.completes,
         )
 
 

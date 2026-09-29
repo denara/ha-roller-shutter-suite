@@ -50,7 +50,7 @@ def _maintenance_lock(gate: GateInput) -> GateOutcome | None:
 # --- 2 No member can execute the command ----------------------------------------
 
 
-def _addressed_members(gate: GateInput) -> list[MemberConfig]:
+def _available_with_target(gate: GateInput) -> list[MemberConfig]:
     """Return the members that have a target and are available right now."""
     wanted = {target.member_id for target in gate.to_send}
     available = {
@@ -65,8 +65,58 @@ def _addressed_members(gate: GateInput) -> list[MemberConfig]:
     ]
 
 
+def addressed_members(gate: GateInput) -> list[MemberConfig]:
+    """Return the members a send commands: the core names them itself.
+
+    A member is addressed if it has a target, is available right now, and
+    does not stand at that target within its own tolerance. A member without
+    position feedback cannot be judged and is addressed. A member that is
+    not addressed gets no command and no record (ruling of the project owner
+    for block C06). The rules "no member can execute" and "target reached"
+    reason over the available members with a target, "movement in flight"
+    over these; the decision names them (``Decision.addressed``), and the
+    runtime and the simulation send to exactly them.
+    """
+    return [
+        member
+        for member in _available_with_target(gate)
+        if not _stands_at_target(gate, member)
+    ]
+
+
+def completing_members(gate: GateInput) -> frozenset[str]:
+    """Return the members a send would bring to a command they missed, if that is all.
+
+    A member that was unavailable when the other members were commanded
+    remembers the command it missed (``MemberState.missed_command``). If
+    every addressed member has missed a command with the target it has now,
+    and with the class of the wish at the gate, the send is the completion of
+    that command and not a fresh wish: the members are commanded with the
+    class and the reason of the missed command, the minimum interval does not
+    apply, and it counts no comfort movement. Otherwise, or for a window in
+    dry-run, which commands nothing, the set is empty.
+    """
+    if gate.controls.dry_run:
+        return frozenset()
+    targets = {target.member_id: target.position for target in gate.to_send}
+    missed = {
+        member.member_id: member.missed_command
+        for member in gate.snapshot.state.members
+        if member.missed_command is not None
+    }
+    addressed = addressed_members(gate)
+    completing = frozenset(
+        member.member_id
+        for member in addressed
+        if (command := missed.get(member.member_id)) is not None
+        and command.target == targets[member.member_id]
+        and command.wish_class is gate.wish.wish_class
+    )
+    return completing if len(completing) == len(addressed) else frozenset()
+
+
 def _no_member_can_execute(gate: GateInput) -> GateOutcome | None:
-    addressed = _addressed_members(gate)
+    addressed = _available_with_target(gate)
     if not addressed:
         return GateOutcome.defer(
             GateRule.NO_MEMBER_CAN_EXECUTE,
@@ -102,7 +152,7 @@ def _target_reached(gate: GateInput) -> GateOutcome | None:
         for member in gate.snapshot.state.members
         if member.last_own_command is not None and not member.last_own_command.failed
     }
-    addressed = _addressed_members(gate)
+    addressed = _available_with_target(gate)
     if not addressed:
         return None  # nobody to judge: nothing is known to be reached
     for member in addressed:
@@ -306,17 +356,12 @@ def _stands_at_target(gate: GateInput, member: MemberConfig) -> bool:
 def _all_commanded(gate: GateInput, pending: Mapping[str, OwnCommand]) -> bool:
     """Return whether a send now would repeat what is under way.
 
-    A send commands only the members that are available and do not stand at
-    their target within tolerance (the runtime filters the same way). So a
-    send would repeat the pending commands if every such member has a
+    A send commands the addressed members only (``addressed_members``). So
+    a send would repeat the pending commands if every addressed member has a
     pending command with its target, and there is at least one.
     """
     targets = {target.member_id: target.position for target in gate.to_send}
-    commanded = [
-        member
-        for member in _addressed_members(gate)
-        if not _stands_at_target(gate, member)
-    ]
+    commanded = addressed_members(gate)
     return bool(commanded) and all(
         member.member_id in pending
         and pending[member.member_id].target == targets[member.member_id]
@@ -428,6 +473,10 @@ def _motor_protection(gate: GateInput) -> GateOutcome | None:
     of 0 or 100 that is not reached (a shutter must not stay a few percent
     open because the rest is "not worth a movement"), and a movement that
     restores a constraint the current position violates.
+
+    The completion of a command that a member missed while it was
+    unavailable is not subject to the minimum interval: the wish was fresh
+    when the command was given (``GateInput.completes_command``).
     """
     settings = gate.config.motor_protection
     reported = gate.current_positions
@@ -440,6 +489,8 @@ def _motor_protection(gate: GateInput) -> GateOutcome | None:
     exempt = gate.restores_constraint or _drives_to_an_end_position(gate)
     if changes and max(changes) < settings.min_change and not exempt:
         return GateOutcome.suppress(GateRule.MOTOR_PROTECTION, ReasonCode.MIN_CHANGE)
+    if gate.completes_command:
+        return None
     if gate.last_comfort_movement is not None and not _is_fresh(gate):
         end = gate.last_comfort_movement + settings.min_interval
         if gate.snapshot.time < end:

@@ -98,12 +98,15 @@ class Engine:
     ) -> WindowState:
         """Return the window state after the targets of the decision were sent.
 
-        The caller hands every target to the actuator under a command
-        identifier and then records the send here: per commanded member the
+        The caller hands the target of every addressed member
+        (``Decision.addressed_targets``) to the actuator under a command
+        identifier and then records the send here: per addressed member the
         last own command (target, direction, time, wish class, reason) with
         one attempt, the owner of the position (the integration), and for a
-        comfort wish the motor protection clock. A decision that did not
-        send leaves the state as it is.
+        comfort wish that completes no missed command the motor protection
+        clock. A member left out because it is unavailable remembers the
+        command it missed. A decision that did not send leaves the state as
+        it is.
         """
         return record_sent_commands(snapshot, decision, command_ids)
 

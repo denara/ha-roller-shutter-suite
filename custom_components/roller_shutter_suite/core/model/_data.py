@@ -112,6 +112,21 @@ def read[T](data: JsonObject, key: str, convert: Callable[[JsonValue], T]) -> T:
         raise ValueError(f"{key}: {err}") from err
 
 
+def read_optional[T](
+    data: JsonObject, key: str, convert: Callable[[JsonValue], T], default: T
+) -> T:
+    """Read a key that is optional within the current schema version.
+
+    A block that adds a key to the persisted state without a schema step
+    reads it with this: data written before the key existed does not have
+    it, and the default applies. A key that is present is read like any
+    other.
+    """
+    if key not in data:
+        return default
+    return read(data, key, convert)
+
+
 def datetime_data(value: datetime | None) -> str | None:
     """Return the ISO 8601 text of a datetime; ``None`` passes."""
     return None if value is None else value.isoformat()
