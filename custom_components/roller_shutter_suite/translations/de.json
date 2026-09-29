@@ -595,6 +595,7 @@
             "old_control_off": "Ich habe die bisherige Steuerung ausgeschaltet und geprüft, dass sie den Rollladen nicht mehr bewegt.",
             "compared": "Ich habe die letzten Tage verglichen: Nach jeder Bewegung der bisherigen Steuerung stand als Grund „Steht bereits richtig“, oder ich verstehe jeden Unterschied.",
             "controls_checked": "Ich habe mir Betriebsart, Pause und Wartungssperre des Hauses, der Gruppe und dieses Fensters angesehen.",
+            "reports_at_once": "Jeder Rollladen dieses Fensters meldet seine Bewegungen sofort, nicht nur in festen Abständen: Während er fährt, ändern sich Zustand und Position in Home Assistant, nicht erst eine Minute später. Bis eine spätere Version jeden Befehl überprüft, könnte eine Bedienung von Hand zwischen zwei Meldungen rückgängig gemacht werden.",
             "fresh_start": "Ich weiß, dass das Fenster frisch beginnt: Was es im Probelauf gesendet hätte, gilt als nie gesendet. Steht der Rollladen nicht dort, wo der Tagesablauf ihn haben will, fährt er wenige Sekunden nach dem Speichern los.",
             "way_back": "Ich kenne den Weg zurück: Mit der Wartungssperre sendet das Fenster keinen Befehl mehr, und dieses Formular schaltet es zurück in den Probelauf."
           }
@@ -832,6 +833,8 @@
         "no_covers": "Deine Auswahl enthält keine Abdeckung.",
         "cover_in_use": "{cover} gehört bereits zum Fenster „{window}“. Eine Abdeckung kann nur zu einem Fenster gehören.",
         "confirm_every_check": "Bestätige jeden Punkt. Trifft einer noch nicht zu, schließe diesen Dialog: Das Fenster bleibt im Probelauf.",
+        "no_movement_detection": "Diese Version kann noch kein Fenster scharf schalten: Sie bemerkt nicht, wenn du einen Rollladen von Hand bewegst, und ein scharfes Fenster würde ihn nach wenigen Sekunden zurückfahren. Das bringt eine spätere Version. Schließe diesen Dialog: Das Fenster bleibt im Probelauf.",
+        "report_delay": "Diese Rollläden melden ihre Bewegungen verzögert, nicht sofort: {covers}. Bis eine spätere Version jeden Befehl überprüft, lässt sich ein Fenster mit einem solchen Rollladen nicht scharf schalten, denn eine Bedienung von Hand zwischen zwei Meldungen könnte rückgängig gemacht werden. Schließe diesen Dialog: Das Fenster bleibt im Probelauf.",
         "invalid_value": "Dieser Wert ist hier nicht möglich.",
         "fraction_not_allowed": "Gib eine ganze Zahl ein.",
         "invalid_day_of_year": "Gib den Tag als Monat und Tag mit je zwei Ziffern ein, zum Beispiel 05-01.",

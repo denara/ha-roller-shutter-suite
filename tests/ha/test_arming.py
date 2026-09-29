@@ -6,6 +6,13 @@ repeats the checks of section 8 of the pilot guide and saves only when every
 one is confirmed. Going back to dry-run needs no confirmation. The controller
 starts the armed window with a clean state (``Engine.arm``): nothing it would
 have sent in dry-run counts, and no dam is armed.
+
+Two facts refuse arming whatever is ticked (maintenance item X10): this
+version does not notice a movement by hand (``MOVEMENT_DETECTION_WIRED`` is
+false until block H10 sets it), and a cover whose profile states a report
+delay could have a movement by hand undone. The tests of the arming path set
+the flag with the fixture ``movement_detection``, as block H10 will; the
+tests of the refusal run with the flag as this version ships it.
 """
 
 import json
@@ -16,17 +23,22 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from homeassistant.config_entries import ConfigEntry, ConfigSubentry
 from homeassistant.const import STATE_OFF, STATE_ON
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
 from homeassistant.helpers.selector import BooleanSelector, SelectSelector
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
+from custom_components.roller_shutter_suite import const
+from custom_components.roller_shutter_suite.capabilities import member_configs
 from custom_components.roller_shutter_suite.const import CONF_DRY_RUN, SUBENTRY_WINDOW
 from custom_components.roller_shutter_suite.core.model import (
     ManualOverrideDam,
+    MemberConfig,
     OverrideEndRule,
 )
+from custom_components.roller_shutter_suite.flow import window_flow
 from custom_components.roller_shutter_suite.flow.window_flow import ARMING_CHECKS
 from tests.ha.helpers import (
     KEEP_ARMED,
@@ -58,6 +70,63 @@ BASICS = {"name": "Example window", "covers": [COVER]}
 ALL_CHECKS = dict.fromkeys(ARMING_CHECKS, True)
 
 
+@pytest.fixture
+def movement_detection(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Let the flow arm, as block H10 will once the runtime notices a movement by hand."""
+    monkeypatch.setattr(const, "MOVEMENT_DETECTION_WIRED", True)
+
+
+@pytest.fixture
+def no_movement_detection(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Refuse arming as this version does, whatever the flag says later."""
+    monkeypatch.setattr(const, "MOVEMENT_DETECTION_WIRED", False)
+
+
+@pytest.fixture
+def saved_dry_run(hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch) -> list[bool]:
+    """Record the value of dry-run of every window that is added or updated."""
+    saved: list[bool] = []
+    entries = hass.config_entries
+    add, update = entries.async_add_subentry, entries.async_update_subentry
+
+    def adding(entry: ConfigEntry, subentry: ConfigSubentry) -> bool:
+        if subentry.subentry_type == SUBENTRY_WINDOW:
+            saved.append(subentry.data[CONF_DRY_RUN])
+        return add(entry, subentry)
+
+    def updating(entry: ConfigEntry, subentry: ConfigSubentry, **changes: Any) -> bool:
+        if subentry.subentry_type == SUBENTRY_WINDOW and "data" in changes:
+            saved.append(changes["data"][CONF_DRY_RUN])
+        return update(entry, subentry, **changes)
+
+    monkeypatch.setattr(entries, "async_add_subentry", adding)
+    monkeypatch.setattr(entries, "async_update_subentry", updating)
+    return saved
+
+
+def _report_late(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Give every cover of a window flow a report delay of one minute.
+
+    The Home Assistant side states no report delay yet, so every profile it
+    reads has none; this is what a profile that states one looks like.
+    """
+
+    def late(
+        hass: HomeAssistant, entity_ids: tuple[str, ...]
+    ) -> tuple[MemberConfig, ...]:
+        return tuple(
+            replace(
+                member,
+                capabilities=replace(
+                    member.capabilities, report_delay=timedelta(minutes=1)
+                ),
+            )
+            for member in member_configs(hass, entity_ids)
+        )
+
+    monkeypatch.setattr(window_flow, "member_configs", late)
+
+
 async def _to_the_last_page(
     hass: HomeAssistant, entry: MockConfigEntry
 ) -> dict[str, Any]:
@@ -79,10 +148,15 @@ async def _window_in_dry_run(hass: HomeAssistant, freezer: Any) -> MockConfigEnt
     return entry
 
 
+@pytest.mark.usefixtures("movement_detection")
 async def test_the_step_from_dry_run_to_armed_asks_for_every_check(
     hass: HomeAssistant, freezer: Any
 ) -> None:
-    """Dry-run first; "armed" leads to the checks; an unchecked point saves nothing."""
+    """Dry-run first; "armed" leads to the checks; an unchecked point saves nothing.
+
+    The new point "reports at once" is one of them: left unticked, it
+    refuses like every other.
+    """
     entry = await _window_in_dry_run(hass, freezer)
 
     result = await _to_the_last_page(hass, entry)
@@ -96,6 +170,8 @@ async def test_the_step_from_dry_run_to_armed_asks_for_every_check(
     result = await configure_subentry_flow(hass, result, KEEP_ARMED)
     assert result["step_id"] == "arm"
     assert result["last_step"] is True
+    assert result["errors"] == {}
+    assert "reports_at_once" in ARMING_CHECKS
     assert schema_keys(result) == list(ARMING_CHECKS)
     for check in ARMING_CHECKS:
         assert isinstance(schema_of(result)[check], BooleanSelector)
@@ -115,6 +191,7 @@ async def test_the_step_from_dry_run_to_armed_asks_for_every_check(
     assert entry.subentries[WINDOW_ID].data[CONF_DRY_RUN] is False
 
 
+@pytest.mark.usefixtures("movement_detection")
 async def test_arming_through_the_form_starts_the_window_clean_and_it_moves(
     hass: HomeAssistant, freezer: Any
 ) -> None:
@@ -146,16 +223,22 @@ async def test_arming_through_the_form_starts_the_window_clean_and_it_moves(
     assert [call.target.value for call in cover_calls(hass)] == [100]
 
 
+@pytest.mark.usefixtures("no_movement_detection")
 async def test_going_back_to_dry_run_needs_no_confirmation(
     hass: HomeAssistant, freezer: Any
 ) -> None:
-    """An armed window offers "armed"; "dry-run" saves at once, nothing moves any more."""
+    """An armed window offers "armed"; "dry-run" saves at once, nothing moves any more.
+
+    This runs as the version ships: a window armed by an older version, or by
+    a test, can always go back, although this version refuses to arm.
+    """
     entry = await setup_window(hass, freezer=freezer)
     assert entry.subentries[WINDOW_ID].data[CONF_DRY_RUN] is False
 
     result = await _to_the_last_page(hass, entry)
     assert marker_of(result, "operation").default() == "armed"
-    assert result["last_step"] is True
+    # "Armed" would lead to the page of the checks, which refuses.
+    assert result["last_step"] is False
     result = await configure_subentry_flow(hass, result, KEEP_DRY_RUN)
 
     assert result["reason"] == "reconfigure_successful"
@@ -170,6 +253,7 @@ async def test_going_back_to_dry_run_needs_no_confirmation(
     assert len(cover_calls(hass)) == calls
 
 
+@pytest.mark.usefixtures("movement_detection")
 async def test_the_window_removed_on_the_last_pages_saves_nothing(
     hass: HomeAssistant, freezer: Any
 ) -> None:
@@ -187,6 +271,131 @@ async def test_the_window_removed_on_the_last_pages_saves_nothing(
     assert result["reason"] == "subentry_removed"
     result = await configure_subentry_flow(hass, second, ALL_CHECKS)
     assert result["reason"] == "subentry_removed"
+
+
+# ---------------------------------------------------------------------------
+# What refuses arming whatever is ticked (maintenance item X10)
+# ---------------------------------------------------------------------------
+
+
+def test_this_version_does_not_notice_a_movement_by_hand() -> None:
+    """The flag ships false; block H10 sets it when the runtime feeds the tracker."""
+    assert const.MOVEMENT_DETECTION_WIRED is False
+
+
+@pytest.mark.usefixtures("no_movement_detection")
+async def test_the_page_of_the_checks_says_why_and_arms_nothing(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The reason shows when the page opens; no combination of ticks saves."""
+    entry = await _window_in_dry_run(hass, freezer)
+
+    result = await _to_the_last_page(hass, entry)
+    result = await configure_subentry_flow(hass, result, KEEP_ARMED)
+    assert result["step_id"] == "arm"
+    assert result["errors"] == {"base": "no_movement_detection"}
+    assert schema_keys(result) == list(ARMING_CHECKS)
+
+    for answer in (ALL_CHECKS, {}, ALL_CHECKS | {"reports_at_once": False}):
+        result = await configure_subentry_flow(hass, result, answer)
+        assert result["type"] is FlowResultType.FORM
+        assert result["step_id"] == "arm"
+        assert result["errors"] == {"base": "no_movement_detection"}
+        assert entry.subentries[WINDOW_ID].data[CONF_DRY_RUN] is True
+    await settle(hass, freezer)
+    assert cover_calls(hass) == []
+    assert state_of(hass, DRY_RUN).state == STATE_ON
+
+
+@pytest.mark.usefixtures("no_movement_detection")
+async def test_no_path_of_the_window_flow_writes_armed(
+    hass: HomeAssistant, freezer: Any, saved_dry_run: list[bool]
+) -> None:
+    """Every save of every path writes dry-run: new, kept, refused, went back.
+
+    An armed window cannot stay armed through the form either: "armed" leads
+    it to the same page, which refuses, so the form never confirms a state
+    this version cannot arm.
+    """
+    entry = await _window_in_dry_run(hass, freezer)
+    hass.states.async_set(
+        "cover.example_other",
+        "open",
+        {"supported_features": 15, "current_position": 100},
+    )
+    created = await run_subentry_flow(
+        hass,
+        entry,
+        SUBENTRY_WINDOW,
+        [
+            {"name": "Other window", "covers": ["cover.example_other"]},
+            *routine_inherit(),
+        ],
+    )
+    assert created["type"] is FlowResultType.CREATE_ENTRY
+
+    for choice in (KEEP_DRY_RUN, KEEP_ARMED):
+        result = await _to_the_last_page(hass, entry)
+        result = await configure_subentry_flow(hass, result, choice)
+        if choice is KEEP_ARMED:
+            result = await configure_subentry_flow(hass, result, ALL_CHECKS)
+            assert result["errors"] == {"base": "no_movement_detection"}
+        assert entry.subentries[WINDOW_ID].data[CONF_DRY_RUN] is True
+    # The new window and the choice "dry-run"; the refused page saved nothing.
+    assert saved_dry_run == [True, True]
+
+    # A window armed before this version refused: it cannot stay armed.
+    hass.config_entries.async_update_subentry(
+        entry,
+        entry.subentries[WINDOW_ID],
+        data={**entry.subentries[WINDOW_ID].data, CONF_DRY_RUN: False},
+    )
+    await settle(hass, freezer)
+    saved_dry_run.clear()
+    result = await _to_the_last_page(hass, entry)
+    assert result["last_step"] is False
+    result = await configure_subentry_flow(hass, result, KEEP_ARMED)
+    assert result["step_id"] == "arm"
+    result = await configure_subentry_flow(hass, result, ALL_CHECKS)
+    assert result["errors"] == {"base": "no_movement_detection"}
+    result = await _to_the_last_page(hass, entry)
+    result = await configure_subentry_flow(hass, result, KEEP_DRY_RUN)
+    assert result["reason"] == "reconfigure_successful"
+    assert entry.subentries[WINDOW_ID].data[CONF_DRY_RUN] is True
+
+    assert saved_dry_run == [True]
+
+
+@pytest.mark.usefixtures("movement_detection")
+async def test_a_cover_that_reports_late_refuses_arming_by_name(
+    hass: HomeAssistant, freezer: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A report delay above zero refuses, names the cover, and keeps an armed window.
+
+    No tick outweighs it, not for a window in dry-run and not for one that is
+    armed already and would stay armed.
+    """
+    _report_late(monkeypatch)
+    entry = await _window_in_dry_run(hass, freezer)
+
+    result = await _to_the_last_page(hass, entry)
+    result = await configure_subentry_flow(hass, result, KEEP_ARMED)
+    assert result["errors"] == {"base": "report_delay"}
+    assert result["description_placeholders"] == {"covers": COVER}
+    result = await configure_subentry_flow(hass, result, ALL_CHECKS)
+    assert result["errors"] == {"base": "report_delay"}
+    assert entry.subentries[WINDOW_ID].data[CONF_DRY_RUN] is True
+
+    hass.config_entries.async_update_subentry(
+        entry,
+        entry.subentries[WINDOW_ID],
+        data={**entry.subentries[WINDOW_ID].data, CONF_DRY_RUN: False},
+    )
+    await settle(hass, freezer)
+    result = await _to_the_last_page(hass, entry)
+    assert result["last_step"] is False
+    result = await configure_subentry_flow(hass, result, KEEP_ARMED)
+    assert result["errors"] == {"base": "report_delay"}
 
 
 # ---------------------------------------------------------------------------
@@ -215,7 +424,7 @@ def test_the_page_names_the_checks_of_the_pilot_guide_in_their_order() -> None:
 
 @pytest.mark.parametrize("language", ["en", "de"])
 def test_every_check_has_its_text(language: str) -> None:
-    """Both languages name every check of the page."""
+    """Both languages name every check of the page and every reason it refuses."""
     strings = json.loads(
         (
             ROOT
@@ -230,3 +439,7 @@ def test_every_check_has_its_text(language: str) -> None:
     assert all(page["data"].values())
     options = strings["selector"]["operation"]["options"]
     assert set(options) == {"dry_run", "armed"}
+    errors = strings["config_subentries"]["window"]["error"]
+    for key in ("confirm_every_check", "no_movement_detection", "report_delay"):
+        assert errors[key]
+    assert "{covers}" in errors["report_delay"]

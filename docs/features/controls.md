@@ -17,7 +17,7 @@ Four controls decide how much a window may move. Three of them are switches you 
 
 **The maintenance lock is the only control that also holds back the fire alarm.** It exists for the moment somebody works on a shutter: a shutter that starts to move could hurt them. The fire alarm is still reported at once, as an event and in the logbook, with the reason "Maintenance lock".
 
-A pause and the operating mode are for comfort. Use them when you do not want the daily routine to move the shutters for a while; storms and the fire alarm still do their job. A pause is also the way to keep a position you set by hand: this version does not notice a movement by hand yet, and an armed window that is not paused moves the shutter back within a few seconds.
+A pause and the operating mode are for comfort. Use them when you do not want the daily routine to move the shutters for a while; storms and the fire alarm still do their job.
 
 ## The entities
 
@@ -85,3 +85,5 @@ The shutter of a studio shall never move for comfort, only to protect the window
 ## Dry-run next to the controls
 
 Dry-run is not one of the switches. It belongs to the settings of a window, and leaving it takes a deliberate step with a confirmation; see [Arming a window](dry-run.md#arming-a-window). While a window is in dry-run, the controls still decide what it *would* do: a paused window in dry-run writes down "would have held back, because the window is paused".
+
+**In version 0.2.0 every window stays in dry-run.** This version does not notice when you move a shutter by hand, and an armed window would move the shutter back within a few seconds, so the page that arms a window says so and saves nothing. The pause, the maintenance lock and the operating mode work in dry-run all the same: try them on your windows now and look at what each window writes down. A later version notices a movement by hand and then arms a window.

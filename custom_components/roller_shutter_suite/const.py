@@ -73,6 +73,16 @@ SAFETY_TICK: Final = timedelta(minutes=5)
 # docs/dev/runtime.md, "Deviations".
 STARTUP_GRACE: Final = timedelta(minutes=2)
 
+# Whether the runtime notices a movement by hand. The tracker of block C06
+# tells a movement by hand from an own one, but the runtime does not feed it
+# the reports of the covers yet; block H10 does, and sets this to True. Until
+# then an armed window would take a shutter that a person moved for one that
+# is not where it should be and move it back within seconds, so the page of
+# the checks refuses to arm a window (maintenance item X10, ruled by the
+# project owner). The one place that decides it; the flow reads it each time
+# the page is shown.
+MOVEMENT_DETECTION_WIRED: Final[bool] = False
+
 # The status of a window (``docs/features/status-and-events.md``).
 #
 # The one event type of the integration on the bus: fired when a wanted

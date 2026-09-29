@@ -6,8 +6,17 @@ of its own that repeats the checks of the pilot guide and saves only when
 every one is confirmed. Going back to dry-run needs no confirmation. Saving
 reloads the entry as every change does; the controller then starts the armed
 window with a clean state (``Engine.arm``).
+
+Two facts refuse arming whatever is ticked (maintenance item X10): the runtime
+does not notice a movement by hand yet (``const.MOVEMENT_DETECTION_WIRED``,
+which block H10 sets), and a cover whose capability profile states a report
+delay could have a movement by hand undone between two reports (until block
+H15 verifies commands). While either holds, no path writes ``dry_run: false``:
+keeping an armed window armed leads to the same page and is refused as well,
+and going back to dry-run always works.
 """
 
+from datetime import timedelta
 from typing import Any, Final
 
 import probatio
@@ -27,6 +36,7 @@ from homeassistant.helpers.selector import (
     TextSelector,
 )
 
+from custom_components.roller_shutter_suite import const
 from custom_components.roller_shutter_suite.capabilities import member_configs
 from custom_components.roller_shutter_suite.const import (
     CONF_COVERS,
@@ -72,6 +82,7 @@ ARMING_CHECKS: Final = (
     "old_control_off",
     "compared",
     "controls_checked",
+    "reports_at_once",
     "fresh_start",
     "way_back",
 )
@@ -81,6 +92,8 @@ ARMING_CHECKS: Final = (
 """
 
 ERROR_CONFIRM_EVERY_CHECK = "confirm_every_check"
+ERROR_NO_MOVEMENT_DETECTION = "no_movement_detection"
+ERROR_REPORT_DELAY = "report_delay"
 ERROR_NO_COVERS = "no_covers"
 ERROR_COVER_IN_USE = "cover_in_use"
 ERROR_NAME_BLANK = "name_blank"
@@ -102,6 +115,19 @@ def _without_position(members: tuple[MemberConfig, ...]) -> list[str]:
             member.capabilities.capability_state("supports_set_position"),
             member.capabilities.capability_state("reports_position"),
         )
+    ]
+
+
+def _with_report_delay(members: tuple[MemberConfig, ...]) -> list[str]:
+    """Return the members whose capability profile states a report delay.
+
+    A reversal by hand within such a delay is invisible, and a command sent
+    again would overrule the person (until command verification, block H15).
+    """
+    return [
+        member.member_id
+        for member in members
+        if member.capabilities.report_delay > timedelta(0)
     ]
 
 
@@ -356,11 +382,14 @@ class WindowSubentryFlow(FeatureStepsMixin, ConfigSubentryFlow):
         """Ask for dry-run or armed (E11); arming needs the confirmation that follows.
 
         Going back to dry-run needs no confirmation. A window that is armed
-        already stays armed without one.
+        already stays armed without one, but only while arming is possible at
+        all: until the runtime notices a movement by hand, "armed" leads to
+        the page of the checks for every window, and that page refuses.
         """
         if self._own_subentry_is_gone():
             return self.async_abort(reason=ABORT_SUBENTRY_REMOVED)
         in_dry_run = self._stored_dry_run()
+        needs_checks = in_dry_run or self._arming_refused()
         if user_input is None:
             schema = probatio.Schema(
                 {
@@ -379,21 +408,41 @@ class WindowSubentryFlow(FeatureStepsMixin, ConfigSubentryFlow):
             return self.async_show_form(
                 step_id=STEP_OPERATION,
                 data_schema=as_form_schema(schema),
-                # From dry-run, "armed" leads to the confirmation.
-                last_step=not in_dry_run,
+                # "Armed" leads to the confirmation from dry-run, and for
+                # every window while arming is refused.
+                last_step=not needs_checks,
             )
         if user_input[CONF_OPERATION] == OPERATION_DRY_RUN:
             return await self._async_save(dry_run=True)
-        if in_dry_run:
+        if needs_checks:
             return await self.async_step_arm()
         return await self._async_save(dry_run=False)
+
+    def _arming_refused(self) -> tuple[str, dict[str, str]] | None:
+        """Return the error and its placeholders of a fact that refuses arming.
+
+        No tick can outweigh these: the runtime does not notice a movement by
+        hand yet, or a cover of the window reports with a delay.
+        """
+        if not const.MOVEMENT_DETECTION_WIRED:
+            return ERROR_NO_MOVEMENT_DETECTION, {}
+        if delayed := _with_report_delay(self._members):
+            return ERROR_REPORT_DELAY, {"covers": ", ".join(delayed)}
+        return None
 
     async def async_step_arm(
         self, user_input: dict[str, Any] | None = None
     ) -> SubentryFlowResult:
-        """Repeat the checks before arming; save only when every one is confirmed."""
+        """Repeat the checks before arming; save only when every one is confirmed.
+
+        A fact that refuses arming is shown when the page opens, and the page
+        then saves nothing whatever is ticked.
+        """
         errors: dict[str, str] = {}
-        if user_input is not None:
+        placeholders: dict[str, str] = {}
+        if (refused := self._arming_refused()) is not None:
+            errors["base"], placeholders = refused
+        elif user_input is not None:
             if all(user_input.get(check) is True for check in ARMING_CHECKS):
                 return await self._async_save(dry_run=False)
             errors["base"] = ERROR_CONFIRM_EVERY_CHECK
@@ -407,6 +456,7 @@ class WindowSubentryFlow(FeatureStepsMixin, ConfigSubentryFlow):
             step_id=STEP_ARM,
             data_schema=as_form_schema(schema),
             errors=errors,
+            description_placeholders=placeholders,
             last_step=True,
         )
 
