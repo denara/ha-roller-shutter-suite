@@ -45,6 +45,7 @@ from custom_components.roller_shutter_suite.features.daily_routine import (
     DAILY_ROUTINE,
 )
 from custom_components.roller_shutter_suite.features.movement import MOVEMENT
+from custom_components.roller_shutter_suite.features.operation import OPERATION
 from custom_components.roller_shutter_suite.flow import inheritance, steps
 from custom_components.roller_shutter_suite.flow.model import (
     Catalog,
@@ -54,6 +55,7 @@ from custom_components.roller_shutter_suite.flow.model import (
 )
 from tests.ha.helpers import (
     EXAMPLE_REGISTRY,
+    KEEP_DRY_RUN,
     ROUTINE_HOUSE,
     configure_subentry_flow,
     resolve_example,
@@ -153,11 +155,13 @@ async def _subentry_walk(
     if flow == SUBENTRY_WINDOW:
         # A new window takes a cover that no other window has.
         basics["covers"] = [COVER if reconfigure else NEW_COVER]
+    # The reconfigure flow of a window ends with "dry-run or armed".
+    last = [KEEP_DRY_RUN] if reconfigure and flow == SUBENTRY_WINDOW else []
     return Walk(
         flow,
         result,
         hass.config_entries.subentries.async_configure,
-        [basics, *routine_inherit()],
+        [basics, *routine_inherit(), *last],
     )
 
 
@@ -222,8 +226,16 @@ async def test_every_page_but_the_last_says_next(
         result = await _submit(walk, result, data)
 
     assert result["type"] in (FlowResultType.CREATE_ENTRY, FlowResultType.ABORT)
-    assert [last for _, last in seen] == [False] * (len(seen) - 1) + [True]
-    assert seen[-1][0] == "feature_movement_general"
+    if name == "window reconfigure":
+        # The window is in dry-run: "armed" would lead to the confirmation,
+        # so the page "dry-run or armed" says "Next" too.
+        assert [last for _, last in seen] == [False] * len(seen)
+    else:
+        assert [last for _, last in seen] == [False] * (len(seen) - 1) + [True]
+
+    assert seen[-1][0] == (
+        "operation" if name == "window reconfigure" else "feature_operation_pause"
+    )
     assert counters == {
         "feature_daily_routine_workday": ("1", "3"),
         "feature_daily_routine_weekend": ("2", "3"),
@@ -260,6 +272,7 @@ def _routine_with(*day_types: str) -> Catalog:
                 DAILY_ROUTINE.feature_id, (general, *kept), DAILY_ROUTINE.switch
             ),
             MOVEMENT,
+            OPERATION,
         ),
         resolve=resolve_window,
     )
@@ -286,13 +299,13 @@ async def test_counter_follows_the_pages_of_the_kinds_of_day_that_are_shown(
     """One, two or three kinds of day: the count is that of the pages shown."""
     monkeypatch.setattr(features, "CATALOG", _routine_with(*day_types))
     walk = await _house_setup(hass)
-    general_house, *day_pages = ROUTINE_HOUSE[1:-1]
+    general_house, *day_pages = ROUTINE_HOUSE[1:5]
     inputs = [
         {},
         ROUTINE_HOUSE[0],
         general_house,
         *day_pages[: len(day_types)],
-        ROUTINE_HOUSE[-1],
+        *ROUTINE_HOUSE[5:],
     ]
     result = walk.first
     counters: dict[str, tuple[str, str]] = {}
@@ -388,6 +401,9 @@ _REFUSED: dict[str, list[tuple[str, Any]]] = {
         ("motor_min_change", 5.5),
         ("stagger_gap", 1.5),
         ("reevaluate_after", 0.5),
+    ],
+    "feature_operation_pause": [
+        ("pause_source_choice", "own"),  # own selection, no entity
     ],
 }
 

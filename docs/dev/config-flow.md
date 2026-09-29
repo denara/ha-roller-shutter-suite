@@ -45,6 +45,7 @@ custom_components/roller_shutter_suite/
     __init__.py      FEATURES and the catalog     <- one line per feature
     daily_routine/   the form of the feature
     movement/        motor protection, staggering, re-evaluation time
+    operation/       the external pause entity (page "Operation")
 translations_src/    sources of the translations, outside the shipped integration
 scripts/build_translations.py
 ```
@@ -64,6 +65,8 @@ The registry of the core (`core/settings.py`) is the only description of a setti
 | `form_name` | the name of the field in the form and in the translations, where it differs from the key: `schedule_brightness_threshold` appears as `schedule_brightness_threshold_lux`, because the key leaves the unit to its documentation. Stored data always uses the key |
 
 A `FeatureForm` lists the pages of one feature (`StepForm`: a name, its fields, and `numbered` for the pages that carry a counter in their title; a page has at most one section, because sections cannot be nested) and names the switch of the feature, if the registry has one. A `Catalog` ties the registry, the feature forms and the resolver together and refuses a form description that does not fit the registry: an unknown key, a switch that is no inheritable boolean, a list (which needs a step of its own), a key in two forms, two pages with the same step ID, and a day of the year or a reference inside the section. A day of the year is a text field, and an emptied text inside a section was never confirmed in a browser. A time has a selector of its own and may sit in the section; like every field, an empty text from it counts as an absent key.
+
+**The page "Operation"** (`features/operation/`) came this way: one registry entry, `pause_source` (an optional reference of the function `pause`), one `FieldForm`, and the fragments; no flow class changed for it. It has no switch and is the last feature page on every level. Dry-run is no setting of the registry but identity data of a window; the window's reconfigure flow asks for it on pages of its own after the feature pages (below).
 
 **A setting that is not offered yet** simply has no `FieldForm`. It stays in the registry, its stored value is kept when a form is saved, and the set-up resolves it like any other. At present these are `morning_condition_source` (the conditional morning opening is not built) and `schedule_profile` (one value), plus the settings of functions that have no form yet (frost protection). Motor protection, the staggering gap and the re-evaluation time have the page "Movement" (`features/movement/`), which has no switch.
 
@@ -126,7 +129,14 @@ Home Assistant loads one file per language, the strings of a step live under the
 
 Which fields a step has, their kind and their section come from the catalog, which the script imports without Home Assistant. The script fans a feature step out to the three levels, appends the inheritance hint of the field's kind on the levels that inherit, writes the error `out_of_range_<field>` of every number field with a range from `_templates.range_errors` and the range of the registry, and generates one repair issue per level and problem code. **Never edit the three generated files by hand.** `tests/scripts/test_build_translations.py` fails when they are not current, when a language differs from English in a key or a placeholder, or when a source ends up inside the shipped integration; `uv run python scripts/build_translations.py --check` does the first of these on the command line. `tests/ha/test_translations.py` asks the forms what they show and fails when a field, an error, a menu entry or an issue has no translation.
 
+## Dry-run or armed: the last pages of a window
+
+A new window is always stored in dry-run; the flow that adds it does not ask. The reconfigure flow of a window ends, after the feature pages, with the page `operation` ("dry-run or armed"), a list selector with the options `dry_run` and `armed` and the translation key `operation`, preset to the stored state. Choosing dry-run saves at once, and so does keeping an armed window armed. The step from dry-run to armed leads to the page `arm`, which repeats the checks of section 8 of the pilot guide as one required checkbox each (`ARMING_CHECKS` of `flow/window_flow.py`); it saves only when every box is ticked, otherwise it comes back with the error `confirm_every_check`, and closing the dialog saves nothing. Both pages check before saving, like every last page, that the window was not removed meanwhile. `tests/ha/test_arming.py` compares the keys of the page with the marked items of that section, in their order.
+
+The feature pages of a reconfigure of a window are therefore never the last ones: a flow with pages of its own after the feature pages says so with `FeatureStepsMixin._pages_follow_the_features`, and the mixin then passes `last_step=False` to every feature page. The page `operation` is the last one for an armed window; for a window in dry-run it says "Next", because "armed" leads to the checks.
+
 ## Next or Submit
+
 
 A flow has no way back, so every page passes `last_step` to `async_show_form`, and the frontend labels its button "Next" or "Submit" by it (`show-dialog-config-flow.ts` and `show-dialog-sub-config-flow.ts` read a translated `step.<id>.submit` first, then fall back to the flag). The first page of every flow (the confirmation of the house, the basics of a group or a window) is never the last one. A feature page is the last one when no other page is queued after it; the page of the switches only when no feature page can follow on the level at all, because which pages follow depends on the switches being chosen. No page has a `submit` text of its own: the last page is not fixed by its step ID, and the frontend shows a `submit` text whatever the flag says.
 

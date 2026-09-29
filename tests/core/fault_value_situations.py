@@ -287,6 +287,19 @@ def valid_samples(
     return samples
 
 
+READ_OUTSIDE_THE_ARBITER: Final = {
+    FunctionId.PAUSE: "tests/ha/test_external_pause.py",
+}
+"""Functions whose settings the arbiter never reads, with the test that judges them.
+
+The external pause entity (``pause_source``) is read by the Home Assistant
+layer into the controls of a window; the arbiter sees only the pause that
+results. No situation here can therefore tell two of its values apart, and
+none is needed: the named test shows that a blind reference pauses comfort
+and lets protection and fire pass. Rule 2 still judges these settings in every
+protection situation, and finds that the core does not read them.
+"""
+
 FAULT_CASES: Final = ("a faulty value on the only level", "an unreadable house")
 
 
@@ -350,7 +363,7 @@ def missing_situations(registry: SettingsRegistry = WINDOW_SETTINGS) -> list[str
             {entry.function for entry in _cautious(registry) if entry.function},
             key=list(FunctionId).index,
         )
-        if function not in covered
+        if function not in covered and function not in READ_OUTSIDE_THE_ARBITER
     ]
 
 

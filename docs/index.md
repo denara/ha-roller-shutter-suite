@@ -2,18 +2,20 @@
 
 Roller Shutter Suite is a custom integration for Home Assistant that controls roller shutters: daily schedules, sun shading, reactions to open windows and doors, protection during storm, hail or fire, and a manual override that respects the person at the window.
 
-**Status: pilot, dry-run only recommended.** Version 0.1.0 decides and records, and moves no shutter: every window is in dry-run and cannot be armed yet. The pages below are written together with the features they describe. A page that is not linked does not exist yet.
+**Status: pilot.** Every new window starts in dry-run: it decides and records, and moves no shutter. A window moves only after you have armed it on purpose, following the checklist of the pilot guide. The pages below are written together with the features they describe. A page that is not linked does not exist yet.
 
 ## For users
 
-- [Pilot guide](pilot.md): install the pilot version, add one window in dry-run, compare its decisions with your existing control, and remove everything again
+- [Pilot guide](pilot.md): install the pilot version, add one window in dry-run, compare its decisions with your existing control, arm it after the checklist, and remove everything again
 - Installation: see the [README](../README.md#installation)
 - [Configuration](configuration.md): first set-up, adding, changing and removing groups and windows, and how inherited values look in the forms
 - [Concepts](concepts.md): how settings are inherited from the house to groups to windows, and how the integration decides where a shutter goes, each with worked examples
 - [The daily routine](features/daily-routine.md): morning and evening, workdays, weekends and public holidays, sun times with "not before" and "not after", and what happens after a restart
 - [Shading by geometry](features/shading-geometry.md): what to measure at a window, at several shutters side by side and at a roof element of two rows; how the shutter follows the sun; the two calibration values and how to find them
 - [Movement](features/movement.md): minimum change and minimum interval of the motors, the gap between motors when many shutters move together, and why a fire alarm is never held back by them
-- [Dry-run](features/dry-run.md): what it is for, that it never moves anything, not even at a fire alarm, the one exception, and how to compare its decisions with reality
+- [Dry-run](features/dry-run.md): what it is for, that it never moves anything, not even at a fire alarm, the one exception, how to compare its decisions with reality, and how to arm a window
+- [Pause, maintenance lock, operating mode and dry-run](features/controls.md): what each holds back and what still moves, the house, groups and windows and why the strictest wins, a pause entity of your own, and worked examples
+
 - [Status, reason events and diagnostics](features/status-and-events.md): the entities of a window, every reason in plain words, the event for your own automations with an example notification, the logbook, and how to download diagnostics
 - Actions for your own automations: to be written
 - Troubleshooting: to be written

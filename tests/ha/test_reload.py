@@ -13,6 +13,7 @@ from custom_components.roller_shutter_suite.const import (
     SUBENTRY_WINDOW,
 )
 from tests.ha.helpers import (
+    KEEP_DRY_RUN,
     ROUTINE_HOUSE,
     add_group,
     add_window,
@@ -86,6 +87,7 @@ async def test_each_change_sets_the_entry_up_exactly_once(
         [
             {"name": "Kitchen window", "covers": ["cover.example_window"]},
             *CHANGED,
+            KEEP_DRY_RUN,
         ],
         reconfigure=window.subentry_id,
     )
@@ -145,7 +147,11 @@ async def test_unchanged_forms_do_not_reload(
         hass,
         entry,
         SUBENTRY_WINDOW,
-        [{"name": "Kitchen", "covers": ["cover.example_window"]}, *INHERIT],
+        [
+            {"name": "Kitchen", "covers": ["cover.example_window"]},
+            *INHERIT,
+            KEEP_DRY_RUN,
+        ],
         window.subentry_id,
     )
     await _save_the_house(hass, entry)

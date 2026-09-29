@@ -203,13 +203,33 @@
             "degraded_accept": "Mit diesen Abdeckungen fortfahren",
             "basics": "Andere Abdeckungen wählen"
           }
+        },
+        "operation": {
+          "title": "Betrieb: Probelauf oder scharf",
+          "description": "Im Probelauf entscheidet das Fenster und hält fest, was es tun würde, bewegt aber nichts. Scharf geschaltet bewegt es seine Rollläden. Schalte ein Fenster erst scharf, wenn du seine Entscheidungen mit deiner bisherigen Steuerung verglichen hast; die nächste Seite fragt die Prüfpunkte ab. Zurück in den Probelauf kannst du hier jederzeit, ohne Bestätigung.",
+          "data": {
+            "operation": "Betrieb"
+          }
+        },
+        "arm": {
+          "title": "Fenster scharf schalten",
+          "description": "Ab jetzt bewegt dieses Fenster seine Rollläden. Bestätige jeden Punkt unten. Trifft einer noch nicht zu, schließe diesen Dialog: Das Fenster bleibt im Probelauf, und nichts wird gespeichert.",
+          "data": {
+            "one_controller": "Nichts anderes bewegt diesen Rollladen: keine Automation, kein Skript, keine Szene, kein Blueprint, kein Zeitplan einer anderen Integration und keine App des Herstellers.",
+            "old_control_off": "Ich habe die bisherige Steuerung ausgeschaltet und geprüft, dass sie den Rollladen nicht mehr bewegt.",
+            "compared": "Ich habe die letzten Tage verglichen: Nach jeder Bewegung der bisherigen Steuerung stand als Grund „Steht bereits richtig“, oder ich verstehe jeden Unterschied.",
+            "controls_checked": "Ich habe mir Betriebsart, Pause und Wartungssperre des Hauses, der Gruppe und dieses Fensters angesehen.",
+            "fresh_start": "Ich weiß, dass das Fenster frisch beginnt: Was es im Probelauf gesendet hätte, gilt als nie gesendet.",
+            "way_back": "Ich kenne den Weg zurück: Mit der Wartungssperre sendet das Fenster keinen Befehl mehr, und dieses Formular schaltet es zurück in den Probelauf."
+          }
         }
       },
       "error": {
         "name_blank": "Gib einen Namen ein.",
         "group_removed": "Die gewählte Gruppe wurde gelöscht, während dieses Formular offen war. Wähle eine andere Gruppe, oder speichere ohne Gruppe; dann übernimmt das Fenster die Einstellungen des Hauses.",
         "no_covers": "Deine Auswahl enthält keine Abdeckung.",
-        "cover_in_use": "{cover} gehört bereits zum Fenster „{window}“. Eine Abdeckung kann nur zu einem Fenster gehören."
+        "cover_in_use": "{cover} gehört bereits zum Fenster „{window}“. Eine Abdeckung kann nur zu einem Fenster gehören.",
+        "confirm_every_check": "Bestätige jeden Punkt. Trifft einer noch nicht zu, schließe diesen Dialog: Das Fenster bleibt im Probelauf."
       },
       "abort": {
         "reconfigure_successful": "Das Fenster wurde gespeichert.",
@@ -232,6 +252,12 @@
         "inherit_reference": "Vom Haus oder von der Gruppe übernehmen (derzeit die unten genannte Entität)",
         "none": "Keine",
         "own": "Eigene Auswahl"
+      }
+    },
+    "operation": {
+      "options": {
+        "dry_run": "Probelauf: entscheiden und festhalten, nichts bewegen",
+        "armed": "Scharf: die Rollläden bewegen"
       }
     }
   },
@@ -263,6 +289,18 @@
     "rule_without_keys": {
       "title": "Gespeicherte Einstellungen wurden aus unbekanntem Grund abgelehnt",
       "description": "Die Einstellungen mindestens eines Fensters wurden als Ganzes abgelehnt, und Roller Shutter Suite konnte nicht sagen, welche Einstellungen der Grund sind. Das ist ein Fehler in der Integration, nicht in deinen Einstellungen. Einstellungen, die Menschen oder Technik schützen oder Bewegungen begrenzen, wirken weiter; Komfortbewegungen sind ausgesetzt. Bitte melde das dem Autor der Integration."
+    },
+    "pause_source_blind_global": {
+      "title": "Die Pausen-Entität des Hauses hat keinen Zustand",
+      "description": "Die Pausen-Entität {entity} des Hauses ist seit mehr als einer Stunde nicht verfügbar oder ihr Zustand ist unbekannt. Bis sie wieder ein oder aus meldet, sind die Komfortbewegungen aller Fenster pausiert; Schutz und Feueralarm bewegen die Rollläden weiterhin. Dieser Hinweis verschwindet von selbst, sobald die Entität wieder meldet. Um die Entität nicht mehr zu verwenden, wähle auf der Seite „Betrieb“ des Hauses „Keine“."
+    },
+    "pause_source_blind_group": {
+      "title": "Die Pausen-Entität der Gruppe „{name}“ hat keinen Zustand",
+      "description": "Die Pausen-Entität {entity} der Gruppe „{name}“ ist seit mehr als einer Stunde nicht verfügbar oder ihr Zustand ist unbekannt. Bis sie wieder ein oder aus meldet, sind die Komfortbewegungen der Fenster dieser Gruppe pausiert; Schutz und Feueralarm bewegen die Rollläden weiterhin. Dieser Hinweis verschwindet von selbst, sobald die Entität wieder meldet. Um die Entität nicht mehr zu verwenden, wähle auf der Seite „Betrieb“ der Gruppe „Keine“."
+    },
+    "pause_source_blind_window": {
+      "title": "Die Pausen-Entität des Fensters „{name}“ hat keinen Zustand",
+      "description": "Die Pausen-Entität {entity} des Fensters „{name}“ ist seit mehr als einer Stunde nicht verfügbar oder ihr Zustand ist unbekannt. Bis sie wieder ein oder aus meldet, sind die Komfortbewegungen dieses Fensters pausiert; Schutz und Feueralarm bewegen den Rollladen weiterhin. Dieser Hinweis verschwindet von selbst, sobald die Entität wieder meldet. Um die Entität nicht mehr zu verwenden, wähle auf der Seite „Betrieb“ des Fensters „Keine“."
     }
   },
   "entity": {
@@ -291,6 +329,24 @@
       },
       "dry_run": {
         "name": "Probelauf"
+      }
+    },
+    "select": {
+      "operating_mode": {
+        "name": "Betriebsart",
+        "state": {
+          "automatic": "Automatisch",
+          "protection_only": "Nur Schutz",
+          "off": "Aus"
+        }
+      }
+    },
+    "switch": {
+      "pause": {
+        "name": "Pause"
+      },
+      "maintenance_lock": {
+        "name": "Wartungssperre"
       }
     }
   },

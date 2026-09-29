@@ -40,6 +40,7 @@ module document that other side, and that fire stays untouched in every case.
 
 import dataclasses
 from datetime import timedelta
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -64,6 +65,7 @@ from custom_components.roller_shutter_suite.core.settings import (
 from tests.core.arbiter_kit import LEFT, day
 from tests.core.fault_value_situations import (
     FAULT_CASES,
+    READ_OUTSIDE_THE_ARBITER,
     SITUATIONS,
     Situation,
     decide,
@@ -152,7 +154,16 @@ def test_every_function_with_settings_that_fall_back_has_a_situation() -> None:
         FunctionId.FROST,
         FunctionId.MOTOR_PROTECTION,
         FunctionId.COMMAND_VERIFICATION,
+        FunctionId.PAUSE,
     }
+
+
+def test_what_the_arbiter_never_reads_is_judged_by_a_test_that_exists() -> None:
+    """The one exemption from a situation names a test file, and that file exists."""
+    root = Path(__file__).parents[2]
+    for function, test in READ_OUTSIDE_THE_ARBITER.items():
+        assert function in {definition.function for definition in CAUTIOUS}
+        assert (root / test).is_file(), test
 
 
 def test_function_without_a_situation_is_named_with_advice() -> None:
@@ -192,6 +203,7 @@ def test_situations_have_both_classes_and_protection_really_moves() -> None:
         definition
         for definition in CAUTIOUS
         if definition.kind in (SettingKind.BOOLEAN, SettingKind.OPTIONAL_REFERENCE)
+        and definition.function not in READ_OUTSIDE_THE_ARBITER
     ],
     ids=lambda definition: definition.key,
 )

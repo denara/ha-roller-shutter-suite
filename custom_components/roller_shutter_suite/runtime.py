@@ -8,9 +8,9 @@ left out while every other window runs. Nothing here raises for a single
 window; the config entry is loaded as long as Home Assistant itself is.
 
 The controls of a window (pause, operating mode, maintenance lock on three
-levels, and dry-run) are read through ``controls_of``; until the block that
-builds the switches exists, the three levels are neutral and dry-run is what
-the window's subentry says.
+levels, and dry-run) are read through ``controls_of``: the set-up of the
+entry hands in the control board of the entry (``controls.py``).
+
 """
 
 import logging
@@ -32,11 +32,6 @@ CONFIGURATION_WITHHELD = "configuration_withheld"
 type ControlsProvider = Callable[[WindowRuntime], Controls]
 
 
-def neutral_controls(window: WindowRuntime) -> Controls:
-    """Return the controls of a window while nothing can be switched yet."""
-    return Controls(dry_run=window.dry_run)
-
-
 class SuiteRuntime:
     """The controllers of the windows of the config entry."""
 
@@ -48,7 +43,7 @@ class SuiteRuntime:
         sun: Sun,
         storage: Storage,
         actuator: CoverActuator,
-        controls_of: ControlsProvider = neutral_controls,
+        controls_of: ControlsProvider,
     ) -> None:
         """Create the runtime with the ports every controller shares."""
         self.hass = hass
@@ -109,6 +104,13 @@ class SuiteRuntime:
             return False
         self.windows[window.subentry_id] = controller
         return True
+
+    @callback
+    def async_request_recompute(self, window_id: str) -> None:
+        """Ask the controller of a window for a recompute, if the window has one."""
+        controller = self.windows.get(window_id)
+        if controller is not None:
+            controller.async_request_recompute()
 
     @callback
     def async_remove_window(self, window_id: str) -> None:

@@ -2,7 +2,7 @@
 
 This page shows how to set up Roller Shutter Suite, how to add groups and windows, how to change and remove them, and how values that are inherited look in the forms. Everything happens in the user interface of Home Assistant. Nothing needs a restart.
 
-**Status: pilot.** The integration is a pilot version (see the [pilot guide](pilot.md)). The forms described here exist and store what you enter, but the integration does not move any shutter yet: every window is in [dry-run](features/dry-run.md), and it cannot be armed yet. At present the forms hold the settings of [the daily routine](features/daily-routine.md) and of [movement](features/movement.md); those pages explain what each of them means. More settings arrive with the features they belong to, and they will look and behave exactly as described here.
+**Status: pilot.** The integration is a pilot version (see the [pilot guide](pilot.md)). The forms described here exist and store what you enter. Every new window starts in [dry-run](features/dry-run.md): it decides and records, and moves nothing, until you arm it on the last page of its settings (see [Arming a window](#arming-a-window)). At present the forms hold the settings of [the daily routine](features/daily-routine.md), of [movement](features/movement.md) and the pause entity of the page **Operation** ([Pause, maintenance lock, operating mode and dry-run](features/controls.md)); those pages explain what each of them means. More settings arrive with the features they belong to, and they will look and behave exactly as described here.
 
 If you have not read [Concepts](concepts.md) yet: settings live on three levels, the **house**, a **group** and a **window**. A window states only what is different about it. Everything else comes from its group, and what the group does not set comes from the house.
 
@@ -13,7 +13,7 @@ If you have not read [Concepts](concepts.md) yet: settings live on three levels,
 3. Confirm the first page. The pages have no way back, but you can change every setting later with **Reconfigure**.
 4. The page **Features** asks what Roller Shutter Suite takes care of in the whole house. Further pages follow only for what you turn on there.
 5. The pages of the daily routine follow: one general page (positions, how workdays and public holidays are recognized, summer, outdoor brightness) and one page each for workdays, weekends and public holidays (when the morning and the evening begin). Their titles count them: **Daily routine: workdays (1/3)**. Every field is filled with a sensible value, so you can simply go on with **Next** and adjust things later.
-6. The last page is **Movement**; its button says **Submit**. Save it, and the integration appears in the list.
+6. The page **Movement** follows, and the last page is **Operation**, where you can choose an entity of your own that pauses the whole house (or "None"); its button says **Submit**. Save it, and the integration appears in the list.
 
 The integration can be added once. It stands for the whole house.
 
@@ -48,7 +48,7 @@ A window is what the integration decides about. It has one device in Home Assist
 4. Go through the pages and change only what is different for this window.
 5. Save the last page.
 
-New windows start in **dry-run**: the integration will decide and record what it would do, but it will not move the shutter. You arm a window deliberately, once you have compared its decisions with reality. (Arming arrives with a later version.)
+New windows start in **dry-run**: the integration decides and records what it would do, but it does not move the shutter. You arm a window deliberately, once you have compared its decisions with reality; see [Arming a window](#arming-a-window).
 
 ### Several covers at one window
 
@@ -101,7 +101,12 @@ Some options will need something from the cover, for example that it can be stop
 
 ### Changing a window
 
-Open the menu of the window and choose **Reconfigure**. The pages show what is stored: the name, the covers (always the members, never a group), the group and the window's own values. Saving reloads the integration once. Dry-run is neither asked for nor changed by this form.
+Open the menu of the window and choose **Reconfigure**. The pages show what is stored: the name, the covers (always the members, never a group), the group and the window's own values. The last page is **Operation: dry-run or armed** and shows the present state of the window; leave it as it is to keep it. Saving reloads the integration once.
+
+### Arming a window
+
+On the last page of the window's **Reconfigure**, choose **Armed: move the shutters**. A page of checks follows, **Arm the window**, which saves only when you have ticked every point; if one of them is not true yet, close the dialog and nothing is saved. To go back to dry-run, choose **Dry-run** on the same page; that needs no confirmation. Read the [checklist of the pilot guide](pilot.md#8-before-you-arm-a-window) before you arm your first window, and [Arming a window](features/dry-run.md#arming-a-window) for what arming changes.
+
 
 ## How inherited values look
 

@@ -42,8 +42,10 @@ from custom_components.roller_shutter_suite.flow.model import (
 from tests.ha.helpers import (
     DAY_TYPES,
     GENERAL_INHERIT,
+    KEEP_DRY_RUN,
     MOVEMENT_INHERIT,
     NO_STOP,
+    OPERATION_INHERIT,
     SWITCHES_INHERIT,
     add_group,
     add_window,
@@ -118,12 +120,19 @@ async def _save_general(
     changes: dict[str, Any],
     general: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Submit the general page with changes and every later page unchanged."""
-    return await submit_steps(
+    """Submit the general page with changes and every later page unchanged.
+
+    A reconfigure of a window ends with "dry-run or armed"; the windows of
+    these tests stay in dry-run.
+    """
+    result = await submit_steps(
         hass,
         result,
         [GENERAL_INHERIT | (general or {}) | changes, *_rest_after(GENERAL_PAGE)],
     )
+    if result.get("step_id") == "operation":
+        result = await configure_subentry_flow(hass, result, KEEP_DRY_RUN)
+    return result
 
 
 def _own(entry: MockConfigEntry, subentry_id: str) -> dict[str, Any]:
@@ -558,7 +567,9 @@ async def test_time_duration_and_day_of_year_come_from_registry_and_form_data(
     marker = marker_of(result, "schedule_workday_morning_time")
     assert suggested_value(marker) == "06:30:00"
     result = await submit_steps(
-        hass, result, [day_inherit("workday"), *_rest_after(WORKDAY_PAGE)]
+        hass,
+        result,
+        [day_inherit("workday"), *_rest_after(WORKDAY_PAGE), KEEP_DRY_RUN],
     )
     assert _own(entry, window_id) == {}
 
@@ -666,7 +677,12 @@ async def test_only_features_that_are_switched_on_get_their_pages(
         hass,
         entry,
         SUBENTRY_GROUP,
-        [{"name": "North"}, {"schedule_enabled": "off"}, MOVEMENT_INHERIT],
+        [
+            {"name": "North"},
+            {"schedule_enabled": "off"},
+            MOVEMENT_INHERIT,
+            OPERATION_INHERIT,
+        ],
     )
     assert result["type"] is FlowResultType.CREATE_ENTRY
     group_id = next(iter(entry.subentries))
@@ -683,6 +699,7 @@ async def test_only_features_that_are_switched_on_get_their_pages(
             {"name": "Kitchen", "covers": [COVER], "group_id": group_id},
             {"schedule_enabled": "inherit_off"},
             MOVEMENT_INHERIT,
+            OPERATION_INHERIT,
         ],
     )
     assert result["type"] is FlowResultType.CREATE_ENTRY
@@ -722,6 +739,8 @@ async def test_values_of_pages_that_are_not_shown_stay_stored(
             {"name": "Kitchen", "covers": [COVER]},
             {"schedule_enabled": "off"},
             MOVEMENT_INHERIT,
+            OPERATION_INHERIT,
+            KEEP_DRY_RUN,
         ],
         reconfigure=window.subentry_id,
     )
@@ -918,7 +937,9 @@ async def test_combination_is_reported_on_the_page_it_concerns(
     assert result["errors"]["schedule_workday_morning_time"] == "invalid_combination"
 
     result = await submit_steps(
-        hass, result, [day_inherit("workday"), *_rest_after(WORKDAY_PAGE)]
+        hass,
+        result,
+        [day_inherit("workday"), *_rest_after(WORKDAY_PAGE), KEEP_DRY_RUN],
     )
     assert result["reason"] == "reconfigure_successful"
     assert _own(entry, "w1") == {}

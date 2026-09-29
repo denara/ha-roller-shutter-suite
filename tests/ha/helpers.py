@@ -192,6 +192,20 @@ def day_inherit(day_type: str, **changes: Any) -> dict[str, Any]:
 MOVEMENT_INHERIT: dict[str, Any] = {"expert": {}}
 MOVEMENT_HOUSE: dict[str, Any] = {"expert": {}}
 
+# The page "Operation" comes last: the pause entity is required as a choice.
+OPERATION_INHERIT: dict[str, Any] = {"pause_source_choice": "inherit_none"}
+OPERATION_HOUSE: dict[str, Any] = {"pause_source_choice": "none"}
+
+# The page "dry-run or armed" that ends the reconfigure flow of a window.
+KEEP_DRY_RUN: dict[str, Any] = {"operation": "dry_run"}
+KEEP_ARMED: dict[str, Any] = {"operation": "armed"}
+
+
+def _has_feature(feature_id: str) -> bool:
+    return any(
+        feature.feature_id == feature_id for feature in features.get_catalog().features
+    )
+
 
 def routine_inherit(
     general: dict[str, Any] | None = None,
@@ -199,17 +213,16 @@ def routine_inherit(
 ) -> list[dict[str, Any]]:
     """Return the inputs of all feature pages, with changes to the daily routine.
 
-    The page "Movement" is part of it only while the catalog in effect has
-    it; the catalog of made-up settings (fixture `example_catalog`) has not.
+    The pages "Movement" and "Operation" are part of it only while the
+    catalog in effect has them; the catalog of made-up settings (fixture
+    `example_catalog`) has not.
     """
-    movement = any(
-        feature.feature_id == "movement" for feature in features.get_catalog().features
-    )
     return [
         SWITCHES_INHERIT,
         GENERAL_INHERIT | (general or {}),
         *(day_inherit(day_type, **days.get(day_type, {})) for day_type in DAY_TYPES),
-        *([MOVEMENT_INHERIT] if movement else []),
+        *([MOVEMENT_INHERIT] if _has_feature("movement") else []),
+        *([OPERATION_INHERIT] if _has_feature("operation") else []),
     ]
 
 
@@ -220,6 +233,7 @@ ROUTINE_HOUSE: list[dict[str, Any]] = [
     DAY_HOUSE,
     DAY_HOUSE,
     MOVEMENT_HOUSE,
+    OPERATION_HOUSE,
 ]
 """The inputs of all feature pages of the house, as a browser sends them."""
 

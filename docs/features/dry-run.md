@@ -33,8 +33,15 @@ The status of each window and its diagnostics show these records in Home Assista
 
 ## Arming a window
 
-Arming a window switches dry-run off for it: from then on it moves its covers. The integration starts the armed window with a clean state: no manual override, and nothing it would have sent in dry-run counts as sent.
+Arming a window switches dry-run off for it: from then on it moves its covers. It is a deliberate step in the settings of the window, never a switch on a dashboard, because a window that is armed while another control still moves its shutter fights that control.
 
-At present a window cannot be armed in the forms yet; the switch arrives with a later version. Until then every window stays in dry-run and moves nothing.
+1. Open **Settings** > **Devices & services** > **Roller Shutter Suite**, find the window, open its menu with the three dots and choose **Reconfigure**.
+2. Go through the pages as they are. The last page is **Operation: dry-run or armed**. Choose **Armed: move the shutters** and select **Next**.
+3. The page **Arm the window** repeats the checks of the [pilot guide](../pilot.md#8-before-you-arm-a-window): nothing else moves the shutter, the old control is switched off, you have compared the decisions, you have looked at the pause, the maintenance lock and the operating mode, you know that the window starts fresh, and you know the way back. Tick each point and select **Submit**. If a point is not true yet, close the dialog: nothing is saved, and the window stays in dry-run.
 
-Before you arm a window, switch off whatever else still drives its shutters, so that one controller moves one window.
+The integration reloads once and starts the armed window with a clean state: nothing it would have sent in dry-run counts as sent, no manual override is armed, and nobody is taken to have moved the shutter last. Its next decision is a real one; the entity **Dry-run** of the window turns off.
+
+**Going back to dry-run** needs no confirmation: choose **Reconfigure** again and, on the last page, **Dry-run: decide and record, move nothing**. If a shutter moves when it should not, turn on the **Maintenance lock** of the window first, after which it sends no further command, and then go back to dry-run; see [Pause, maintenance lock, operating mode and dry-run](controls.md).
+
+A new window always starts in dry-run; the form that adds it does not ask. Before you arm a window, switch off whatever else still drives its shutters, so that one controller moves one window.
+

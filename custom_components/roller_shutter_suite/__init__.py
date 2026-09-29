@@ -18,6 +18,14 @@ storage port.
 ``sensor`` and ``binary_sensor``), fires reason events (``events.py``) that the
 logbook describes (``logbook.py``), and has a diagnostics download
 (``diagnostics.py``); see ``docs/features/status-and-events.md``.
+
+**Controls.** The house, every group and every window have a pause, a
+maintenance lock and an operating mode (the platforms ``switch`` and
+``select``, ``controls.py``). The house has a device of its own that belongs
+to the config entry and to no subentry, and every group has a device that
+belongs to its subentry; both are service devices. A change of a control
+recomputes the windows it concerns and never reloads the entry; see
+``docs/features/controls.md``.
 """
 
 from collections.abc import Mapping
@@ -29,10 +37,12 @@ from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryError
 from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers.device_registry import DeviceEntryType
 from homeassistant.helpers.translation import async_get_translations
 
 from .actuator import actuator_of, forget_actuator
 from .const import CONF_SETTINGS, CONFIG_MINOR_VERSION, CONFIG_VERSION, DOMAIN
+from .controls import ControlBoard, forget_blind_memory
 from .events import ReasonEvents, WindowHistory, forget_history, history_of
 from .features import get_catalog
 from .issues import async_sync_issues
@@ -41,7 +51,7 @@ from .runtime import SuiteRuntime
 from .storage import forget_storage, storage_of
 from .windows import WindowRuntime, resolve_entry
 
-PLATFORMS = (Platform.BINARY_SENSOR, Platform.SENSOR)
+PLATFORMS = (Platform.BINARY_SENSOR, Platform.SELECT, Platform.SENSOR, Platform.SWITCH)
 
 TRANSLATIONS_FOR_THE_LOGBOOK = ("entity", "common")
 """The categories the logbook reads from the cache of translations; see logbook.py."""
@@ -53,12 +63,26 @@ class RollerShutterSuiteData:
 
     ``windows`` holds the windows that are set up, by subentry ID, each with
     its resolved settings. ``not_set_up`` names the windows whose covers could
-    not be read. ``runtime`` holds the controllers of the windows.
+    not be read. ``runtime`` holds the controllers of the windows, ``board``
+    the controls of every level.
     """
 
     runtime: SuiteRuntime
+    board: ControlBoard
     windows: dict[str, WindowRuntime] = field(default_factory=dict)
     not_set_up: tuple[str, ...] = ()
+
+    def control_levels(self) -> list[tuple[str, str | None]]:
+        """Return every level that has controls, with the subentry it belongs to.
+
+        The house belongs to no subentry; a group and a window to their own.
+        """
+        board = self.board
+        return [
+            (board.house_id, None),
+            *((group_id, group_id) for group_id in board.groups),
+            *((window_id, window_id) for window_id in self.windows),
+        ]
 
 
 type RollerShutterSuiteConfigEntry = ConfigEntry[RollerShutterSuiteData]
@@ -80,23 +104,48 @@ async def async_setup_entry(
     missing sun port fails the set-up closed, before any window is looked
     at. After that nothing raises for a single window.
     """
+    clock = HomeAssistantClock(local_zone(hass))
+    sun = sun_port(hass)
+    resolved = resolve_entry(hass, entry, get_catalog())
+    board = ControlBoard(hass, entry, resolved.windows)
     runtime = SuiteRuntime(
         hass,
-        clock=HomeAssistantClock(local_zone(hass)),
-        sun=sun_port(hass),
+        clock=clock,
+        sun=sun,
         storage=storage_of(hass),
         actuator=actuator_of(hass),
+        controls_of=board.controls_of,
     )
-    resolved = resolve_entry(hass, entry, get_catalog())
+    board.request_recompute = runtime.async_request_recompute
     entry.runtime_data = RollerShutterSuiteData(
         runtime=runtime,
+        board=board,
         windows=resolved.windows,
         not_set_up=tuple(resolved.not_set_up),
     )
 
+    # The house has a service device that belongs to the entry and to no
+    # subentry; every group has one that belongs to its subentry. They hold
+    # the controls of their level.
+    device_registry = dr.async_get(hass)
+    device_registry.async_get_or_create(
+        config_entry_id=entry.entry_id,
+        config_subentry_id=None,
+        identifiers={(DOMAIN, board.house_id)},
+        name=entry.title,
+        entry_type=DeviceEntryType.SERVICE,
+    )
+    for group_id, title in board.groups.items():
+        device_registry.async_get_or_create(
+            config_entry_id=entry.entry_id,
+            config_subentry_id=group_id,
+            identifiers={(DOMAIN, group_id)},
+            name=title,
+            entry_type=DeviceEntryType.SERVICE,
+        )
+
     # One device per window, tied to the window's subentry and to nothing
     # else. Removing the subentry removes the device without code of ours.
-    device_registry = dr.async_get(hass)
     history = history_of(hass)
     for stale in set(history) - set(resolved.windows):
         del history[stale]
@@ -120,7 +169,11 @@ async def async_setup_entry(
     for category in TRANSLATIONS_FOR_THE_LOGBOOK:
         await async_get_translations(hass, hass.config.language, category, {DOMAIN})
     async_sync_issues(hass, resolved.issues.values())
+    # The controls are restored while the platforms are set up, so the first
+    # decision of every window already sees them.
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    board.async_start()
+    entry.async_on_unload(board.async_stop)
     runtime.async_start(resolved.windows)
     entry.async_on_unload(entry.add_update_listener(_async_reload_on_update))
     return True
@@ -147,6 +200,7 @@ async def async_remove_entry(
     forget_actuator(hass)
     forget_storage(hass)
     forget_history(hass)
+    forget_blind_memory(hass)
 
 
 def _with_settings(data: Mapping[str, Any]) -> dict[str, Any]:

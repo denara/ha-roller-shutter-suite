@@ -40,7 +40,8 @@ The German texts address the reader informally, as the German interface of Home 
 | morning position, evening position | Morgenposition, Abendposition | How far the shutter opens in the morning and closes in the evening. | forms, pages |
 | target position | Zielposition | The position a window should have. Also the name of a status entity. | status, pages |
 | dry-run | Probelauf | A window decides and records what it would do, and moves nothing. Every new window starts in dry-run. | forms, status, issues, pages |
-| arm | scharf schalten | Switching dry-run off for a window, so that it moves its shutters; a later version adds it. | pages |
+| arm, armed | scharf schalten, scharf | Switching dry-run off for a window, so that it moves its shutters; done on the last page of the window's settings, with a page of checks to confirm. | forms, pages |
+| operation (page) | Betrieb | The page with the pause entity, and for a window the page "dry-run or armed". | forms, issues, pages |
 | comfort movement | Komfortbewegung | A movement for convenience, such as those of the daily routine, as opposed to protection. | forms, issues, pages |
 | shading | Beschattung | Lowering a shutter against the sun, at a fixed position or following the sun; a later version adds it. | status, pages (later version) |
 | sleep mode | Schlafmodus | Keeps shutters closed while someone sleeps; a later version adds it. | status, pages (later version) |
@@ -55,11 +56,15 @@ The German texts address the reader informally, as the German interface of Home 
 | fire alarm, acknowledge | Feueralarm, quittieren | The fire alarm and the confirmation that it is over; later versions add them. | status, pages |
 | manual operation | Bedienung von Hand | Moving a shutter by hand: with a wall switch, a remote or an app. Later versions notice it. | status, pages |
 | manual override | Handbetrieb | The time after a manual operation during which automatic movements wait. Also the name of a status entity. | status, pages |
-| pause | Pause, pausiert | Holds back comfort movements of a window, a group or the house on purpose; a later version adds the switch. | status, pages |
+| pause | Pause, pausiert | Holds back comfort movements of a window, a group or the house on purpose; protection and the fire alarm still move the shutter. Also the name of a switch. | forms, status, pages |
+| pause entity | Pausen-Entität | An entity of your own that pauses the house, a group or a window while it is on; one without a state pauses as well. | forms, issues, pages |
 | suspended | ausgesetzt | A comfort feature does not move a window because a saved setting it needs is faulty. Not the same as a pause. | status, issues, pages |
 | cautious choice | vorsichtige Vorgabe | What a setting that protects people or hardware or limits movements uses while its saved setting is faulty and no group or house setting stands in. | issues, pages |
-| maintenance lock | Wartungssperre | Nothing may move a shutter while somebody works on it; a later version adds the switch. | status, pages |
-| operating mode | Betriebsart | Off, protection only, or normal operation; a later version adds it. | status, pages |
+| maintenance lock | Wartungssperre | Nothing may move a shutter while somebody works on it, not even the fire alarm, which is still reported. Also the name of a switch. | forms, status, pages |
+| operating mode | Betriebsart | Automatic, protection only, or off; the name of a select. "Protection only" holds back comfort movements, "off" also protection; the fire alarm always opens. | status, pages |
+| automatic, protection only, off | Automatisch, Nur Schutz, Aus | The three operating modes. | status, pages |
+| strictest wins | das Strengste gilt | Of the pause, the maintenance lock and the operating mode of the house, the group and the window, the strictest applies to the window. | pages |
+
 | movement (page) | Bewegung | The page with the settings that spare the motors. | forms, pages |
 | motor protection | Motorschutz | The minimum change and the minimum interval together: they leave out small comfort movements and space them out. | pages |
 | minimum change, minimum interval | Mindeständerung, Mindestabstand | The two settings of motor protection. | forms, status, pages |

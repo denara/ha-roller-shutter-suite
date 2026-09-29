@@ -74,6 +74,11 @@ class FunctionId(StrEnum):
     MANUAL_OVERRIDE = "manual_override"
     """Detecting a movement by hand, and the two dams. A fault there must never
     make the integration fight a person."""
+    PAUSE = "pause"
+    """The external pause entities of the three levels (E4). A pause holds back
+    comfort only, so a fault falls back to the cautious side, which pauses.
+    The Home Assistant layer reads the setting into the controls of a window;
+    the pause rule of the gate acts on them."""
 
     @property
     def fault_behavior(self) -> FaultBehavior:
@@ -96,4 +101,5 @@ _BEHAVIOR: Final = {
     FunctionId.MOTOR_PROTECTION: FaultBehavior.FALL_BACK,
     FunctionId.COMMAND_VERIFICATION: FaultBehavior.FALL_BACK,
     FunctionId.MANUAL_OVERRIDE: FaultBehavior.FALL_BACK,
+    FunctionId.PAUSE: FaultBehavior.FALL_BACK,
 }
