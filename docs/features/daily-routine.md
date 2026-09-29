@@ -2,7 +2,7 @@
 
 The daily routine opens your shutters in the morning and closes them in the evening. It is the basis of everything else: whenever nothing more important applies, the daily routine decides where a shutter belongs. Later versions add such more important things, for example protection from storms, shading and sleep mode.
 
-**Status: pilot.** The forms for these settings exist; [Configuration](../configuration.md) shows them. Every window is in [dry-run](dry-run.md) and cannot be armed yet, so the routine decides and records and moves no shutter.
+**Status: pilot.** The forms for these settings exist; [Configuration](../configuration.md) shows them. Every new window starts in [dry-run](dry-run.md), where the routine decides and records and moves no shutter; once you have [armed](dry-run.md#arming-a-window) a window, the routine moves its shutter.
 
 ## Day and night
 

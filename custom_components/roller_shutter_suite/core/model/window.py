@@ -464,6 +464,12 @@ class WindowConfig:
       (0 to 10 seconds; zero switches staggering off for the motors of this
       window). Fire is never staggered. The core only carries it; the
       actuator adapter of the Home Assistant layer applies it.
+    - ``pause_source``: the external pause entity of the window level (E4),
+      its own or inherited; its ``on`` state pauses the window level in
+      addition to the pause switch. ``None``: no such entity.
+      :data:`BLIND_SOURCE`: configured, but faulty, which pauses, as a
+      source without a value does. The core only carries it; the Home
+      Assistant layer reads it into the controls.
     - ``schedule_enabled`` and the other ``schedule_*`` fields: the settings of
       the schedule, one field per setting; :attr:`schedule` is the view over
       them and describes them. Per day type (workday, weekend, holiday) and
@@ -503,6 +509,7 @@ class WindowConfig:
     motor_min_interval: timedelta = _DEFAULT_MIN_INTERVAL
     reevaluate_after: timedelta = _DEFAULT_REEVALUATE_AFTER
     stagger_gap: timedelta = DEFAULT_STAGGER_GAP
+    pause_source: str | BlindSource | None = None
     schedule_enabled: bool = _SCHEDULE_ENABLED
     schedule_workday_morning_kind: TriggerKind = _MORNING_KIND
     schedule_workday_morning_time: time = _MORNING_TIME_WORKDAY
@@ -602,6 +609,8 @@ class WindowConfig:
         require_type(self.stagger_gap, timedelta, "the staggering gap")
         if not timedelta(0) <= self.stagger_gap <= MAX_STAGGER_GAP:
             raise ValueError("the staggering gap must be within 0 and 10 seconds")
+        if self.pause_source is not None and self.pause_source is not BLIND_SOURCE:
+            require_identifier(self.pause_source, "the external pause entity")
         given: object = self.disabled_functions
         if isinstance(given, str):
             raise TypeError("the disabled functions must be a set of identifiers")

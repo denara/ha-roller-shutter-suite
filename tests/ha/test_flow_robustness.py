@@ -21,6 +21,7 @@ from custom_components.roller_shutter_suite.const import (
     SUBENTRY_WINDOW,
 )
 from tests.ha.helpers import (
+    KEEP_DRY_RUN,
     add_group,
     add_window,
     configure_subentry_flow,
@@ -132,9 +133,10 @@ async def test_group_removed_while_a_window_is_being_changed(
     assert result["step_id"] == "basics"
     assert result["errors"] == {"base": "group_removed"}
 
-    result = await submit_steps(hass, result, [_basics(), *INHERIT])
+    result = await submit_steps(hass, result, [_basics(), *INHERIT, KEEP_DRY_RUN])
 
     assert result["reason"] == "reconfigure_successful"
+
     assert CONF_GROUP_ID not in entry.subentries[window.subentry_id].data
     # Saving repaired the reference, so the issue of the set-up is gone too.
     assert not ir.async_get(hass).issues

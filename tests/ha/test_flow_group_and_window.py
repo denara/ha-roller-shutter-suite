@@ -19,6 +19,8 @@ from custom_components.roller_shutter_suite.const import (
 )
 from custom_components.roller_shutter_suite.core.settings import STORED_NONE
 from tests.ha.helpers import (
+    KEEP_ARMED,
+    KEEP_DRY_RUN,
     NO_STOP,
     OPEN_CLOSE_ONLY,
     add_group,
@@ -93,7 +95,7 @@ async def test_entry_group_and_two_windows_without_a_restart(
             "group_id": group.subentry_id,
         },
     )
-    result = await submit_steps(hass, result, INHERIT)
+    result = await submit_steps(hass, result, [*INHERIT, KEEP_DRY_RUN])
     assert result["reason"] == "reconfigure_successful"
     assert entry.subentries[left.subentry_id].title == "Left window"
     assert entry.runtime_data.windows[left.subentry_id].title == "Left window"
@@ -149,7 +151,12 @@ async def test_window_form_offers_the_group_only_if_one_exists(
 async def test_new_window_starts_in_dry_run_and_reconfigure_keeps_the_state(
     hass: HomeAssistant,
 ) -> None:
-    """New windows are stored in dry-run; the form neither asks for it nor resets it."""
+    """New windows are stored in dry-run; a reconfigure offers the state it has.
+
+    Creating a window never asks for dry-run. The reconfigure flow ends with
+    the page "dry-run or armed", which starts from the stored state; an armed
+    window that stays armed needs no confirmation.
+    """
     set_cover(hass, "cover.example_window")
     entry = await setup_entry(hass)
     window = await add_window(
@@ -158,7 +165,7 @@ async def test_new_window_starts_in_dry_run_and_reconfigure_keeps_the_state(
     assert window.data[CONF_DRY_RUN] is True
     assert entry.runtime_data.windows[window.subentry_id].dry_run is True
 
-    # Somebody armed the window (the way to do that arrives with a later block).
+    # The window is armed (tests/ha/test_arming.py arms it through the form).
     hass.config_entries.async_update_subentry(
         entry, window, data={**window.data, CONF_DRY_RUN: False}
     )
@@ -170,6 +177,10 @@ async def test_new_window_starts_in_dry_run_and_reconfigure_keeps_the_state(
         [{"name": "Kitchen", "covers": ["cover.example_window"]}, *INHERIT],
         reconfigure=window.subentry_id,
     )
+    assert result["step_id"] == "operation"
+    assert marker_of(result, "operation").default() == "armed"
+    assert result["last_step"] is True
+    result = await configure_subentry_flow(hass, result, KEEP_ARMED)
 
     assert result["reason"] == "reconfigure_successful"
     assert entry.subentries[window.subentry_id].data[CONF_DRY_RUN] is False
@@ -216,7 +227,11 @@ async def test_window_may_keep_its_own_cover_on_reconfigure(
         hass,
         entry,
         SUBENTRY_WINDOW,
-        [{"name": "Kitchen", "covers": ["cover.example_window"]}, *INHERIT],
+        [
+            {"name": "Kitchen", "covers": ["cover.example_window"]},
+            *INHERIT,
+            KEEP_DRY_RUN,
+        ],
         reconfigure=window.subentry_id,
     )
 
@@ -474,7 +489,7 @@ async def test_window_whose_covers_cannot_be_read_opens_with_an_empty_selection(
     result = await configure_subentry_flow(
         hass, result, {"name": "Repaired", "covers": ["cover.example_window"]}
     )
-    result = await submit_steps(hass, result, INHERIT)
+    result = await submit_steps(hass, result, [*INHERIT, KEEP_DRY_RUN])
 
     assert result["reason"] == "reconfigure_successful"
     assert entry.subentries["window_broken"].data == {

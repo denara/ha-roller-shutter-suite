@@ -52,6 +52,7 @@ def test_loading_the_catalog_leaves_no_stand_in_behind() -> None:
     assert [feature.feature_id for feature in catalog.features] == [
         "daily_routine",
         "movement",
+        "operation",
     ]
     assert (build_translations.PACKAGE in sys.modules) is before
 
@@ -255,7 +256,7 @@ def _sources(language: str) -> tuple[dict[str, Any], dict[str, dict[str, Any]]]:
                 build_translations.SOURCES / "features" / f"{name}.{language}.json"
             ).read_text(encoding="utf-8")
         )
-        for name in ("daily_routine", "movement")
+        for name in ("daily_routine", "movement", "operation")
     }
     return templates, fragments
 

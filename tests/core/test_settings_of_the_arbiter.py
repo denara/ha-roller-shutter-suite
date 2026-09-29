@@ -42,6 +42,7 @@ EXPECTED = {
     "motor_min_interval": (SettingKind.DURATION, FunctionId.MOTOR_PROTECTION),
     "reevaluate_after": (SettingKind.DURATION, FunctionId.COMMAND_VERIFICATION),
     "stagger_gap": (SettingKind.DURATION, FunctionId.MOTOR_PROTECTION),
+    "pause_source": (SettingKind.OPTIONAL_REFERENCE, FunctionId.PAUSE),
 }
 
 
@@ -203,14 +204,19 @@ FAULT_VALUES = {
     "motor_min_interval": timedelta(minutes=10),
     "reevaluate_after": timedelta(minutes=5),
     "stagger_gap": timedelta(seconds=2),
+    "pause_source": BLIND_SOURCE,
 }
-"""Confirmed by the project owner; the reasons stand at the entries of the registry."""
+"""Confirmed by the project owner; the reasons stand at the entries of the registry.
+
+``pause_source`` follows ruling 4 of block H06: an external pause entity
+without a value pauses its level, and a faulty stored reference is blind.
+"""
 
 
 def test_fault_values_are_the_confirmed_ones_and_stated_for_exactly_these_settings() -> (
     None
 ):
-    """Two differ from the default: the blind source, and "hold closed" switched on."""
+    """Three differ from the default: two blind sources, and "hold closed" on."""
     stated = {
         definition.key: definition.fault_value
         for definition in WINDOW_SETTINGS.definitions
@@ -225,6 +231,7 @@ def test_fault_values_are_the_confirmed_ones_and_stated_for_exactly_these_settin
     assert {key for key, value in stated.items() if value != defaults[key]} == {
         "frost_source",
         "frost_hold_closed",
+        "pause_source",
     }
 
 

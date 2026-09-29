@@ -476,7 +476,7 @@ BUILT_IN_GATE_RULES: Final = (
     GateRuleRegistration(
         GateRule.OPERATING_MODE, _PROTECTION_AND_COMFORT, _operating_mode, None
     ),
-    GateRuleRegistration(GateRule.PAUSE, _COMFORT, _pause, None),
+    GateRuleRegistration(GateRule.PAUSE, _COMFORT, _pause, FunctionId.PAUSE),
     PERSON_AT_WINDOW_DAM.registration(),
     MANUAL_OVERRIDE_DAM.registration(),
     GateRuleRegistration(

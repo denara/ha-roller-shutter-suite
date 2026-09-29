@@ -21,7 +21,10 @@ button "Next" or "Submit". A feature page is the last one when no other page
 is queued after it. The page of the switches is the last one only when no
 feature page can follow on this level at all; which pages follow depends on
 the switches the user is about to choose, so it says "Next" as soon as one
-could.
+could. A flow that shows pages of its own after the feature pages (the
+reconfigure flow of a window asks for dry-run or armed) says so with
+:meth:`FeatureStepsMixin._pages_follow_the_features`, and then no feature
+page is the last one.
 
 **Numbered pages** carry a counter in their title: ``{page_number}`` and
 ``{page_count}`` count the numbered pages of the same feature that the flow
@@ -81,6 +84,10 @@ class FeatureStepsMixin:
     async def _async_finish(self) -> Any:
         """Save ``self._context.own`` and end the flow."""
 
+    def _pages_follow_the_features(self) -> bool:
+        """Return whether the flow shows pages of its own after the feature pages."""
+        return False
+
     async def _async_start_feature_steps(self, context: LevelContext) -> Any:
         """Begin the generated steps for the level the flow edits."""
         self._context = context
@@ -132,7 +139,8 @@ class FeatureStepsMixin:
             STEP_FEATURES,
             _switches(catalog),
             user_input,
-            last_step=not _pages_of_the_level(catalog, self._context),
+            last_step=not _pages_of_the_level(catalog, self._context)
+            and not self._pages_follow_the_features(),
         )
         if form is not None:
             return form
@@ -174,7 +182,8 @@ class FeatureStepsMixin:
             step_id,
             step.fields,
             user_input,
-            last_step=self._pending == [step_id],
+            last_step=self._pending == [step_id]
+            and not self._pages_follow_the_features(),
             counter=self._counter(catalog, step_id) if step.numbered else None,
         )
         if form is not None:

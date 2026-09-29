@@ -45,6 +45,7 @@ from custom_components.roller_shutter_suite.core.settings import (
 )
 from custom_components.roller_shutter_suite.flow.model import Catalog
 from tests.ha.helpers import (
+    KEEP_DRY_RUN,
     NO_STOP,
     routine_inherit,
     run_subentry_flow,
@@ -329,6 +330,7 @@ async def test_group_that_is_gone_falls_back_to_the_house_and_saving_repairs_it(
         [
             {"name": "Window w1", "covers": ["cover.example_window"]},
             *routine_inherit(),
+            KEEP_DRY_RUN,
         ],
         reconfigure="w1",
     )
@@ -413,6 +415,7 @@ async def test_saving_the_form_repairs_a_faulty_setting(hass: HomeAssistant) -> 
         [
             {"name": "Kitchen", "covers": ["cover.example_window"]},
             *routine_inherit({"schedule_evening_position": 20}),
+            KEEP_DRY_RUN,
         ],
         reconfigure="w1",
     )

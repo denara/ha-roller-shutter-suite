@@ -9,6 +9,7 @@ from typing import Any
 import pytest
 
 from custom_components.roller_shutter_suite.core.model import (
+    BLIND_SOURCE,
     DEFAULT_TOLERANCE_CALCULATED,
     DEFAULT_TOLERANCE_MEASURED,
     MIN_TOLERANCE,
@@ -407,6 +408,21 @@ def test_staggering_gap_above_the_maximum_is_refused_by_the_model() -> None:
     """The rule holds for every caller, also one that bypasses the reader."""
     with pytest.raises(ValueError, match="within 0 and 10 seconds"):
         _window(stagger_gap=timedelta(seconds=11))
+
+
+@pytest.mark.parametrize(
+    "source", [None, BLIND_SOURCE, "binary_sensor.example_holiday_mode"]
+)
+def test_external_pause_entity_is_none_blind_or_an_identifier(source: object) -> None:
+    """The three cases a reader of the field handles."""
+    assert _window(pause_source=source).pause_source is source
+
+
+@pytest.mark.parametrize("source", ["", 7])
+def test_external_pause_entity_that_names_nothing_is_refused(source: object) -> None:
+    """Neither blank text nor a number names an entity."""
+    with pytest.raises((TypeError, ValueError), match="external pause entity"):
+        _window(pause_source=source)
 
 
 def test_window_members_are_unique() -> None:
@@ -880,6 +896,7 @@ FALLING_BACK = [
     FunctionId.MOTOR_PROTECTION,
     FunctionId.COMMAND_VERIFICATION,
     FunctionId.MANUAL_OVERRIDE,
+    FunctionId.PAUSE,
 ]
 
 
@@ -915,6 +932,7 @@ def test_names_values_and_order_of_the_functions_are_pinned() -> None:
         ("MOTOR_PROTECTION", "motor_protection"),
         ("COMMAND_VERIFICATION", "command_verification"),
         ("MANUAL_OVERRIDE", "manual_override"),
+        ("PAUSE", "pause"),
     ]
 
 

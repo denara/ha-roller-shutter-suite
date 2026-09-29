@@ -101,7 +101,8 @@ def test_every_icon_belongs_to_an_entity_with_a_translation_key() -> None:
             assert key in strings[domain], (domain, key)
             assert icon["default"].startswith("mdi:")
             for state in icon.get("state", {}):
-                if domain == "sensor":
+                if domain in {"sensor", "select"}:
                     assert state in strings[domain][key]["state"], state
+
                 else:
                     assert state in {"on", "off"}

@@ -180,7 +180,7 @@ STAGGERING = GateRuleRegistration(
 ```
 
 - Its place is its member of `GateRule`; `GATE_RULE_REASONS` says which reason codes it can give.
-- State the function the rule belongs to, or `None` for a rule without a feature of its own (maintenance lock, no member can execute, target reached, operating mode, pause, movement in flight, dry-run). Motor protection states `FunctionId.MOTOR_PROTECTION`, both dams `FunctionId.MANUAL_OVERRIDE`. The argument has no default. As for a constraint, the function must fall back, and a gate rule is never skipped because of `disabled_functions`.
+- State the function the rule belongs to, or `None` for a rule without a feature of its own (maintenance lock, no member can execute, target reached, operating mode, movement in flight, dry-run). Motor protection states `FunctionId.MOTOR_PROTECTION`, both dams `FunctionId.MANUAL_OVERRIDE`, the pause `FunctionId.PAUSE`, the function of the external pause entity. The argument has no default. As for a constraint, the function must fall back, and a gate rule is never skipped because of `disabled_functions`.
 - Name the classes it can hold back. Do not write an exception for fire into the rule: a rule that is part of the fire bypass cannot name fire, and the arbiter skips it.
 - Return `GateOutcome.suppress(...)` or `GateOutcome.defer(...)` under the rule's own name, never `send`. A deferral states `until` or `reevaluate_no_later_than`.
 - A rule whose parts hold back different classes is registered once per part, each with `reasons=` naming the reason codes of that part; the parts must not depend on the order in which they are asked. "Movement in flight" is the example.

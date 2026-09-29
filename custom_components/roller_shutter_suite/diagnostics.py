@@ -2,8 +2,11 @@
 
 What a window shows: its resolved configuration with the level every value
 comes from, the capability profile of every member, the status of its
-controller (phase, sources, schedule, commands, next wake-up), the last
-decisions with the time each was first made, and its persisted state.
+controller (phase, sources, schedule, commands, next wake-up), the controls
+of its levels (house, group, window) with the effective value and what pauses
+it, the last decisions with the time each was first made, and its persisted
+state. The download of the entry adds the controls of the house and of every
+group.
 
 **Redaction** follows the convention of Home Assistant: a download is meant
 to be attached to a bug report, and a report can only be matched with the
@@ -216,6 +219,7 @@ def _window(
         "dry_run": window.dry_run,
         "not_controlled": data.runtime.failed.get(window_id),
         "configuration": _configuration(window),
+        "controls": data.board.window_report(window_id),
         "status": None if controller is None else _status(controller),
         "recent_decisions": _decisions(
             history_of(hass).get(window_id) or WindowHistory()
@@ -235,6 +239,10 @@ async def async_get_config_entry_diagnostics(
                 "version": entry.version,
                 "minor_version": entry.minor_version,
             },
+            "controls": [
+                data.board.level_report(level_id)
+                for level_id in (data.board.house_id, *data.board.groups)
+            ],
             "windows": [_window(hass, entry, window_id) for window_id in data.windows],
             "windows_not_set_up": list(data.not_set_up),
         },

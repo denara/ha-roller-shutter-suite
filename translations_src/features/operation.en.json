@@ -1,0 +1,16 @@
+{
+  "steps": {
+    "pause": {
+      "title": "Operation",
+      "description": "An entity of your own can pause the comfort movements, for example a helper you turn on for a party or while you are away. While it is on, comfort movements wait as if the switch \"Pause\" were on; protection and the fire alarm still move the shutters. If the entity is unavailable or its state is unknown, comfort movements wait too, and after an hour a repair issue says so."
+    }
+  },
+  "fields": {
+    "pause_source": {
+      "label": "Pause entity",
+      "description": "While this entity is on, comfort movements are paused. With \"None\", only the switch \"Pause\" pauses. A pause entity of the house or of a group always applies to its windows as well.",
+      "entity_label": "Entity that pauses",
+      "entity_description": "Used only with \"Own selection\" above."
+    }
+  }
+}

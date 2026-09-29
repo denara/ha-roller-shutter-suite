@@ -175,6 +175,7 @@ def test_no_function_of_a_constraint_or_a_gate_rule_can_be_paused() -> None:
         FunctionId.FROST,
         FunctionId.MOTOR_PROTECTION,
         FunctionId.MANUAL_OVERRIDE,
+        FunctionId.PAUSE,
     }
 
 
@@ -184,7 +185,22 @@ def test_every_function_with_settings_has_a_listener() -> None:
     assert functions_with_settings() >= {
         FunctionId.FROST,
         FunctionId.MOTOR_PROTECTION,
+        FunctionId.PAUSE,
     }
+
+
+def test_the_pause_rule_holds_back_comfort_and_belongs_to_the_pause() -> None:
+    """The listener of ``pause_source``: the gate rule of the pause, for comfort only.
+
+    The Home Assistant layer reads the external pause entity into the
+    controls; the pause rule acts on the result and states its function.
+    """
+    (pause,) = [
+        entry for entry in build_arbiter().gate_rules if entry.rule is GateRule.PAUSE
+    ]
+    assert pause.applies_to == frozenset({WishClass.COMFORT})
+    assert pause.function is FunctionId.PAUSE
+    assert FunctionId.PAUSE.fault_behavior is FaultBehavior.FALL_BACK
 
 
 # --- The checks themselves, shown with stubs ----------------------------------------
