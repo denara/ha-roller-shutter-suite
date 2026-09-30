@@ -8,7 +8,10 @@ window; and, from block C06, the movement tracker and the two dams:
 deadlines and the ends of the dams), ``resume`` and
 ``sleep_mode_switched_on`` (the manual override ends), ``position_uncertain``
 (the reference flag for the blocks that know of frost), and ``wake_ups``,
-the one source of every instant a caller has to wake the window at.
+the one source of every instant a caller has to wake the window at. From
+block C07: the fire and protection layers, ``elapse`` also persists what
+their sources did (starts, ends, releases, blind sources),
+``acknowledge_fire``, and ``judge_protection_event`` for the restart.
 
 Every method is a pure function of its arguments. The engine keeps the window
 configuration and the arbiter, both immutable, and nothing else: no state, no
@@ -19,7 +22,7 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, replace
 from datetime import datetime
 
-from . import dams, tracking
+from . import dams, protection, tracking
 from .arbiter import (
     BUILT_IN_GATE_RULES,
     Arbiter,
@@ -33,11 +36,17 @@ from .arbiter import (
     remember_would_be_send,
     wake_ups,
 )
-from .constraints import DIRECTION_CONSTRAINT, FROST_CONSTRAINT
+from .constraints import (
+    DIRECTION_CONSTRAINT,
+    FROST_CONSTRAINT,
+    NO_INTERMEDIATE_CONSTRAINT,
+    SLEEP_EXCEPTION_CONSTRAINT,
+)
 from .model import (
     CommandResult,
     Decision,
     Observation,
+    ProtectionEventState,
     TrackerEvent,
     Transition,
     WindowConfig,
@@ -47,11 +56,26 @@ from .model import (
 from .reasons import ReasonCode
 from .schedule import SCHEDULE_LAYER
 
-BUILT_IN_CONSTRAINTS = (DIRECTION_CONSTRAINT, FROST_CONSTRAINT)
-"""The constraints that belong to no single feature block."""
+BUILT_IN_CONSTRAINTS = (
+    DIRECTION_CONSTRAINT,
+    SLEEP_EXCEPTION_CONSTRAINT,
+    FROST_CONSTRAINT,
+    NO_INTERMEDIATE_CONSTRAINT,
+)
+"""The constraints every arbiter of the integration has.
+
+Direction and frost protection (block C03), the sleep-room exception and "no
+intermediate position during a protection event" (block C07). A block that
+builds a constraint adds it here; ``tests/core/test_constraint_registrations.py``
+compares this list with the constraints of section 2.2 of the specification.
+"""
 
 
-FEATURE_LAYERS: tuple[LayerRegistration, ...] = (SCHEDULE_LAYER,)
+FEATURE_LAYERS: tuple[LayerRegistration, ...] = (
+    protection.FIRE_LAYER,
+    protection.PROTECTION_LAYER,
+    SCHEDULE_LAYER,
+)
 """The layers of the feature blocks; a block that builds a layer adds it here.
 
 ``tests/core/test_layer_triggers.py`` asks every comfort layer in this list for
@@ -221,7 +245,11 @@ class Engine:
         Called before every recompute and at every wake-up (``wake_ups``):
         the tracker judges every member whose settle time or deadline has
         passed, and the dams end, turn into one another, or learn their end.
-        The caller recomputes with the state that comes back.
+        Then the fire alarm and the protection events persist what their
+        sources did (block C07): a start with what the window looked like, an
+        end, a release by the watchdog, a source that has been blind for the
+        blind time; each raises its event, with the event and the source as
+        attributes. The caller recomputes with the state that comes back.
         """
         dry_run = snapshot.controls.dry_run
         tracked = tracking.elapse(
@@ -230,9 +258,43 @@ class Engine:
         if tracked.state is not snapshot.state:
             snapshot = replace(snapshot, state=tracked.state)
         dammed = dams.update_dams(self.config, snapshot, last_decision)
-        if not tracked.events:
+        if dammed.state is not snapshot.state:
+            snapshot = replace(snapshot, state=dammed.state)
+        # Protection last: an event that starts now remembers the owner and
+        # the override as the tracker and the dams leave them.
+        fire = protection.fire_after(self.config, snapshot)
+        if fire.state is not snapshot.state:
+            snapshot = replace(snapshot, state=fire.state)
+        protected = protection.protection_after(self.config, snapshot)
+        events = (*tracked.events, *dammed.events, *fire.events, *protected.events)
+        if not events and protected.state is dammed.state:
             return dammed
-        return Transition(dammed.state, (*tracked.events, *dammed.events))
+        return Transition(protected.state, events)
+
+    @staticmethod
+    def acknowledge_fire(state: WindowState) -> Transition:
+        """Acknowledge the fire alarm (D3): the lower layers act again.
+
+        Clears ``fire_unacknowledged`` and raises ``fire_acknowledged``; it
+        can be done at any time, also while the alarm is still active. Block
+        H07 calls it from its action, block H14 from a button. Without an
+        unacknowledged alarm nothing changes. The window is recomputed
+        afterwards; a movement by hand after the alarm has armed the manual
+        override, which holds the comfort layers back as usual.
+        """
+        return protection.acknowledge_fire(state)
+
+    def judge_protection_event(
+        self, snapshot: WorldSnapshot, event_id: str
+    ) -> ProtectionEventState | None:
+        """Judge a persisted protection event against its live source (block C12).
+
+        The pure function of the restart reconciliation for one event: an
+        event whose source is unavailable stays what it was (D6), one whose
+        source reports active is active from then on (caught up). ``None``
+        if the window has no such event, or its list cannot be read.
+        """
+        return protection.judge_event(self.config, snapshot, event_id)
 
     @staticmethod
     def resume(state: WindowState) -> Transition:
@@ -265,7 +327,13 @@ class Engine:
         """Return every instant after ``now`` at which the caller wakes the window.
 
         The deadlines of the pending own commands, the ends of the settle
-        times, and the ends of the dams (``wake_ups`` of the gate). At each,
-        the caller hands the snapshot to :meth:`elapse` and recomputes.
+        times, and the ends of the dams (``wake_ups`` of the gate); from
+        block C07 also the release of a protection event by the watchdog,
+        the end of the waiting time after an event, and the moment a source
+        without a value is reported as blind. At each, the caller hands the
+        snapshot to :meth:`elapse` and recomputes.
         """
-        return wake_ups(self.config, state, now, dry_run=dry_run)
+        times = set(wake_ups(self.config, state, now, dry_run=dry_run))
+        times |= protection.protection_wake_ups(self.config, state)
+        times |= protection.fire_wake_ups(self.config, state)
+        return tuple(sorted(time for time in times if time > now))

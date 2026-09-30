@@ -4,12 +4,14 @@ The gate only reads a dam (``arbiter/gate.py``); this module writes it.
 
 - **Arming.** The tracker (``core/tracking``) calls
   :func:`arm_after_external_movement` when it attributes a movement to
-  somebody else than the integration. While a protection wish is winning,
-  the person-at-the-window dam is armed; otherwise the manual override dam,
-  with the position the person chose. The arming reads the winning wish
-  class of the last decision, so the protection layers of block C07 change
-  nothing here. The owner of the position becomes ``user``. In dry-run
-  nothing is ever armed; the tracker does not call this then.
+  somebody else than the integration. While a protection wish for a target
+  is winning, the person-at-the-window dam is armed; otherwise the manual
+  override dam, with the position the person chose. The arming reads the
+  winning wish of the last decision (:func:`protection_winning`); a
+  protection wish that only leaves the window alone, as in the waiting time
+  after an event (block C07), does not count. The owner of the position
+  becomes ``user``. In dry-run nothing is ever armed; the tracker does not
+  call this then.
 - **Ending the manual override** (E2): after fixed minutes; when the shading
   episode it was armed during ends; at the next boundary between parts of
   the day (the default); after the room has been empty for the configured
@@ -53,6 +55,7 @@ from .model import (
     WindowObservation,
     WindowState,
     WishClass,
+    WishKind,
     WorldSnapshot,
 )
 from .reasons import ReasonCode
@@ -94,16 +97,27 @@ def armed_since(config: WindowConfig, state: WindowState) -> datetime | None:
 
 
 def protection_winning(decision: Decision | None) -> bool:
-    """Return whether a protection wish won the decision; unknown counts as yes.
+    """Return whether a protection wish for a target won the decision; unknown: yes.
 
     Without a decision nobody knows whether a protection event is under way,
     and the person-at-the-window dam holds back more than the override: a
     person at the window is never overruled because a fact was missing.
+
+    A protection wish that only leaves the window alone does not count
+    (block C07): the waiting time after an event that has ended, or a list
+    of events that cannot be read. Nothing is driven against the person
+    then, so there is nothing for the person-at-the-window dam to hold back;
+    a movement by hand arms the manual override, and a person-at-the-window
+    dam that ends turns into one, as after the end of an event (section 3.2).
     """
     if decision is None:
         return True
     wish = decision.winning_wish
-    return wish is not None and wish.wish_class is WishClass.PROTECTION
+    return (
+        wish is not None
+        and wish.wish_class is WishClass.PROTECTION
+        and wish.kind is WishKind.TARGET
+    )
 
 
 def new_override(

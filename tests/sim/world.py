@@ -23,6 +23,7 @@ from custom_components.roller_shutter_suite.sun_astral import AstralSun
 
 from .clock import SimClock
 from .cover import SimulatedCover
+from .house import HOUSE
 from .sources import Script
 from .storage import MemoryStorage
 
@@ -113,10 +114,12 @@ class World:
         """Return a window configuration over covers of this world.
 
         The capability profile of every member is what the user would state
-        for its cover. ``fields`` are fields of ``WindowConfig``.
+        for its cover. ``fields`` are fields of ``WindowConfig``; the settings
+        of the house (``house.HOUSE``: the fire source and the protection
+        events) apply unless ``fields`` states them.
         """
         members = tuple(
             MemberConfig(member_id, self.covers[member_id].profile.capability_profile())
             for member_id in member_ids
         )
-        return WindowConfig(window_id, members, **fields)
+        return WindowConfig(window_id, members, **{**HOUSE, **fields})

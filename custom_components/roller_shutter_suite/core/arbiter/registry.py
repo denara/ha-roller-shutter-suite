@@ -127,17 +127,31 @@ class LayerRegistration:
 
 @dataclass(frozen=True, slots=True)
 class ConstraintInput:
-    """What a constraint sees: the winning wish and the targets so far."""
+    """What a constraint sees: the winning wish and the targets so far.
+
+    ``answers`` are the answers of every layer and every part of a layer of
+    this recompute, in the order in which they were asked, the winning wish
+    among them. The arbiter asks every layer, also those below the winner,
+    so a constraint can read what a lower layer wants: the sleep-room
+    exception judges "sleep mode is active" as "the sleep layer wants a
+    position" (block C07). A layer that was not asked (a function disabled
+    by a fault) or that raised answers "no opinion" here, as in the decision.
+    """
 
     config: WindowConfig
     snapshot: WorldSnapshot
     wish: Wish
     targets: tuple[MemberTarget, ...]
+    answers: tuple[Wish, ...] = ()
 
     @property
     def current_positions(self) -> dict[str, Position | None]:
         """Return the reported position of every member, if it reports one."""
         return reported_positions(self.snapshot)
+
+    def answers_of(self, layer: Layer) -> tuple[Wish, ...]:
+        """Return the answers of one layer: one per part, in the order asked."""
+        return tuple(answer for answer in self.answers if answer.layer is layer)
 
 
 type ConstraintFunction = Callable[[ConstraintInput], ConstraintResult | None]

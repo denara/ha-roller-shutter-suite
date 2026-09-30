@@ -235,6 +235,36 @@ async def test_after_an_hour_without_a_value_a_repair_issue_names_level_and_enti
     assert _reason(entry)[1] is not ReasonCode.PAUSED
 
 
+@pytest.mark.parametrize(
+    ("stored", "hours"),
+    [(7200, 2), (30, 1), ("not a duration", 1)],
+    ids=["two hours", "out of range", "unreadable"],
+)
+async def test_the_time_before_the_issue_is_the_blind_time_of_the_house(
+    hass: HomeAssistant,
+    freezer: Any,
+    alarms: Alarms,
+    stored: object,
+    hours: int,
+) -> None:
+    """One setting for every kind of source: ``source_blind_after`` of the house.
+
+    A faulty stored value is the fault value, the default hour.
+    """
+    del alarms
+    hass.states.async_set(AWAY, STATE_UNAVAILABLE)
+    entry = await setup_house(
+        hass, freezer, house={**SOURCE, "source_blind_after": stored}
+    )
+    issue_id = f"pause_source_blind_{entry.entry_id}"
+    start = controller_of(entry, WINDOW_ID).clock.now()
+
+    await advance(hass, freezer, start + timedelta(hours=hours, minutes=-1))
+    assert issue_id not in _issues(hass)
+    await advance(hass, freezer, start + timedelta(hours=hours, minutes=1))
+    assert issue_id in _issues(hass)
+
+
 async def test_the_clock_of_a_blind_entity_survives_a_reload(
     hass: HomeAssistant, freezer: Any, alarms: Alarms
 ) -> None:

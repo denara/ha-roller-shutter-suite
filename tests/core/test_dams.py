@@ -37,6 +37,7 @@ from custom_components.roller_shutter_suite.core.model import (
     ManualOverrideDam,
     MemberCommand,
     MemberState,
+    MemberTarget,
     MemberTracking,
     OverrideEndRule,
     OwnCommand,
@@ -96,7 +97,29 @@ def _decision_of(wish_class: WishClass) -> Decision:
         WishClass.FIRE: ReasonCode.FIRE_ALARM,
         WishClass.COMFORT: ReasonCode.SCHEDULE_DAY,
     }[wish_class]
-    return Decision(winning_wish=Wish.leave_alone(layer, reason))
+    # A wish for a target that a constraint pinned: a decision without a gate.
+    return Decision(
+        winning_wish=Wish.target(layer, reason, FULLY_CLOSED),
+        targets=(MemberTarget(LEFT, None),),
+    )
+
+
+def test_a_protection_wish_that_only_leaves_the_window_alone_is_not_winning() -> None:
+    """The waiting time after an event: nothing is driven against the person.
+
+    A movement by hand arms the manual override, and a person-at-the-window
+    dam that ends turns into one, as after the end of the event (block C07).
+    """
+    waiting = Decision(
+        winning_wish=Wish.leave_alone(Layer.PROTECTION, ReasonCode.WAITING_FOR_DELAY)
+    )
+
+    assert not protection_winning(waiting)
+    assert protection_winning(_decision_of(WishClass.PROTECTION))
+    armed = arm_after_external_movement(
+        window(), WindowState(), NOW, waiting, Position(60)
+    )
+    assert codes(armed.events) == [ReasonCode.OVERRIDE_STARTED]
 
 
 def _at(world: WorldSnapshot, minutes: float) -> WorldSnapshot:

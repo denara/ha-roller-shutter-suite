@@ -83,6 +83,7 @@ from tests.core.arbiter_kit import (
     STUB_LAYERS,
     day,
     fire,
+    night,
     on_level,
     registered,
     snapshot,
@@ -373,7 +374,7 @@ def test_constraint_that_raises_applies_the_cautious_result_it_states() -> None:
 
     arbiter = _arbiter(constraints=(*BUILT_IN_CONSTRAINTS, _broken(cautious=floor)))
 
-    decision = _decide(arbiter, storm())
+    decision = _decide(arbiter, night())
 
     assert decision.constraints[-1] == ConstraintResult(
         Constraint.VENTILATION_FLOOR,
@@ -384,6 +385,14 @@ def test_constraint_that_raises_applies_the_cautious_result_it_states() -> None:
     assert decision.gate is not None
     assert decision.gate.kind is GateKind.SEND
     assert len(decision.faults) == 1
+    # A storm is never driven halfway: "no intermediate position" (block C07)
+    # pins what the cautious floor left at 30.
+    stormy = _decide(arbiter, storm())
+    assert [result.constraint for result in stormy.constraints] == [
+        Constraint.VENTILATION_FLOOR,
+        Constraint.NO_INTERMEDIATE_POSITION,
+    ]
+    assert stormy.gate is None
 
 
 def test_cautious_result_that_limits_nothing_is_recorded_all_the_same() -> None:

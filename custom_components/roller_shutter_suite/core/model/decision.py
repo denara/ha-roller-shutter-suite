@@ -146,6 +146,39 @@ def _member_ids(targets: tuple[MemberTarget, ...]) -> tuple[str, ...]:
 
 
 @dataclass(frozen=True, slots=True)
+class WishSubject:
+    """The variable subject of a wish or a layer reason, never part of its code.
+
+    - ``event_id``: the protection event the wish is about;
+    - ``source``: the source it concerns (the trigger of the event, the fire
+      source);
+    - ``held``: why the input of the wish is held rather than read, a code of
+      the group "why a layer did not act": ``input_unavailable`` or
+      ``input_unknown`` while the source has had no value for less than the
+      blind time, ``input_held_last_known`` after it (section 10.1). A wish
+      for a target of an event whose source is away says so here
+      (situation 14 of the specification).
+    """
+
+    event_id: str | None = None
+    source: str | None = None
+    held: ReasonCode | None = None
+
+    def __post_init__(self) -> None:
+        """Validate the attributes."""
+        for name in ("event_id", "source"):
+            value = getattr(self, name)
+            if value is not None:
+                require_identifier(value, f"the {name} of a subject")
+        if self.held is not None:
+            _require_reason(
+                self.held,
+                (ReasonCategory.LAYER_INACTIVE,),
+                "why the input of a subject is held",
+            )
+
+
+@dataclass(frozen=True, slots=True)
 class Wish:
     """The answer of one layer: a target position, leave alone, or no opinion.
 
@@ -166,6 +199,10 @@ class Wish:
     dropped out. Motor protection reads it: a wish whose trigger lies after
     the last own comfort movement is fresh. A wish that states no trigger is
     never fresh.
+
+    ``subject`` is the variable subject of the wish, as attributes next to
+    the reason and never inside it (section 5): the protection event and its
+    source (:class:`WishSubject`). Every kind of wish can carry one.
     """
 
     layer: Layer
@@ -176,11 +213,13 @@ class Wish:
     member_positions: tuple[MemberTarget, ...] = ()
     ray_height: float | None = None
     triggered_at: datetime | None = None
+    subject: WishSubject | None = None
 
     def __post_init__(self) -> None:
         """Reject combinations that do not describe one of the three answers."""
         require_type(self.layer, Layer, "the layer of a wish")
         require_type(self.kind, WishKind, "the kind of a wish")
+        require_optional_type(self.subject, WishSubject, "the subject of a wish")
         if (
             self.reason is ReasonCode.PROTECTION_RETURN_MANUAL
             and self.layer is not Layer.PROTECTION
@@ -274,6 +313,10 @@ class Wish:
         """Return the same wish for a target with the time of its trigger."""
         return replace(self, triggered_at=at)
 
+    def about(self, subject: WishSubject) -> Self:
+        """Return the same wish with its subject."""
+        return replace(self, subject=subject)
+
     @classmethod
     def leave_alone(cls, layer: Layer, reason: ReasonCode) -> Self:
         """Return a wish that wins and holds the window where it is."""
@@ -308,11 +351,14 @@ class LayerReason:
     arbiter fills it from the registration, never the layer itself, so a
     reader of the record does not need the registry. It is ``None`` for a
     registration that declares no function and for a layer nobody registered.
+    ``subject`` is the subject of the wish the layer answered with (the
+    protection event and its source), if it named one.
     """
 
     layer: Layer
     reason: ReasonCode
     function: FunctionId | None = None
+    subject: WishSubject | None = None
 
     def __post_init__(self) -> None:
         """Validate the types, so a reason is never free text."""
@@ -321,6 +367,7 @@ class LayerReason:
         require_optional_type(
             self.function, FunctionId, "the function of a layer reason"
         )
+        require_optional_type(self.subject, WishSubject, "the subject of a reason")
 
 
 # ---------------------------------------------------------------------------

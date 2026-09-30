@@ -17,7 +17,7 @@ world snapshot ─► layers (first opinion wins) ─► constraints ─► gate
 | `arbiter/take_over.py` | what a take-over of a movement in flight does to the state |
 | `arbiter/capabilities.py` | the one place where the gate asks what a member can do |
 | `arbiter/layers.py` | help for layers: what a missing input means |
-| `constraints/` | one module per constraint; so far `direction` and `frost` |
+| `constraints/` | one module per constraint: `direction` and `frost` (block C03), `sleep_exception` and `no_intermediate` (block C07) |
 | `arbiter/sent.py` | what a real send leaves behind in the state |
 | `engine.py` | the façade: `recompute(snapshot) → decision`, the state after a decision, the state after a send, arming, and the movement tracker and the dams ([The movement tracker and the dams](tracking.md)) |
 
@@ -93,7 +93,7 @@ It never skips the maintenance lock and never dry-run, never "no member can exec
 The registry keeps this exact in both directions. A registration whose reasons all belong to the bypass cannot name the class fire; one whose reasons are all outside it has to apply to all three classes; one that mixes the two is refused and has to be split into parts. A test compares the rules the bypass touches with the list in section 2.4 of the specification. A dam cannot be defined to hold back fire either, and a constraint cannot be registered for fire.
 Under a maintenance lock and in dry-run the decision still names the fire wish as the winner, with its target, so the fire event can be fired although nothing moves.
 
-The fire layer itself belongs to a later block. What the arbiter guarantees for it: while its wish is a target, the bypass applies; while its wish is "leave alone" (`fire_unacknowledged`, after the alarm has ended and until somebody acknowledges it), it wins, no lower layer acts, and nothing is sent.
+The fire layer is built by block C07 ([Protection](protection.md)). What the arbiter guarantees for it: while its wish is a target, the bypass applies; while its wish is "leave alone" (`fire_unacknowledged`, after the alarm has ended and until somebody acknowledges it), it wins, no lower layer acts, and nothing is sent.
 
 ## Dams
 
@@ -102,7 +102,7 @@ A dam is a gate rule that holds back wishes of certain classes for a while. `Dam
 - A dam whose end lies in the past has no effect, whether or not somebody has cleared it.
 - A dam with a known end defers until that end. A dam without one (the room becomes empty, the shading episode ends) suppresses.
 - The two end rules without a known end are read by the gate too (`override_ended_by_condition`): once the room has been empty for the configured time, or the shading episode the override was armed during has ended, the dam has no effect any more, whether or not `Engine.elapse` has ended it already. `core/dams.py` reads the same function when it ends the dam and raises the event.
-- The manual override dam lets exactly one comfort wish pass: the return to the manual position after a protection event, which a layer expresses as a wish of the protection layer with the reason `protection_return_manual`. It restores what the dam protects. It is still a comfort wish: every constraint applies to it, the person-at-the-window dam stands before the override dam and holds it back, and pause, operating mode, movement in flight and motor protection apply as to any comfort wish. Whether that wish exists at all (the override is still armed, the waiting time after the event has passed) is decided by the protection layer.
+- The manual override dam lets exactly one comfort wish pass: the return to the manual position after a protection event, which a layer expresses as a wish of the protection layer with the reason `protection_return_manual`. It restores what the dam protects. It is still a comfort wish: every constraint applies to it, the person-at-the-window dam stands before the override dam and holds it back, and pause, operating mode, movement in flight and motor protection apply as to any comfort wish. Whether that wish exists at all (the override that was armed when the event started is still armed, the waiting time after the event has passed) is decided by the protection layer; [Protection](protection.md#the-life-cycle-of-an-event) says how.
 
 ## Deferrals
 
@@ -156,7 +156,7 @@ SLEEP_LAYER = LayerRegistration(Layer.SLEEP, sleep_layer, function=FunctionId.SL
 
 ## How to add a constraint
 
-A constraint is a pure function from a `ConstraintInput` (configuration, snapshot, the winning wish, the targets so far) to a `ConstraintResult`, or to `None` if it has nothing to report.
+A constraint is a pure function from a `ConstraintInput` (configuration, snapshot, the winning wish, the targets so far, and `answers`, the answer of every layer of this recompute) to a `ConstraintResult`, or to `None` if it has nothing to report.
 
 ```python
 LOCKOUT = ConstraintRegistration(
@@ -172,11 +172,12 @@ LOCKOUT = ConstraintRegistration(
 - Name the wish classes it applies to. Fire cannot be named. A constraint that applies to a class only under a setting names the class and checks the setting itself, as `frost` does for protection.
 - Return the target of **every** member, in order. Limit a target, or pin a member with `None`; never give a pinned member a target again, and never invent a target.
 - Compare with `ConstraintInput.current_positions`. A member that reports no position cannot be judged; say in the module what that means for the constraint.
+- A constraint that depends on what another layer wants reads `ConstraintInput.answers` (`answers_of(layer)`): the arbiter asks every layer, also those below the winner, and hands every answer to the constraints, in the order in which the layers were asked. The sleep-room exception judges "sleep mode is active" that way, because the window configuration has no sleep source (block C07).
 - A constraint that says where a window may **stand** (a floor, a ceiling) can be violated by the position the window has right now: somebody tilts the window while the shutter stands just below the ventilation floor. Such a constraint also registers `violated_by_position`, a function that answers whether a member stands on the wrong side at this moment. The movement that restores it is then exempt from the minimum change of motor protection. A constraint that says which **movements** are allowed leaves it out.
 - **Say what applies if the constraint raises:** register `cautious`, a second function that returns the most restrictive result the constraint could have produced for this wish, computed without whatever can fail. Without it the arbiter pins every member when the constraint raises, and the wish is not executed. See [The safety net](#the-safety-net-exceptions).
 - Put it in its own module under `constraints/` and hand it to `build_arbiter(constraints=[...])`.
 
-The two constraints of this block. Neither can be violated by a position, because both are about movements: the direction is judged relative to where the member stands, and frost protection forbids opening further, not standing open. A shutter that is fully open when frost begins stays where it is.
+The constraints that exist. None can be violated by a position, because all are about movements: the direction is judged relative to where the member stands, and frost protection forbids opening further, not standing open. A shutter that is fully open when frost begins stays where it is. The sleep-room exception and "no intermediate position" are described in [Protection](protection.md#the-two-constraints); `tests/core/test_constraint_registrations.py` fails for a constraint of section 2.2 of the specification that `build_arbiter()` does not register and whose block is not named as still to come.
 
 - **Direction** (`raise_only`, `lower_only`): a member whose target lies in the forbidden direction is pinned. A member without a known position passes.
 - **Frost** (`FrostSettings` of the window): while frost is active and not waived, an opening goes only up to the frost position; a member that already stands at or above it is pinned, never closed; closing is never limited. Comfort always, protection only with `applies_to_protection`, fire never. `hold_closed` ("do not raise a closed window at all") is off by default and reports `frost_hold`. Frost is active below the threshold and ends at threshold plus hysteresis; inside the band, and while the source has no value, `WindowState.held_frost` decides, the latter for at most 24 hours. **A silent source is never silently "no frost":** after those 24 hours, or if there never was a known state, the source is blind (`FrostState.BLIND`), and the limit applies as a cautious value until data returns or the operator waives frost protection. The record tells the two apart: `frost_limit` means frost was measured (or is still held), `frost_limit_source_blind` means nothing is known. The event-only code `frost_source_blind` exists for the repair issue and the event, which a later block of the Home Assistant layer raises. A frost source that is **configured, but blind** because its stored setting is faulty (`BLIND_SOURCE`, the fault value of `frost_source`) is blind at once: no held state is used, because a held state belongs to a source and nobody knows which source the window has. `held_frost_after` returns what to persist (for such a window, and for a source that delivers no temperature, what was held stays as it is); the constraint itself only reads. The waiver is an input: `WindowState.frost_waiver_until`. Who sets it, on which level, and the release by sun are later blocks.

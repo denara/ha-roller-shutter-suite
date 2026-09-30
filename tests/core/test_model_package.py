@@ -23,6 +23,7 @@ ORDER = [
     "geometry",
     "schedule",
     "almanac",
+    "protection",
     "window",
     "controls",
     "decision",

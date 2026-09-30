@@ -86,7 +86,9 @@ For a situation of the arbiter (which layer wins, what a constraint limits, what
 
 For the movement tracker and the dams, `tests/core/tracking_kit.py` has a driver that walks one window through reports and time the way the runtime does (`observe` for every report, `elapse` before every recompute); see [The movement tracker and the dams](tracking.md).
 
-For a whole day or a whole year of one or several windows against a synthetic world (scripted sources, simulated covers with behaviour profiles, restarts, injected events), the time-lapse simulation under `tests/sim/` is the harness; its scenario tests stand in `tests/core/test_sim_scenarios.py`, and [The time-lapse simulation](simulation.md) explains how to write a scenario and how to read its timeline.
+For the fire and protection layers, `tests/core/protection_kit.py` has the events of a house, the worlds they are judged in and an engine with the real layers; `engine(stand_ins=True)` adds the test-only stand-ins for lockout protection and sleep mode of `tests/sim/stand_ins.py`; see [Protection](protection.md#testing).
+
+For a whole day or a whole year of one or several windows against a synthetic world (scripted sources, simulated covers with behaviour profiles, restarts, injected events), the time-lapse simulation under `tests/sim/` is the harness; its scenario tests stand in `tests/core/test_sim_scenarios.py`, `test_sim_tracking.py` and `test_sim_protection.py`, and [The time-lapse simulation](simulation.md) explains how to write a scenario and how to read its timeline.
 
 For behavior of the Home Assistant layer:
 

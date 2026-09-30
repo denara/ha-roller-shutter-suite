@@ -91,6 +91,8 @@ Constraints are applied to the winning wish in this order. Each one names the cl
 
 Fire is subject to no constraint at all.
 
+Constraints 1 and 6 are built by block C03, constraints 2 and 7 by block C07, constraints 3 to 5 by block C08 (section 14). A test compares this table with the constraints the arbiter of the integration registers, and names every constraint of the table that has no registration and whose block is not named as still to come.
+
 > **Decision 3 — Frost when the temperature is unavailable.** "Missing data is not good news", and frost is the warning here. While the frost source has no value, the last known frost state is held for at most 24 hours. After that, or if there never was a known state, the source counts as **blind**: the frost limit applies as a cautious value until data returns or the operator waives it, and a repair issue and an event say so, as for every other blind source (section 10.1). It never silently becomes "no frost". The cost of the cautious value is small, because frost protection only limits opening to the frost position. *Rejected:* letting the constraint become inactive after the 24 hours (that is the silent all-clear the project rules out; revised by the project owner on 2026-09-20); treating "unavailable" as "no frost" at once (contradicts D6's principle).
 
 ### 2.3 The gate
@@ -443,7 +445,7 @@ Persisted per window, versioned, all timestamps timezone-aware (naive ones are r
 - latched day types, at most two entries, each with the mark whether it is a fallback: today's once it is set, until then yesterday's (needed for the exact start of the running night); one for tomorrow is kept if present;
 - time of the last own comfort movement (the motor protection clock; a wish whose trigger is later than this time is fresh);
 - the number of own comfort movements of the current local day, with that day's date, and whether the threshold was already reported for it;
-- last known values of inputs that are held (frost state, season, protection triggers);
+- last known values of inputs that are held (frost state, season, protection triggers, the fire alarm), and per source without a value the time since which it has had none and whether it was reported as blind. The time before a source is reported as blind (section 10.1) is **one setting of the house for every kind of source** (`source_blind_after`, default one hour): the trigger sources of the protection events, the fire source, the external pause entity and, from block C08, the blocking contacts. Like the waiting time it is configuration, applied when it is evaluated. Decided by the project owner on 2026-09-29 with block C07;
 - frost waiver: active until; per member the position reference flag (`referenced` / `uncertain`);
 - per member the self-measurement of the tracker ([section 8.3](#83-the-tracker)): the last twenty samples of each measured value, kept only for members whose position is reported event-driven (report delay zero), so that a restart keeps the numbers a user tunes the report delay and the travel times by;
 - in dry-run only: the simulated commands of [section 2.3](#23-the-gate), kept apart from the real state and discarded when the window is armed.

@@ -47,9 +47,9 @@ from typing import Any, Final
 from custom_components.roller_shutter_suite.core.arbiter import Arbiter
 from custom_components.roller_shutter_suite.core.engine import build_arbiter
 from custom_components.roller_shutter_suite.core.model import (
-    FULLY_OPEN,
     AnySourceValue,
     Decision,
+    EventDirection,
     FunctionId,
     GateKind,
     HeldInput,
@@ -57,14 +57,18 @@ from custom_components.roller_shutter_suite.core.model import (
     ManualOverrideDam,
     OverrideEndRule,
     Position,
+    ProtectionEventConfig,
+    ProtectionEventState,
+    ProtectionTrigger,
     SourceValue,
-    WindowConfig,
     WindowState,
-    Wish,
     WishClass,
     WorldSnapshot,
 )
-from custom_components.roller_shutter_suite.core.reasons import ReasonCode
+from custom_components.roller_shutter_suite.core.protection import (
+    FIRE_LAYER,
+    PROTECTION_LAYER,
+)
 from custom_components.roller_shutter_suite.core.settings import (
     WINDOW_SETTINGS,
     PartialSettings,
@@ -78,9 +82,8 @@ from tests.core.arbiter_kit import (
     NOW,
     STUB_LAYERS,
     day,
+    night,
     observed,
-    protection_layer,
-    registered,
     snapshot,
     window,
 )
@@ -113,24 +116,39 @@ class Situation:
         )
 
 
-def _hail_or_storm(config: WindowConfig, world: WorldSnapshot) -> Wish:
-    """Open fully while it hails; otherwise answer like the protection stub."""
-    hail = world.sources.get("hail")
-    if hail is not None and hail.has_value and hail.value is True:
-        return Wish.target(Layer.PROTECTION, ReasonCode.PROTECTION_EVENT, FULLY_OPEN)
-    return protection_layer(config, world)
-
-
 def arbiter() -> Arbiter:
-    """Return the arbiter of the situations: the built-in rules and the stub layers.
+    """Return the arbiter of the situations: the built-in rules and the layers.
 
-    A block whose constraint or gate rule is not built in adds it here.
+    The real fire and protection layers (block C07) and the comfort stubs of
+    the kit. A block whose constraint or gate rule is not built in adds it
+    here.
     """
-    layers = [entry for entry in STUB_LAYERS if entry.layer is not Layer.PROTECTION]
-    return build_arbiter([*layers, registered(Layer.PROTECTION, _hail_or_storm)])
+    comfort = [
+        entry
+        for entry in STUB_LAYERS
+        if entry.layer not in (Layer.FIRE, Layer.PROTECTION)
+    ]
+    return build_arbiter([*comfort, FIRE_LAYER, PROTECTION_LAYER])
 
 
+FIRE_SOURCE: Final = "fire_alarm"
+"""The fire source of the situations: the key the kit's calm day sets to off."""
+
+HAIL_EVENT: Final = ProtectionEventConfig(
+    event_id="hail",
+    trigger=ProtectionTrigger("hail"),
+    direction=EventDirection.OPEN,
+    rank=20,
+)
+STORM_EVENT: Final = ProtectionEventConfig(
+    event_id="storm",
+    trigger=ProtectionTrigger("storm"),
+    direction=EventDirection.CLOSED,
+    rank=10,
+)
+_EVENTS = {"protection_events": (HAIL_EVENT, STORM_EVENT)}
 _FROST = {"frost_source": FROST_SOURCE}
+_FROST_AND_EVENTS = {**_FROST, **_EVENTS}
 _MOVED_RECENTLY = WindowState(last_comfort_movement=NOW - timedelta(minutes=7))
 
 
@@ -139,6 +157,11 @@ def _cold(temperature: float, **extra: AnySourceValue) -> dict[str, AnySourceVal
 
 
 _HAIL = SourceValue.of(True)
+_STORM_ENDED = WindowState(
+    protection_events=(
+        ProtectionEventState("storm", ended_at=NOW - timedelta(minutes=10)),
+    )
+)
 
 SITUATIONS: Final = (
     # --- Frost protection, comfort: the morning opening ---------------------------
@@ -171,7 +194,7 @@ SITUATIONS: Final = (
         FunctionId.FROST,
         WishClass.PROTECTION,
         _cold(-5.0, hail=_HAIL),
-        settings=_FROST,
+        settings=_FROST_AND_EVENTS,
     ),
     Situation(
         "frost, hail opens a closed shutter",
@@ -179,7 +202,7 @@ SITUATIONS: Final = (
         WishClass.PROTECTION,
         _cold(-5.0, hail=_HAIL),
         position=0,
-        settings=_FROST,
+        settings=_FROST_AND_EVENTS,
     ),
     Situation(
         "no frost source anywhere, hail opens a closed shutter",
@@ -187,6 +210,7 @@ SITUATIONS: Final = (
         WishClass.PROTECTION,
         day(hail=_HAIL),
         position=0,
+        settings=_EVENTS,
     ),
     # --- Motor protection ----------------------------------------------------------
     Situation(
@@ -208,6 +232,7 @@ SITUATIONS: Final = (
         WishClass.PROTECTION,
         day(hail=_HAIL),
         position=96,
+        settings=_EVENTS,
         state=_MOVED_RECENTLY,
     ),
     # --- Manual operation detection and the dams -------------------------------------
@@ -252,6 +277,40 @@ SITUATIONS: Final = (
         WishClass.PROTECTION,
         day(hail=_HAIL),
         position=None,
+        settings=_EVENTS,
+    ),
+    # --- The fire alarm (block C07) -------------------------------------------------
+    Situation(
+        "the fire alarm is active while a storm closes a half open shutter",
+        FunctionId.FIRE,
+        WishClass.PROTECTION,
+        day(storm=SourceValue.of(True), **{FIRE_SOURCE: SourceValue.of(True)}),
+        settings={"fire_source": FIRE_SOURCE, **_EVENTS},
+    ),
+    # --- The protection events (block C07) -------------------------------------------
+    Situation(
+        "the storm ended ten minutes ago, its waiting time runs; a wish to open",
+        FunctionId.PROTECTION_EVENTS,
+        WishClass.COMFORT,
+        day(),
+        settings=_EVENTS,
+        state=_STORM_ENDED,
+    ),
+    Situation(
+        "the storm closes a half open shutter",
+        FunctionId.PROTECTION_EVENTS,
+        WishClass.PROTECTION,
+        day(storm=SourceValue.of(True)),
+        settings=_EVENTS,
+    ),
+    Situation(
+        "hail opens a closed bedroom window marked for the sleep-room exception, "
+        "while sleep mode is on",
+        FunctionId.PROTECTION_EVENTS,
+        WishClass.PROTECTION,
+        night(hail=_HAIL, sleep=SourceValue.of(True)),
+        position=0,
+        settings={**_EVENTS, "protection_sleep_exception": ("hail",)},
     ),
 )
 """Every world in which a function with settings that fall back restricts."""
@@ -433,6 +492,12 @@ def protection_restricted_by_a_fault(
 
     Every setting is judged in every protection situation, whatever its
     function: a fault value must not reach a protection wish by any path.
+
+    It judges the protection or fire wish the default decides. The one
+    setting whose default leaves neither is the list of protection events
+    itself (its default is "no events"): with it inherited, a comfort wish
+    wins the situation, there is no protection wish that a fault could
+    restrict, and what its fault value does to comfort is test 1's to judge.
     """
     findings: list[str] = []
     for definition in _cautious(registry):
@@ -440,6 +505,9 @@ def protection_restricted_by_a_fault(
             if situation.wish_class is not WishClass.PROTECTION:
                 continue
             default = decide(registry, situation, definition.key, inherit=True)
+            winner = default.winning_wish
+            if winner is None or winner.wish_class is WishClass.COMFORT:
+                continue
             for fault_case in FAULT_CASES:
                 faulty = decide(
                     registry, situation, definition.key, fault_case=fault_case

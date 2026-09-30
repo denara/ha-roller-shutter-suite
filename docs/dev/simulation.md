@@ -9,7 +9,8 @@ The domain core can run a whole day or a whole year against a synthetic world in
 | `storage.py` | the in-memory storage; every save goes through JSON |
 | `cover.py` | the simulated cover and its behaviour profile |
 | `world.py` | the world: clock, sun, sources, covers, storage, actuator |
-| `stubs.py` | stub layers for fire and protection until their block exists |
+| `house.py` | the protection of the simulated house: its fire source, a storm that closes and hail that opens |
+| `stand_ins.py` | test-only stand-ins for blocks that do not exist yet: lockout protection (C08) and sleep mode (C11) |
 | `runner.py` | the scenario runner: windows, injected events, recomputes, restart |
 | `record.py` | the record of a run and the readable timeline |
 | `assertions.py` | what a run must satisfy |
@@ -47,9 +48,9 @@ One recompute:
 
 **Restart.** `Simulation.restart()` throws the engines away, reads every window state back from the storage, reads the covers once, and recomputes every window whose members are available. The covers keep their state, as real covers do. The scenario `restarts` does this at four points of a day, and a test shows that the commands after every restart equal those of the uninterrupted run.
 
-**Injected events**, scheduled with `simulation.at(instant, label, action)`: `move_by_hand(window, target, member_id=..., user_id=...)` (a whole window or one member; with a user, a movement from a dashboard whose first reports carry the user in their context), `stop_by_hand(window, member)`, `dropout(window, member, duration)`, `set_controls(window, controls)` (pause, lock, mode, dry-run; leaving dry-run arms the window), `other_controller_moves(window, target)` (a scripted second controller), `resume(window)` (the "resume automation" button), `sleep_mode_switched_on(window)`, and `restart()`. The movements by hand, the stops, the other controller and the dropouts are marked as foreign in the record (`Entry.foreign`).
+**Injected events**, scheduled with `simulation.at(instant, label, action)`: `move_by_hand(window, target, member_id=..., user_id=...)` (a whole window or one member; with a user, a movement from a dashboard whose first reports carry the user in their context), `stop_by_hand(window, member)`, `dropout(window, member, duration)`, `set_controls(window, controls)` (pause, lock, mode, dry-run; leaving dry-run arms the window), `other_controller_moves(window, target)` (a scripted second controller), `resume(window)` (the "resume automation" button), `sleep_mode_switched_on(window)`, `acknowledge_fire(window)` (the action and the button that acknowledge the fire alarm), and `restart()`. The movements by hand, the stops, the other controller and the dropouts are marked as foreign in the record (`Entry.foreign`).
 
-**Layers.** By default every window's arbiter gets the real schedule layer and two stubs (`tests/sim/stubs.py`): a fire layer that opens while the source `fire_alarm` is on and a protection layer that closes while `storm` is on. These are extension points. When block C07 delivers the real layers, a scenario hands them in with `Simulation(world, layers=...)` and scripts the sources they read; the same goes for shading, sleep mode and the rest as their blocks arrive. No scenario exists for a feature that does not exist.
+**Layers.** By default every window's arbiter is the one of the integration (`build_arbiter()`): the real fire, protection and schedule layers and the built-in constraints and gate rules. The stubs of fire and protection that stood here until block C07 are gone. Every window inherits the protection of the simulated house (`house.py`, applied by `World.window` unless a scenario states other values): the fire source `binary_sensor.example_smoke_alarm`, a storm that closes (`binary_sensor.example_storm_warning`, rank 10) and hail that opens (`binary_sensor.example_hail_warning`, rank 20); `calm_sources` scripts all three off. A scenario hands in other layers or additional constraints with `Simulation(world, layers=..., constraints=...)`. For features whose block does not exist yet the scenarios of block C07 use the **stand-ins** of `stand_ins.py`: a lockout constraint (sources `door`, `tamper`) for C08 and a sleep layer (source `sleep`) for C11. They are test-only and are replaced by the real constraint and layer when those blocks arrive; no other scenario exists for a feature that does not exist.
 
 ## Writing a scenario
 
@@ -161,4 +162,23 @@ Reading a failed scenario: the message names the window, the moment and the rule
 
 ## What is out of scope
 
-Plots and a graphical front end. Scenarios for shading, protection events beyond the stub, sleep mode and privacy: their blocks add them, with the real layers in place of the stubs.
+Plots and a graphical front end. Scenarios for shading, sleep mode and privacy: their blocks add them, with the real layers in place of the stand-ins.
+
+## The scenarios of protection (block C07)
+
+`tests/core/test_sim_protection.py` runs them and names, for each situation of section 4 of the specification, the reason codes of its row.
+
+| Scenario | Shows |
+|---|---|
+| `fire-locked`, `fire-dry-run`, `fire-off` | situations 1 to 3: under the lock and in dry-run nothing moves and the decision names the fire wish; in mode `off` fire opens at once |
+| `fire-unacknowledged` | situation 3a: after a false alarm a person closes the shutter; nothing reopens it, and after the acknowledgement the manual override protects it |
+| `storm-door-open`, `storm-door-tamper` | situations 4 and 5, with the lockout stand-in: no movement while the door is open; with the tamper contact the storm closes |
+| `hail-sleep-exception` | situation 6, with the sleep stand-in: hail does not open a room marked for the exception while sleep mode is on |
+| `person-at-window` | situation 7: a person opens the window during a storm; after 15 minutes the storm position is restored and a reason event is fired |
+| `storm-return`, `storm-override-expired` | situations 8 to 10: an override before the storm stays armed, and after the waiting time the person's position is restored; with an override that expired, the window is recomputed |
+| `storm-source-away` | situation 14 and D6: the source is away, the event holds, the source is reported blind after an hour, and the event ends when the source returns with "off" |
+| `storm-stuck` | the watchdog releases a stuck source after 12 hours and makes the event effective again after one genuine "off" |
+| `storm-and-hail` | two events at once: hail ranks above the storm; when it ends, the active storm closes again |
+| `fire-during-storm` | fire wins over the storm, and after the acknowledgement the storm applies again |
+
+`storm_return_with_restart` and `storm_stuck_with_restart` restart during the storm, during its waiting time, after the return and during a release; the tests compare the commands with the uninterrupted run. The `storm` scenario of block C05 runs against the real layer: never an intermediate position, and the schedule opens the window again after the waiting time.

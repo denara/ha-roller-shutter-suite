@@ -14,6 +14,8 @@ from custom_components.roller_shutter_suite.core.constraints import (
     DIRECTION_CONSTRAINT,
     FROST_CONSTRAINT,
     FROST_HOLD_LIMIT,
+    NO_INTERMEDIATE_CONSTRAINT,
+    SLEEP_EXCEPTION_CONSTRAINT,
     FrostState,
     frost_state,
     held_frost_after,
@@ -90,9 +92,16 @@ def test_constraints_are_applied_in_the_specified_order() -> None:
 
     assert [entry.constraint for entry in arbiter.constraints] == [
         Constraint.DIRECTION,
+        Constraint.SLEEP_ROOM_EXCEPTION,
         Constraint.FROST_PROTECTION,
+        Constraint.NO_INTERMEDIATE_POSITION,
     ]
-    assert BUILT_IN_CONSTRAINTS == (DIRECTION_CONSTRAINT, FROST_CONSTRAINT)
+    assert BUILT_IN_CONSTRAINTS == (
+        DIRECTION_CONSTRAINT,
+        SLEEP_EXCEPTION_CONSTRAINT,
+        FROST_CONSTRAINT,
+        NO_INTERMEDIATE_CONSTRAINT,
+    )
     assert (
         Arbiter(constraints=reversed_order, gate_rules=arbiter.gate_rules).constraints
         == arbiter.constraints
@@ -195,7 +204,16 @@ def test_a_constraint_is_skipped_for_the_classes_it_does_not_name() -> None:
     assert comfort_only.recompute(
         window(), snapshot(sources=storm())
     ).target == Position(0)
-    assert both.recompute(window(), snapshot(sources=storm())).target == Position(30)
+    stormy = both.recompute(window(), snapshot(sources=storm()))
+    # The floor applies to the storm, and "no intermediate position" (block
+    # C07) leaves the window alone rather than driving it to 30.
+    assert [result.constraint for result in stormy.constraints] == [
+        Constraint.VENTILATION_FLOOR,
+        Constraint.NO_INTERMEDIATE_POSITION,
+    ]
+    assert stormy.constraints[0].targets[0].position == Position(30)
+    assert stormy.target is None
+    assert stormy.gate is None
     burning = both.recompute(window(), snapshot(sources=fire()))
     assert burning.constraints == ()
     assert burning.target == FULLY_OPEN

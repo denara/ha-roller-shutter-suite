@@ -50,23 +50,33 @@ from typing import Any, Final
 from .model import (
     BLIND_SOURCE,
     DEFAULT_COMFORT_MOVEMENTS_THRESHOLD,
+    DEFAULT_MAX_DURATION,
     DEFAULT_OVERRIDE_MINUTES,
     DEFAULT_PERSON_AT_WINDOW,
     DEFAULT_ROOM_EMPTY_AFTER,
+    DEFAULT_SOURCE_BLIND_AFTER,
+    DEFAULT_WAITING_TIME,
+    EVENTS_UNREADABLE,
     FULLY_CLOSED,
     FULLY_OPEN,
     GEOMETRY_FIELDS,
     GEOMETRY_PREFIX,
     MAX_COMFORT_MOVEMENTS_THRESHOLD,
     MAX_DAM_DURATION,
+    MAX_MAX_DURATION,
     MAX_RANDOM_OFFSET,
+    MAX_RANK,
+    MAX_SOURCE_BLIND_AFTER,
     MAX_STAGGER_GAP,
     MAX_STATED_TOLERANCE,
     MAX_SUN_OFFSET_MINUTES,
     MAX_TOLERANCE,
     MAX_TRIGGER_ELEVATION,
+    MAX_WAITING_TIME,
     MEMBER_MEASUREMENT_FIELDS,
     MIN_DAM_DURATION,
+    MIN_RANK,
+    MIN_SOURCE_BLIND_AFTER,
     MIN_TOLERANCE,
     SCHEDULE_DAY_TYPES,
     SCHEDULE_EDGES,
@@ -75,6 +85,7 @@ from .model import (
     CapabilityProfile,
     CapabilityState,
     CoveringType,
+    EventDirection,
     FaultBehavior,
     FunctionId,
     JsonValue,
@@ -84,10 +95,14 @@ from .model import (
     OverrideEndRule,
     Position,
     PositionSource,
+    ProtectionEventConfig,
+    ProtectionEvents,
+    ProtectionTrigger,
     ScheduleProfile,
     SettingsCombinationError,
     TemperatureTier,
     TriggerKind,
+    TriggerType,
     WindowCapabilityStates,
     WindowConfig,
     member_glass_for,
@@ -96,6 +111,7 @@ from .model._data import (
     as_bool,
     as_enum,
     as_int,
+    as_list,
     as_object,
     as_str,
     read,
@@ -1471,6 +1487,207 @@ def _signed_minutes(value: JsonValue) -> int:
     return as_int(value)
 
 
+# --- The protection events: a list of the house, read leniently -------------------
+#
+# Ruling of the project owner of 2026-10-01: a list that cannot be read as a
+# whole is "configured, but unreadable" (the fault value EVENTS_UNREADABLE),
+# and faults inside one event are read field by field, each with its cautious
+# value, and recorded on the event (``faulty_fields``) so that the Home
+# Assistant layer can report them. What each cautious value costs is written
+# at ``core/model/protection.py``.
+
+_EVENT_ID: Final = "event_id"
+_TRIGGER_KEYS: Final = (
+    "source",
+    "trigger",
+    "states",
+    "threshold",
+    "hysteresis",
+    "invert",
+)
+_EVENT_KEYS: Final = (
+    _EVENT_ID,
+    *_TRIGGER_KEYS,
+    "direction",
+    "rank",
+    "waiting_time",
+    "max_duration",
+)
+"""The keys of one stored event, for example
+``{"event_id": "storm", "source": "binary_sensor.example_storm",
+"trigger": "binary", "direction": "closed", "rank": 10, "waiting_time": 1800,
+"max_duration": 43200}``."""
+
+_READ_REFUSALS: Final = (
+    TypeError,
+    ValueError,
+    ArithmeticError,
+    LookupError,
+    AttributeError,
+    RecursionError,
+)
+
+
+def _as_rank(value: JsonValue) -> int:
+    rank = as_int(value)
+    if not MIN_RANK <= rank <= MAX_RANK:
+        raise ValueError(f"expected a rank from {MIN_RANK} to {MAX_RANK}")
+    return rank
+
+
+def _duration_up_to(maximum: timedelta) -> Callable[[JsonValue], timedelta]:
+    def convert(value: JsonValue) -> timedelta:
+        duration = as_duration(value)
+        if duration > maximum:
+            raise ValueError(f"expected at most {int(maximum.total_seconds())} seconds")
+        return duration
+
+    return convert
+
+
+def _as_states(value: JsonValue) -> tuple[str, ...]:
+    states = tuple_of(as_str)(value)
+    if not states or any(not state for state in states):
+        raise ValueError("expected a list of states, none of them empty")
+    return states
+
+
+def _as_hysteresis(value: JsonValue) -> float:
+    hysteresis = _as_number(value)
+    if hysteresis < 0:
+        raise ValueError("expected a hysteresis that is not negative")
+    return hysteresis
+
+
+class _EventReader:
+    """Reads one stored event and remembers the keys it could not read."""
+
+    def __init__(self, data: Mapping[str, JsonValue]) -> None:
+        self.data = data
+        self.faulty: list[str] = [key for key in data if key not in _EVENT_KEYS]
+
+    def field[T](
+        self,
+        key: str,
+        reader: Callable[[JsonValue], T],
+        fallback: T,
+        *,
+        required: bool = False,
+    ) -> T:
+        """Return the value of one key, or the fallback and the key as a fault."""
+        if key not in self.data:
+            if required:
+                self.faulty.append(key)
+            return fallback
+        try:
+            value = self.data[key]
+            if value is None:
+                raise ValueError("null is not a stored value")
+            return reader(value)
+        except _READ_REFUSALS:
+            self.faulty.append(key)
+            return fallback
+
+    def trigger(self) -> ProtectionTrigger | None:
+        """Return the trigger; ``None`` if a key it needs cannot be read.
+
+        A key that does not belong to the kind of the trigger (a threshold
+        on a binary trigger) is reported and changes nothing.
+        """
+        before = len(self.faulty)
+        source = self.field("source", as_str, "", required=True)
+        kind = self.field("trigger", as_enum(TriggerType), TriggerType.BINARY)
+        states: tuple[str, ...] = ()
+        threshold = hysteresis = 0.0
+        invert = False
+        if kind is TriggerType.STATES:
+            states = self.field("states", _as_states, (), required=True)
+        if kind is TriggerType.THRESHOLD:
+            threshold = self.field("threshold", _as_number, 0.0, required=True)
+            hysteresis = self.field("hysteresis", _as_hysteresis, 0.0)
+        if kind is not TriggerType.STATES:
+            invert = self.field("invert", as_bool, False)
+        blind = len(self.faulty) > before
+        foreign = {
+            TriggerType.BINARY: ("states", "threshold", "hysteresis"),
+            TriggerType.STATES: ("threshold", "hysteresis", "invert"),
+            TriggerType.THRESHOLD: ("states",),
+        }[kind]
+        self.faulty.extend(key for key in foreign if key in self.data)
+        if blind:
+            return None
+        try:
+            return ProtectionTrigger(
+                source=source,
+                kind=kind,
+                states=states,
+                threshold=threshold,
+                hysteresis=hysteresis,
+                invert=invert,
+            )
+        except _READ_REFUSALS:
+            self.faulty.append("source")
+            return None
+
+
+def _read_event(value: JsonValue) -> ProtectionEventConfig:
+    """Read one event; only an event without a readable identifier is refused."""
+    if not isinstance(value, dict):
+        raise ValueError("expected an object for every protection event")  # noqa: TRY004
+    event_id = value.get(_EVENT_ID)
+    if not isinstance(event_id, str) or not event_id.strip():
+        raise ValueError("every protection event needs an identifier")
+    reader = _EventReader(value)
+    trigger = reader.trigger()
+    direction = reader.field("direction", as_enum(EventDirection), None, required=True)
+    rank = reader.field("rank", _as_rank, None, required=True)
+    waiting_time = reader.field(
+        "waiting_time", _duration_up_to(MAX_WAITING_TIME), DEFAULT_WAITING_TIME
+    )
+    max_duration = reader.field(
+        "max_duration", _duration_up_to(MAX_MAX_DURATION), DEFAULT_MAX_DURATION
+    )
+    return ProtectionEventConfig(
+        event_id=event_id,
+        trigger=trigger,
+        direction=direction,
+        rank=rank,
+        waiting_time=waiting_time,
+        max_duration=max_duration,
+        faulty_fields=tuple(dict.fromkeys(reader.faulty)),
+    )
+
+
+def as_protection_events(value: JsonValue) -> tuple[ProtectionEventConfig, ...]:
+    """Read the stored protection events of a level: a list of objects.
+
+    The list itself, and the identifier of every event, must be readable and
+    unique; otherwise the whole list is refused, and the fault value applies
+    (configured, but unreadable), because the persisted state of an event is
+    found by its identifier. Every other key is read leniently: a key that
+    cannot be read takes its cautious value and is named in the event's
+    ``faulty_fields``, so a fault in one field never costs the protection of
+    the event. A rank that two events state is faulty on both: each loses
+    against every valid rank, and a duplicate never reaches the arbiter.
+    """
+    events = [_read_event(item) for item in as_list(value)]
+    require_unique(
+        (event.event_id for event in events), "the identifiers of protection events"
+    )
+    ranks = [event.rank for event in events if event.rank is not None]
+    twice = {rank for rank in ranks if ranks.count(rank) > 1}
+    return tuple(
+        dataclasses.replace(
+            event,
+            rank=None,
+            faulty_fields=tuple(dict.fromkeys((*event.faulty_fields, "rank"))),
+        )
+        if event.rank in twice
+        else event
+        for event in events
+    )
+
+
 POSITION_RANGE: Final = ValueRange(FULLY_CLOSED.value, FULLY_OPEN.value)
 """The range of a position: 0 (fully closed) to 100 (fully open)."""
 
@@ -1891,6 +2108,66 @@ WINDOW_SETTINGS: Final = SettingsRegistry(
             fault_value=DEFAULT_PERSON_AT_WINDOW,
             parse=as_duration,
             value_range=_DAM_DURATION,
+        ),
+        # The fire alarm of the house (D3). Fire opens every window, so a
+        # data fault must never switch the fire layer off.
+        SettingDefinition[str | BlindSource | None](
+            key="fire_source",
+            kind=SettingKind.OPTIONAL_REFERENCE,
+            function=FunctionId.FIRE,
+            default=None,
+            # "None" means "no fire alarm" and would switch the fire layer off.
+            # Configured, but blind: the held state of the alarm applies, as
+            # for a source without a value, until the setting is repaired.
+            fault_value=BLIND_SOURCE,
+            parse=as_str,
+        ),
+        # The protection events of the house (D1, D2, D8), each with its
+        # trigger, direction, rank, waiting time and maximum duration.
+        SettingDefinition[ProtectionEvents](
+            key="protection_events",
+            kind=SettingKind.LIST,
+            function=FunctionId.PROTECTION_EVENTS,
+            default=(),
+            # "No events" would take the protection away. Configured, but
+            # unreadable: every persisted event that is active or in its
+            # waiting time holds the window where it is, with the default
+            # waiting time and the default maximum duration (ruling of the
+            # project owner of 2026-10-01). Faults inside one event are read
+            # leniently by the reader, field by field.
+            fault_value=EVENTS_UNREADABLE,
+            parse=as_protection_events,
+        ),
+        # The sleep-room exception (D4): the events that must not open the
+        # window while sleep mode is active.
+        SettingDefinition[tuple[str, ...]](
+            key="protection_sleep_exception",
+            kind=SettingKind.LIST,
+            function=FunctionId.PROTECTION_EVENTS,
+            default=(),
+            # No exception: protection wins over sleep. A faulty exception
+            # must not keep a protection opening from happening; a fault on
+            # its own never restricts a protection wish more than the default.
+            fault_value=(),
+            parse=tuple_of(as_str),
+        ),
+        # The time before a source without a value is reported as blind: one
+        # setting for every kind of source (ruling of the project owner of
+        # 2026-09-29), the trigger sources of the protection events, the fire
+        # source and the external pause entity. It changes no behavior.
+        SettingDefinition(
+            key="source_blind_after",
+            kind=SettingKind.DURATION,
+            function=FunctionId.PROTECTION_EVENTS,
+            default=DEFAULT_SOURCE_BLIND_AFTER,
+            # The default, stated on purpose: a blind source is never
+            # reported later than approved. It blocks nothing.
+            fault_value=DEFAULT_SOURCE_BLIND_AFTER,
+            parse=as_duration,
+            value_range=ValueRange(
+                MIN_SOURCE_BLIND_AFTER.total_seconds(),
+                MAX_SOURCE_BLIND_AFTER.total_seconds(),
+            ),
         ),
         # The external pause entity (E4). A pause holds back comfort only, so
         # the cautious side is the pause: an entity without a value pauses its

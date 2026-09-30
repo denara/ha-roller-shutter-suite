@@ -587,7 +587,7 @@ def test_maintenance_lock_records_decisions_but_no_commands() -> None:
     )
 
 
-# --- The stub fire trigger in every operating mode ------------------------------------------
+# --- The fire alarm in every operating mode ------------------------------------------------
 
 
 @pytest.mark.parametrize(

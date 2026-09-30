@@ -216,13 +216,15 @@ class Arbiter:
 
     # --- Constraints --------------------------------------------------------
 
-    def _constrain(
+    def _constrain(  # noqa: PLR0913 - the wish, its targets, every answer and the faults
         self,
         config: WindowConfig,
         snapshot: WorldSnapshot,
         wish: Wish,
         targets: tuple[MemberTarget, ...],
         faults: list[EvaluationFault],
+        *,
+        answers: tuple[Wish, ...] = (),
     ) -> tuple[tuple[ConstraintResult, ...], tuple[MemberTarget, ...]]:
         """Apply the constraints in order. Fire is subject to none.
 
@@ -239,7 +241,7 @@ class Arbiter:
         for registration in self.constraints:
             if wish.wish_class not in registration.applies_to:
                 continue
-            constraint_input = ConstraintInput(config, snapshot, wish, targets)
+            constraint_input = ConstraintInput(config, snapshot, wish, targets, answers)
             try:
                 result = _result_of(registration.apply, registration, constraint_input)
             except Exception as error:  # noqa: BLE001 - the safety net: a constraint that raises keeps restricting
@@ -255,13 +257,15 @@ class Arbiter:
             targets = result.targets
         return tuple(results), targets
 
-    def _violated_by_position(
+    def _violated_by_position(  # noqa: PLR0913 - the wish, its targets, every answer and the faults
         self,
         config: WindowConfig,
         snapshot: WorldSnapshot,
         wish: Wish,
         targets: tuple[MemberTarget, ...],
         faults: list[EvaluationFault],
+        *,
+        answers: tuple[Wish, ...] = (),
     ) -> bool:
         """Say whether the window stands where a constraint on the wish forbids it.
 
@@ -271,7 +275,7 @@ class Arbiter:
         """
         if wish.wish_class is WishClass.FIRE:
             return False
-        constraint_input = ConstraintInput(config, snapshot, wish, targets)
+        constraint_input = ConstraintInput(config, snapshot, wish, targets, answers)
         violated = False
         for registration in self.constraints:
             if (
@@ -447,7 +451,7 @@ class Arbiter:
         )
         winner, winning_function = (None, None) if won is None else answers[won]
         others = tuple(
-            LayerReason(wish.layer, wish.reason, function)
+            LayerReason(wish.layer, wish.reason, function, wish.subject)
             for index, (wish, function) in enumerate(answers)
             if index != won
         )
@@ -459,8 +463,13 @@ class Arbiter:
                 faults=tuple(faults),
             )
         targets = _initial_targets(winner, member_ids)
-        restores = self._violated_by_position(config, snapshot, winner, targets, faults)
-        results, targets = self._constrain(config, snapshot, winner, targets, faults)
+        asked = tuple(wish for wish, _ in answers)
+        restores = self._violated_by_position(
+            config, snapshot, winner, targets, faults, answers=asked
+        )
+        results, targets = self._constrain(
+            config, snapshot, winner, targets, faults, answers=asked
+        )
         to_send = tuple(target for target in targets if target.position is not None)
         gate, addressed = (
             self._gate(config, snapshot, winner, to_send, faults, restores=restores)

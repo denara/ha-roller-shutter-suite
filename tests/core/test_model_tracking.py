@@ -31,7 +31,10 @@ from custom_components.roller_shutter_suite.core.model import (
     Transition,
     WindowState,
 )
-from custom_components.roller_shutter_suite.core.reasons import ReasonCode
+from custom_components.roller_shutter_suite.core.reasons import (
+    ReasonCategory,
+    ReasonCode,
+)
 from tests.core.arbiter_kit import LEFT, NOW, window
 from tests.core.tracking_kit import UNAVAILABLE, resting
 
@@ -170,9 +173,32 @@ def test_an_event_carries_an_event_code_and_its_subject_as_attributes() -> None:
         "count": 41,
         "threshold": 40,
         "user_id": None,
+        "event_id": None,
+        "source": None,
     }
     with pytest.raises(ValueError, match="group 'event'"):
         TrackerEvent(ReasonCode.SENT)
+    with pytest.raises(ValueError, match="group 'event'"):
+        TrackerEvent(ReasonCode.INPUT_HELD_LAST_KNOWN)
+
+
+def test_the_release_by_the_watchdog_is_an_event_with_the_event_and_its_source() -> (
+    None
+):
+    """``watchdog_released`` stays a code of its group and is raised as an event too."""
+    event = TrackerEvent(
+        ReasonCode.WATCHDOG_RELEASED,
+        event_id="storm",
+        source="binary_sensor.example_storm",
+    )
+
+    assert event.to_data()["event_id"] == "storm"
+    assert event.to_data()["source"] == "binary_sensor.example_storm"
+    assert ReasonCode.WATCHDOG_RELEASED.category is not ReasonCategory.EVENT
+    with pytest.raises(ValueError, match="empty"):
+        TrackerEvent(ReasonCode.PROTECTION_STARTED, event_id="")
+    with pytest.raises(TypeError, match="source"):
+        TrackerEvent(ReasonCode.PROTECTION_STARTED, source=7)  # type: ignore[arg-type]
     with pytest.raises(TypeError, match="count"):
         TrackerEvent(ReasonCode.OVERRIDE_ENDED, count=True)
     with pytest.raises(ValueError, match="must not be empty"):

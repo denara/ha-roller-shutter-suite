@@ -47,6 +47,14 @@ from .values import Position, _position_data
 SELF_MEASUREMENT_SAMPLES: Final = 20
 """How many samples per value the self-measurement keeps (ruling of the owner)."""
 
+EVENT_CODES_OF_OTHER_GROUPS: Final = frozenset({ReasonCode.WATCHDOG_RELEASED})
+"""Codes outside the group "events only" that an event may carry.
+
+``watchdog_released`` says in a decision why the protection layer did not
+act, and it is raised as an event when the watchdog releases an event
+(ruling of the project owner of 2026-10-01).
+"""
+
 
 @unique
 class TrackerPhase(StrEnum):
@@ -304,10 +312,14 @@ class TrackerEvent:
     """An event of the tracker or the life cycle of a window.
 
     ``code`` is a reason code of the group "tracker and life cycle (events
-    only)". The subject is an attribute, never part of the code: the member,
-    the position a person chose, the count and the threshold of the comfort
-    movements, the user identifier seen at a foreign movement (a hint that
-    never decides). The instant is the one of the call that raised it; the
+    only)", or ``watchdog_released``: that code stays in the group "why a
+    layer did not act", and the release is raised as an event too (ruling of
+    the project owner of 2026-10-01). The subject is an attribute, never part
+    of the code: the member, the position a person chose, the count and the
+    threshold of the comfort movements, the user identifier seen at a foreign
+    movement (a hint that never decides), and the protection event and its
+    source (``event_id``, ``source``; the fire source has no event
+    identifier). The instant is the one of the call that raised it; the
     caller knows it. Events are not persisted: the Home Assistant layer puts
     them on the bus and into the logbook.
     """
@@ -318,17 +330,26 @@ class TrackerEvent:
     count: int | None = None
     threshold: int | None = None
     user_id: str | None = None
+    event_id: str | None = None
+    source: str | None = None
 
     def __post_init__(self) -> None:
         """Accept event codes only; validate the attributes."""
         require_type(self.code, ReasonCode, "the code of an event")
-        if self.code.category is not ReasonCategory.EVENT:
+        if (
+            self.code.category is not ReasonCategory.EVENT
+            and self.code not in EVENT_CODES_OF_OTHER_GROUPS
+        ):
             raise ValueError(
                 f"an event carries a code of the group 'event'; {self.code.value!r} "
                 f"belongs to {self.code.category.value!r}"
             )
         if self.member_id is not None:
             require_identifier(self.member_id, "the member of an event")
+        for name in ("event_id", "source"):
+            value = getattr(self, name)
+            if value is not None:
+                require_identifier(value, f"the {name} of an event")
         require_optional_type(self.position, Position, "the position of an event")
         for name in ("count", "threshold"):
             value = getattr(self, name)
@@ -347,4 +368,6 @@ class TrackerEvent:
             "count": self.count,
             "threshold": self.threshold,
             "user_id": self.user_id,
+            "event_id": self.event_id,
+            "source": self.source,
         }
