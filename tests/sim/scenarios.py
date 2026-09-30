@@ -836,6 +836,42 @@ def storm_after_an_override(
 PERSON_LOWERS: Final = 40
 """Where the person of the override scenarios lowers the window to."""
 
+PERSON_OPENS: Final = 60
+"""Where the person of ``storm_twice`` opens the window in the waiting time."""
+
+
+def storm_twice(seed: int = 1) -> Simulation:
+    """Return a storm, a hand movement in its waiting time, and the storm again.
+
+    The finding of the review of block C07: a person lowers the window to 40
+    at 12:30; a storm closes it from 14:00 to 15:00; at 15:10, in the waiting
+    time, the person opens it to 60; the storm comes back from 15:15 to
+    15:45. The second start remembers the 60 and the override of 15:10, so
+    the window returns to 60 at 16:15.
+    """
+    simulation = _protection_day(
+        seed,
+        {
+            STORM_SOURCE: _switched(
+                (time(14, 0), True),
+                (time(15, 0), False),
+                (time(15, 15), True),
+                (time(15, 45), False),
+            )
+        },
+    )
+    simulation.at(
+        local(MONDAY, time(12, 30)),
+        "a person lowers the window to 40",
+        lambda sim: sim.move_by_hand(WINDOW_ID, PERSON_LOWERS),
+    )
+    simulation.at(
+        local(MONDAY, time(15, 10)),
+        "the person opens the window to 60 in the waiting time",
+        lambda sim: sim.move_by_hand(WINDOW_ID, PERSON_OPENS),
+    )
+    return simulation
+
 
 def storm_with_a_source_that_drops_out(seed: int = 1) -> Simulation:
     """Situation 14 and D6: the storm source is away from 14:30 to 16:30.
@@ -1096,6 +1132,11 @@ SCENARIOS: Final[Mapping[str, Scenario]] = {
     "storm-return": Scenario(
         "situations 8 and 9: an override, a storm, the return to the person's 40",
         partial(storm_after_an_override, override_minutes=None),
+        timedelta(hours=6),
+    ),
+    "storm-twice": Scenario(
+        "a hand movement in the waiting time is remembered at the next storm",
+        storm_twice,
         timedelta(hours=6),
     ),
     "storm-override-expired": Scenario(

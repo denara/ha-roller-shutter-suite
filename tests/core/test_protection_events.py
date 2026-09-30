@@ -621,6 +621,52 @@ def test_a_new_activation_during_the_waiting_time_keeps_what_was_remembered() ->
     assert decision.winning_wish.position == FULLY_CLOSED
 
 
+def test_a_new_activation_after_a_hand_movement_in_the_waiting_time_remembers_afresh() -> (
+    None
+):
+    """Section 10.2: the person's 60 and the new override, not the old 40."""
+    moved_at = NOW + 5 * MINUTE
+    machine, state = _return_world(
+        manual_override=override(armed_at=moved_at, position=60),
+        owner=PositionOwner.USER,
+    )
+
+    again, _ = step(machine, with_(storm=ON), state, NOW + 10 * MINUTE, position=60)
+
+    storm = event_state(again.state)
+    assert storm.remembered_position == Position(60)
+    assert storm.remembered_owner is PositionOwner.USER
+    assert storm.override_armed_at == moved_at
+
+
+def test_a_new_activation_while_a_person_holds_the_window_remembers_afresh() -> None:
+    """The same override, but a person took the window since: remembered afresh."""
+    machine, state = _return_world(owner=PositionOwner.USER)
+
+    again, _ = step(machine, with_(storm=ON), state, NOW + 10 * MINUTE, position=70)
+
+    storm = event_state(again.state)
+    assert storm.remembered_position == Position(70)
+    assert storm.override_armed_at == ARMED_AT
+
+
+def test_a_released_event_passes_nothing_on_to_an_event_that_starts() -> None:
+    """Its window was recomputed; the new event remembers the window as it stands."""
+    machine = engine(protected(STORM_EVENT, HAIL_EVENT))
+    released_at = NOW - timedelta(hours=1)
+    storm = remembering(
+        active(since=released_at - timedelta(hours=12), released_at=released_at)
+    )
+    state = WindowState(protection_events=(storm,), owner=PositionOwner.ENGINE)
+
+    started, _ = step(machine, with_(storm=ON, hail=ON), state, NOW, position=100)
+
+    hail = event_state(started.state, "hail")
+    assert hail.remembered_position == Position(100)
+    assert hail.remembered_owner is PositionOwner.ENGINE
+    assert hail.override_armed_at is None
+
+
 def test_after_a_release_the_return_comes_after_release_plus_waiting_time() -> None:
     """The waiting time runs from the release; the trigger is still active."""
     machine = engine()

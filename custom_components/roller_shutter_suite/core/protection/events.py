@@ -8,10 +8,13 @@ changed setting takes effect at once and survives a restart (section 11).
 - **Start.** The trigger becomes active: the event is active since now, its
   release is forgotten, and it remembers the position and the owner of the
   window and the manual override that is armed (section 10.2, decision 4).
-  An event that starts again during its waiting time keeps what it
-  remembered: the window stands at the event's position, not where the
-  person had put it. An event that starts while another event holds the
-  window takes over what that one remembered, for the same reason.
+  What an event remembered from an earlier activation, or what another event
+  remembered, is taken over only while it still describes the window
+  (:func:`still_remembers`): the other event holds the window; or the event
+  is in its waiting time, the override in force is still the one it
+  remembered and no person has taken the window since; or its return
+  applies. Otherwise the window is remembered afresh, so a person who moved
+  the window during the waiting time is remembered at the next start.
 - **End.** The trigger becomes inactive: the event ends now (``ended_at``);
   its release, if there was one, is kept.
 - **Watchdog** (section 10.3, decision 10). An event that is active longer
@@ -77,7 +80,7 @@ NOTHING_REMEMBERED = Remembered(None, PositionOwner.UNKNOWN, None)
 """For an evaluation that judges an event without starting it for real."""
 
 
-def _nothing() -> Remembered:
+def _nothing(_state: ProtectionEventState) -> Remembered:
     return NOTHING_REMEMBERED
 
 
@@ -139,14 +142,15 @@ def advance_event(  # noqa: PLR0913 - the event, its state, the source, the mome
     now: datetime,
     *,
     blind_after: timedelta,
-    remember: Callable[[], Remembered],
+    remember: Callable[[ProtectionEventState], Remembered],
 ) -> tuple[ProtectionEventState, tuple[TrackerEvent, ...]]:
     """Return the state of one event after this moment, and the events it raised.
 
     The watchdog is judged first, on the state as it was persisted, so a
     release that fell due before a late evaluation (after a restart) keeps
     its instant and its order before the end of the trigger. ``remember``
-    says what an event that starts now remembers; it is asked only then.
+    says what an event that starts now remembers, given its persisted
+    state; it is asked only then.
     """
     state = persisted if persisted is not None else ProtectionEventState(event.event_id)
     source = source_of(event)
@@ -166,19 +170,14 @@ def advance_event(  # noqa: PLR0913 - the event, its state, the source, the mome
             _event(ReasonCode.PROTECTION_SOURCE_BLIND, event.event_id, source)
         )
     if reading is Reading.ACTIVE and state.status is ProtectionEventStatus.INACTIVE:
-        keep = state.return_clock_start is not None
-        remembered = NOTHING_REMEMBERED if keep else remember()
+        remembered = remember(state)
         state = ProtectionEventState(
             event_id=event.event_id,
             status=ProtectionEventStatus.ACTIVE,
             active_since=now,
-            remembered_position=(
-                state.remembered_position if keep else remembered.position
-            ),
-            remembered_owner=state.remembered_owner if keep else remembered.owner,
-            override_armed_at=(
-                state.override_armed_at if keep else remembered.override_armed_at
-            ),
+            remembered_position=remembered.position,
+            remembered_owner=remembered.owner,
+            override_armed_at=remembered.override_armed_at,
             blind=state.blind,
         )
         raised.append(_event(ReasonCode.PROTECTION_STARTED, event.event_id, source))
@@ -269,30 +268,8 @@ def return_applies(
     return override is not None and override.armed_at == state.override_armed_at
 
 
-def _remembered_at_start(
-    config: WindowConfig,
-    snapshot: WorldSnapshot,
-    ranked: tuple[ProtectionEventConfig, ...],
-) -> Remembered:
-    """Return what an event that starts now remembers.
-
-    What an event that holds the window, or that is in its return phase,
-    remembered is taken over: the window stands where protection put it.
-    Otherwise the position and the owner the window has now, and the manual
-    override that holds now.
-    """
-    persisted = {state.event_id: state for state in snapshot.state.protection_events}
-    for event in ranked:
-        state = persisted.get(event.event_id)
-        if state is not None and (
-            state.status is ProtectionEventStatus.ACTIVE
-            or state.return_clock_start is not None
-        ):
-            return Remembered(
-                state.remembered_position,
-                state.remembered_owner or PositionOwner.UNKNOWN,
-                state.override_armed_at,
-            )
+def _afresh(config: WindowConfig, snapshot: WorldSnapshot) -> Remembered:
+    """Return the window as it stands: position, owner, the override that holds."""
     tolerances = {m.member_id: m.capabilities.tolerance for m in config.members}
     override = override_in_force(config, snapshot)
     return Remembered(
@@ -300,6 +277,77 @@ def _remembered_at_start(
         snapshot.state.owner,
         None if override is None else override.armed_at,
     )
+
+
+def still_remembers(
+    event: ProtectionEventConfig,
+    state: ProtectionEventState,
+    config: WindowConfig,
+    snapshot: WorldSnapshot,
+) -> bool:
+    """Return whether what an event remembered still describes the window.
+
+    - The event holds the window (active, not released): protection put the
+      window where it stands, and a person who moved it since is held by the
+      person-at-the-window dam, whose position does not replace the
+      remembered one (section 3.2).
+    - The event is in its waiting time, the override in force is still the
+      one it remembered, and no person has taken the window since (the owner
+      is not a person): nothing has moved the window since protection did.
+    - Its return applies: the window is being restored to what it remembered.
+
+    Otherwise, a released event whose window was recomputed or a waiting
+    event whose window a person moved, the window is remembered afresh.
+    """
+    if holds(event, state) or return_applies(event, state, config, snapshot):
+        return True
+    if not waiting(event, state, snapshot.time):
+        return False
+    override = override_in_force(config, snapshot)
+    in_force = None if override is None else override.armed_at
+    return (
+        in_force == state.override_armed_at
+        and snapshot.state.owner is not PositionOwner.USER
+    )
+
+
+def _kept(state: ProtectionEventState) -> Remembered:
+    return Remembered(
+        state.remembered_position,
+        state.remembered_owner or PositionOwner.UNKNOWN,
+        state.override_armed_at,
+    )
+
+
+def _rememberer(
+    config: WindowConfig,
+    snapshot: WorldSnapshot,
+    ranked: tuple[ProtectionEventConfig, ...],
+) -> Callable[[ProtectionEventState], Remembered]:
+    """Return what an event that starts now remembers, given its persisted state.
+
+    Its own earlier values while they still describe the window; otherwise
+    what another event that still describes the window remembered (highest
+    rank first); otherwise the window as it stands now.
+    """
+    persisted = {state.event_id: state for state in snapshot.state.protection_events}
+    by_id = {event.event_id: event for event in ranked}
+
+    @cache
+    def others() -> Remembered:
+        for event in ranked:
+            state = persisted.get(event.event_id)
+            if state is not None and still_remembers(event, state, config, snapshot):
+                return _kept(state)
+        return _afresh(config, snapshot)
+
+    def remember(own: ProtectionEventState) -> Remembered:
+        event = by_id.get(own.event_id)
+        if event is not None and still_remembers(event, own, config, snapshot):
+            return _kept(own)
+        return others()
+
+    return remember
 
 
 def _forget_the_return(state: ProtectionEventState) -> ProtectionEventState:
@@ -349,11 +397,7 @@ def protection_after(config: WindowConfig, snapshot: WorldSnapshot) -> Transitio
         return _unreadable_after(snapshot)
     ranked = in_order_of_rank(events)
     persisted = {item.event_id: item for item in state.protection_events}
-
-    @cache
-    def remember() -> Remembered:
-        return _remembered_at_start(config, snapshot, ranked)
-
+    remember = _rememberer(config, snapshot, ranked)
     by_id: dict[str, ProtectionEventState] = {}
     raised: list[TrackerEvent] = []
     for event in ranked:
@@ -469,7 +513,7 @@ def judge_event(
             value_of(event, snapshot.sources),
             snapshot.time,
             blind_after=config.source_blind_after,
-            remember=lambda: _remembered_at_start(config, snapshot, ranked),
+            remember=_rememberer(config, snapshot, ranked),
         )
         return state
     return None

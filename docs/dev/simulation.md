@@ -176,6 +176,7 @@ Plots and a graphical front end. Scenarios for shading, sleep mode and privacy: 
 | `hail-sleep-exception` | situation 6, with the sleep stand-in: hail does not open a room marked for the exception while sleep mode is on |
 | `person-at-window` | situation 7: a person opens the window during a storm; after 15 minutes the storm position is restored and a reason event is fired |
 | `storm-return`, `storm-override-expired` | situations 8 to 10: an override before the storm stays armed, and after the waiting time the person's position is restored; with an override that expired, the window is recomputed |
+| `storm-twice` | a person opens the window in the waiting time and the storm comes back: the second start remembers the person's 60, and the window returns to it |
 | `storm-source-away` | situation 14 and D6: the source is away, the event holds, the source is reported blind after an hour, and the event ends when the source returns with "off" |
 | `storm-stuck` | the watchdog releases a stuck source after 12 hours and makes the event effective again after one genuine "off" |
 | `storm-and-hail` | two events at once: hail ranks above the storm; when it ends, the active storm closes again |

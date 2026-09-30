@@ -30,6 +30,7 @@ from tests.sim.record import EntryKind, Record
 from tests.sim.scenarios import (
     MONDAY,
     PERSON_LOWERS,
+    PERSON_OPENS,
     PROTECTION_RESTARTS,
     local,
     run_named,
@@ -226,6 +227,20 @@ def test_situations_8_and_9_an_override_a_storm_and_the_return() -> None:
         ("15:30:00", PERSON_LOWERS, "protection_return_manual"),
     ]
     assert event_codes(record, ReasonCode.OVERRIDE_ENDED) == []
+    assert_dams_follow_foreign_movements(record)
+
+
+def test_a_hand_movement_in_the_waiting_time_is_remembered_at_the_next_storm() -> None:
+    """The review's case: the window returns to the person's 60, not to 40 or 0."""
+    record = run_named("storm-twice").record
+
+    starts = record.events(WINDOW, ReasonCode.PROTECTION_STARTED)
+    assert [entry.at for entry in starts] == [at(14), at(15, 15)]
+    assert sends(record) == [
+        ("14:00:00", 0, "protection_event"),
+        ("15:15:00", 0, "protection_event"),
+        ("16:15:00", PERSON_OPENS, "protection_return_manual"),
+    ]
     assert_dams_follow_foreign_movements(record)
 
 
