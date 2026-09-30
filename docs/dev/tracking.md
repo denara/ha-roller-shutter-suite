@@ -44,7 +44,7 @@ The runtime controller of the Home Assistant layer calls them as the simulation 
      └──────► external: arms a dam, owner "user"
 ```
 
-Per member, `MemberTracking` in `MemberState.tracking` (persisted, so a restart continues the same movement):
+Per member, `MemberTracking` in `MemberState.tracking` (part of the persisted state: a reload of the entry continues the same movement today, a restart of Home Assistant once block H05 writes the state to disk):
 
 - **Normalizing.** An observation equal to the member's last one (`MemberState.last_observation`) is dropped: `observe` returns the same state object and no event. That removes an identical write, a rewrite of an unchanged state with a new change time, and an attribute-only write that the same resting state follows. Nothing is ever decided from a change time.
 - **`expecting`.** A send sets it with the command (`command_id`); a new own command replaces the expectation as a whole. A member without position feedback is never tracked.
@@ -80,7 +80,7 @@ The settings of the dams belong to the function `manual_override`, which falls b
 
 ## How to read the self-measurement
 
-For every own movement that came to rest on a member whose reporting kind is `event_driven`, whatever its reporting time, the tracker keeps three samples in `MemberState.self_measurement`: the latency from the command to the first report, the time from the command to the report of rest (both in milliseconds), and the deviation of the reported end position from the target (in percent). The last twenty samples per value are persisted with the member state, so a restart keeps them (ruling of the project owner). `SelfMeasurement.latency`, `time_to_rest` and `end_deviation` give count, median and maximum; the median, never the mean, so that one movement cut short by the overload protection of a motor does not distort it.
+For every own movement that came to rest on a member whose reporting kind is `event_driven`, whatever its reporting time, the tracker keeps three samples in `MemberState.self_measurement`: the latency from the command to the first report, the time from the command to the report of rest (both in milliseconds), and the deviation of the reported end position from the target (in percent). The last twenty samples per value belong to the persisted member state, so that a restart keeps them (ruling of the project owner); today the storage lives in memory, so a reload of the entry keeps them and a restart of Home Assistant loses them until block H05 writes the state to disk. `SelfMeasurement.latency`, `time_to_rest` and `end_deviation` give count, median and maximum; the median, never the mean, so that one movement cut short by the overload protection of a motor does not distort it.
 
 A polled member is not measured: it reports on its grid, and its numbers would say nothing about the cover. An event-driven member with a delay is measured since the reporting kind and the reporting time were separated (ruling of the project owner of 2026-10-01): its latency is how a user finds the reporting time to state.
 
