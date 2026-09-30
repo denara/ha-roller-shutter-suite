@@ -227,7 +227,9 @@ def _runs_in_dry_run(
         Issue(
             f"{ISSUE_ARMED_WITHOUT_REPORTING}_{window_id}",
             ISSUE_ARMED_WITHOUT_REPORTING,
-            placeholders | {"covers": ", ".join((*facts.not_stated, *facts.polled))},
+            # A polled cover without a time is both; it is named once.
+            placeholders
+            | {"covers": ", ".join(dict.fromkeys((*facts.not_stated, *facts.polled)))},
         )
     )
     return True

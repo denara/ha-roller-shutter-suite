@@ -381,8 +381,18 @@ async def test_a_member_that_never_reports_reads_no_reaction_once_at_its_deadlin
     assert controller.state.manual_override is None
     assert controller.state.person_at_window is None
 
+    # Later the window sends again (the cover still stands at 50); every
+    # command whose deadline has passed reads "no reaction" exactly once.
+    sent_before = len(commands_sent(entry))
     await advance(hass, freezer, deadline + timedelta(minutes=20))
-    assert ReasonCode.ACTUATOR_NO_REACTION not in codes(entry)[:1]
+    resent = len(commands_sent(entry)) - sent_before
+    assert resent >= 1
+    last = controller.state.member_state(COVER).last_own_command
+    assert last is not None
+    now = controller.clock.now()
+    judged = resent if member_expectation_end(config, last) <= now else resent - 1
+    assert codes(entry) == [ReasonCode.ACTUATOR_NO_REACTION] * judged
+    assert controller.state.manual_override is None
 
 
 # ---------------------------------------------------------------------------
@@ -448,6 +458,72 @@ async def test_a_stale_expectation_of_0_2_0_raises_nothing_and_arms_no_dam(
     # The fake cover never answers the new command; the old one is never judged.
     assert codes(entry) == [ReasonCode.ACTUATOR_NO_REACTION] * len(expected)
     assert controller.state.manual_override is None
+
+
+async def test_a_would_be_command_of_an_unstated_cover_does_not_hold_the_evening(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The reviewer's case: a would-be command at 19:55 and the evening at 20:00.
+
+    The reporting time of the cover is not stated. The simulated command
+    counts without it (decision of the orchestrator), so the evening is
+    recorded at 20:00 as an armed window would send it, not deferred as
+    "movement in flight" until about 20:06.
+    """
+    freezer.move_to(local(19, 55))
+    set_cover(hass, COVER, position=50)
+    entry = await setup_window(
+        hass,
+        window_data(dry_run=True, members={}),
+        covers_present=False,
+        freezer=freezer,
+    )
+    controller = controller_of(entry)
+    assert controller.config.members[0].capabilities.reporting_time is None
+    simulated = controller.state.simulated
+    assert simulated is not None
+    assert [c.command.target for c in simulated.commands] == [Position(100)]
+
+    await advance(hass, freezer, local(20, 0, second=1))
+    decision = controller.status.decision
+    assert decision is not None
+    assert decision.gate is not None
+    assert decision.gate.reason is ReasonCode.DRY_RUN
+    assert decision.target == Position(0)
+    assert commands_sent(entry) == []
+
+
+@pytest.mark.parametrize(
+    ("state", "dammed"),
+    [("opening", False), ("closing", True)],
+    ids=["towards-the-target", "against-it"],
+)
+async def test_a_stale_expectation_whose_cover_still_travels_is_the_own_movement(
+    hass: HomeAssistant, freezer: Any, state: str, *, dammed: bool
+) -> None:
+    """From the review: 20 s after a command of 0.2.0 the cover still moves at the start.
+
+    The command is real and its deadline lies ahead, so the expectation is
+    kept: a movement towards its target is the own movement, one against it
+    is somebody reversing it.
+    """
+    at = local(10, 0) - timedelta(seconds=20)
+    stored = WindowState(members=(_stale(COVER, observed=False, at=at),))
+    storage_of(hass).save_window_state(WINDOW_ID, stored.to_data())
+    set_cover(hass, COVER, position=50, state=state)
+    entry = await setup_window(hass, covers_present=False, freezer=freezer)
+    set_cover(hass, COVER, position=100 if not dammed else 20, state="open")
+    await settle(hass, freezer, seconds=5)
+
+    raised = codes(entry)
+    controller = controller_of(entry)
+    assert (ReasonCode.MANUAL_DETECTED in raised) is dammed
+    assert (controller.state.person_at_window is not None) is dammed
+    assert ReasonCode.ACTUATOR_NO_REACTION not in raised
+    if not dammed:
+        assert raised == []
+        assert controller.state.member_state(COVER).tracking == MemberTracking()
+        assert commands_sent(entry) == []
 
 
 @pytest.mark.parametrize(

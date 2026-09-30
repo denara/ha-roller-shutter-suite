@@ -513,9 +513,10 @@ def _returned(
     """Judge the return of an idle member from an unavailable gap; ``None``: go on.
 
     ``member`` still carries the gap (``before_gap``, ``ended_in_gap``); the
-    state that comes back has it closed. The same observation is nothing. So is a return at the target of the
-    last own command, as in the restart reconciliation (section 11), but
-    only if a deadline ended the expectation of that command during the gap
+    state that comes back has it closed. The same observation is nothing. So
+    is a return at the target of the last own command, as in the restart
+    reconciliation (section 11), but only if a deadline ended the
+    expectation of that command during the gap
     (``ended_in_gap``): the own movement may have finished in it. A gap that
     began after the own movement was judged has no own movement in it, and
     a return at the old target is somebody's. Another position is

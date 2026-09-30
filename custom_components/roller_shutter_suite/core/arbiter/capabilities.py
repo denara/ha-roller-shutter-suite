@@ -54,14 +54,24 @@ def is_tracked(profile: CapabilityProfile) -> bool:
     return not has_no_position_feedback(profile) and profile.movement_detection_known
 
 
-def reporting_time_bound(profile: CapabilityProfile) -> timedelta:
+def reporting_time_bound(
+    profile: CapabilityProfile, *, simulated: bool = False
+) -> timedelta:
     """Return how long a report of the member may lag behind: an upper bound.
 
     The stated reporting time; while it is unknown, the largest one a user
     can state (``MAX_REPORTING_TIME``), never zero: a deadline that is too
     long keeps a command pending a little longer, one that is too short
     would judge a movement that is still being reported.
+
+    A **simulated** command of a window in dry-run is the exception
+    (decision of the orchestrator from the review of block H10): for it an
+    unknown reporting time contributes nothing. Nothing reports a simulated
+    command, and the bound would hold the dry-run record in "movement in
+    flight" for up to twelve minutes after every would-be command, which an
+    armed window never shows: an armed window never has a member with an
+    unknown reporting time, and the tracker judges nothing for one.
     """
     if profile.reporting_time is None:
-        return MAX_REPORTING_TIME
+        return timedelta(0) if simulated else MAX_REPORTING_TIME
     return profile.reporting_time

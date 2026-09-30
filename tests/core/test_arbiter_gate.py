@@ -594,6 +594,27 @@ def test_an_unknown_reporting_time_counts_with_its_upper_bound_never_zero() -> N
     assert timedelta(minutes=10) == MAX_REPORTING_TIME
 
 
+def test_a_simulated_command_of_an_unknown_reporting_time_counts_without_it() -> None:
+    """Decision of the orchestrator from the review of H10: nothing reports it.
+
+    The bound would hold a window in dry-run in "movement in flight" for up
+    to twelve minutes; a stated reporting time still counts.
+    """
+    unknown = window(profiles={LEFT: profile(reporting_kind=None, reporting_time=None)})
+    stated = window(profiles={LEFT: profile(reporting_time=timedelta(seconds=30))})
+    down = _commanded(30, 5).last_own_command
+    assert down is not None
+    unknown_member = next(m for m in unknown.members if m.member_id == LEFT)
+    stated_member = next(m for m in stated.members if m.member_id == LEFT)
+
+    assert member_expectation_end(
+        unknown_member, down, simulated=True
+    ) == NOW + timedelta(seconds=-5 + 10 + 18 * 1.5 + 5)
+    assert member_expectation_end(
+        stated_member, down, simulated=True
+    ) == NOW + timedelta(seconds=-5 + 30 + 10 + 18 * 1.5 + 5)
+
+
 def test_the_start_position_of_a_command_goes_through_plain_data() -> None:
     """Optional within schema version 1: data without it is read as "not known"."""
     command = _commanded(30, 5).last_own_command

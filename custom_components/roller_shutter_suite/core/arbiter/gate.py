@@ -360,7 +360,9 @@ END_ALLOWANCE: Final = timedelta(seconds=5)
 """What a movement into an end stop takes beyond its share of the travel."""
 
 
-def member_expectation_end(member: MemberConfig, command: OwnCommand) -> datetime:
+def member_expectation_end(
+    member: MemberConfig, command: OwnCommand, *, simulated: bool = False
+) -> datetime:
     """Return the deadline of the expectation of an own command to a member.
 
     The formula of section 8.3 of the specification: the time of the command
@@ -377,7 +379,12 @@ def member_expectation_end(member: MemberConfig, command: OwnCommand) -> datetim
     delay of an event-driven platform or the poll interval of a polled one.
     While the user has stated none, the largest reporting time a user can
     state counts (``reporting_time_bound``), never zero; the tracker does not
-    judge such a member at all, so only the gate and the timers read it.
+    judge such a member at all, so only the gate and the timers read it. For
+    a ``simulated`` command of a window in dry-run an unknown reporting time
+    contributes nothing (decision of the orchestrator from the review of
+    block H10): the bound would hold the dry-run record in "movement in
+    flight" for minutes that an armed window never waits, because an armed
+    window has no member with an unknown reporting time.
 
     This is the one deadline: the gate reads it through
     ``expectation_window_end`` (a command counts as pending until then), the
@@ -393,7 +400,7 @@ def member_expectation_end(member: MemberConfig, command: OwnCommand) -> datetim
     )
     return (
         command.time
-        + reporting_time_bound(profile)
+        + reporting_time_bound(profile, simulated=simulated)
         + START_ALLOWANCE
         + travel_time * (command.share_of_travel * TRAVEL_SLACK)
         + END_ALLOWANCE
@@ -441,6 +448,7 @@ def wake_ups(
     from the decision and the schedule as before.
     """
     times: set[datetime] = set()
+    simulated = dry_run and state.simulated is not None
     commands: dict[str, OwnCommand] = (
         {c.member_id: c.command for c in state.simulated.commands}
         if dry_run and state.simulated is not None
@@ -453,7 +461,9 @@ def wake_ups(
     by_id = {member.member_id: member for member in config.members}
     for member_id, command in commands.items():
         if member_id in by_id:
-            times.add(member_expectation_end(by_id[member_id], command))
+            times.add(
+                member_expectation_end(by_id[member_id], command, simulated=simulated)
+            )
     for member_state in state.members:
         tracking = member_state.tracking
         member = by_id.get(member_state.member_id)
@@ -480,7 +490,9 @@ def expectation_window_end(
     """
     for member in gate.config.members:
         if member.member_id == member_id:
-            return member_expectation_end(member, command)
+            return member_expectation_end(
+                member, command, simulated=gate.controls.dry_run
+            )
     return None
 
 

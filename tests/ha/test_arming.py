@@ -487,8 +487,20 @@ REPORTING_ISSUE = f"armed_without_reporting_{WINDOW_ID}"
 
 @pytest.mark.parametrize(
     "members",
-    [{}, {COVER: {"reporting_kind": "event_driven"}}, {COVER: POLLED}],
-    ids=["nothing-stated", "time-not-stated", "polled"],
+    [
+        {},
+        {COVER: {"reporting_kind": "event_driven"}},
+        {COVER: {"reporting_time": 30}},
+        {COVER: POLLED},
+        {COVER: {"reporting_kind": "polled"}},
+    ],
+    ids=[
+        "nothing-stated",
+        "time-not-stated",
+        "kind-not-stated",
+        "polled",
+        "polled-without-time",
+    ],
 )
 async def test_a_stored_armed_window_with_a_cover_it_cannot_trust_runs_in_dry_run(
     hass: HomeAssistant, freezer: Any, members: dict[str, Any]

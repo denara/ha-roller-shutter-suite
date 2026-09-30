@@ -28,6 +28,8 @@ You see the override in three places:
 
 **When it ends.** By default at the next change between day and night of the daily routine: if you lower a shutter in the afternoon, the window leaves it there until the evening, and then the evening closes it as usual. To end it earlier, press the button **Resume automation** of the window: the window then moves at once to where it should be now. Nothing the window held back in the meantime is replayed; it simply decides again. Moving the shutter by hand again starts a new override.
 
+**A restart of Home Assistant ends the override** in this version, because the window does not store it yet: if the shutter you moved by hand is not where the daily routine wants it when Home Assistant has started again, the window moves it there at once (see [section 7 of the pilot guide](../pilot.md#7-after-a-restart-of-home-assistant)). A reload of the integration, which every change of its settings causes, keeps the override.
+
 You no longer need to switch on the **Pause** after moving a shutter by hand.
 
 **A window with several covers** has one override for all of them. If you move one of its covers by hand, the whole window waits, and the other covers stay where they are; nothing follows the cover you moved. When the override ends, all covers go to their positions.
@@ -56,7 +58,7 @@ Home Assistant cannot tell by itself how a cover reports, so you state it. Two e
 
 ## The measurements in the diagnostics
 
-For every movement of its own, Roller Shutter Suite measures, per cover that reports event-driven, how long the cover took to report the start (`latency_ms`), how long until it reported that it came to rest (`time_to_rest_ms`), and how far from the target it stopped (`end_deviation`). The diagnostics download of the window shows them under `movement_tracking`, next to what you stated for the cover, each with the number of movements, the median and the largest value. They keep the last twenty movements, also across a restart.
+For every movement of its own, Roller Shutter Suite measures, per cover that reports event-driven, how long the cover took to report the start (`latency_ms`), how long until it reported that it came to rest (`time_to_rest_ms`), and how far from the target it stopped (`end_deviation`). The diagnostics download of the window shows them under `movement_tracking`, next to what you stated for the cover, each with the number of movements, the median and the largest value. They keep the last twenty movements, also across a reload of the integration; a restart of Home Assistant loses them in this version, until a later version stores them.
 
 How to use them:
 

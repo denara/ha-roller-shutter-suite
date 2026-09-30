@@ -732,16 +732,21 @@ class WindowController:
 
         The leftover of version 0.2.0: from block C06 on, every send set the
         tracker of an addressed member to ``expecting``, and nothing in the
-        runtime advanced it until the tracker was wired. Such a phase, and
-        one whose deadline passed while no controller ran (a start or a
-        reload), is no movement that can still be judged: judging it now
-        would raise ``actuator_no_reaction`` for a movement that happened
-        long ago, or take the report of it for a movement by hand. The member
-        is idle instead, once, with its last observation. A phase of 0.2.0
-        is told by its missing last observation, because 0.2.0 never handed
-        one to the tracker: its first report is only recorded. For a member
-        that was observed, the time without a controller is a gap: its next
-        report is judged like the return from an unavailable gap, so the
+        runtime advanced it until the tracker was wired. An expectation whose
+        deadline still lies ahead belongs to a real command and is kept, so
+        the tracker attributes what its cover reports to that command: a
+        cover still travelling towards the target at the start is the own
+        movement, not a person's. An expectation whose deadline passed while
+        no controller ran (a start or a reload) is no movement that can still
+        be judged: judging it now would raise ``actuator_no_reaction`` for a
+        movement that happened long ago, or take the report of it for a
+        movement by hand. That member is idle instead, once, with its last
+        observation. So is a member of 0.2.0 (told by its missing last
+        observation, because 0.2.0 never handed one to the tracker) whose
+        cover rests at the start: without an earlier observation nothing can
+        say whether it moved, and its first report is only recorded. For a
+        member that was observed, the time without a controller is a gap: its
+        next report is judged like the return from an unavailable gap, so the
         cover where it was seen, or at the target of the own command, is
         nothing, and anywhere else somebody moved it meanwhile
         (``moved_during_downtime``). The restart reconciliation (block C12)
@@ -758,10 +763,13 @@ class WindowController:
                 or member is None
             ):
                 continue
-            if (
-                member_state.last_observation is not None
-                and member_expectation_end(member, command) > now
-            ):
+            current = observation_of(self.hass.states.get(member.member_id), member)
+            resting_unseen = (
+                member_state.last_observation is None
+                and current.available
+                and not current.moving
+            )
+            if member_expectation_end(member, command) > now and not resting_unseen:
                 continue
             _LOGGER.debug(
                 "Window %s: the expectation of the command to %s is left over "
@@ -777,8 +785,7 @@ class WindowController:
                 and seen.available
                 # A cover that still reports what was seen shows no gap; the
                 # tracker would drop that report and keep the gap open.
-                and observation_of(self.hass.states.get(member.member_id), member)
-                != seen
+                and current != seen
             ):
                 before_gap = seen
             # The expectation ended in that gap, so a return at the target of
