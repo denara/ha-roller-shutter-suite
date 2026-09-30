@@ -47,6 +47,7 @@ from custom_components.roller_shutter_suite.core.engine import (
 from custom_components.roller_shutter_suite.core.model import (
     FULLY_CLOSED,
     FULLY_OPEN,
+    MAX_REPORTING_TIME,
     AnySourceValue,
     Constraint,
     ConstraintResult,
@@ -84,6 +85,7 @@ from tests.core.arbiter_kit import (
     day,
     fire,
     on_level,
+    profile,
     registered,
     snapshot,
     storm,
@@ -782,6 +784,33 @@ def test_dry_run_rule_that_fails_for_good_sends_fire_once_per_window_in_dry_run(
 
     assert kinds == [GateKind.SEND, GateKind.SUPPRESS, GateKind.SEND]
     assert state.simulated is None
+
+
+def test_a_real_fire_command_in_dry_run_keeps_the_bound_of_an_unknown_reporting_time() -> (
+    None
+):
+    """From the re-review of H10: the fire command a broken dry-run rule let through is real.
+
+    Its cover states no reporting time, so its expectation window counts with
+    the largest reporting time (600 s), as for any real command; only the
+    would-be commands of a window in dry-run count without it. It is not
+    sent again after the 45 s of a window without the bound.
+    """
+    unknown = window(profiles={LEFT: profile(reporting_kind=None, reporting_time=None)})
+    subject = Engine(unknown, _arbiter(gate_rules=_gate_rules(GateRule.DRY_RUN)))
+    state = WindowState()
+    bound = MAX_REPORTING_TIME.total_seconds() + EXPECTATION_WINDOW.total_seconds()
+    kinds: list[GateKind] = []
+
+    for seconds in (0, EXPECTATION_WINDOW.total_seconds() + 15, bound - 1, bound):
+        world = _burning(state, seconds, DRY_RUN)
+        decision = subject.recompute(world)
+        assert decision.gate is not None
+        kinds.append(decision.gate.kind)
+        if decision.gate.kind is GateKind.SEND:
+            state = _after_sending(world, decision)
+
+    assert kinds == [GateKind.SEND, GateKind.SUPPRESS, GateKind.SUPPRESS, GateKind.SEND]
 
 
 @pytest.mark.parametrize(

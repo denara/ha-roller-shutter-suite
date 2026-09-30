@@ -423,18 +423,27 @@ def _stale(member_id: str, *, observed: bool, at: datetime) -> MemberState:
 
 
 @pytest.mark.parametrize(
-    ("minutes_ago", "cover_at"),
-    [(1, 100), (1, 50), (180, 100), (180, 50)],
+    ("minutes_ago", "cover_at", "kept", "no_reactions"),
+    [(1, 100, False, 0), (1, 50, True, 2), (180, 100, False, 0), (180, 50, False, 1)],
     ids=["fresh-at-target", "fresh-elsewhere", "old-at-target", "old-elsewhere"],
 )
-async def test_a_stale_expectation_of_0_2_0_raises_nothing_and_arms_no_dam(
-    hass: HomeAssistant, freezer: Any, minutes_ago: int, cover_at: int
+async def test_a_stale_expectation_of_0_2_0_raises_nothing_and_arms_no_dam(  # noqa: PLR0913 - the case and its expected outcome
+    hass: HomeAssistant,
+    freezer: Any,
+    minutes_ago: int,
+    cover_at: int,
+    *,
+    kept: bool,
+    no_reactions: int,
 ) -> None:
-    """A phase ``expecting`` without an observation predates the wiring: idle, once.
+    """A phase ``expecting`` without an observation predates the wiring.
 
-    Its command may still count as pending for the gate until its deadline;
-    then the window sends what the day wants, and the tracker says nothing
-    about the old command, ever.
+    Expired, or its cover at the target already: idle, and nothing is
+    judged. Still within its deadline with the cover at rest elsewhere
+    (from the re-review): the expectation is kept from what the cover
+    reports now, so the cover that never moves reads "no reaction" once for
+    the old command, and once for the command the window sends after it.
+    No case arms a dam.
     """
     at = local(10, 0) - timedelta(minutes=minutes_ago)
     stored = WindowState(members=(_stale(COVER, observed=False, at=at),))
@@ -447,7 +456,7 @@ async def test_a_stale_expectation_of_0_2_0_raises_nothing_and_arms_no_dam(
     assert controller.state.manual_override is None
     assert controller.state.person_at_window is None
     member = controller.state.member_state(COVER)
-    assert member.tracking.command_id != "old-command"
+    assert (member.tracking.command_id == "old-command") is kept
     assert member.tracking.before_gap is None
 
     for minute in range(1, 6):
@@ -455,9 +464,51 @@ async def test_a_stale_expectation_of_0_2_0_raises_nothing_and_arms_no_dam(
     # Nothing wrong is sent: at the day target nothing, elsewhere the day target.
     expected = [] if cover_at == 100 else [100]  # noqa: PLR2004
     assert [call.target.value for call in commands_sent(entry)] == expected
-    # The fake cover never answers the new command; the old one is never judged.
-    assert codes(entry) == [ReasonCode.ACTUATOR_NO_REACTION] * len(expected)
+    assert codes(entry) == [ReasonCode.ACTUATOR_NO_REACTION] * no_reactions
     assert controller.state.manual_override is None
+    assert controller.state.person_at_window is None
+
+
+@pytest.mark.parametrize("starts", [True, False], ids=["late-start", "never-moves"])
+async def test_a_0_2_0_command_whose_cover_rests_at_the_start_is_followed(
+    hass: HomeAssistant, freezer: Any, *, starts: bool
+) -> None:
+    """The case of the re-review: the command is 5 s old, the cover reports late.
+
+    The cover is stated with a reporting time of 30 s and still rests at the
+    start. Its late "opening" is the own movement, not a person's; a cover
+    that never moves reads "no reaction" at the deadline, and no dam is armed.
+    """
+    at = local(10, 0) - timedelta(seconds=5)
+    stored = WindowState(members=(_stale(COVER, observed=False, at=at),))
+    storage_of(hass).save_window_state(WINDOW_ID, stored.to_data())
+    set_cover(hass, COVER, position=50)
+    members = {COVER: {"reporting_kind": "event_driven", "reporting_time": 30}}
+    entry = await setup_window(
+        hass, window_data(members=members), covers_present=False, freezer=freezer
+    )
+    controller = controller_of(entry)
+    assert controller.state.member_state(COVER).tracking.command_id == "old-command"
+
+    if starts:
+        freezer.tick(timedelta(seconds=20))
+        set_cover(hass, COVER, position=50, state="opening")
+        await settle(hass, freezer)
+        freezer.tick(timedelta(seconds=30))
+        set_cover(hass, COVER, position=100, state="open")
+        await settle(hass, freezer, seconds=5)
+        assert codes(entry) == []
+        assert controller.state.member_state(COVER).tracking == MemberTracking()
+    else:
+        config = controller.config.members[0]
+        command = controller.state.member_state(COVER).last_own_command
+        assert command is not None
+        deadline = member_expectation_end(config, command)
+        await advance(hass, freezer, deadline + timedelta(seconds=1))
+        assert codes(entry) == [ReasonCode.ACTUATOR_NO_REACTION]
+    assert controller.state.manual_override is None
+    assert controller.state.person_at_window is None
+    assert ReasonCode.OVERRIDE_STARTED not in codes(entry)
 
 
 async def test_a_would_be_command_of_an_unstated_cover_does_not_hold_the_evening(

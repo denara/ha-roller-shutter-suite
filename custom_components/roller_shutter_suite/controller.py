@@ -101,7 +101,10 @@ from .core.model import (
     EvaluationFault,
     FunctionId,
     MemberCommand,
+    MemberConfig,
     MemberTracking,
+    Observation,
+    Position,
     ScheduleSettings,
     SunAlmanac,
     TrackerEvent,
@@ -741,10 +744,14 @@ class WindowController:
         be judged: judging it now would raise ``actuator_no_reaction`` for a
         movement that happened long ago, or take the report of it for a
         movement by hand. That member is idle instead, once, with its last
-        observation. So is a member of 0.2.0 (told by its missing last
-        observation, because 0.2.0 never handed one to the tracker) whose
-        cover rests at the start: without an earlier observation nothing can
-        say whether it moved, and its first report is only recorded. For a
+        observation. A member of 0.2.0 (told by its missing last observation,
+        because 0.2.0 never handed one to the tracker) whose cover rests at
+        the start while the deadline lies ahead gets what its cover reports
+        now as its last observation, and the expectation is kept: a late
+        start is the own movement, and a cover that never moves reads
+        ``actuator_no_reaction`` at the deadline, with no dam. If it rests at
+        the target already, the own movement ended before the start and it
+        is idle. For a
         member that was observed, the time without a controller is a gap: its
         next report is judged like the return from an unavailable gap, so the
         cover where it was seen, or at the target of the own command, is
@@ -764,13 +771,26 @@ class WindowController:
             ):
                 continue
             current = observation_of(self.hass.states.get(member.member_id), member)
-            resting_unseen = (
-                member_state.last_observation is None
-                and current.available
-                and not current.moving
-            )
-            if member_expectation_end(member, command) > now and not resting_unseen:
-                continue
+            if member_expectation_end(member, command) > now:
+                if (
+                    member_state.last_observation is not None
+                    or not current.available
+                    or current.moving
+                ):
+                    # Observed before, or its first report is still to come:
+                    # the tracker follows the command as it would any other.
+                    continue
+                if not _stands_at(current, command.target, member):
+                    # A member of 0.2.0 at rest short of its target: what it
+                    # reports now is the start the command is measured from,
+                    # so a late start is the own movement, and a cover that
+                    # never moves reads "no reaction" at the deadline.
+                    state = state.with_member(
+                        replace(member_state, last_observation=current)
+                    )
+                    continue
+                # At its target already: the own movement ended before the
+                # start; nothing is left to judge.
             _LOGGER.debug(
                 "Window %s: the expectation of the command to %s is left over "
                 "from before the start; the member is taken as idle",
@@ -845,6 +865,17 @@ class WindowController:
                 "Window %s: the recompute runs without a fault again", self.title
             )
         self._logged_faults = current
+
+
+def _stands_at(
+    observation: Observation, target: Position, member: MemberConfig
+) -> bool:
+    """Return whether an observation reports a position within tolerance of a target."""
+    position = observation.position
+    return (
+        position is not None
+        and abs(position.value - target.value) <= member.capabilities.tolerance
+    )
 
 
 def _next_wake_up(

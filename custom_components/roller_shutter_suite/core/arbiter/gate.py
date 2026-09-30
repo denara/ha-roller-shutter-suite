@@ -481,18 +481,18 @@ def wake_ups(
 
 
 def expectation_window_end(
-    gate: GateInput, member_id: str, command: OwnCommand
+    gate: GateInput, member_id: str, command: OwnCommand, *, simulated: bool
 ) -> datetime | None:
     """Return until when an own command counts as pending; an upper bound.
 
     See ``member_expectation_end``. A command to a member the window no
-    longer has is ignored.
+    longer has is ignored. ``simulated`` says whether the command is a
+    simulated one of a window in dry-run (``GateInput.own_commands`` of such
+    a window) or a real, persisted one; the caller knows which it reads.
     """
     for member in gate.config.members:
         if member.member_id == member_id:
-            return member_expectation_end(
-                member, command, simulated=gate.controls.dry_run
-            )
+            return member_expectation_end(member, command, simulated=simulated)
     return None
 
 
@@ -500,7 +500,10 @@ def _pending(gate: GateInput) -> dict[str, tuple[OwnCommand, datetime]]:
     """Return the own commands whose expectation window is still running."""
     pending: dict[str, tuple[OwnCommand, datetime]] = {}
     for member_id, command in gate.own_commands.items():
-        end = expectation_window_end(gate, member_id, command)
+        # In dry-run the own commands of the gate are the simulated ones.
+        end = expectation_window_end(
+            gate, member_id, command, simulated=gate.controls.dry_run
+        )
         if end is not None and gate.snapshot.time < end:
             pending[member_id] = (command, end)
     return pending
@@ -577,7 +580,9 @@ def fire_command_pending(gate: GateInput) -> bool:
         command = member.last_own_command
         if command is None or command.wish_class is not WishClass.FIRE:
             continue
-        end = expectation_window_end(gate, member.member_id, command)
+        # A real command, also in dry-run: the bound of an unknown reporting
+        # time applies to it.
+        end = expectation_window_end(gate, member.member_id, command, simulated=False)
         if end is not None and gate.snapshot.time < end:
             pending[member.member_id] = command
     return _all_commanded(gate, pending)
