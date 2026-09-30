@@ -199,10 +199,30 @@
         },
         "degraded": {
           "title": "Covers that only open and close",
-          "description": "These covers cannot be moved to a position, or do not report one: {covers}\n\nYou can still use them. They are only ever opened or closed fully, never moved to a position in between.",
+          "description": "These covers cannot be moved to a position, or do not report one: {covers}\n\nYou can still use them. They are only ever opened or closed fully, never moved to a position in between. A cover that does not report its position cannot tell Roller Shutter Suite that you moved it by hand, so a movement by hand does not hold the automatic movements back for it.",
           "menu_options": {
             "degraded_accept": "Continue with these covers",
             "basics": "Choose other covers"
+          }
+        },
+        "member": {
+          "title": "Cover {member_number} of {member_count}: {member}",
+          "description": "What Roller Shutter Suite cannot read from this cover. With these values it tells its own movements from yours. Leave a number empty to use what its helper text names.",
+          "data": {
+            "position_source": "Position source",
+            "tolerance": "Tolerance",
+            "reporting_kind": "How the cover reports",
+            "reporting_time": "Reporting time",
+            "travel_time_up": "Travel time up",
+            "travel_time_down": "Travel time down"
+          },
+          "data_description": {
+            "position_source": "Where the position of this cover comes from. Most actuators of a plain up and down motor calculate it from the running time; some drives measure it themselves.",
+            "tolerance": "How far the reported position may lie from the target and still count as reached. Widen it for a cover that settles a little off its target, and keep it as small as needed: a movement by hand smaller than the tolerance is taken for an automatic one. Empty: {tolerance_calculated} for a calculated position, {tolerance_measured} for a measured one.",
+            "reporting_kind": "Event-driven: the cover tells Home Assistant about every change by itself, possibly a little late; many radio actuators report this way, some up to a minute late. Polled: Home Assistant asks the cover on a schedule, for example every 60 seconds for a cover linked through a HomeKit bridge, and sees nothing that happens between two questions. Home Assistant cannot tell which one it is, so you state it. A window can be armed only when every cover is event-driven and has a reporting time.",
+            "reporting_time": "For an event-driven cover: how late its reports arrive at most, 0 if at once. For a polled cover: how often Home Assistant asks it. Empty: not known; then movements of this cover are not judged, and the window cannot be armed. If you are not sure, state the largest delay you have seen, for example 60 s: Roller Shutter Suite measures the delay only of its own movements, after the window is armed, and the diagnostics then show it.",
+            "travel_time_up": "How long the shutter takes from fully closed to fully open. A wrong value makes Roller Shutter Suite wait too long or too short before it judges a movement; the diagnostics show the time it measures. Empty: {travel_time_up_default}.",
+            "travel_time_down": "How long the shutter takes from fully open to fully closed. A wrong value makes Roller Shutter Suite wait too long or too short before it judges a movement; the diagnostics show the time it measures. Empty: {travel_time_down_default}."
           }
         },
         "operation": {
@@ -220,7 +240,6 @@
             "old_control_off": "I have switched the old control off and checked that it no longer moves the shutter.",
             "compared": "I have compared the last days: after each movement of the old control the reason read \"Already where it should be\", or I understand every difference.",
             "controls_checked": "I have looked at the operating mode, the pause and the maintenance lock of the house, the group and this window.",
-            "reports_at_once": "Every cover of this window reports its movements at once, not on a polling schedule: while the shutter moves, its state and position change in Home Assistant, not only a minute later. Until a later version checks every command, a movement by hand between two reports could be undone.",
             "fresh_start": "I know that the window starts fresh: what it would have sent in dry-run counts as never sent, so if the shutter is not where the daily routine wants it, it moves within a few seconds after I save.",
             "way_back": "I know the way back: with the maintenance lock the window sends no further command, and this form switches it back to dry-run."
           }
@@ -233,7 +252,12 @@
         "cover_in_use": "{cover} already belongs to the window \"{window}\". A cover can belong to one window only.",
         "confirm_every_check": "Confirm every point. If one of them is not true yet, close this dialog: the window stays in dry-run.",
         "no_movement_detection": "This version cannot arm a window yet: it does not notice when you move a shutter by hand, and an armed window would move it back within a few seconds. A later version brings this. This page saves nothing: close this dialog, and the window stays as it was. To save your other changes, choose \"Reconfigure\" again and select \"Dry-run\" on the page \"Operation\".",
-        "report_delay": "These covers report their movements late, not at once: {covers}. Until a later version checks every command, a window with such a cover cannot be armed, because a movement by hand between two reports could be undone. This page saves nothing: close this dialog, and the window stays as it was. To save your other changes, choose \"Reconfigure\" again and select \"Dry-run\" on the page \"Operation\"."
+        "reporting_not_stated": "For these covers it is not stated how they report, or how late: {covers}. Enter both on the page of each cover, which follows the pages of the features in this form. This page saves nothing: close this dialog, and the window stays as it was. To save your other changes, choose \"Reconfigure\" again and select \"Dry-run\" on the page \"Operation\".",
+        "reporting_polled": "These covers are polled: {covers}. Until a later version checks every command, a window with a polled cover cannot be armed, because a movement by hand between two questions could be undone. This page saves nothing: close this dialog, and the window stays as it was. To save your other changes, choose \"Reconfigure\" again and select \"Dry-run\" on the page \"Operation\".",
+        "out_of_range_tolerance": "Enter a value from {tolerance_minimum} to {tolerance_maximum}.",
+        "out_of_range_reporting_time": "Enter a value from {reporting_time_minimum} to {reporting_time_maximum}.",
+        "out_of_range_travel_time_up": "Enter a value from {travel_time_up_minimum} to {travel_time_up_maximum}.",
+        "out_of_range_travel_time_down": "Enter a value from {travel_time_down_minimum} to {travel_time_down_maximum}."
       },
       "abort": {
         "reconfigure_successful": "The window was saved.",
@@ -263,6 +287,19 @@
         "dry_run": "Dry-run: decide and record, move nothing",
         "armed": "Armed: move the shutters"
       }
+    },
+    "position_source": {
+      "options": {
+        "calculated": "Calculated from the running time",
+        "measured": "Measured by the drive"
+      }
+    },
+    "reporting_kind": {
+      "options": {
+        "not_stated": "Not stated",
+        "event_driven": "Event-driven: reports every change by itself",
+        "polled": "Polled: asked on a schedule"
+      }
     }
   },
   "issues": {
@@ -285,6 +322,10 @@
     "armed_without_movement_detection": {
       "title": "Window \"{window}\" runs in dry-run",
       "description": "The saved settings say that the window \"{window}\" is armed. This version cannot yet notice when you move a shutter by hand, and an armed window would move it back within a few seconds. So the window runs in dry-run: it decides and records what it would do, and moves nothing, until a later version notices a movement by hand. To remove this message, open the window, choose \"Reconfigure\" and select \"Dry-run\" on the page \"Operation\"."
+    },
+    "armed_without_reporting": {
+      "title": "Window \"{window}\" runs in dry-run",
+      "description": "The saved settings say that the window \"{window}\" is armed, but these covers are not stated as event-driven with a reporting time: {covers}. Without that, a movement by hand could go unnoticed and be undone, so the window runs in dry-run: it decides and records what it would do, and moves nothing. To repair this, open the window, choose \"Reconfigure\" and state on the page of each cover how it reports; or select \"Dry-run\" on the page \"Operation\"."
     },
     "option_unavailable": {
       "title": "Window \"{window}\" cannot use the setting \"{key}\"",
@@ -339,6 +380,11 @@
         "name": "Dry-run"
       }
     },
+    "button": {
+      "resume_automation": {
+        "name": "Resume automation"
+      }
+    },
     "select": {
       "operating_mode": {
         "name": "Operating mode",
@@ -364,6 +410,11 @@
     "logbook_dry_run": "dry-run, nothing moved: it would have moved to {target} %. Reason: {cause}.",
     "logbook_dry_run_no_target": "dry-run, nothing moved: it would have moved. Reason: {cause}.",
     "logbook_held_back": "movement to {target} % held back: {held}. Reason for the movement: {cause}.",
-    "logbook_held_back_no_target": "movement held back: {held}. Reason for the movement: {cause}."
+    "logbook_held_back_no_target": "movement held back: {held}. Reason for the movement: {cause}.",
+    "logbook_event": "{event}.",
+    "logbook_event_position": "{event}, at {position} %.",
+    "logbook_event_member": "{event}: {member}.",
+    "logbook_event_member_position": "{event}: {member}, at {position} %.",
+    "logbook_event_count": "{event}: {count} today, threshold {threshold}."
   }
 }

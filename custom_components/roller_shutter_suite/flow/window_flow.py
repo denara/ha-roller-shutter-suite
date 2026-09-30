@@ -7,16 +7,20 @@ every one is confirmed. Going back to dry-run needs no confirmation. Saving
 reloads the entry as every change does; the controller then starts the armed
 window with a clean state (``Engine.arm``).
 
-Two facts refuse arming whatever is ticked (maintenance item X10): the runtime
-does not notice a movement by hand yet (``const.MOVEMENT_DETECTION_WIRED``,
-which block H10 sets), and a cover whose capability profile states a report
-delay could have a movement by hand undone between two reports (until block
-H15 verifies commands). While either holds, no path writes ``dry_run: false``:
-keeping an armed window armed leads to the same page and is refused as well,
-and going back to dry-run always works.
+After the feature pages every cover of the window gets a page of its own
+(``flow/member_page.py``): what no entity can report about it.
+
+Facts refuse arming whatever is ticked: a cover whose reporting kind or time
+is not stated on its page, or which is polled, because a movement by hand
+between two polls would be undone (rulings of the project owner, 2026-09-29
+and 2026-10-01, until block H15 verifies commands); a known reporting time
+above zero does not refuse. The guard of maintenance item X10
+(``const.MOVEMENT_DETECTION_WIRED``, true since block H10) is the other. While
+a fact holds, no path writes ``dry_run: false``: keeping an armed window armed
+leads to the same page and is refused as well, and going back to dry-run
+always works.
 """
 
-from datetime import timedelta
 from typing import Any, Final
 
 import probatio
@@ -37,11 +41,16 @@ from homeassistant.helpers.selector import (
 )
 
 from custom_components.roller_shutter_suite import const
-from custom_components.roller_shutter_suite.capabilities import member_configs
+from custom_components.roller_shutter_suite.capabilities import (
+    member_configs,
+    reporting_facts,
+    with_stated,
+)
 from custom_components.roller_shutter_suite.const import (
     CONF_COVERS,
     CONF_DRY_RUN,
     CONF_GROUP_ID,
+    CONF_MEMBERS,
     CONF_NAME,
     CONF_SETTINGS,
     SUBENTRY_GROUP,
@@ -56,9 +65,11 @@ from custom_components.roller_shutter_suite.stored import (
     COVER_DOMAIN,
     level_settings,
     read_window_identity,
+    sound_member_values,
     sound_own_values,
 )
 
+from . import member_page
 from .covers import ResolvedCovers, find_conflict, resolve_covers
 from .inheritance import as_form_schema
 from .model import GroupParent, LevelContext
@@ -82,7 +93,6 @@ ARMING_CHECKS: Final = (
     "old_control_off",
     "compared",
     "controls_checked",
-    "reports_at_once",
     "fresh_start",
     "way_back",
 )
@@ -93,7 +103,8 @@ ARMING_CHECKS: Final = (
 
 ERROR_CONFIRM_EVERY_CHECK = "confirm_every_check"
 ERROR_NO_MOVEMENT_DETECTION = "no_movement_detection"
-ERROR_REPORT_DELAY = "report_delay"
+ERROR_REPORTING_NOT_STATED = "reporting_not_stated"
+ERROR_REPORTING_POLLED = "reporting_polled"
 ERROR_NO_COVERS = "no_covers"
 ERROR_COVER_IN_USE = "cover_in_use"
 ERROR_NAME_BLANK = "name_blank"
@@ -118,19 +129,6 @@ def _without_position(members: tuple[MemberConfig, ...]) -> list[str]:
     ]
 
 
-def _with_report_delay(members: tuple[MemberConfig, ...]) -> list[str]:
-    """Return the members whose capability profile states a report delay.
-
-    A reversal by hand within such a delay is invisible, and a command sent
-    again would overrule the person (until command verification, block H15).
-    """
-    return [
-        member.member_id
-        for member in members
-        if member.capabilities.report_delay > timedelta(0)
-    ]
-
-
 @install_feature_steps
 class WindowSubentryFlow(FeatureStepsMixin, ConfigSubentryFlow):
     """Create or change a window.
@@ -138,6 +136,7 @@ class WindowSubentryFlow(FeatureStepsMixin, ConfigSubentryFlow):
     basics (name, covers, group) -> members (only if a cover group was taken
     apart) -> degraded (only if a cover works without positions) -> features
     (switches, if there are any) -> one step per feature that is switched on
+    -> one page per cover -> (reconfigure: dry-run or armed -> the checks)
     -> save once.
     """
 
@@ -146,6 +145,8 @@ class WindowSubentryFlow(FeatureStepsMixin, ConfigSubentryFlow):
     _resolved: ResolvedCovers
     _members: tuple[MemberConfig, ...]
     _last_basics: dict[str, Any] | None = None
+    _member_values: dict[str, dict[str, Any]]
+    _member_index: int
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
@@ -363,14 +364,59 @@ class WindowSubentryFlow(FeatureStepsMixin, ConfigSubentryFlow):
         )
 
     def _pages_follow_the_features(self) -> bool:
-        """Return whether the page "dry-run or armed" follows: in a reconfigure only."""
-        return self.source == SOURCE_RECONFIGURE
+        """Return whether pages follow the feature pages: the page of every cover does."""
+        return True
 
     async def _async_finish(self) -> SubentryFlowResult:
-        if self.source == SOURCE_RECONFIGURE:
-            return await self.async_step_operation()
-        # New windows start in dry-run (architecture document, decision 12).
-        return await self._async_save(dry_run=True)
+        """Go on with the page of the first cover, after the feature pages."""
+        if self._own_subentry_is_gone():
+            return self.async_abort(reason=ABORT_SUBENTRY_REMOVED)
+        stored = (
+            self._get_reconfigure_subentry().data
+            if self.source == SOURCE_RECONFIGURE
+            else {}
+        )
+        self._member_values = {
+            member.member_id: sound_member_values(stored, member.member_id)
+            for member in self._members
+        }
+        self._member_index = 0
+        return await self.async_step_member()
+
+    async def async_step_member(
+        self, user_input: dict[str, Any] | None = None
+    ) -> SubentryFlowResult:
+        """Ask what no entity can report about one cover; one page per cover.
+
+        The position source, the tolerance, the reporting kind and time, and
+        the travel times. After the last cover, a new window is saved in
+        dry-run and a reconfigure goes on with "dry-run or armed".
+        """
+        member_id = self._members[self._member_index].member_id
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            read = member_page.read_input(user_input)
+            if not read.errors:
+                self._member_values[member_id] = read.own
+                self._member_index += 1
+                if self._member_index < len(self._members):
+                    return await self.async_step_member()
+                self._members = with_stated(self._members, self._member_values)
+                if self.source == SOURCE_RECONFIGURE:
+                    return await self.async_step_operation()
+                # New windows start in dry-run (architecture document, decision 12).
+                return await self._async_save(dry_run=True)
+            errors = read.errors
+        return self.async_show_form(
+            step_id=member_page.STEP_MEMBER,
+            data_schema=member_page.schema(self._member_values[member_id]),
+            errors=errors,
+            description_placeholders=member_page.placeholders(
+                member_id, self._member_index + 1, len(self._members)
+            ),
+            last_step=self._member_index == len(self._members) - 1
+            and self.source != SOURCE_RECONFIGURE,
+        )
 
     def _stored_dry_run(self) -> bool:
         """Return whether the window is in dry-run now; unreadable counts as dry-run."""
@@ -422,12 +468,18 @@ class WindowSubentryFlow(FeatureStepsMixin, ConfigSubentryFlow):
         """Return the error and its placeholders of a fact that refuses arming.
 
         No tick can outweigh these: the runtime does not notice a movement by
-        hand yet, or a cover of the window reports with a delay.
+        hand yet, a cover of the window has no reporting kind or time stated
+        on its page, or a cover is polled. A reporting time above zero is no
+        refusal: it enters the deadline (ruling of the project owner,
+        2026-10-01).
         """
         if not const.MOVEMENT_DETECTION_WIRED:
             return ERROR_NO_MOVEMENT_DETECTION, {}
-        if delayed := _with_report_delay(self._members):
-            return ERROR_REPORT_DELAY, {"covers": ", ".join(delayed)}
+        facts = reporting_facts(self._members)
+        if facts.not_stated:
+            return ERROR_REPORTING_NOT_STATED, {"covers": ", ".join(facts.not_stated)}
+        if facts.polled:
+            return ERROR_REPORTING_POLLED, {"covers": ", ".join(facts.polled)}
         return None
 
     async def async_step_arm(
@@ -477,6 +529,15 @@ class WindowSubentryFlow(FeatureStepsMixin, ConfigSubentryFlow):
         }
         if self._group_id is not None:
             data[CONF_GROUP_ID] = self._group_id
+        # Only the covers that state something, and of them only what they
+        # state: "members are listed only where they differ" (section 9).
+        members = {
+            member_id: values
+            for member_id, values in self._member_values.items()
+            if values
+        }
+        if members:
+            data[CONF_MEMBERS] = members
         if self.source == SOURCE_RECONFIGURE:
             return self.async_update_and_abort(
                 self._get_entry(),

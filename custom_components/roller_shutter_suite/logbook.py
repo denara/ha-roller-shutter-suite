@@ -31,7 +31,7 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.translation import async_get_cached_translations
 
 from .const import DOMAIN, EVENT_REASON
-from .core.reasons import ReasonCode
+from .core.reasons import ReasonCategory, ReasonCode
 from .events import ATTR_NAME, ATTR_SUBENTRY_ID
 from .sensor import KEY_ACTIVE_REASON
 
@@ -41,6 +41,11 @@ CATEGORY_COMMON = "common"
 MESSAGE_SENT = "logbook_sent"
 MESSAGE_DRY_RUN = "logbook_dry_run"
 MESSAGE_HELD_BACK = "logbook_held_back"
+MESSAGE_EVENT = "logbook_event"
+MESSAGE_EVENT_MEMBER = "logbook_event_member"
+MESSAGE_EVENT_COUNT = "logbook_event_count"
+POSITION = "_position"
+"""The suffix of the message of an event that carries a position."""
 NO_TARGET = "_no_target"
 """The suffix of the message for a decision without one common target."""
 
@@ -65,11 +70,49 @@ def _reason_text(texts: Mapping[str, str], code: str) -> str:
     return texts.get(key, code)
 
 
+def _is_tracker_event(reason: str) -> bool:
+    """Return whether the reason is the code of an event of the tracker or the dams."""
+    code = next((code for code in ReasonCode if code.value == reason), None)
+    return code is not None and code.category is ReasonCategory.EVENT
+
+
+def _describe_tracker_event(
+    data: Mapping[str, Any], entity_texts: Mapping[str, str], common: Mapping[str, str]
+) -> str:
+    """Return the message for an event of the tracker or the dams.
+
+    The words of the event are those of the reason sensor; the sentence
+    names the cover, the position or the count where the event carries them.
+    """
+    reason = str(data.get("reason"))
+    member, position, count = (data.get(k) for k in ("member_id", "position", "count"))
+    if count is not None:
+        name = MESSAGE_EVENT_COUNT
+    elif member is not None:
+        name = MESSAGE_EVENT_MEMBER
+        if position is not None:
+            name += POSITION
+    else:
+        name = MESSAGE_EVENT + (POSITION if position is not None else "")
+    template = common.get(f"component.{DOMAIN}.{CATEGORY_COMMON}.{name}")
+    if template is None:
+        return reason
+    return (
+        template.replace("{event}", _reason_text(entity_texts, reason))
+        .replace("{member}", str(member))
+        .replace("{position}", str(position))
+        .replace("{count}", str(count))
+        .replace("{threshold}", str(data.get("threshold")))
+    )
+
+
 def describe(
     data: Mapping[str, Any], entity_texts: Mapping[str, str], common: Mapping[str, str]
 ) -> str:
     """Return the message of the logbook entry for the data of a reason event."""
     reason = str(data.get("reason"))
+    if _is_tracker_event(reason):
+        return _describe_tracker_event(data, entity_texts, common)
     cause = _reason_text(entity_texts, str(data.get("wish_reason")))
     held = _reason_text(entity_texts, reason)
     target = data.get("target")

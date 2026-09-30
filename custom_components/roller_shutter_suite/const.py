@@ -20,9 +20,10 @@ ENTRY_TITLE: Final = "Roller Shutter Suite"
 # subentries. Home Assistant keeps one version per config entry and none per
 # subentry, so this pair covers the subentries too; ``async_migrate_entry``
 # migrates both. 1.1 was the entry without any data; 1.2 added the mapping of
-# the settings.
+# the settings; 1.3 added the optional mapping of what the user states per
+# member of a window (``CONF_MEMBERS``), which data of 1.2 does not need.
 CONFIG_VERSION: Final = 1
-CONFIG_MINOR_VERSION: Final = 2
+CONFIG_MINOR_VERSION: Final = 3
 
 SUBENTRY_GROUP: Final = "group"
 SUBENTRY_WINDOW: Final = "window"
@@ -39,12 +40,13 @@ CONF_SETTINGS: Final = SETTINGS_KEY
 # its data, because the user interface can rename a subentry outside any flow.
 CONF_NAME: Final = "name"
 
-# The core's capability profile needs travel times, which are configuration
-# values of a later block (per-member values). Until that block exists, every
-# member carries this provisional value. It lives in memory only: it is never
-# stored, never shown as a value the user set, and it disappears with the
-# block that introduces per-member values.
-PROVISIONAL_TRAVEL_TIME: Final = timedelta(seconds=60)
+# What the user states per member of a window (the member pages of the form):
+# a mapping from the member's entity ID to its capability settings, keys of
+# ``CAPABILITY_SETTINGS`` of the core in their stored form. Only members that
+# state something are listed, and of them only what they state (section 9 of
+# the specification: "members are listed only where they differ"). An
+# absent key is "nothing stated"; a window stored before version 1.3 has none.
+CONF_MEMBERS: Final = "members"
 
 # The runtime (``docs/dev/runtime.md``).
 #
@@ -73,16 +75,15 @@ SAFETY_TICK: Final = timedelta(minutes=5)
 # docs/dev/runtime.md, "Deviations".
 STARTUP_GRACE: Final = timedelta(minutes=2)
 
-# Whether the runtime notices a movement by hand. The tracker of block C06
-# tells a movement by hand from an own one, but the runtime does not feed it
-# the reports of the covers yet; block H10 does, and sets this to True. Until
-# then an armed window would take a shutter that a person moved for one that
-# is not where it should be and move it back within seconds, so the page of
-# the checks refuses to arm a window, and a window stored as armed runs in
-# dry-run with a repair issue (maintenance item X10, ruled by the project
-# owner). The one place that decides it; the flow and the set-up read it each
-# time they need it.
-MOVEMENT_DETECTION_WIRED: Final[bool] = False
+# Whether the runtime notices a movement by hand. Since block H10 the runtime
+# feeds every report of a cover to the tracker of block C06, which tells a
+# movement by hand from an own one. Were it false, an armed window would take
+# a shutter that a person moved for one that is not where it should be and
+# move it back within seconds: the page of the checks would refuse to arm a
+# window, and a window stored as armed would run in dry-run with a repair
+# issue (maintenance item X10, ruled by the project owner). The one place
+# that decides it; the flow and the set-up read it each time they need it.
+MOVEMENT_DETECTION_WIRED: Final[bool] = True
 
 # The status of a window (``docs/features/status-and-events.md``).
 #

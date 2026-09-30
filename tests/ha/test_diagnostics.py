@@ -55,10 +55,12 @@ from tests.ha.runtime_kit import (
     COVER,
     FIXED_ROUTINE,
     WINDOW_ID,
+    EngineDouble,
     controller_of,
     monday_morning,
     settle,
     setup_window,
+    use_engine,
     window_data,
     window_subentry,
 )
@@ -87,7 +89,7 @@ TELLING_TEXT = "cover.example_secret_room"
 """Text that an exception message could carry and that must never be written out."""
 
 
-class FaultyConstraint:
+class FaultyConstraint(EngineDouble):
     """An engine whose decision carries a fault with a telling exception message."""
 
     def recompute(self, snapshot: WorldSnapshot) -> Decision:
@@ -263,7 +265,7 @@ async def test_a_fault_is_shown_by_stage_and_code_never_by_its_exception(
     """The diagnostics and the attributes name the stage and the code, not the message."""
     entry = await setup_window(hass, freezer=freezer)
     controller = controller_of(entry)
-    controller.engine = FaultyConstraint()  # type: ignore[assignment]
+    use_engine(controller, FaultyConstraint())
     controller.async_request_recompute()
     await settle(hass, freezer)
 

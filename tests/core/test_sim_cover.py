@@ -10,6 +10,7 @@ from custom_components.roller_shutter_suite.core.model import (
     Position,
     PositionSource,
     PositionUpdates,
+    ReportingKind,
     TransitReporting,
 )
 from tests.sim.cover import CoverProfile, RawReport, Reporting, SimulatedCover
@@ -368,7 +369,8 @@ def test_the_capability_profile_follows_the_behaviour() -> None:
     )
     live = profile()
 
-    assert polled.capability_profile().report_delay == timedelta(seconds=65)
+    assert polled.capability_profile().reporting_time == timedelta(seconds=65)
+    assert polled.capability_profile().reporting_kind is ReportingKind.POLLED
     assert polled.capability_profile().reports_transit_states is TransitReporting.NO
     assert polled.capability_profile().position_updates is PositionUpdates.END_ONLY
     assert live.capability_profile().position_updates is PositionUpdates.LIVE

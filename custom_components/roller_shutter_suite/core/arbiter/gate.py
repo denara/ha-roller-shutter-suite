@@ -34,7 +34,11 @@ from custom_components.roller_shutter_suite.core.model import (
 )
 from custom_components.roller_shutter_suite.core.reasons import ReasonCode
 
-from .capabilities import cannot_execute, has_no_position_feedback
+from .capabilities import (
+    cannot_execute,
+    has_no_position_feedback,
+    reporting_time_bound,
+)
 from .controls import MODE_TABLE
 from .registry import ALL_CLASSES, GateInput, GateRuleRegistration, outranks
 
@@ -356,7 +360,9 @@ END_ALLOWANCE: Final = timedelta(seconds=5)
 """What a movement into an end stop takes beyond its share of the travel."""
 
 
-def member_expectation_end(member: MemberConfig, command: OwnCommand) -> datetime:
+def member_expectation_end(
+    member: MemberConfig, command: OwnCommand, *, simulated: bool = False
+) -> datetime:
     """Return the deadline of the expectation of an own command to a member.
 
     The formula of section 8.3 of the specification: the time of the command
@@ -368,6 +374,17 @@ def member_expectation_end(member: MemberConfig, command: OwnCommand) -> datetim
     the whole travel counts. The proportional share alone underestimates a
     movement that ends in an end stop, and a fixed allowance alone would
     raise a false "did not react" on a polled platform.
+
+    The report delay is the reporting time of the capability profile: the
+    delay of an event-driven platform or the poll interval of a polled one.
+    While the user has stated none, the largest reporting time a user can
+    state counts (``reporting_time_bound``), never zero; the tracker does not
+    judge such a member at all, so only the gate and the timers read it. For
+    a ``simulated`` command of a window in dry-run an unknown reporting time
+    contributes nothing (decision of the orchestrator from the review of
+    block H10): the bound would hold the dry-run record in "movement in
+    flight" for minutes that an armed window never waits, because an armed
+    window has no member with an unknown reporting time.
 
     This is the one deadline: the gate reads it through
     ``expectation_window_end`` (a command counts as pending until then), the
@@ -383,7 +400,7 @@ def member_expectation_end(member: MemberConfig, command: OwnCommand) -> datetim
     )
     return (
         command.time
-        + profile.report_delay
+        + reporting_time_bound(profile, simulated=simulated)
         + START_ALLOWANCE
         + travel_time * (command.share_of_travel * TRAVEL_SLACK)
         + END_ALLOWANCE
@@ -405,7 +422,7 @@ def settle_time(member: MemberConfig, tracking: MemberTracking) -> timedelta:
     so a person's movement on a polled platform is judged once, at its end.
     """
     if tracking.external and not tracking.transit_seen:
-        return SETTLE_TIME + member.capabilities.report_delay
+        return SETTLE_TIME + reporting_time_bound(member.capabilities)
     return SETTLE_TIME
 
 
@@ -431,6 +448,7 @@ def wake_ups(
     from the decision and the schedule as before.
     """
     times: set[datetime] = set()
+    simulated = dry_run and state.simulated is not None
     commands: dict[str, OwnCommand] = (
         {c.member_id: c.command for c in state.simulated.commands}
         if dry_run and state.simulated is not None
@@ -443,7 +461,9 @@ def wake_ups(
     by_id = {member.member_id: member for member in config.members}
     for member_id, command in commands.items():
         if member_id in by_id:
-            times.add(member_expectation_end(by_id[member_id], command))
+            times.add(
+                member_expectation_end(by_id[member_id], command, simulated=simulated)
+            )
     for member_state in state.members:
         tracking = member_state.tracking
         member = by_id.get(member_state.member_id)
@@ -461,16 +481,18 @@ def wake_ups(
 
 
 def expectation_window_end(
-    gate: GateInput, member_id: str, command: OwnCommand
+    gate: GateInput, member_id: str, command: OwnCommand, *, simulated: bool
 ) -> datetime | None:
     """Return until when an own command counts as pending; an upper bound.
 
     See ``member_expectation_end``. A command to a member the window no
-    longer has is ignored.
+    longer has is ignored. ``simulated`` says whether the command is a
+    simulated one of a window in dry-run (``GateInput.own_commands`` of such
+    a window) or a real, persisted one; the caller knows which it reads.
     """
     for member in gate.config.members:
         if member.member_id == member_id:
-            return member_expectation_end(member, command)
+            return member_expectation_end(member, command, simulated=simulated)
     return None
 
 
@@ -478,7 +500,10 @@ def _pending(gate: GateInput) -> dict[str, tuple[OwnCommand, datetime]]:
     """Return the own commands whose expectation window is still running."""
     pending: dict[str, tuple[OwnCommand, datetime]] = {}
     for member_id, command in gate.own_commands.items():
-        end = expectation_window_end(gate, member_id, command)
+        # In dry-run the own commands of the gate are the simulated ones.
+        end = expectation_window_end(
+            gate, member_id, command, simulated=gate.controls.dry_run
+        )
         if end is not None and gate.snapshot.time < end:
             pending[member_id] = (command, end)
     return pending
@@ -555,7 +580,9 @@ def fire_command_pending(gate: GateInput) -> bool:
         command = member.last_own_command
         if command is None or command.wish_class is not WishClass.FIRE:
             continue
-        end = expectation_window_end(gate, member.member_id, command)
+        # A real command, also in dry-run: the bound of an unknown reporting
+        # time applies to it.
+        end = expectation_window_end(gate, member.member_id, command, simulated=False)
         if end is not None and gate.snapshot.time < end:
             pending[member.member_id] = command
     return _all_commanded(gate, pending)

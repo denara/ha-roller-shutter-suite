@@ -13,11 +13,9 @@ from typing import Any
 import pytest
 
 from custom_components.roller_shutter_suite import windows
-from custom_components.roller_shutter_suite.const import (
-    ENTRY_TITLE,
-    PROVISIONAL_TRAVEL_TIME,
-)
+from custom_components.roller_shutter_suite.const import ENTRY_TITLE
 from custom_components.roller_shutter_suite.core.model import (
+    DEFAULT_TRAVEL_TIME,
     CapabilityProfile,
     MemberConfig,
     TriggerKind,
@@ -93,8 +91,8 @@ def _context(level: Level) -> LevelContext:
                     supports_set_position=True,
                     supports_stop=False,
                     reports_position=True,
-                    travel_time_up=PROVISIONAL_TRAVEL_TIME,
-                    travel_time_down=PROVISIONAL_TRAVEL_TIME,
+                    travel_time_up=DEFAULT_TRAVEL_TIME,
+                    travel_time_down=DEFAULT_TRAVEL_TIME,
                 ),
             ),
         )

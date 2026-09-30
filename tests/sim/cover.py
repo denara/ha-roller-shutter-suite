@@ -54,6 +54,7 @@ from custom_components.roller_shutter_suite.core.model import (
     Position,
     PositionSource,
     PositionUpdates,
+    ReportingKind,
     TransitReporting,
 )
 
@@ -124,11 +125,18 @@ class CoverProfile:
             raise ValueError("the rewrite interval must be longer than zero")
 
     @property
-    def report_delay_for_the_core(self) -> timedelta:
-        """Return the report delay the capability profile states.
+    def reporting_kind_for_the_core(self) -> ReportingKind:
+        """Return the reporting kind the user states: a grid is polled."""
+        if self.reporting is Reporting.GRID:
+            return ReportingKind.POLLED
+        return ReportingKind.EVENT_DRIVEN
+
+    @property
+    def reporting_time_for_the_core(self) -> timedelta:
+        """Return the reporting time the capability profile states.
 
         A polled platform lags by up to one grid interval; the user states
-        that as the report delay, plus what the platform itself delays.
+        that as the reporting time, plus what the platform itself delays.
         """
         if self.reporting is Reporting.GRID:
             return self.report_delay + self.grid_interval
@@ -152,7 +160,8 @@ class CoverProfile:
                 if self.reporting is Reporting.LIVE
                 else PositionUpdates.END_ONLY
             ),
-            report_delay=self.report_delay_for_the_core,
+            reporting_kind=self.reporting_kind_for_the_core,
+            reporting_time=self.reporting_time_for_the_core,
         )
 
 

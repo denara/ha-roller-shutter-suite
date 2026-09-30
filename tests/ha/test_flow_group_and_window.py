@@ -2,7 +2,6 @@
 
 from typing import Any
 
-import pytest
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
@@ -10,7 +9,6 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.setup import async_setup_component
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.roller_shutter_suite import const
 from custom_components.roller_shutter_suite.const import (
     CONF_COVERS,
     CONF_DRY_RUN,
@@ -151,7 +149,7 @@ async def test_window_form_offers_the_group_only_if_one_exists(
 
 
 async def test_new_window_starts_in_dry_run_and_reconfigure_keeps_the_state(
-    hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch
+    hass: HomeAssistant,
 ) -> None:
     """New windows are stored in dry-run; a reconfigure offers the state it has.
 
@@ -159,10 +157,6 @@ async def test_new_window_starts_in_dry_run_and_reconfigure_keeps_the_state(
     the page "dry-run or armed", which starts from the stored state; an armed
     window that stays armed needs no confirmation once arming is possible.
     """
-    # Arming is refused until block H10 notices a movement by hand
-    # (maintenance item X10, tests/ha/test_arming.py); this test is about the
-    # page once it is possible.
-    monkeypatch.setattr(const, "MOVEMENT_DETECTION_WIRED", True)
     set_cover(hass, "cover.example_window")
     entry = await setup_entry(hass)
     window = await add_window(
@@ -171,9 +165,21 @@ async def test_new_window_starts_in_dry_run_and_reconfigure_keeps_the_state(
     assert window.data[CONF_DRY_RUN] is True
     assert entry.runtime_data.windows[window.subentry_id].dry_run is True
 
-    # The window is armed (tests/ha/test_arming.py arms it through the form).
+    # The window is armed (tests/ha/test_arming.py arms it through the form),
+    # and its cover is stated as event-driven, as arming requires.
     hass.config_entries.async_update_subentry(
-        entry, window, data={**window.data, CONF_DRY_RUN: False}
+        entry,
+        window,
+        data={
+            **window.data,
+            CONF_DRY_RUN: False,
+            "members": {
+                "cover.example_window": {
+                    "reporting_kind": "event_driven",
+                    "reporting_time": 0,
+                }
+            },
+        },
     )
     await hass.async_block_till_done()
     result = await run_subentry_flow(

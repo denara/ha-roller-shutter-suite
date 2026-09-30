@@ -10,7 +10,7 @@ import logging
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 from itertools import pairwise
-from typing import Any
+from typing import Any, cast
 
 import pytest
 from homeassistant.components.cover import DOMAIN as COVER_DOMAIN
@@ -81,10 +81,6 @@ from tests.ha.runtime_kit import (
 )
 
 _monday_morning = pytest.fixture(autouse=True)(monday_morning)
-# These tests watch armed windows at work. This version runs every window in
-# dry-run until block H10 notices movements by hand (maintenance item X10);
-# the fixture sets that fact as H10 will.
-pytestmark = pytest.mark.usefixtures("movement_detection")
 
 OPEN_CLOSE = CoverEntityFeature.OPEN | CoverEntityFeature.CLOSE
 QUIET = FIXED_ROUTINE | {"schedule_enabled": False}
@@ -122,6 +118,10 @@ class Scripted:
         return self.engine.state_after(
             replace(snapshot, sources=self.sources), decision
         )
+
+    def __getattr__(self, name: str) -> Any:
+        """Hand everything else to the real engine: the tracker, the send, the timers."""
+        return getattr(self.engine, name)
 
 
 def script(controller: WindowController, sources: dict[str, AnySourceValue]) -> None:
@@ -274,7 +274,8 @@ async def test_a_window_in_dry_run_calls_nothing_and_records_the_would_be_comman
     (would_be,) = simulated.commands
     assert would_be.command.target == Position(target)
     assert would_be.command.reason is reason
-    assert controller.state.members == ()
+    # The real state knows what the tracker saw, and no own command.
+    assert all(m.last_own_command is None for m in controller.state.members)
 
 
 @pytest.mark.parametrize(
@@ -560,7 +561,7 @@ async def test_a_staggered_protection_command_is_not_repeated_while_it_travels(
     assert deadline == (
         second.at
         + member.capabilities.travel_time_down
-        + member.capabilities.report_delay
+        + cast("timedelta", member.capabilities.reporting_time)
     )
     # The controller waits for the deadline of the call, not of the hand-over.
     assert later.status.wake_up is not None
@@ -878,7 +879,9 @@ async def test_a_member_at_its_target_is_not_commanded(
 
     assert [c.member_id for c in cover_calls(hass)] == [right]
     controller = controller_of(entry)
-    assert [m.member_id for m in controller.state.members] == [right]
+    assert [
+        m.member_id for m in controller.state.members if m.last_own_command is not None
+    ] == [right]
 
     # While the right member travels, a recompute sends nothing again.
     set_cover(hass, right, position=60, state="opening")

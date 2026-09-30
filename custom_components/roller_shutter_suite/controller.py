@@ -11,12 +11,22 @@ describes its life cycle.
 **Triggers of a recompute:** a state change of an entity the window uses
 (its members and its sources), a point in time the core asked for (the end
 of a deferral, the upper bound of a re-evaluation, the next planned action
-of the schedule, its recheck), the end of the expectation window of a
-pending own command (``member_expectation_end`` of the core, the same
-deadline the gate reads), the periodic safety tick, and an explicit
-request. Every trigger goes through one debouncer per window, so a burst of
-changes is coalesced into one recompute and two recomputes of the same
-window never run at the same time.
+of the schedule, its recheck), every instant of ``Engine.wake_ups`` (the
+deadline of a pending own command, the end of a settle time, the end of a
+dam), the periodic safety tick, and an explicit request. Every trigger goes
+through one debouncer per window, so a burst of changes is coalesced into
+one recompute and two recomputes of the same window never run at the same
+time.
+
+**The movement tracker** (``docs/dev/tracking.md``) is fed here and nowhere
+else. Every state change of a member becomes an observation that goes to
+``Engine.observe`` at once, with the instant of the clock, the decision of
+the last recompute, dry-run and the user of the change's context as a
+hint; every recompute first hands the current observation of every member
+to it (an unchanged one is dropped by the core) and calls ``Engine.elapse``;
+a send is recorded with ``Engine.after_send``. The events these calls raise
+are kept for the reason events (``take_tracker_events``). The controller
+computes no time of its own.
 
 **Wake-up times cannot form a loop.** A time the core asks for is accepted
 only if it lies strictly in the future; otherwise it is moved to
@@ -43,6 +53,7 @@ of the exception, never its message, and they are part of the status.
 """
 
 import logging
+from collections import deque
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field, replace
 from datetime import UTC, date, datetime
@@ -72,7 +83,7 @@ from .actuator import (
     WindowActuator,
     fire_passed_failed_dry_run,
 )
-from .capabilities import member_config
+from .capabilities import keeping_stated, member_config
 from .const import (
     COALESCE_SECONDS,
     MIN_WAKE_UP_DISTANCE,
@@ -80,7 +91,7 @@ from .const import (
     STARTUP_GRACE,
     status_signal,
 )
-from .core.arbiter import member_expectation_end, record_sent_commands
+from .core.arbiter import member_expectation_end
 from .core.engine import Engine, build_arbiter
 from .core.model import (
     AnySourceValue,
@@ -90,9 +101,15 @@ from .core.model import (
     EvaluationFault,
     FunctionId,
     MemberCommand,
-    OwnCommand,
+    MemberConfig,
+    MemberTracking,
+    Observation,
+    Position,
     ScheduleSettings,
     SunAlmanac,
+    TrackerEvent,
+    TrackerPhase,
+    Transition,
     WindowConfig,
     WindowObservation,
     WindowState,
@@ -105,7 +122,7 @@ from .core.schedule import (
     build_sun_almanac,
     evaluate_schedule,
 )
-from .members import observe_window
+from .members import observation_of, observe_window
 from .sources import SourceReference, read_sources, window_sources
 from .storage import installation_seed
 
@@ -116,7 +133,16 @@ WAKE_UP_REEVALUATE: Final = "reevaluate_no_later_than"
 WAKE_UP_NEXT_ACTION: Final = "next_planned_action"
 WAKE_UP_RECHECK: Final = "schedule_recheck"
 WAKE_UP_STARTUP_GRACE: Final = "startup_grace"
-WAKE_UP_EXPECTATION_END: Final = "expectation_window_end"
+WAKE_UP_TRACKER: Final = "movement_tracking"
+"""A wake-up of ``Engine.wake_ups``: a deadline, a settle time, the end of a dam."""
+
+TRACKER_EVENTS_KEPT: Final = 100
+"""How many events of the tracker wait for their reader at most.
+
+The reader (``events.ReasonEvents``) takes them with every status signal, so
+the queue is empty after every recompute; the bound only matters while no
+reader listens.
+"""
 
 
 @unique
@@ -222,6 +248,8 @@ class WindowController:
         self._last_wake_up: datetime | None = None
         self._woken = False
         self._binding: WindowActuator | None = None
+        self._tracker_events: deque[TrackerEvent] = deque(maxlen=TRACKER_EVENTS_KEPT)
+        self._members = {member.member_id for member in config.members}
         self._debouncer = Debouncer(
             hass,
             _LOGGER,
@@ -295,13 +323,44 @@ class WindowController:
         """Ask for a recompute; a burst of requests yields one."""
         self._debouncer.async_schedule_call()
 
+    @callback
+    def async_resume(self) -> None:
+        """End the manual override at once: the button "resume automation" (E2).
+
+        ``Engine.resume`` ends the dam and raises ``override_ended``; the
+        window is recomputed, nothing is replayed. Without an override
+        nothing changes, and the recompute finds the same decision.
+        """
+        self._apply(Engine.resume(self.state))
+        self.async_request_recompute()
+
     # ------------------------------------------------------------------
     # Triggers
     # ------------------------------------------------------------------
 
     @callback
     def _on_state_change(self, event: Event[EventStateChangedData]) -> None:
-        del event
+        """Hand a report of a member to the tracker at once; ask for a recompute.
+
+        The observation is taken from the new state the change carries, at
+        the instant of the clock port, with the decision of the last
+        recompute; the user in the context of the change is a hint that never
+        decides. A change of a source only asks for a recompute.
+        """
+        entity_id = event.data["entity_id"]
+        if entity_id in self._members:
+            member = next(m for m in self.config.members if m.member_id == entity_id)
+            self._apply(
+                self.engine.observe(
+                    self.state,
+                    entity_id,
+                    observation_of(event.data["new_state"], member),
+                    self.clock.now(),
+                    self.status.decision,
+                    dry_run=self.controls().dry_run,
+                    user_id=event.context.user_id,
+                )
+            )
         self.async_request_recompute()
 
     @callback
@@ -424,15 +483,39 @@ class WindowController:
             learned = member_config(self.hass, member.member_id)
             if not learned.capabilities.capabilities_known:
                 continue
-            members[index] = replace(member, capabilities=learned.capabilities)
+            members[index] = replace(
+                member,
+                capabilities=keeping_stated(member.capabilities, learned.capabilities),
+            )
             changed = True
         if changed:
             self.config = replace(self.config, members=tuple(members))
             self.engine = Engine(self.config, self.engine.arbiter)
 
+    def _observe_members(self, observation: WindowObservation, now: datetime) -> None:
+        """Hand the current observation of every member to the tracker.
+
+        What the tracker knows already (the last observation of the member)
+        is dropped by the core; a state change that arrived while no listener
+        ran, or the first reading after a start, is seen here.
+        """
+        dry_run = self.controls().dry_run
+        for member in observation.members:
+            self._apply(
+                self.engine.observe(
+                    self.state,
+                    member.member_id,
+                    member.observation,
+                    now,
+                    self.status.decision,
+                    dry_run=dry_run,
+                )
+            )
+
     def _decide(self, now: datetime) -> None:
         self._learn_unknown_capabilities()
         observation = observe_window(self.hass, self.config)
+        self._observe_members(observation, now)
         if not self._members_ready(observation, now):
             wake_up = None
             if observation.available and self._started_at is not None:
@@ -459,6 +542,10 @@ class WindowController:
             almanac=self._almanac_for(now),
             installation_seed=installation_seed(self.storage),
         )
+        # The tracker judges what is due and the dams end first; the decision
+        # is made on the state that leaves behind.
+        self._apply(self.engine.elapse(snapshot, self.status.decision))
+        snapshot = replace(snapshot, state=self.state)
         decision = self.engine.recompute(snapshot)
         self._log_faults(decision.faults)
         state = self.engine.state_after(snapshot, decision)
@@ -469,7 +556,7 @@ class WindowController:
         # The send is recorded on top of the state the decision left behind.
         commands = self._send(replace(snapshot, state=self.state), decision)
         wake_up = self._schedule_wake_up(
-            _next_wake_up(decision, schedule, self._expectation_ends(now)), now
+            _next_wake_up(decision, schedule, self._tracker_wake_ups(now)), now
         )
         self.status = WindowStatus(
             phase=Phase.RUNNING,
@@ -530,12 +617,16 @@ class WindowController:
         the available members that do not stand at their target, and a member
         without position feedback. The controller filters nothing itself.
         Every addressed member gets a fresh command identifier. The core
-        records the send (``record_sent_commands``, the one recorder of own
-        commands, which ``Engine.state_after_send`` is too), and it is called
-        right after each member's call returned,
-        with the identifiers of every member sent so far: if the actuator
-        raises for a later member, the commands that were given stay recorded
-        and are not sent a second time by the next recompute.
+        records the send (``Engine.after_send``: the one recorder of own
+        commands, which sets the tracker of every addressed member to
+        ``expecting`` and counts a comfort movement of the day), and it is
+        called right after each member's call returned, with the identifiers
+        of every member sent so far: if the actuator raises for a later
+        member, the commands that were given stay recorded and are not sent a
+        second time by the next recompute. Every call starts from the same
+        state, so the event of the daily count that each of them raises is
+        the same event: the one of the last call is handed on, also when a
+        later member raised.
         """
         targets = decision.addressed_targets
         if not targets or self.actuator is None:
@@ -548,13 +639,19 @@ class WindowController:
             )
             return ()
         command_ids: dict[str, str] = {}
-        for member_id, position in targets:
-            command_id = uuid4().hex
-            self.actuator.move_to(command_id, member_id, position, decision=decision)
-            command_ids[member_id] = command_id
-            self._store(
-                record_sent_commands(self.config, snapshot, decision, command_ids)
-            )
+        sent: Transition | None = None
+        try:
+            for member_id, position in targets:
+                command_id = uuid4().hex
+                self.actuator.move_to(
+                    command_id, member_id, position, decision=decision
+                )
+                command_ids[member_id] = command_id
+                sent = self.engine.after_send(snapshot, decision, command_ids)
+                self._store(sent.state)
+        finally:
+            if sent is not None:
+                self._tracker_events.extend(sent.events)
         return tuple(
             MemberCommand(member.member_id, member.last_own_command)
             for member in self.state.members
@@ -569,10 +666,10 @@ class WindowController:
         (``Engine.on_command_result``) and ignores a late result of an older
         command. An accepted command's time moves to the instant of the call,
         so its expectation window starts there; the wake-up at the end of
-        that window is armed again from ``member_expectation_end``, the one
-        deadline source. Nothing is retried here; a failed command stays
-        pending until its expectation window has closed, and "target
-        reached" does not count it.
+        that window is armed again from ``Engine.wake_ups``, the one source
+        of the instants of the tracker. Nothing is retried here; a failed
+        command stays pending until its expectation window has closed, and
+        "target reached" does not count it.
         """
         state = Engine.on_command_result(self.state, result)
         if state is self.state:
@@ -582,7 +679,7 @@ class WindowController:
         now = self.clock.now()
         if self.active and self.status.decision is not None:
             candidate = _next_wake_up(
-                self.status.decision, self.status.schedule, self._expectation_ends(now)
+                self.status.decision, self.status.schedule, self._tracker_wake_ups(now)
             )
             # A time of the last decision that has passed meanwhile is left
             # to the timer that is armed; nothing is re-armed for it.
@@ -602,34 +699,126 @@ class WindowController:
         )
         self._publish_status()
 
-    def _expectation_ends(self, now: datetime) -> tuple[datetime, ...]:
-        """Return the ends of the expectation windows that still lie ahead.
+    def _tracker_wake_ups(self, now: datetime) -> tuple[datetime, ...]:
+        """Return the instants after ``now`` at which the tracker needs the window.
 
-        One per pending own command of a member of the window (the simulated
-        ones for a window in dry-run), each computed by the core's
-        ``member_expectation_end``, the deadline the gate reads. The window
-        is woken at each, so a command the cover did not answer is judged
-        again at the instant the gate stops counting it as pending.
+        ``Engine.wake_ups`` is the one source: the deadline of every pending
+        own command (the simulated ones for a window in dry-run), the end of
+        every settle time and of each dam. At each the window is recomputed,
+        and the recompute calls ``Engine.elapse`` first.
         """
-        commands: dict[str, OwnCommand] = (
-            {c.member_id: c.command for c in self.state.simulated.commands}
-            if self.controls().dry_run and self.state.simulated is not None
-            else {
-                m.member_id: m.last_own_command
-                for m in self.state.members
-                if m.last_own_command is not None
-            }
-        )
-        ends = (
-            member_expectation_end(member, commands[member.member_id])
-            for member in self.config.members
-            if member.member_id in commands
-        )
-        return tuple(end for end in ends if end > now)
+        return self.engine.wake_ups(self.state, now, dry_run=self.controls().dry_run)
+
+    def take_tracker_events(self) -> tuple[TrackerEvent, ...]:
+        """Return the events of the tracker and the dams since the last call.
+
+        The reason events take them with every status signal and put them on
+        the bus; each event is handed out once.
+        """
+        events = tuple(self._tracker_events)
+        self._tracker_events.clear()
+        return events
 
     # ------------------------------------------------------------------
     # State and faults
     # ------------------------------------------------------------------
+
+    def _apply(self, transition: Transition) -> None:
+        """Store the state of a call of the tracker and keep its events."""
+        self._store(transition.state)
+        self._tracker_events.extend(transition.events)
+
+    def _without_stale_expectations(
+        self, state: WindowState, now: datetime
+    ) -> WindowState:
+        """Return the state with every stale expectation of an own command dropped.
+
+        The leftover of version 0.2.0: from block C06 on, every send set the
+        tracker of an addressed member to ``expecting``, and nothing in the
+        runtime advanced it until the tracker was wired. An expectation whose
+        deadline still lies ahead belongs to a real command and is kept, so
+        the tracker attributes what its cover reports to that command: a
+        cover still travelling towards the target at the start is the own
+        movement, not a person's. An expectation whose deadline passed while
+        no controller ran (a start or a reload) is no movement that can still
+        be judged: judging it now would raise ``actuator_no_reaction`` for a
+        movement that happened long ago, or take the report of it for a
+        movement by hand. That member is idle instead, once, with its last
+        observation. A member of 0.2.0 (told by its missing last observation,
+        because 0.2.0 never handed one to the tracker) whose cover rests at
+        the start while the deadline lies ahead gets what its cover reports
+        now as its last observation, and the expectation is kept: a late
+        start is the own movement, and a cover that never moves reads
+        ``actuator_no_reaction`` at the deadline, with no dam. If it rests at
+        the target already, the own movement ended before the start and it
+        is idle. For a
+        member that was observed, the time without a controller is a gap: its
+        next report is judged like the return from an unavailable gap, so the
+        cover where it was seen, or at the target of the own command, is
+        nothing, and anywhere else somebody moved it meanwhile
+        (``moved_during_downtime``). The restart reconciliation (block C12)
+        takes this over when it exists.
+        """
+        members = {member.member_id: member for member in self.config.members}
+        for member_state in state.members:
+            tracking = member_state.tracking
+            command = member_state.last_own_command
+            member = members.get(member_state.member_id)
+            if (
+                tracking.phase is not TrackerPhase.EXPECTING
+                or command is None
+                or member is None
+            ):
+                continue
+            current = observation_of(self.hass.states.get(member.member_id), member)
+            if member_expectation_end(member, command) > now:
+                if (
+                    member_state.last_observation is not None
+                    or not current.available
+                    or current.moving
+                ):
+                    # Observed before, or its first report is still to come:
+                    # the tracker follows the command as it would any other.
+                    continue
+                if not _stands_at(current, command.target, member):
+                    # A member of 0.2.0 at rest short of its target: what it
+                    # reports now is the start the command is measured from,
+                    # so a late start is the own movement, and a cover that
+                    # never moves reads "no reaction" at the deadline.
+                    state = state.with_member(
+                        replace(member_state, last_observation=current)
+                    )
+                    continue
+                # At its target already: the own movement ended before the
+                # start; nothing is left to judge.
+            _LOGGER.debug(
+                "Window %s: the expectation of the command to %s is left over "
+                "from before the start; the member is taken as idle",
+                self.title,
+                member_state.member_id,
+            )
+            seen = member_state.last_observation
+            before_gap = tracking.before_gap
+            if (
+                before_gap is None
+                and seen is not None
+                and seen.available
+                # A cover that still reports what was seen shows no gap; the
+                # tracker would drop that report and keep the gap open.
+                and current != seen
+            ):
+                before_gap = seen
+            # The expectation ended in that gap, so a return at the target of
+            # the command may be the own movement that finished meanwhile.
+            state = state.with_member(
+                replace(
+                    member_state,
+                    tracking=MemberTracking(
+                        before_gap=before_gap, ended_in_gap=before_gap is not None
+                    ),
+                )
+            )
+        return state
 
     def _load_state(self) -> None:
         data = self.storage.load_window_state(self.window_id)
@@ -646,8 +835,10 @@ class WindowController:
                 )
         if not self.controls().dry_run and state.simulated is not None:
             state = Engine.arm(state)
-        self.state = state
+        self.state = self._without_stale_expectations(state, self.clock.now())
         self._loaded = True
+        if self.state != state:
+            self.storage.save_window_state(self.window_id, self.state.to_data())
 
     def _store(self, state: WindowState) -> None:
         if state == self.state:
@@ -676,15 +867,28 @@ class WindowController:
         self._logged_faults = current
 
 
+def _stands_at(
+    observation: Observation, target: Position, member: MemberConfig
+) -> bool:
+    """Return whether an observation reports a position within tolerance of a target."""
+    position = observation.position
+    return (
+        position is not None
+        and abs(position.value - target.value) <= member.capabilities.tolerance
+    )
+
+
 def _next_wake_up(
     decision: Decision,
     schedule: ScheduleResult | None,
-    expectation_ends: tuple[datetime, ...],
+    tracker_wake_ups: tuple[datetime, ...],
 ) -> WakeUp | None:
-    """Return the earliest time the core asked for, with its reason."""
-    candidates: list[WakeUp] = [
-        WakeUp(end, WAKE_UP_EXPECTATION_END) for end in expectation_ends
-    ]
+    """Return the earliest time the core asked for, with its reason.
+
+    At a tie the reason of the decision or the schedule is named: the end of
+    a dam that defers the decision is its deferral, too.
+    """
+    candidates: list[WakeUp] = []
     if decision.gate is not None:
         if decision.gate.until is not None:
             candidates.append(WakeUp(decision.gate.until, WAKE_UP_DEFERRED))
@@ -697,6 +901,7 @@ def _next_wake_up(
             candidates.append(WakeUp(schedule.next_action.at, WAKE_UP_NEXT_ACTION))
         if schedule.recheck_at is not None:
             candidates.append(WakeUp(schedule.recheck_at, WAKE_UP_RECHECK))
+    candidates.extend(WakeUp(at, WAKE_UP_TRACKER) for at in tracker_wake_ups)
     if not candidates:
         return None
     return min(candidates, key=lambda wake_up: wake_up.at)
