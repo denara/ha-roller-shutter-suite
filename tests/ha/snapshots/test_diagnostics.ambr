@@ -1130,9 +1130,9 @@
                 'reason': 'not_configured',
               }),
               dict({
-                'function': None,
+                'function': 'request',
                 'layer': 'external_request',
-                'reason': 'not_configured',
+                'reason': 'inactive',
               }),
               dict({
                 'function': None,
@@ -1190,9 +1190,9 @@
                 'reason': 'not_configured',
               }),
               dict({
-                'function': None,
+                'function': 'request',
                 'layer': 'external_request',
-                'reason': 'not_configured',
+                'reason': 'inactive',
               }),
               dict({
                 'function': None,

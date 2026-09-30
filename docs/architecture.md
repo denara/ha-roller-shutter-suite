@@ -441,7 +441,7 @@ Persisted per window, versioned, all timestamps timezone-aware (naive ones are r
 - per protection event: state, active since, **ended at**, **released at**, remembered position and owner. The two times are separate fields with one meaning each: "ended at" is when the trigger became inactive, "released at" is when the watchdog released the event (section 10.3) while its trigger was still active. An event keeps its "released at" when the trigger becomes inactive later, so both times can be set. The waiting time of section 10.2 runs from "released at" if it is set, otherwise from "ended at". An active event that is not released has neither. The times are persisted, not a remaining duration or a deadline: the waiting time of section 10.2 is configuration and is applied to the end time whenever it is evaluated, so it survives a restart and follows a changed setting;
 - fire: unacknowledged flag;
 - episodes: as listed in [section 7](#7-episodes);
-- external request: position, reason, expires at;
+- external request: position, reason, expires at, and the time it arrived (section 12a);
 - latched day types, at most two entries, each with the mark whether it is a fallback: today's once it is set, until then yesterday's (needed for the exact start of the running night); one for tomorrow is kept if present;
 - time of the last own comfort movement (the motor protection clock; a wish whose trigger is later than this time is fresh);
 - the number of own comfort movements of the current local day, with that day's date, and whether the threshold was already reported for it;
@@ -461,6 +461,20 @@ Removing a window deletes its persisted state (N4).
 ## 12. Privacy when lights are on (F2)
 
 > **Decision 11 — Inputs of F2.** Recommendation: per window, a list of **light entities** (any on = light on), and "dark outside" as **sun elevation below a threshold** (default 0°), or alternatively the outdoor brightness source of A4 below its threshold if one is configured. The wish is the privacy position, lowering only. It starts when both conditions have held for a short delay (default 1 minute) and ends when the lights have been off for a longer delay (default 5 minutes) or it is no longer dark. Unavailable lights count as off (no privacy wish; comfort steps aside). *Rejected:* a room or area lookup for lights (installation structure is not an API, brief section 6); deriving "dark" from the part of the day (F2 is meant to act *before* the evening time).
+
+---
+
+## 12a. External requests (F1, A11)
+
+Layer 4 of section 2.1. An automation requests a position, with a reason text and an expiry (the actions of F1; the alarm clock of A11 is one such automation), and it can clear the request. The request is persisted (section 11). Until it expires or is cleared, the layer wants the requested position as a wish of class comfort with the reason `external_request`; the text of the caller is a subject for the status and never part of a decision. A new request replaces the one before it; a request without an expiry lasts until it is cleared, and a request that has expired at its arrival is refused.
+
+- **Its place** (decision 2): below sleep mode, above privacy and shading. A request in a room with active sleep mode is accepted, waits below the sleep layer and moves nothing; once sleep mode ends, it wins if it still stands.
+- **Its trigger is its arrival.** A request is a fresh wish for the minimum interval of motor protection (section 2.3, rule 9): it acts at once, also right after another comfort movement. The trigger stays the same while the request stands.
+- **Its expiry** is an instant. From then on the layer has no opinion, the window is recomputed, and nothing is replayed.
+- Every other rule applies as to any comfort wish: the two dams, pause, the operating mode, every constraint, motor protection, dry-run.
+- The reference run (section 8.4) is a request with an end position and its own reason.
+
+Built by block C07, apart from the protection events and judged separately (ruling of the project owner of 2026-09-28): its own module (`request`, section 14), its own tests and its own scenarios.
 
 ---
 
@@ -504,7 +518,8 @@ Everything under `custom_components/roller_shutter_suite/core/`. No import from 
 | `protection` | events, trigger state machine, return, watchdog; the fire and protection layers | C07 |
 | `geometry` | sun relative to the window, ray height, glass calibration in both directions, roof pitch | C09 |
 | `episodes`, `shading` | episode life cycle; shading and solar heating layer | C10 |
-| `comfort` | sleep layer, privacy layer, external request layer | C11 |
+| `request` | the external request layer (section 12a) | C07 |
+| `comfort` | sleep layer, privacy layer | C11 |
 | `persistence` | versioned snapshot of the window state, migration, restart reconciliation | C12 |
 | `engine` | the façade the Home Assistant layer talks to: `recompute(snapshot) → decision`, `observe(member, report)`, `on_command_result(...)` | C03, extended by later blocks |
 

@@ -49,6 +49,7 @@ from custom_components.roller_shutter_suite.core.model import (
     GateKind,
     MemberObservation,
     Observation,
+    Position,
     SunAlmanac,
     TrackerEvent,
     Transition,
@@ -239,6 +240,35 @@ class Simulation:
         window = self._windows[window_id]
         self._note(EntryKind.EVENT, "resume automation", window_id=window_id)
         self._apply(window, window.engine.resume(window.state))
+        self._recompute(window)
+
+    def request(
+        self,
+        window_id: str,
+        position: int,
+        reason: str,
+        expires: datetime | None = None,
+    ) -> None:
+        """Let an automation request a position for a window (the action of H07)."""
+        window = self._windows[window_id]
+        self._note(
+            EntryKind.EVENT,
+            f"an automation requests {position} ({reason})",
+            window_id=window_id,
+        )
+        self._apply(
+            window,
+            window.engine.request(
+                window.state, Position(position), reason, expires, now=self.now
+            ),
+        )
+        self._recompute(window)
+
+    def clear_request(self, window_id: str) -> None:
+        """Let an automation clear its request for a window."""
+        window = self._windows[window_id]
+        self._note(EntryKind.EVENT, "the request is cleared", window_id=window_id)
+        self._apply(window, window.engine.clear_request(window.state))
         self._recompute(window)
 
     def acknowledge_fire(self, window_id: str) -> None:

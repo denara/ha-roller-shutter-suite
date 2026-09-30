@@ -31,8 +31,10 @@ from custom_components.roller_shutter_suite.core.engine import (
 )
 from custom_components.roller_shutter_suite.core.model import (
     FULLY_CLOSED,
+    ExternalRequest,
     FunctionId,
     Layer,
+    Position,
     SourceValue,
     WindowConfig,
     WindowState,
@@ -81,9 +83,18 @@ def _return_after_a_storm() -> tuple[WindowConfig, WorldSnapshot]:
     return protected(), world(calm(), state=state)
 
 
+def _a_request() -> tuple[WindowConfig, WorldSnapshot]:
+    """Return a request of an automation that arrived an hour ago."""
+    request = ExternalRequest(
+        Position(40), "scene", requested_at=NOW - timedelta(hours=1)
+    )
+    return protected(), world(calm(), state=WindowState(external_request=request))
+
+
 PROVOCATIONS: dict[Part, Provocation] = {
     FunctionId.SCHEDULE: _schedule_by_day,
     FunctionId.PROTECTION_EVENTS: _return_after_a_storm,
+    FunctionId.REQUEST: _a_request,
 }
 """Per registration: a situation in which it wants a position for comfort.
 

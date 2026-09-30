@@ -48,7 +48,7 @@ One recompute:
 
 **Restart.** `Simulation.restart()` throws the engines away, reads every window state back from the storage, reads the covers once, and recomputes every window whose members are available. The covers keep their state, as real covers do. The scenario `restarts` does this at four points of a day, and a test shows that the commands after every restart equal those of the uninterrupted run.
 
-**Injected events**, scheduled with `simulation.at(instant, label, action)`: `move_by_hand(window, target, member_id=..., user_id=...)` (a whole window or one member; with a user, a movement from a dashboard whose first reports carry the user in their context), `stop_by_hand(window, member)`, `dropout(window, member, duration)`, `set_controls(window, controls)` (pause, lock, mode, dry-run; leaving dry-run arms the window), `other_controller_moves(window, target)` (a scripted second controller), `resume(window)` (the "resume automation" button), `sleep_mode_switched_on(window)`, `acknowledge_fire(window)` (the action and the button that acknowledge the fire alarm), and `restart()`. The movements by hand, the stops, the other controller and the dropouts are marked as foreign in the record (`Entry.foreign`).
+**Injected events**, scheduled with `simulation.at(instant, label, action)`: `move_by_hand(window, target, member_id=..., user_id=...)` (a whole window or one member; with a user, a movement from a dashboard whose first reports carry the user in their context), `stop_by_hand(window, member)`, `dropout(window, member, duration)`, `set_controls(window, controls)` (pause, lock, mode, dry-run; leaving dry-run arms the window), `other_controller_moves(window, target)` (a scripted second controller), `resume(window)` (the "resume automation" button), `sleep_mode_switched_on(window)`, `acknowledge_fire(window)` (the action and the button that acknowledge the fire alarm), `request(window, position, reason, expires)` and `clear_request(window)` (an automation requests a position and clears it), and `restart()`. The movements by hand, the stops, the other controller and the dropouts are marked as foreign in the record (`Entry.foreign`).
 
 **Layers.** By default every window's arbiter is the one of the integration (`build_arbiter()`): the real fire, protection and schedule layers and the built-in constraints and gate rules. The stubs of fire and protection that stood here until block C07 are gone. Every window inherits the protection of the simulated house (`house.py`, applied by `World.window` unless a scenario states other values): the fire source `binary_sensor.example_smoke_alarm`, a storm that closes (`binary_sensor.example_storm_warning`, rank 10) and hail that opens (`binary_sensor.example_hail_warning`, rank 20); `calm_sources` scripts all three off. A scenario hands in other layers or additional constraints with `Simulation(world, layers=..., constraints=...)`. For features whose block does not exist yet the scenarios of block C07 use the **stand-ins** of `stand_ins.py`: a lockout constraint (sources `door`, `tamper`) for C08 and a sleep layer (source `sleep`) for C11. They are test-only and are replaced by the real constraint and layer when those blocks arrive; no other scenario exists for a feature that does not exist.
 
@@ -182,3 +182,14 @@ Plots and a graphical front end. Scenarios for shading, sleep mode and privacy: 
 | `fire-during-storm` | fire wins over the storm, and after the acknowledgement the storm applies again |
 
 `storm_return_with_restart` and `storm_stuck_with_restart` restart during the storm, during its waiting time, after the return and during a release; the tests compare the commands with the uninterrupted run. The `storm` scenario of block C05 runs against the real layer: never an intermediate position, and the schedule opens the window again after the waiting time.
+
+## The scenarios of the external request layer
+
+Kept apart from protection; `tests/core/test_sim_request.py` runs them.
+
+| Scenario | Shows |
+|---|---|
+| `request-below-sleep` | an alarm clock requests 60 while sleep mode is on (the sleep stand-in): accepted, nothing moves; after sleep mode the request wins; at its expiry the schedule opens |
+| `request-expires` | a request for 40 for an hour, then the schedule's day position again |
+| `request-cleared` | a request without an expiry, cleared half an hour later |
+| `request-dry-run` | a window in dry-run: the record shows "would have sent 40", nothing is sent |

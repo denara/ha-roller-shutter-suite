@@ -11,7 +11,9 @@ deadlines and the ends of the dams), ``resume`` and
 the one source of every instant a caller has to wake the window at. From
 block C07: the fire and protection layers, ``elapse`` also persists what
 their sources did (starts, ends, releases, blind sources),
-``acknowledge_fire``, and ``judge_protection_event`` for the restart.
+``acknowledge_fire``, and ``judge_protection_event`` for the restart; and,
+apart from them, the external request layer with ``request`` and
+``clear_request``.
 
 Every method is a pure function of its arguments. The engine keeps the window
 configuration and the arbiter, both immutable, and nothing else: no state, no
@@ -22,7 +24,7 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, replace
 from datetime import datetime
 
-from . import dams, protection, tracking
+from . import dams, protection, request, tracking
 from .arbiter import (
     BUILT_IN_GATE_RULES,
     Arbiter,
@@ -46,6 +48,7 @@ from .model import (
     CommandResult,
     Decision,
     Observation,
+    Position,
     ProtectionEventState,
     TrackerEvent,
     Transition,
@@ -74,6 +77,7 @@ compares this list with the constraints of section 2.2 of the specification.
 FEATURE_LAYERS: tuple[LayerRegistration, ...] = (
     protection.FIRE_LAYER,
     protection.PROTECTION_LAYER,
+    request.REQUEST_LAYER,
     SCHEDULE_LAYER,
 )
 """The layers of the feature blocks; a block that builds a layer adds it here.
@@ -249,7 +253,8 @@ class Engine:
         sources did (block C07): a start with what the window looked like, an
         end, a release by the watchdog, a source that has been blind for the
         blind time; each raises its event, with the event and the source as
-        attributes. The caller recomputes with the state that comes back.
+        attributes. An expired request of an automation is dropped. The
+        caller recomputes with the state that comes back.
         """
         dry_run = snapshot.controls.dry_run
         tracked = tracking.elapse(
@@ -266,10 +271,13 @@ class Engine:
         if fire.state is not snapshot.state:
             snapshot = replace(snapshot, state=fire.state)
         protected = protection.protection_after(self.config, snapshot)
+        if protected.state is not snapshot.state:
+            snapshot = replace(snapshot, state=protected.state)
+        requested = request.request_after(snapshot)
         events = (*tracked.events, *dammed.events, *fire.events, *protected.events)
-        if not events and protected.state is dammed.state:
+        if not events and requested.state is dammed.state:
             return dammed
-        return Transition(protected.state, events)
+        return Transition(requested.state, events)
 
     @staticmethod
     def acknowledge_fire(state: WindowState) -> Transition:
@@ -283,6 +291,32 @@ class Engine:
         override, which holds the comfort layers back as usual.
         """
         return protection.acknowledge_fire(state)
+
+    @staticmethod
+    def request(
+        state: WindowState,
+        position: Position,
+        reason: str,
+        expires: datetime | None,
+        *,
+        now: datetime,
+    ) -> Transition:
+        """Record a request of an automation (F1): a position until it expires.
+
+        ``reason`` is the caller's text, kept for the status, never inside a
+        decision; ``expires`` is when the request ends by itself (``None``:
+        when it is cleared); ``now`` is its arrival, the trigger of its wish.
+        A new request replaces an older one. Block H07 calls this from its
+        action, also for the reference run (an end position and its own
+        reason). The window is recomputed afterwards; the request waits below
+        an active sleep mode (decision 2).
+        """
+        return request.request(state, position, reason, expires, now=now)
+
+    @staticmethod
+    def clear_request(state: WindowState) -> Transition:
+        """Clear the request of an automation; without one nothing changes."""
+        return request.clear_request(state)
 
     def judge_protection_event(
         self, snapshot: WorldSnapshot, event_id: str
@@ -330,10 +364,12 @@ class Engine:
         times, and the ends of the dams (``wake_ups`` of the gate); from
         block C07 also the release of a protection event by the watchdog,
         the end of the waiting time after an event, and the moment a source
-        without a value is reported as blind. At each, the caller hands the
-        snapshot to :meth:`elapse` and recomputes.
+        without a value is reported as blind; and the expiry of a request.
+        At each, the caller hands the snapshot to :meth:`elapse` and
+        recomputes.
         """
         times = set(wake_ups(self.config, state, now, dry_run=dry_run))
         times |= protection.protection_wake_ups(self.config, state)
         times |= protection.fire_wake_ups(self.config, state)
+        times |= request.request_wake_ups(state)
         return tuple(sorted(time for time in times if time > now))

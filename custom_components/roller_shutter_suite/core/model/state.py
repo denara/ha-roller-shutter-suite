@@ -655,11 +655,18 @@ class ExternalRequest:
     ``reason`` is the text the caller gave with the request. It is a subject
     attribute for status and events; a decision carries the reason code
     ``external_request`` and never this text.
+
+    ``requested_at`` is when the request arrived: the trigger of its wish, so
+    a request is a fresh wish for the minimum interval of motor protection
+    (block C07). The key is optional within schema version 1. A request
+    expires after it arrives; ``expires_at`` of ``None`` lasts until it is
+    cleared.
     """
 
     position: Position
     reason: str
     expires_at: datetime | None = None
+    requested_at: datetime | None = None
 
     def __post_init__(self) -> None:
         """Validate the types and reject a naive datetime."""
@@ -670,6 +677,17 @@ class ExternalRequest:
             "expires_at",
             to_utc_or_none(self.expires_at, "the expiry of a request"),
         )
+        object.__setattr__(
+            self,
+            "requested_at",
+            to_utc_or_none(self.requested_at, "the arrival of a request"),
+        )
+        if (
+            self.expires_at is not None
+            and self.requested_at is not None
+            and self.expires_at <= self.requested_at
+        ):
+            raise ValueError("a request expires after it arrives")
 
     def to_data(self) -> JsonObject:
         """Return plain data for persistence."""
@@ -677,16 +695,20 @@ class ExternalRequest:
             "position": self.position.value,
             "reason": self.reason,
             "expires_at": datetime_data(self.expires_at),
+            "requested_at": datetime_data(self.requested_at),
         }
 
     @classmethod
     def from_data(cls, data: JsonValue) -> Self:
         """Rebuild the request from plain data."""
-        content = as_object(data, "position", "reason", "expires_at")
+        content = as_object(data, "position", "reason", "expires_at", "requested_at")
         return cls(
             position=read(content, "position", _as_position),
             reason=read(content, "reason", as_str),
             expires_at=read(content, "expires_at", optional(as_datetime)),
+            requested_at=read_optional(
+                content, "requested_at", optional(as_datetime), None
+            ),
         )
 
 

@@ -940,6 +940,98 @@ def storm_stuck_with_restart(restart: time | None, seed: int = 1) -> Simulation:
     return simulation
 
 
+# --- External requests (block C07, kept apart from protection) ---------------------------
+#
+# Layer 4 of section 2.1: an automation requests a position with a reason and
+# an expiry. The request waits below an active sleep mode (decision 2; the
+# stand-in for block C11), expires, is cleared, and in dry-run only shows what
+# would have been sent.
+
+REQUESTED: Final = 40
+"""The position the automation of the request scenarios asks for."""
+
+
+def _requesting(seed: int, *, start: time = time(9, 0), **arguments: Any) -> Simulation:
+    """Return one window, open, on a Monday: the schedule wants the day position."""
+    return one_window(seed, local(MONDAY, start), position=100, **arguments)
+
+
+def request_below_sleep_mode(seed: int = 1) -> Simulation:
+    """Return a request at 06:30 while sleep mode is on until 06:50: nothing moves.
+
+    The alarm clock of an automation asks for 60 until 08:00. Sleep mode holds
+    the window closed; when it ends at 06:50, the request wins below it and
+    above the schedule, which still says night; at 08:00 it expires and the
+    schedule opens.
+    """
+    night = local(MONDAY, time(0, 0))
+    script = calm_sources(night).with_series(
+        SLEEP_SOURCE, Series.of((night, True), (local(MONDAY, time(6, 50)), False))
+    )
+    script = script.with_series(SLEEP_SINCE, Series.constant(night.isoformat(), night))
+    simulation = one_window(
+        seed,
+        local(MONDAY, time(5, 0)),
+        script=script,
+        position=0,
+        layers=(*FEATURE_LAYERS, SLEEP_STAND_IN),
+    )
+    simulation.at(
+        local(MONDAY, time(6, 30)),
+        "an alarm clock requests 60 until 08:00",
+        lambda sim: sim.request(
+            WINDOW_ID, ALARM_CLOCK, "alarm clock", local(MONDAY, time(8, 0))
+        ),
+    )
+    return simulation
+
+
+ALARM_CLOCK: Final = 60
+"""The position the alarm clock of ``request_below_sleep_mode`` asks for."""
+
+
+def request_that_expires(seed: int = 1) -> Simulation:
+    """Return a request for 40 from 10:00 to 11:00; then the day position again."""
+    simulation = _requesting(seed)
+    simulation.at(
+        local(MONDAY, time(10, 0)),
+        "an automation requests 40 for an hour",
+        lambda sim: sim.request(
+            WINDOW_ID, REQUESTED, "scene", local(MONDAY, time(11, 0))
+        ),
+    )
+    return simulation
+
+
+def request_that_is_cleared(seed: int = 1) -> Simulation:
+    """Return a request for 40 at 10:00 without an expiry, cleared at 10:30."""
+    simulation = _requesting(seed)
+    simulation.at(
+        local(MONDAY, time(10, 0)),
+        "an automation requests 40 until it clears it",
+        lambda sim: sim.request(WINDOW_ID, REQUESTED, "scene"),
+    )
+    simulation.at(
+        local(MONDAY, time(10, 30)),
+        "the automation clears its request",
+        lambda sim: sim.clear_request(WINDOW_ID),
+    )
+    return simulation
+
+
+def request_in_dry_run(seed: int = 1) -> Simulation:
+    """Return a request for 40 at 10:00 in dry-run: would send 40, sends nothing."""
+    simulation = _requesting(seed, controls=DRY_RUN)
+    simulation.at(
+        local(MONDAY, time(10, 0)),
+        "an automation requests 40",
+        lambda sim: sim.request(
+            WINDOW_ID, REQUESTED, "scene", local(MONDAY, time(11, 0))
+        ),
+    )
+    return simulation
+
+
 @dataclass(frozen=True, slots=True)
 class Scenario:
     """A named scenario: what it shows, how it is built, how long it runs."""
@@ -1087,6 +1179,26 @@ SCENARIOS: Final[Mapping[str, Scenario]] = {
         "situation 7: a person opens the window during a storm beyond the dam",
         partial(person_at_window, time(15, 0)),
         timedelta(hours=3),
+    ),
+    "request-below-sleep": Scenario(
+        "a request while sleep mode is on is accepted and moves nothing (stand-in)",
+        request_below_sleep_mode,
+        timedelta(hours=5),
+    ),
+    "request-expires": Scenario(
+        "a request of an automation for an hour, then the schedule again",
+        request_that_expires,
+        timedelta(hours=4),
+    ),
+    "request-cleared": Scenario(
+        "a request of an automation until the automation clears it",
+        request_that_is_cleared,
+        timedelta(hours=4),
+    ),
+    "request-dry-run": Scenario(
+        "a request for a window in dry-run: would have sent, sent nothing",
+        request_in_dry_run,
+        timedelta(hours=4),
     ),
     "dry-run-day": Scenario(
         "a window in dry-run next to a second controller for a whole day",
