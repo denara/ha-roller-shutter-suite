@@ -1267,6 +1267,11 @@
         "name": "Probelauf"
       }
     },
+    "button": {
+      "resume_automation": {
+        "name": "Automatik fortsetzen"
+      }
+    },
     "select": {
       "operating_mode": {
         "name": "Betriebsart",
@@ -1292,6 +1297,11 @@
     "logbook_dry_run": "Probelauf, nichts bewegt: wäre auf {target} % gefahren. Grund: {cause}.",
     "logbook_dry_run_no_target": "Probelauf, nichts bewegt: wäre gefahren. Grund: {cause}.",
     "logbook_held_back": "Bewegung auf {target} % zurückgehalten: {held}. Grund für die Bewegung: {cause}.",
-    "logbook_held_back_no_target": "Bewegung zurückgehalten: {held}. Grund für die Bewegung: {cause}."
+    "logbook_held_back_no_target": "Bewegung zurückgehalten: {held}. Grund für die Bewegung: {cause}.",
+    "logbook_event": "{event}.",
+    "logbook_event_position": "{event}, bei {position} %.",
+    "logbook_event_member": "{event}: {member}.",
+    "logbook_event_member_position": "{event}: {member}, bei {position} %.",
+    "logbook_event_count": "{event}: heute {count}, Schwellwert {threshold}."
   }
 }

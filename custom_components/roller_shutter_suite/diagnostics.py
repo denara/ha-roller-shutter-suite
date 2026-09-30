@@ -2,7 +2,10 @@
 
 What a window shows: its resolved configuration with the level every value
 comes from, the capability profile of every member, the status of its
-controller (phase, sources, schedule, commands, next wake-up), the controls
+controller (phase, sources, schedule, commands, next wake-up, and under
+``movement_tracking`` per member whether its movements are judged, what the
+user stated and what the tracker measured, next to the daily count of
+comfort movements and its threshold), the controls
 of its levels (house, group, window) with the effective value and what pauses
 it, the last decisions with the time each was first made, and its persisted
 state. The download of the entry adds the controls of the house and of every
@@ -52,7 +55,8 @@ from homeassistant.helpers.device_registry import DeviceEntry
 from . import RollerShutterSuiteConfigEntry
 from .const import DOMAIN
 from .controller import SourceReading, WindowController
-from .core.model import SourceState
+from .core.arbiter.capabilities import has_no_position_feedback, is_tracked
+from .core.model import MemberConfig, SampleStatistic, SourceState
 from .core.settings import ResolvedValue
 from .events import WindowHistory, history_of
 from .record import decision_attributes, member_targets, plain
@@ -70,6 +74,13 @@ TO_REDACT: Final = frozenset(
         CONF_API_KEY,
     }
 )
+
+DETECTION_ACTIVE: Final = "active"
+"""Movements of the member are judged: the tracker follows it."""
+DETECTION_UNKNOWN: Final = "unknown"
+"""The reporting time of the member is not stated: nothing is judged."""
+DETECTION_INACTIVE: Final = "inactive"
+"""The member reports no position: there is nothing to judge (section 8.1)."""
 
 _SCHEDULE_FACTS: Final = (
     "evaluated_at",
@@ -178,6 +189,7 @@ def _status(controller: WindowController) -> dict[str, Any]:
             else {name: plain(getattr(schedule, name)) for name in _SCHEDULE_FACTS}
         ),
         "commands": [command.to_data() for command in status.commands],
+        "movement_tracking": _movement_tracking(controller),
         "decision": (
             None
             if status.decision is None
@@ -188,6 +200,65 @@ def _status(controller: WindowController) -> dict[str, Any]:
                 "member_targets": member_targets(status.decision.targets),
             }
         ),
+    }
+
+
+def _statistic(statistic: SampleStatistic) -> dict[str, Any]:
+    return {
+        "count": statistic.count,
+        "median": statistic.median,
+        "maximum": statistic.maximum,
+    }
+
+
+def _detection(member: MemberConfig) -> str:
+    """Say whether movements of the member are judged: active, unknown or inactive."""
+    if has_no_position_feedback(member.capabilities):
+        return DETECTION_INACTIVE
+    if is_tracked(member.capabilities):
+        return DETECTION_ACTIVE
+    return DETECTION_UNKNOWN
+
+
+def _movement_tracking(controller: WindowController) -> dict[str, Any]:
+    """Return what the tracker knows per member, next to what the user stated.
+
+    The measured latency and time to rest stand next to the reporting time
+    and the travel times the member states, so that a user can tune them;
+    nothing is tuned automatically. The daily count of comfort movements
+    stands with its threshold.
+    """
+    state = controller.state
+    count = state.comfort_movements
+    members = []
+    for member in controller.config.members:
+        profile = member.capabilities
+        member_state = state.member_state(member.member_id)
+        measured = member_state.self_measurement
+        members.append(
+            {
+                "member_id": member.member_id,
+                "movement_detection": _detection(member),
+                "reporting_kind": plain(profile.reporting_kind),
+                "reporting_time": plain(profile.reporting_time),
+                "travel_time_up": plain(profile.travel_time_up),
+                "travel_time_down": plain(profile.travel_time_down),
+                "tolerance": profile.tolerance,
+                "phase": member_state.tracking.phase.value,
+                "position_reference": member_state.position_reference.value,
+                "latency_ms": _statistic(measured.latency),
+                "time_to_rest_ms": _statistic(measured.time_to_rest),
+                "end_deviation": _statistic(measured.end_deviation),
+            }
+        )
+    return {
+        "members": members,
+        "comfort_movements": {
+            "day": None if count is None else count.day.isoformat(),
+            "count": 0 if count is None else count.count,
+            "reported": False if count is None else count.reported,
+            "threshold": controller.config.comfort_movements_threshold,
+        },
     }
 
 

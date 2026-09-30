@@ -9,12 +9,15 @@ writes the reports a cover of that profile would write.
 Time is controlled by the ``freezer`` fixture; no test sleeps.
 """
 
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
-from homeassistant.core import Context, HomeAssistant
+from homeassistant.const import STATE_OFF, STATE_ON
+from homeassistant.core import Context, Event, HomeAssistant, callback
+from homeassistant.util.hass_dict import HassKey
 
+from custom_components.roller_shutter_suite.const import EVENT_REASON
 from custom_components.roller_shutter_suite.core.arbiter import member_expectation_end
 from custom_components.roller_shutter_suite.core.model import (
     MemberState,
@@ -31,10 +34,14 @@ from custom_components.roller_shutter_suite.core.model import (
     WishClass,
 )
 from custom_components.roller_shutter_suite.core.reasons import ReasonCode
+from custom_components.roller_shutter_suite.diagnostics import (
+    async_get_config_entry_diagnostics,
+)
 from custom_components.roller_shutter_suite.storage import storage_of
 from tests.ha.helpers import set_cover
 from tests.ha.runtime_kit import (
     COVER,
+    FIXED_ROUTINE,
     WINDOW_ID,
     advance,
     commands_sent,
@@ -45,16 +52,43 @@ from tests.ha.runtime_kit import (
     setup_window,
     window_data,
 )
+from tests.ha.status_kit import OVERRIDE, REASON, state_of
 
 _monday_morning = pytest.fixture(autouse=True)(monday_morning)
 
 LEFT = "cover.example_left"
+RESUME = "button.example_window_resume_automation"
 RIGHT = "cover.example_right"
 
 
+TRACKER_EVENTS: HassKey[list[dict[str, Any]]] = HassKey("test_tracker_events")
+
+
+@pytest.fixture(autouse=True)
+def _tracker_events(hass: HomeAssistant) -> None:
+    """Collect the reason events of the tracker and the dams, as they reach the bus."""
+    fired: list[dict[str, Any]] = []
+    hass.data[TRACKER_EVENTS] = fired
+
+    @callback
+    def _collect(event: Event) -> None:
+        if event.data["layer"] is None:
+            fired.append(dict(event.data))
+
+    hass.bus.async_listen(EVENT_REASON, _collect)
+
+
+def tracker_events(entry: Any) -> list[dict[str, Any]]:
+    """Return the data of the tracker's events on the bus since the last look."""
+    fired = entry.runtime_data.runtime.hass.data[TRACKER_EVENTS]
+    taken = list(fired)
+    fired.clear()
+    return taken
+
+
 def codes(entry: Any) -> list[ReasonCode]:
-    """Return the codes of the tracker's events since the last look."""
-    return [event.code for event in controller_of(entry).take_tracker_events()]
+    """Return the codes of the tracker's events on the bus since the last look."""
+    return [ReasonCode(event["reason"]) for event in tracker_events(entry)]
 
 
 def gate_reason(entry: Any) -> ReasonCode | None:
@@ -102,6 +136,18 @@ async def test_a_hand_movement_arms_the_override_and_nothing_is_sent_until_it_en
     assert state.manual_override.remembered_position == Position(40)
     assert gate_reason(entry) is ReasonCode.MANUAL_OVERRIDE
     assert codes(entry) == []
+    # The entity follows the dam; the reason says until when and what.
+    assert state_of(hass, OVERRIDE).state == STATE_ON
+    reason = state_of(hass, REASON)
+    assert reason.state == "manual_override"
+    dam = dict(reason.attributes["manual_override"])
+    assert datetime.fromisoformat(dam.pop("armed_at")) < local(10, 1)
+    assert dam == {
+        "end_rule": "next_part_of_day",
+        "ends_at": local(20, 0).astimezone(UTC).isoformat(),
+        "remembered_position": 40,
+    }
+    assert reason.attributes["person_at_window"] is None
 
     # The day goes on; the window sends nothing until the evening ends the dam.
     await advance(hass, freezer, local(19, 59))
@@ -109,6 +155,99 @@ async def test_a_hand_movement_arms_the_override_and_nothing_is_sent_until_it_en
     await advance(hass, freezer, local(20, 0, second=30))
     assert ReasonCode.OVERRIDE_ENDED in codes(entry)
     assert [call.target.value for call in commands_sent(entry)] == [0]
+    assert state_of(hass, OVERRIDE).state == STATE_OFF
+    assert state_of(hass, REASON).attributes["manual_override"] is None
+
+
+async def test_resume_automation_ends_the_override_and_the_window_moves(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The button of the window: the override ends at once, the window recomputes."""
+    entry = await armed_at(hass, freezer, 100)
+    set_cover(hass, COVER, position=100, state="closing")
+    set_cover(hass, COVER, position=40, state="open")
+    await settle(hass, freezer, seconds=5)
+    codes(entry)
+    assert state_of(hass, OVERRIDE).state == STATE_ON
+    assert commands_sent(entry) == []
+
+    await hass.services.async_call(
+        "button", "press", {"entity_id": RESUME}, blocking=True
+    )
+    await settle(hass, freezer)
+
+    assert codes(entry) == [ReasonCode.OVERRIDE_ENDED]
+    assert state_of(hass, OVERRIDE).state == STATE_OFF
+    assert controller_of(entry).state.manual_override is None
+    assert [call.target.value for call in commands_sent(entry)] == [100]
+
+    # Without an override the button changes nothing.
+    await hass.services.async_call(
+        "button", "press", {"entity_id": RESUME}, blocking=True
+    )
+    await settle(hass, freezer)
+    assert codes(entry) == []
+    assert len(commands_sent(entry)) == 1
+
+
+async def test_the_button_is_unavailable_while_the_window_has_no_controller(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """Pressed without a controller, it does nothing."""
+    entry = await armed_at(hass, freezer, 100)
+    runtime = entry.runtime_data.runtime
+    controller = runtime.windows.pop(WINDOW_ID)
+    try:
+        button = next(
+            entity
+            for entity in hass.data["entity_components"]["button"].entities
+            if entity.entity_id == RESUME
+        )
+        assert button.available is False
+        await button.async_press()
+    finally:
+        runtime.windows[WINDOW_ID] = controller
+    assert commands_sent(entry) == []
+
+
+async def test_the_daily_count_is_in_the_diagnostics_and_reported_once_above_it(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """Threshold 1: the second comfort movement of the day is reported, once."""
+    set_cover(hass, COVER, position=50)
+    entry = await setup_window(
+        hass,
+        house=FIXED_ROUTINE | {"comfort_movements_threshold": 1},
+        covers_present=False,
+        freezer=freezer,
+    )
+    set_cover(hass, COVER, position=100)
+    await settle(hass, freezer, seconds=5)
+    assert codes(entry) == []
+
+    await advance(hass, freezer, local(20, 0, second=1))
+    raised = tracker_events(entry)
+    assert [(e["reason"], e["count"], e["threshold"]) for e in raised] == [
+        ("comfort_movements_threshold", 2, 1)
+    ]
+    set_cover(hass, COVER, position=0, state="closed")
+    await settle(hass, freezer, seconds=5)
+
+    diagnostics = await async_get_config_entry_diagnostics(hass, entry)
+    tracking = diagnostics["windows"][0]["status"]["movement_tracking"]
+    assert tracking["comfort_movements"] == {
+        "day": "2026-09-21",
+        "count": 2,
+        "reported": True,
+        "threshold": 1,
+    }
+    (member,) = tracking["members"]
+    assert member["movement_detection"] == "active"
+    assert member["reporting_kind"] == "event_driven"
+    assert member["reporting_time"] == 0
+    assert member["travel_time_up"] == 60  # noqa: PLR2004
+    assert member["latency_ms"]["count"] == 2  # noqa: PLR2004
+    assert codes(entry) == []
 
 
 async def test_one_member_moved_by_hand_holds_the_whole_window(
@@ -151,9 +290,13 @@ async def test_the_user_of_a_dashboard_is_a_hint_on_the_member_event(
         context=context,
     )
     await settle(hass, freezer)
-    events = controller_of(entry).take_tracker_events()
-    member = next(e for e in events if e.code is ReasonCode.MANUAL_DETECTED_MEMBER)
-    assert member.user_id == hass_admin_user.id
+    events = tracker_events(entry)
+    member = next(e for e in events if e["reason"] == "manual_detected_member")
+    assert member["user_id"] == hass_admin_user.id
+    assert member["member_id"] == COVER
+    # Detected at its start, under way: no position yet (ruling of C06).
+    assert member["position"] is None
+    assert member["dry_run"] is False
 
 
 # ---------------------------------------------------------------------------

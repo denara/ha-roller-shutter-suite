@@ -2,7 +2,7 @@
 
 This page shows how to set up Roller Shutter Suite, how to add groups and windows, how to change and remove them, and how values that are inherited look in the forms. Everything happens in the user interface of Home Assistant. Nothing needs a restart.
 
-**Status: pilot.** The integration is a pilot version (see the [pilot guide](pilot.md)). The forms described here exist and store what you enter. Every new window starts in [dry-run](features/dry-run.md): it decides and records, and moves nothing, until you arm it on the last page of its settings (see [Arming a window](#arming-a-window)). Version 0.2.0 cannot arm a window yet, because it does not notice when you move a shutter by hand: every window stays in dry-run, and the pause, the maintenance lock and the operating mode work there all the same. At present the forms hold the settings of [the daily routine](features/daily-routine.md), of [movement](features/movement.md) and the pause entity of the page **Operation** ([Pause, maintenance lock, operating mode and dry-run](features/controls.md)); those pages explain what each of them means. More settings arrive with the features they belong to, and they will look and behave exactly as described here.
+**Status: pilot.** The integration is a pilot version (see the [pilot guide](pilot.md)). The forms described here exist and store what you enter. Every new window starts in [dry-run](features/dry-run.md): it decides and records, and moves nothing, until you arm it on the last page of its settings (see [Arming a window](#arming-a-window)). A window can be armed once every one of its covers is stated as event-driven on its page. At present the forms hold the settings of [the daily routine](features/daily-routine.md), of [movement](features/movement.md) and the pause entity of the page **Operation** ([Pause, maintenance lock, operating mode and dry-run](features/controls.md)); those pages explain what each of them means. More settings arrive with the features they belong to, and they will look and behave exactly as described here.
 
 If you have not read [Concepts](concepts.md) yet: settings live on three levels, the **house**, a **group** and a **window**. A window states only what is different about it. Everything else comes from its group, and what the group does not set comes from the house.
 
@@ -45,7 +45,7 @@ A window is what the integration decides about. It has one device in Home Assist
 1. Open the integration and choose **Add window**.
 2. Enter a name and choose the **cover** of the window. Only cover entities are offered.
 3. If you have groups, you can choose one. Leave the field empty and the window inherits from the house directly.
-4. Go through the pages and change only what is different for this window.
+4. Go through the pages and change only what is different for this window. After the pages of the features comes one page for every cover of the window ([The page of every cover](#the-page-of-every-cover)).
 5. Save the last page.
 
 New windows start in **dry-run**: the integration decides and records what it would do, but it does not move the shutter. You arm a window deliberately, once you have compared its decisions with reality; see [Arming a window](#arming-a-window).
@@ -90,10 +90,16 @@ These covers cannot be moved to a position, or do not report one:
 cover.example_garage
 
 You can still use them. They are only ever opened or closed fully,
-never moved to a position in between.
+never moved to a position in between. A cover that does not report its
+position cannot tell Roller Shutter Suite that you moved it by hand, so a
+movement by hand does not hold the automatic movements back for it.
 ```
 
 If a cover is merely unavailable while you configure the window, that is no problem: the integration uses what Home Assistant last knew about it.
+
+### The page of every cover
+
+After the pages of the features, every cover of the window has a page of its own, titled with its number and its entity, for example **Cover 1 of 2: cover.example_left**. It asks what Roller Shutter Suite cannot read from the cover: where its position comes from, the tolerance, how it reports and how late, and how long it takes to open and to close. Only what you enter is saved; an empty field uses the value its helper text names, and "how the cover reports" stays "Not stated" until you choose. A window can be armed only when every cover is stated as event-driven with a reporting time. [Manual operation](features/manual-operation.md#how-your-covers-report) explains each field and how to find the right values.
 
 ### An option your cover cannot do
 
@@ -105,7 +111,7 @@ Open the menu of the window and choose **Reconfigure**. The pages show what is s
 
 ### Arming a window
 
-On the last page of the window's **Reconfigure**, choose **Armed: move the shutters**. A page of checks follows, **Arm the window**, which saves only when you have ticked every point; if one of them is not true yet, close the dialog and nothing is saved. In version 0.2.0 that page says at the top that this version cannot arm a window yet, and saves nothing whatever you tick. To go back to dry-run, choose **Dry-run** on the same page; that needs no confirmation. Read the [checklist of the pilot guide](pilot.md#8-before-you-arm-a-window) before you arm your first window, and [Arming a window](features/dry-run.md#arming-a-window) for what arming changes.
+On the last page of the window's **Reconfigure**, choose **Armed: move the shutters**. A page of checks follows, **Arm the window**, which saves only when you have ticked every point; if one of them is not true yet, close the dialog and nothing is saved. If a cover of the window is polled, or its reporting is not stated on its page, that page names the cover at the top and saves nothing whatever you tick. To go back to dry-run, choose **Dry-run** on the same page; that needs no confirmation. Read the [checklist of the pilot guide](pilot.md#8-before-you-arm-a-window) before you arm your first window, and [Arming a window](features/dry-run.md#arming-a-window) for what arming changes.
 
 ## How inherited values look
 

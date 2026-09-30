@@ -320,6 +320,17 @@ class WindowController:
         """Ask for a recompute; a burst of requests yields one."""
         self._debouncer.async_schedule_call()
 
+    @callback
+    def async_resume(self) -> None:
+        """End the manual override at once: the button "resume automation" (E2).
+
+        ``Engine.resume`` ends the dam and raises ``override_ended``; the
+        window is recomputed, nothing is replayed. Without an override
+        nothing changes, and the recompute finds the same decision.
+        """
+        self._apply(Engine.resume(self.state))
+        self.async_request_recompute()
+
     # ------------------------------------------------------------------
     # Triggers
     # ------------------------------------------------------------------

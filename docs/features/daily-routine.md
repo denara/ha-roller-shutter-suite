@@ -129,7 +129,7 @@ Nothing is "caught up", because nothing can be missed. The routine does not work
 
 In all three cases a shutter that is already where it belongs, or beyond it in the permitted direction, is not moved.
 
-One consequence is worth knowing once a later version notices movements by hand. If you lower a shutter by hand during the day, the integration leaves it alone: your manual override holds until the next part of the day by default, which is the evening. If you choose a shorter duration for the override, the routine raises the shutter again when the override ends, because it is still day.
+One consequence is worth knowing now that the integration notices movements by hand ([Manual operation](manual-operation.md)). If you lower a shutter by hand during the day, the integration leaves it alone: your manual override holds until the next part of the day, which is the evening. If you end it earlier with **Resume automation**, the routine raises the shutter again, because it is still day.
 
 ## A workday, step by step
 
@@ -141,7 +141,7 @@ Settings: on workdays the morning is "sunrise, not before 06:30, not after 07:30
 | 00:00–07:30 | Night. The shutter stays closed. The status shows the next planned action: 07:30, 100 %. |
 | 07:30 | Sunrise at 07:41 plus this window's random amount of 6 minutes would be 07:47. That is later than "not after", so the morning happens at 07:30. The kind of day "workday" is now fixed for the day. It is day; the shutter is raised to 100 %. |
 | 11:00 | Home Assistant is restarted. It is still day, the shutter is at 100 %. Nothing moves. |
-| 14:00 | You lower the shutter to 40 % by hand. From the version on that notices movements by hand, the integration leaves it alone until the evening. |
+| 14:00 | You lower the shutter to 40 % by hand. The integration leaves it alone until the evening. |
 | 18:48 | The elevation is reached at 18:52; this window's random amount for the evening is minus 4 minutes. It is night; the shutter is lowered from 40 % to 0 %. |
 
 ## A weekend, step by step

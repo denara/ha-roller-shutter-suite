@@ -1267,6 +1267,11 @@
         "name": "Dry-run"
       }
     },
+    "button": {
+      "resume_automation": {
+        "name": "Resume automation"
+      }
+    },
     "select": {
       "operating_mode": {
         "name": "Operating mode",
@@ -1292,6 +1297,11 @@
     "logbook_dry_run": "dry-run, nothing moved: it would have moved to {target} %. Reason: {cause}.",
     "logbook_dry_run_no_target": "dry-run, nothing moved: it would have moved. Reason: {cause}.",
     "logbook_held_back": "movement to {target} % held back: {held}. Reason for the movement: {cause}.",
-    "logbook_held_back_no_target": "movement held back: {held}. Reason for the movement: {cause}."
+    "logbook_held_back_no_target": "movement held back: {held}. Reason for the movement: {cause}.",
+    "logbook_event": "{event}.",
+    "logbook_event_position": "{event}, at {position} %.",
+    "logbook_event_member": "{event}: {member}.",
+    "logbook_event_member_position": "{event}: {member}, at {position} %.",
+    "logbook_event_count": "{event}: {count} today, threshold {threshold}."
   }
 }

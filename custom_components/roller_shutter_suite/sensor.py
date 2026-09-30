@@ -30,7 +30,12 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from . import RollerShutterSuiteConfigEntry
 from .controls import ControlBoard
 from .entity import WindowStatusEntity
-from .record import REASON_OPTIONS, active_reason, decision_attributes
+from .record import (
+    REASON_OPTIONS,
+    active_reason,
+    dam_attributes,
+    decision_attributes,
+)
 from .runtime import SuiteRuntime
 
 KEY_ACTIVE_REASON = "active_reason"
@@ -105,6 +110,10 @@ class ReasonSensor(WindowStatusEntity, SensorEntity):
         ``paused_by`` lists every level that pauses the window at the moment
         of the last recompute, with its external entity and that entity's
         state where the pause comes from one; empty while nothing pauses.
+        ``manual_override`` and ``person_at_window`` are the dams with their
+        end and the position they remember (``record.dam_attributes``), so
+        the reasons ``manual_override`` and ``person_at_window`` say until
+        when and what the person chose.
         """
         controller = self.controller
         if controller is None or controller.status.decision is None:
@@ -116,6 +125,7 @@ class ReasonSensor(WindowStatusEntity, SensorEntity):
             "paused_by": [
                 cause.as_data() for cause in self.board.pause_causes(self.window_id)
             ],
+            **dam_attributes(controller.state),
         }
 
 

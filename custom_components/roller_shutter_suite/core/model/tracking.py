@@ -254,11 +254,12 @@ class SelfMeasurement:
     owner for block C06): the latency from the command to the first report
     and the time from the command to the report of rest, in milliseconds,
     and the deviation between the commanded and the reported end position,
-    in percent. Only a member whose position is reported event-driven, with
-    a report delay of zero, is measured. The statistic is the median, never
-    the mean, so that one movement cut short by the overload protection of a
-    motor does not distort it. Nothing is tuned from these values; they are
-    for a person who looks for the right report delay and travel times.
+    in percent. Only a member whose reporting kind is event-driven is
+    measured, whatever its reporting time; a polled one reports on its grid.
+    The statistic is the median, never the mean, so that one movement cut
+    short by the overload protection of a motor does not distort it.
+    Nothing is tuned from these values; they are for a person who looks for
+    the right reporting time and travel times.
     """
 
     latency_ms: tuple[int, ...] = ()

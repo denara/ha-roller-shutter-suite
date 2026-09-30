@@ -86,4 +86,10 @@ The shutter of a studio shall never move for comfort, only to protect the window
 
 Dry-run is not one of the switches. It belongs to the settings of a window, and leaving it takes a deliberate step with a confirmation; see [Arming a window](dry-run.md#arming-a-window). While a window is in dry-run, the controls still decide what it *would* do: a paused window in dry-run writes down "would have held back, because the window is paused".
 
-**In version 0.2.0 every window stays in dry-run.** This version does not notice when you move a shutter by hand, and an armed window would move the shutter back within a few seconds, so the page that arms a window says so and saves nothing. The pause, the maintenance lock and the operating mode work in dry-run all the same: try them on your windows now and look at what each window writes down. A later version notices a movement by hand and then arms a window.
+The pause, the maintenance lock and the operating mode work in dry-run all the same: try them on your windows before you arm one, and look at what each window writes down.
+
+## Resume automation
+
+Every window has the button **Resume automation** (`button.example_window_resume_automation`) on its device, next to its controls. After you moved a shutter by hand, the window waits with its automatic movements until the manual override ends, by default at the next change between day and night ([Manual operation](manual-operation.md)). Press the button to end it now: the window moves to where it should be at this moment, for example back up to the day position, and nothing that it held back in the meantime is replayed. Without a manual override the button changes nothing.
+
+You no longer need the **Pause** for a movement by hand: the override takes care of it. The pause is for longer times you choose yourself, such as a party or a holiday.

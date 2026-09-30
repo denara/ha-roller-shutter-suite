@@ -28,7 +28,12 @@ from tests.ha.runtime_kit import (
     setup_window,
     window_data,
 )
-from tests.ha.status_kit import FireAlarm, collect_reason_events, controls
+from tests.ha.status_kit import (
+    FireAlarm,
+    collect_reason_events,
+    controls,
+    outcomes,
+)
 
 _monday_morning = pytest.fixture(autouse=True)(monday_morning)
 
@@ -68,6 +73,12 @@ async def test_a_sent_command_fires_one_event_with_the_window_and_the_reason(
             "gate_rule": None,
             "dry_run": False,
             "until": None,
+            # Filled by the events of the tracker only; every event has them.
+            "member_id": None,
+            "position": None,
+            "count": None,
+            "threshold": None,
+            "user_id": None,
         }
     ]
 
@@ -142,7 +153,10 @@ async def test_reaching_the_target_ends_the_outcome(
     # so no minimum interval applies in dry-run.)
     set_cover(hass, COVER, position=50)
     await _tick(hass, freezer, times=4, minutes=5)
-    assert [e["reason"] for e in fired] == [ReasonCode.DRY_RUN, ReasonCode.DRY_RUN]
+    assert [e["reason"] for e in outcomes(fired)] == [
+        ReasonCode.DRY_RUN,
+        ReasonCode.DRY_RUN,
+    ]
     assert commands_sent(entry) == []
 
 
@@ -192,14 +206,14 @@ async def test_the_fire_event_fires_at_once_under_maintenance_lock_and_sends_not
     alarm.active = True
     controller.async_request_recompute()
     await settle(hass, freezer)
-    assert [(e["layer"], e["reason"], e["gate"]) for e in fired] == [
+    assert [(e["layer"], e["reason"], e["gate"]) for e in outcomes(fired)] == [
         ("fire", ReasonCode.MAINTENANCE_LOCK, "suppress")
     ]
-    assert fired[0]["target"] == 100  # noqa: PLR2004 - fully open
+    assert outcomes(fired)[0]["target"] == 100  # noqa: PLR2004 - fully open
     assert len(commands_sent(entry)) == before
 
     await _tick(hass, freezer, times=3, minutes=5)
-    assert len(fired) == 1
+    assert len(outcomes(fired)) == 1
 
 
 async def test_the_memory_of_the_last_outcome_survives_a_reload(

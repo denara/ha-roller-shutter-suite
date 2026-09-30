@@ -25,18 +25,20 @@ from homeassistant.util.hass_dict import HassKey
 
 from .const import DOMAIN, EVENT_REASON, RECENT_DECISIONS, status_signal
 from .controller import Phase
-from .core.model import Decision
+from .core.model import Decision, TrackerEvent
 from .record import (
     ReasonOutcome,
     decision_attributes,
     member_targets,
     reason_outcome,
+    tracker_event_data,
 )
 from .runtime import SuiteRuntime
 
 ATTR_SUBENTRY_ID = "subentry_id"
 ATTR_DEVICE_ID = "device_id"
 ATTR_NAME = "name"
+ATTR_DRY_RUN = "dry_run"
 
 
 @dataclass(frozen=True, slots=True)
@@ -106,10 +108,14 @@ class ReasonEvents:
         controller = self.runtime.windows.get(self.window_id)
         if controller is None:
             return
+        dry_run = controller.controls().dry_run
+        # The events of the tracker and the dams first: each is raised once
+        # by the core and handed out once by the controller.
+        for event in controller.take_tracker_events():
+            self._fire_tracker_event(event, dry_run=dry_run)
         status = controller.status
         if status.phase is not Phase.RUNNING or status.decision is None:
             return
-        dry_run = controller.controls().dry_run
         self._remember(status.decision, dry_run, status.last_recompute)
         outcome = reason_outcome(
             status.decision, sent=bool(status.commands), dry_run=dry_run
@@ -144,5 +150,25 @@ class ReasonEvents:
                 ATTR_DEVICE_ID: self.device_id,
                 ATTR_NAME: self.name,
                 **outcome.as_event_data(),
+            },
+        )
+
+    def _fire_tracker_event(self, event: TrackerEvent, *, dry_run: bool) -> None:
+        """Put one event of the tracker or the dams on the bus.
+
+        The same event type as every reason event; ``reason`` is the code of
+        the event, and the member, the position, the count, the threshold
+        and the user of a dashboard (a hint, never a decision) are attributes
+        where the event carries them. An event raised while a movement is
+        under way carries no position (ruling of block C06).
+        """
+        self.hass.bus.async_fire(
+            EVENT_REASON,
+            {
+                ATTR_SUBENTRY_ID: self.window_id,
+                ATTR_DEVICE_ID: self.device_id,
+                ATTR_NAME: self.name,
+                **tracker_event_data(event),
+                ATTR_DRY_RUN: dry_run,
             },
         )

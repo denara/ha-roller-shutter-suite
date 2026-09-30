@@ -2,18 +2,19 @@
 
 Every window explains itself: why it is where it is, where it should be, and what happens next. This page describes the entities that show it, the event the integration fires when it moves a shutter or holds a movement back, the entries in the logbook, and the diagnostics download.
 
-**Status: pilot.** The entities, the event and the diagnostics exist, and an armed window sends commands to its covers. Every new window starts in dry-run and records the command it would give, until you arm it in its settings ([Arming a window](dry-run.md#arming-a-window)). Manual operation is not detected yet, so the entity "Manual override" is always off. The pause, the maintenance lock and the operating mode exist for the house, every group and every window ([Pause, maintenance lock, operating mode and dry-run](controls.md)). The reactions to open doors and windows, protection from storms and hail, and the fire alarm arrive with later versions; this page already describes their reasons and events, so that your automations can rely on them.
+**Status: pilot.** The entities, the event and the diagnostics exist, and an armed window sends commands to its covers. Every new window starts in dry-run and records the command it would give, until you arm it in its settings ([Arming a window](dry-run.md#arming-a-window)). A movement by hand is noticed on every cover that reports its position and whose reporting you stated ([Manual operation](manual-operation.md)); the entity "Manual override" shows when it holds the window. The pause, the maintenance lock and the operating mode exist for the house, every group and every window ([Pause, maintenance lock, operating mode and dry-run](controls.md)). The reactions to open doors and windows, protection from storms and hail, and the fire alarm arrive with later versions; this page already describes their reasons and events, so that your automations can rely on them.
 
 ## The entities of a window
 
-Each window has a device with the window's name. The device carries five entities. The examples use a window named "Example window".
+Each window has a device with the window's name. The device carries six entities. The examples use a window named "Example window".
 
 | Entity | Example | What it shows |
 |---|---|---|
 | Reason | `sensor.example_window_reason` | The one reason that explains best why the window is where it is, for example "Daily routine: night", "Paused" or "Dry-run: nothing moves". The full list is below. |
 | Target position | `sensor.example_window_target_position` | The position the window should have, in percent: 100 % is fully open, 0 % fully closed. It is unknown when nothing wants a position, or when the covers of a window with several covers should stand at different positions. |
 | Next planned action | `sensor.example_window_next_planned_action` | When the daily routine wants something new next, for example the evening at 20:00. Its attributes say which position it will want (`target`) and why (`reason`). It is a plan, not a promise: something more important can apply at that time, and the evening never raises a shutter that is already lower. |
-| Manual override | `binary_sensor.example_window_manual_override` | On while a movement by hand holds the automatic movements back. Always off for now, see above. |
+| Manual override | `binary_sensor.example_window_manual_override` | On while a movement by hand holds the automatic movements back, until the override ends ([Manual operation](manual-operation.md)). Always off in dry-run. |
+| Resume automation | `button.example_window_resume_automation` | Ends the manual override at once: the automatic movements no longer wait, and the window moves to where it should be. Without an override it changes nothing. |
 | Dry-run | `binary_sensor.example_window_dry_run` | On while the window decides and records but moves nothing. You find it under the diagnostic entities of the device. New windows start in dry-run; you arm a window in its settings ([Arming a window](dry-run.md#arming-a-window)). |
 
 The device also carries the controls of the window, **Pause**, **Maintenance lock** and **Operating mode**, as configuration entities; the house and every group have the same three on a device of their own. [Pause, maintenance lock, operating mode and dry-run](controls.md) describes them.
@@ -48,6 +49,8 @@ The entity "Reason" carries the complete explanation as attributes. They change 
 | `other_layers` | For every other part of the logic (fire, protection, sleep mode, requests, privacy, shading, the daily routine) the reason why it did not decide: not set up, not active, a required entity that is unavailable or unknown, suspended because of a faulty setting, and so on. |
 | `faults` | Parts that failed with an internal error during this decision, each with where it happened and its reason (`layer_failed`, `constraint_failed`, `gate_rule_failed`). Empty in a sound installation. Protection never stops because of such an error; the error text itself is written to the log, not here. |
 | `paused_by` | Every level that pauses the window at the moment: `level` is `global` (the house), `group` or `window`; for a pause that comes from a pause entity, `entity_id` names it and `state` says why it pauses: `on`, or `unavailable`, `unknown` or another state for an entity without a usable state, or `blind` for a saved setting that cannot be read. Empty while nothing pauses the window. |
+| `manual_override` | While a manual override holds the window: `armed_at`, `end_rule` (`next_part_of_day`, `fixed_minutes`, `shading_episode_end` or `room_empty`), `ends_at` (empty for an end at a condition, such as an empty room) and `remembered_position`, the position the person chose. Empty while there is no override. |
+| `person_at_window` | While the person-at-the-window rule holds the window: `ends_at` and `remembered_position`. Empty otherwise. |
 
 **In dry-run** the attributes show the outcome as if the window were armed: either `would_send` with the position, or `gate_rule` with the rule that would have held it back. "Already where it should be" (`target_reached`) is especially useful while another controller still moves the window: it means that the other controller put the window where this integration wanted it.
 
@@ -57,7 +60,8 @@ The integration fires one event type, `roller_shutter_suite_reason`, when:
 
 - a position is wanted and a command is sent;
 - a window in dry-run would have sent a command;
-- a wanted movement is deferred or held back, for example by the pause, the maintenance lock, the minimum interval between two movements, or an open door.
+- a wanted movement is deferred or held back, for example by the pause, the maintenance lock, the minimum interval between two movements, or an open door;
+- something happens to a cover: a movement by hand is noticed, a manual override begins or ends, a cover did not react to a command, or the window made more comfort movements today than its threshold ([Events of manual operation](#events-of-manual-operation)).
 
 **The fire alarm is always reported at once**, also when the maintenance lock or dry-run keeps the shutter where it is; the event then names the reason why nothing moved.
 
@@ -79,6 +83,30 @@ The data of the event:
 | `gate_rule` | `pause` | The rule that decided, if one did. |
 | `dry_run` | `false` | Whether the window is in dry-run. |
 | `until` | | For a deferral with a known end: when it ends. |
+| `member_id`, `position` | `cover.example_window` | For an event of manual operation: the cover it concerns and the position, where the event carries them. A movement noticed while it is still under way carries no position yet; see [Events of manual operation](#events-of-manual-operation). |
+| `count`, `threshold` | `41` | For `comfort_movements_threshold`: the comfort movements of today and the threshold. |
+| `user_id` | | The user of a dashboard seen at the start of a movement by hand, if any; a hint only. |
+
+Every event has all of these fields; a field that does not concern the event is empty (`null`). An event about a decision always names its `layer`; an event of manual operation never does.
+
+### Events of manual operation
+
+Each of these is sent once, when it happens, with `reason` set to its code:
+
+| `reason` | When | Fields it fills |
+|---|---|---|
+| `manual_detected` | A movement by hand of the window is noticed. | `position` once the movement has come to rest |
+| `manual_detected_member` | The same, for the cover that was moved. | `member_id`, `position` as above, `user_id` if a dashboard moved it |
+| `override_started`, `override_ended` | The manual override begins, or ends by its rule or through **Resume automation**. | |
+| `person_at_window_started`, `person_at_window_ended` | During protection, a movement by hand holds the window for a while instead of an override. | |
+| `external_movement_observed` | In dry-run: something else moved the cover. Nothing else happens. | `member_id`, `position` as above |
+| `moved_during_downtime` | A cover returns from being unavailable at another position. | `member_id`, `position` |
+| `position_may_be_inaccurate` | An own movement was stopped or not finished; the reported position may be off until the next movement to fully open or closed. | `member_id` |
+| `actuator_no_reaction` | A cover showed no reaction to a command in time. | `member_id` |
+| `movement_not_finished` | A cover started to move but did not report the end in time. | `member_id` |
+| `comfort_movements_threshold` | The window made more comfort movements today than its threshold (40 unless set otherwise); once a day. | `count`, `threshold` |
+
+A movement noticed while it is still under way (a person pressing the wall switch) is reported at once, without a position: it is not yet where the person will stop it. The position the person chose appears in the attribute `manual_override` of the entity **Reason** once the shutter has come to rest.
 
 ### Example: a notification when a movement is held back
 
@@ -91,7 +119,9 @@ triggers:
     event_type: roller_shutter_suite_reason
 conditions:
   - condition: template
-    value_template: "{{ trigger.event.data.reason not in ['sent', 'dry_run'] }}"
+    value_template: >-
+      {{ trigger.event.data.layer is not none
+         and trigger.event.data.reason not in ['sent', 'dry_run'] }}
 actions:
   - action: persistent_notification.create
     data:
@@ -111,6 +141,10 @@ Every reason event appears in the logbook, under the name of the window and link
 - *Example window* command sent to move to 0 %. Reason: Daily routine: night.
 - *Example window* dry-run, nothing moved: it would have moved to 100 %. Reason: Daily routine: day.
 - *Example window* movement to 0 % held back: Paused. Reason for the movement: Daily routine: night.
+- *Example window* Moved by hand, at 40 %.
+- *Example window* One cover of the window was moved by hand: cover.example_window.
+- *Example window* Manual override ended.
+- *Example window* More comfort movements today than the threshold: 41 today, threshold 40.
 
 ## Diagnostics
 
@@ -119,7 +153,7 @@ The diagnostics help when something does not behave as you expect, and when you 
 - **For all windows:** Settings → Devices & services → Roller Shutter Suite → the menu (three dots) → **Download diagnostics**.
 - **For one window:** open the device of the window → the menu (three dots) → **Download diagnostics**.
 
-The file contains, per window: every setting with where it comes from (the house, a group, the window, or the built-in default) and whether a cautious choice stands in for it because its saved setting is faulty; what each cover can do; the state of the window (the entities it reads, the daily routine of today, the next planned time); the pause, maintenance lock and operating mode of the house, its group and the window, with the pause entity of each and what applies to the window; the last ten decisions with the time each was first made; and what the window remembers between two decisions. The file of all windows also lists the controls of the house and of every group.
+The file contains, per window: every setting with where it comes from (the house, a group, the window, or the built-in default) and whether a cautious choice stands in for it because its saved setting is faulty; what each cover can do; the state of the window (the entities it reads, the daily routine of today, the next planned time); the pause, maintenance lock and operating mode of the house, its group and the window, with the pause entity of each and what applies to the window; the last ten decisions with the time each was first made; what the window remembers between two decisions; and, under `movement_tracking`, per cover whether its movements by hand are noticed (`movement_detection`: `active`; `unknown` while its reporting is not stated; `inactive` for a cover without a position), what you stated on its page (reporting kind and time, travel times, tolerance), and what Roller Shutter Suite measured of its own movements (`latency_ms`, `time_to_rest_ms`, `end_deviation`, each with count, median and maximum), next to the count of comfort movements of the day and its threshold. [Manual operation](manual-operation.md#the-measurements-in-the-diagnostics) explains how to use the measurements. The file of all windows also lists the controls of the house and of every group.
 
 **Before you share the file**, know what it contains and what it leaves out. Like the diagnostics of other integrations, it keeps the names of your windows and groups, the IDs of your entities and the values those entities report, because a problem can only be traced with them. Removed, and replaced by `**REDACTED**` wherever they would appear, are the location of your home (latitude, longitude, elevation) and anything secret, such as passwords, tokens and API keys; none of these is part of a window today. The message of an error inside the integration is never included, only where it happened and its reason code. If a name of a window or an entity says more than you want to share, replace it in the file before you attach it. The covers of a window appear in the order of its configuration, so the same place in each list means the same cover.
 
@@ -206,9 +240,9 @@ The reason entity and the events use these codes. The column "Shown as" is the E
 | `staggered` | Waiting for its turn |
 | `gate_rule_failed` | Held back because of an internal error |
 
-### Only in events, later
+### Only in events
 
-These codes belong to functions that are not built yet. They will appear in events, never as the state of the reason entity.
+These codes appear in events and in the logbook, never as the state of the reason entity. The first group is sent by this version ([Events of manual operation](#events-of-manual-operation)); the second belongs to functions that are not built yet.
 
 | Code | Shown as |
 |---|---|
@@ -220,6 +254,13 @@ These codes belong to functions that are not built yet. They will appear in even
 | `person_at_window_ended` | Nobody at the window any more |
 | `override_started` | Manual override started |
 | `override_ended` | Manual override ended |
+| `position_may_be_inaccurate` | The position may be inaccurate |
+| `actuator_no_reaction` | The cover did not react |
+| `movement_not_finished` | The end of the movement was not reported in time |
+| `comfort_movements_threshold` | More comfort movements today than the threshold |
+
+| Code | Shown as |
+|---|---|
 | `protection_started` | Protection started |
 | `protection_ended` | Protection ended |
 | `protection_source_blind` | An entity used for protection is unavailable or unknown |
@@ -229,10 +270,7 @@ These codes belong to functions that are not built yet. They will appear in even
 | `frost_waiver_ended` | Frost protection applies again |
 | `frost_released_by_sun` | Frost protection lifted by the sun |
 | `frost_source_blind` | The entity used for frost is unavailable or unknown |
-| `position_may_be_inaccurate` | The position may be inaccurate |
 | `command_failed` | Command failed |
-| `actuator_no_reaction` | The cover did not react |
-| `movement_not_finished` | The end of the movement was not reported in time |
 | `member_unavailable` | One cover of the window is unavailable |
 | `button_refused_maintenance_lock` | Button press ignored because of the maintenance lock |
 

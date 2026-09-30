@@ -540,6 +540,7 @@ async def test_every_movement_by_hand_of_the_dry_run_window_causes_no_call(
     morning, when the window would have sent a command. In dry-run nothing
     arms a dam, nobody owns the position, and no real command is recorded.
     """
+    fired = collect_reason_events(hass)
     entry = await _install(hass, freezer)
     dry = _controller(entry, "Example window")
 
@@ -583,6 +584,14 @@ async def test_every_movement_by_hand_of_the_dry_run_window_causes_no_call(
     _clean_state(dry.state)
     assert dry.state.members[0].position_reference.value == "referenced"
     assert state_of(hass, OVERRIDE).state == STATE_OFF
+    # Observed and reported, and nothing else: the only event of the tracker
+    # in dry-run.
+    observed = [
+        e for e in fired if e["subentry_id"] == dry.window_id and e["layer"] is None
+    ]
+    assert observed
+    assert {e["reason"] for e in observed} == {"external_movement_observed"}
+    assert all(e["dry_run"] is True for e in observed)
 
 
 async def test_after_a_restart_in_the_night_the_decision_is_the_same(

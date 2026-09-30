@@ -1201,6 +1201,42 @@
           'dry_run': True,
           'error': None,
           'last_recompute': '2026-09-21T10:00:01.500000+02:00',
+          'movement_tracking': dict({
+            'comfort_movements': dict({
+              'count': 0,
+              'day': None,
+              'reported': False,
+              'threshold': 40,
+            }),
+            'members': list([
+              dict({
+                'end_deviation': dict({
+                  'count': 0,
+                  'maximum': None,
+                  'median': None,
+                }),
+                'latency_ms': dict({
+                  'count': 0,
+                  'maximum': None,
+                  'median': None,
+                }),
+                'member_id': 'cover.example_window',
+                'movement_detection': 'active',
+                'phase': 'idle',
+                'position_reference': 'referenced',
+                'reporting_kind': 'event_driven',
+                'reporting_time': 0.0,
+                'time_to_rest_ms': dict({
+                  'count': 0,
+                  'maximum': None,
+                  'median': None,
+                }),
+                'tolerance': 2,
+                'travel_time_down': 60.0,
+                'travel_time_up': 60.0,
+              }),
+            ]),
+          }),
           'observation': list([
             dict({
               'member_id': 'cover.example_window',

@@ -61,6 +61,7 @@ The German texts address the reader informally, as the German interface of Home 
 | reporting time | Meldezeit | How late the reports of an event-driven cover arrive at most, or how often a polled cover is asked. | forms, issues, pages |
 | travel time up, travel time down | Fahrzeit nach oben, Fahrzeit nach unten | How long a shutter takes from fully closed to fully open, and back. | forms, pages |
 | manual operation | Bedienung von Hand | Moving a shutter by hand: with a wall switch, a remote or an app. Roller Shutter Suite notices it on a cover that reports its position. | status, pages |
+| resume automation | Automatik fortsetzen | The button of a window that ends its manual override at once. | status, pages |
 | manual override | Handbetrieb | The time after a manual operation during which automatic movements wait. Also the name of a status entity. | status, pages |
 | pause | Pause, pausiert | Holds back comfort movements of a window, a group or the house on purpose; protection and the fire alarm still move the shutter. Also the name of a switch. | forms, status, pages |
 | pause entity | Pausen-Entität | An entity of your own that pauses the house, a group or a window while it is on; one without a state pauses as well. | forms, issues, pages |

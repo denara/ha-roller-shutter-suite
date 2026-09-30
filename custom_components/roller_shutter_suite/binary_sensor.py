@@ -1,9 +1,8 @@
 """The binary sensors of a window: manual override and dry-run.
 
 - **Manual override** (``override_active``): on while a movement by hand holds
-  the automatic comfort movements back. Detecting a movement by hand is the
-  job of a later block; until it exists this sensor is always off, and the
-  documentation says so.
+  the automatic comfort movements back: while the manual override dam of the
+  window is armed. In dry-run it is never armed, so the sensor stays off.
 - **Dry-run** (``dry_run``): on while the window decides and records but
   moves nothing. A diagnostic entity: it is changed in the settings of the
   window, not here.
@@ -52,12 +51,15 @@ async def async_setup_entry(
 
 
 class OverrideSensor(WindowStatusEntity, BinarySensorEntity):
-    """Whether a manual override holds the window; always off for now."""
+    """Whether a manual override holds the window: it follows the dam."""
 
     @property
-    def is_on(self) -> bool:
-        """Return off: manual operation is not detected yet."""
-        return False
+    def is_on(self) -> bool | None:
+        """Return whether the manual override dam of the window is armed."""
+        controller = self.controller
+        return (
+            None if controller is None else controller.state.manual_override is not None
+        )
 
 
 class DryRunSensor(WindowStatusEntity, BinarySensorEntity):
