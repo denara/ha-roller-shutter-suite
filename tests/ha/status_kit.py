@@ -57,7 +57,8 @@ class FireAlarm:
         """Give the controller an arbiter with this fire layer and the real rules."""
         arbiter = build_arbiter(
             [
-                *FEATURE_LAYERS,
+                # The real fire layer reads a source that block H08 wires.
+                *(entry for entry in FEATURE_LAYERS if entry.layer is not Layer.FIRE),
                 LayerRegistration(Layer.FIRE, self.layer, FunctionId.FIRE),
             ]
         )

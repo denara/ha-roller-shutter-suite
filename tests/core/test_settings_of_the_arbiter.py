@@ -12,6 +12,7 @@ import pytest
 
 from custom_components.roller_shutter_suite.core.model import (
     BLIND_SOURCE,
+    EVENTS_UNREADABLE,
     FrostSettings,
     FunctionId,
     MotorProtectionSettings,
@@ -53,6 +54,10 @@ EXPECTED = {
     "override_room_empty_after": (SettingKind.DURATION, FunctionId.MANUAL_OVERRIDE),
     "person_at_window_duration": (SettingKind.DURATION, FunctionId.MANUAL_OVERRIDE),
     "pause_source": (SettingKind.OPTIONAL_REFERENCE, FunctionId.PAUSE),
+    "fire_source": (SettingKind.OPTIONAL_REFERENCE, FunctionId.FIRE),
+    "protection_events": (SettingKind.LIST, FunctionId.PROTECTION_EVENTS),
+    "protection_sleep_exception": (SettingKind.LIST, FunctionId.PROTECTION_EVENTS),
+    "source_blind_after": (SettingKind.DURATION, FunctionId.PROTECTION_EVENTS),
 }
 
 
@@ -224,6 +229,15 @@ FAULT_VALUES = {
     "override_room_empty_after": timedelta(minutes=30),
     "person_at_window_duration": timedelta(minutes=15),
     "pause_source": BLIND_SOURCE,
+    # Block C07, item 7 of its scope and the rulings of the project owner of
+    # 2026-10-01: a faulty fire source is blind (the held alarm applies), a
+    # list of events that cannot be read is "configured, but unreadable", a
+    # faulty sleep-room exception is no exception, and the blind time keeps
+    # its default.
+    "fire_source": BLIND_SOURCE,
+    "protection_events": EVENTS_UNREADABLE,
+    "protection_sleep_exception": (),
+    "source_blind_after": timedelta(hours=1),
 }
 """Confirmed by the project owner; the reasons stand at the entries of the registry.
 
@@ -252,6 +266,8 @@ def test_fault_values_are_the_confirmed_ones_and_stated_for_exactly_these_settin
         "frost_hold_closed",
         "override_presence_source",
         "pause_source",
+        "fire_source",
+        "protection_events",
     }
 
 

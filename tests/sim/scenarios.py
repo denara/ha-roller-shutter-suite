@@ -19,6 +19,11 @@ from functools import partial
 from typing import Any, Final
 from zoneinfo import ZoneInfo
 
+from custom_components.roller_shutter_suite.core.arbiter import (
+    ConstraintRegistration,
+    LayerRegistration,
+)
+from custom_components.roller_shutter_suite.core.engine import FEATURE_LAYERS
 from custom_components.roller_shutter_suite.core.model import (
     ControlLevel,
     Controls,
@@ -30,9 +35,17 @@ from custom_components.roller_shutter_suite.core.model import (
 )
 
 from .cover import CoverProfile, Reporting, SimulatedCover
+from .house import FIRE_SOURCE, HAIL_SOURCE, STORM_SOURCE
 from .runner import Simulation
-from .sources import Script, Series
-from .stubs import FIRE_SOURCE, STORM_SOURCE
+from .sources import UNAVAILABLE, Script, Scripted, Series
+from .stand_ins import (
+    DOOR_SOURCE,
+    LOCKOUT_STAND_IN,
+    SLEEP_SINCE,
+    SLEEP_SOURCE,
+    SLEEP_STAND_IN,
+    TAMPER_SOURCE,
+)
 from .world import Location, World
 
 ZONE: Final = ZoneInfo(Location().time_zone)
@@ -124,11 +137,12 @@ def cover(
 
 
 def calm_sources(since: datetime) -> Script:
-    """Return the sources of a calm world: no fire, no storm."""
+    """Return the sources of a calm world: no fire, no storm, no hail."""
     return Script(
         {
             FIRE_SOURCE: Series.constant(False, since),
             STORM_SOURCE: Series.constant(False, since),
+            HAIL_SOURCE: Series.constant(False, since),
         }
     )
 
@@ -144,16 +158,20 @@ def one_window(  # noqa: PLR0913 - every part of a scenario can be varied
     controls: Controls = ARMED,
     script: Script | None = None,
     position: int = 0,
+    layers: tuple[LayerRegistration, ...] | None = None,
+    constraints: tuple[ConstraintRegistration, ...] = (),
     **fields: Any,
 ) -> Simulation:
     """Return a simulation with one window over one cover, closed by default.
 
     Every day scenario starts at midnight, when the schedule wants the night
     position; a cover that starts closed does not move at the start.
+    ``layers`` and ``constraints`` are handed to the simulation (the
+    stand-ins of the protection scenarios).
     """
     world = World(start, seed=seed, script=script or calm_sources(start))
     world.add_cover(cover("window", profile, position=position, since=start))
-    simulation = Simulation(world)
+    simulation = Simulation(world, layers=layers, constraints=constraints)
     simulation.add_window(
         world.window("window_example", "cover.example_window", **fields), controls
     )
@@ -289,7 +307,7 @@ def dry_run_next_to_another_controller(seed: int = 1) -> Simulation:
 
 
 def fire_in_mode(operating_mode: OperatingMode | None, seed: int = 1) -> Simulation:
-    """Return the stub fire trigger at 10:00 on a Monday, in one operating mode.
+    """Return the fire alarm at 10:00 on a Monday, in one operating mode.
 
     ``None`` stands for the maintenance lock, which is not a mode but the
     fourth row of the table of section 2.5.
@@ -313,7 +331,7 @@ HALF_OPEN: Final = Position(30)
 
 
 def fire_in_dry_run(seed: int = 1) -> Simulation:
-    """Return the stub fire trigger at 10:00 for a window in dry-run: no movement."""
+    """Return the fire alarm at 10:00 for a window in dry-run: no movement."""
     start = local(MONDAY, time(0, 0))
     script = calm_sources(start).with_series(
         FIRE_SOURCE, Series.of((start, False), (local(MONDAY, time(10, 0)), True))
@@ -694,6 +712,362 @@ def own_movement_with_restart(restart: time | None, seed: int = 1) -> Simulation
     return simulation
 
 
+# --- Protection events and the fire alarm (block C07) ----------------------------------
+#
+# The real fire and protection layers of the house (``house.py``). Situations 4
+# and 5 use the stand-in for lockout protection of block C08, situation 6 the
+# stand-in for sleep mode of block C11 (``stand_ins.py``); they are test-only.
+
+
+def _switched(*steps: tuple[time, Scripted], day: date = MONDAY) -> Series:
+    """Return an on/off series that is off from midnight and follows the steps."""
+    start = local(day, time(0, 0))
+    return Series.of((start, False), *((local(day, at), value) for at, value in steps))
+
+
+def _protection_day(
+    seed: int,
+    series: Mapping[str, Series],
+    *,
+    position: int = 100,
+    start: time = time(12, 0),
+    **arguments: Any,
+) -> Simulation:
+    """Return one window, open by default, on a Monday with the scripted sources."""
+    since = local(MONDAY, start)
+    script = calm_sources(local(MONDAY, time(0, 0)))
+    for key, steps in series.items():
+        script = script.with_series(key, steps)
+    return one_window(seed, since, script=script, position=position, **arguments)
+
+
+def fire_unacknowledged(seed: int = 1) -> Simulation:
+    """Situation 3a: a false alarm; a person closes a shutter; acknowledged later.
+
+    The alarm lasts from 13:00 to 13:05 and opens the half open window. At
+    13:20 a person closes it by hand; nothing reopens it. At 14:00 the alarm is
+    acknowledged: the manual override protects what the person did.
+    """
+    simulation = _protection_day(
+        seed,
+        {FIRE_SOURCE: _switched((time(13, 0), True), (time(13, 5), False))},
+        position=HALF_OPEN.value,
+        schedule_morning_position=HALF_OPEN,
+    )
+    simulation.at(
+        local(MONDAY, time(13, 20)),
+        "a person closes the window by hand",
+        lambda sim: sim.move_by_hand(WINDOW_ID, 0),
+    )
+    simulation.at(
+        local(MONDAY, time(14, 0)),
+        "the fire alarm is acknowledged",
+        lambda sim: sim.acknowledge_fire(WINDOW_ID),
+    )
+    return simulation
+
+
+def storm_with_the_door(seed: int = 1, *, tamper: bool = False) -> Simulation:
+    """Situations 4 and 5: a storm from 14:00 to 16:00 while the terrace door is open.
+
+    The door is open from 13:55 and shut at 14:30. With the tamper contact
+    active the trust in the door is withdrawn and the window closes at once.
+    """
+    series = {
+        STORM_SOURCE: _switched((time(14, 0), True), (time(16, 0), False)),
+        DOOR_SOURCE: _switched((time(13, 55), True), (time(14, 30), False)),
+        TAMPER_SOURCE: _switched((time(13, 0), tamper)),
+    }
+    return _protection_day(seed, series, constraints=(LOCKOUT_STAND_IN,))
+
+
+def hail_in_a_sleeping_room(seed: int = 1) -> Simulation:
+    """Situation 6: hail (opening) at 02:00 in a room marked for the exception.
+
+    Sleep mode is on all night (the stand-in for block C11); the closed window
+    stays closed.
+    """
+    night = local(MONDAY, time(0, 0))
+    series = {
+        HAIL_SOURCE: _switched((time(2, 0), True), (time(2, 30), False)),
+        SLEEP_SOURCE: Series.constant(True, night),
+        SLEEP_SINCE: Series.constant(night.isoformat(), night),
+    }
+    return _protection_day(
+        seed,
+        series,
+        position=0,
+        start=time(0, 0),
+        layers=(*FEATURE_LAYERS, SLEEP_STAND_IN),
+        protection_sleep_exception=("hail",),
+    )
+
+
+def storm_after_an_override(
+    seed: int = 1, *, override_minutes: int | None = None
+) -> Simulation:
+    """Situations 8, 9 and 10: a person lowers the window to 40, then a storm.
+
+    The person moves the window at 12:30; the storm lasts from 14:00 to 15:00;
+    the waiting time ends at 15:30. By default the override lasts until the
+    evening (situations 8 and 9: the window returns to 40 at 15:30). With
+    ``override_minutes`` it ends earlier (situation 10: the window is
+    recomputed).
+    """
+    fields: dict[str, Any] = {}
+    if override_minutes is not None:
+        fields = {
+            "override_end_rule": OverrideEndRule.FIXED_MINUTES,
+            "override_minutes": timedelta(minutes=override_minutes),
+        }
+    simulation = _protection_day(
+        seed,
+        {STORM_SOURCE: _switched((time(14, 0), True), (time(15, 0), False))},
+        **fields,
+    )
+    simulation.at(
+        local(MONDAY, time(12, 30)),
+        "a person lowers the window to 40",
+        lambda sim: sim.move_by_hand(WINDOW_ID, PERSON_LOWERS),
+    )
+    return simulation
+
+
+PERSON_LOWERS: Final = 40
+"""Where the person of the override scenarios lowers the window to."""
+
+PERSON_OPENS: Final = 60
+"""Where the person of ``storm_twice`` opens the window in the waiting time."""
+
+
+def storm_twice(seed: int = 1) -> Simulation:
+    """Return a storm, a hand movement in its waiting time, and the storm again.
+
+    The finding of the review of block C07: a person lowers the window to 40
+    at 12:30; a storm closes it from 14:00 to 15:00; at 15:10, in the waiting
+    time, the person opens it to 60; the storm comes back from 15:15 to
+    15:45. The second start remembers the 60 and the override of 15:10, so
+    the window returns to 60 at 16:15.
+    """
+    simulation = _protection_day(
+        seed,
+        {
+            STORM_SOURCE: _switched(
+                (time(14, 0), True),
+                (time(15, 0), False),
+                (time(15, 15), True),
+                (time(15, 45), False),
+            )
+        },
+    )
+    simulation.at(
+        local(MONDAY, time(12, 30)),
+        "a person lowers the window to 40",
+        lambda sim: sim.move_by_hand(WINDOW_ID, PERSON_LOWERS),
+    )
+    simulation.at(
+        local(MONDAY, time(15, 10)),
+        "the person opens the window to 60 in the waiting time",
+        lambda sim: sim.move_by_hand(WINDOW_ID, PERSON_OPENS),
+    )
+    return simulation
+
+
+def storm_with_a_source_that_drops_out(seed: int = 1) -> Simulation:
+    """Situation 14 and D6: the storm source is away from 14:30 to 16:30.
+
+    The storm began at 14:00. The event stays active while its source is
+    away, the source is reported as blind at 15:30, and the storm ends when
+    the source returns with "off" at 16:30.
+    """
+    storm = Series.of(
+        (local(MONDAY, time(0, 0)), False),
+        (local(MONDAY, time(14, 0)), True),
+        (local(MONDAY, time(14, 30)), UNAVAILABLE),
+        (local(MONDAY, time(16, 30)), False),
+    )
+    return _protection_day(seed, {STORM_SOURCE: storm})
+
+
+def storm_stuck(seed: int = 1) -> Simulation:
+    """Return the watchdog: a storm source stuck on from 01:00, off once, on again.
+
+    The event is released at 13:00, after its maximum duration of 12 hours,
+    and the schedule acts again. The source is genuinely off from 14:00 to
+    14:30; its activation at 14:30 makes the event effective again, until
+    15:30.
+    """
+    return _protection_day(
+        seed,
+        {
+            STORM_SOURCE: _switched(
+                (time(1, 0), True),
+                (time(14, 0), False),
+                (time(14, 30), True),
+                (time(15, 30), False),
+            )
+        },
+        position=0,
+        start=time(0, 0),
+    )
+
+
+def storm_and_hail(seed: int = 1) -> Simulation:
+    """Two events at once: a storm from 14:00 to 16:00 and hail from 14:30 to 14:45.
+
+    Hail ranks above the storm and opens; when it ends, the storm, which is
+    active, outranks the hail in its waiting time and closes again.
+    """
+    return _protection_day(
+        seed,
+        {
+            STORM_SOURCE: _switched((time(14, 0), True), (time(16, 0), False)),
+            HAIL_SOURCE: _switched((time(14, 30), True), (time(14, 45), False)),
+        },
+    )
+
+
+def fire_during_a_storm(seed: int = 1) -> Simulation:
+    """Fire wins over a storm, unstaggered; after the acknowledgement the storm applies.
+
+    The storm lasts from 14:00 to 16:00, the fire alarm from 14:30 to 14:40;
+    it is acknowledged at 15:00.
+    """
+    simulation = _protection_day(
+        seed,
+        {
+            STORM_SOURCE: _switched((time(14, 0), True), (time(16, 0), False)),
+            FIRE_SOURCE: _switched((time(14, 30), True), (time(14, 40), False)),
+        },
+    )
+    simulation.at(
+        local(MONDAY, time(15, 0)),
+        "the fire alarm is acknowledged",
+        lambda sim: sim.acknowledge_fire(WINDOW_ID),
+    )
+    return simulation
+
+
+PROTECTION_RESTARTS: Final = {
+    "active": time(14, 30),
+    "waiting": time(15, 10),
+    "returned": time(15, 40),
+}
+"""A restart during the storm, during its waiting time, and after the return."""
+
+
+def storm_return_with_restart(restart: str | None, seed: int = 1) -> Simulation:
+    """Return situations 8 and 9 with a restart at one point; ``None``: none."""
+    simulation = storm_after_an_override(seed)
+    if restart is not None:
+        simulation.at(
+            local(MONDAY, PROTECTION_RESTARTS[restart]),
+            "restart",
+            lambda sim: sim.restart(),
+        )
+    return simulation
+
+
+def storm_stuck_with_restart(restart: time | None, seed: int = 1) -> Simulation:
+    """Return the watchdog scenario with a restart during a release; ``None``: none."""
+    simulation = storm_stuck(seed)
+    if restart is not None:
+        simulation.at(local(MONDAY, restart), "restart", lambda sim: sim.restart())
+    return simulation
+
+
+# --- External requests (block C07, kept apart from protection) ---------------------------
+#
+# Layer 4 of section 2.1: an automation requests a position with a reason and
+# an expiry. The request waits below an active sleep mode (decision 2; the
+# stand-in for block C11), expires, is cleared, and in dry-run only shows what
+# would have been sent.
+
+REQUESTED: Final = 40
+"""The position the automation of the request scenarios asks for."""
+
+
+def _requesting(seed: int, *, start: time = time(9, 0), **arguments: Any) -> Simulation:
+    """Return one window, open, on a Monday: the schedule wants the day position."""
+    return one_window(seed, local(MONDAY, start), position=100, **arguments)
+
+
+def request_below_sleep_mode(seed: int = 1) -> Simulation:
+    """Return a request at 06:30 while sleep mode is on until 06:50: nothing moves.
+
+    The alarm clock of an automation asks for 60 until 08:00. Sleep mode holds
+    the window closed; when it ends at 06:50, the request wins below it and
+    above the schedule, which still says night; at 08:00 it expires and the
+    schedule opens.
+    """
+    night = local(MONDAY, time(0, 0))
+    script = calm_sources(night).with_series(
+        SLEEP_SOURCE, Series.of((night, True), (local(MONDAY, time(6, 50)), False))
+    )
+    script = script.with_series(SLEEP_SINCE, Series.constant(night.isoformat(), night))
+    simulation = one_window(
+        seed,
+        local(MONDAY, time(5, 0)),
+        script=script,
+        position=0,
+        layers=(*FEATURE_LAYERS, SLEEP_STAND_IN),
+    )
+    simulation.at(
+        local(MONDAY, time(6, 30)),
+        "an alarm clock requests 60 until 08:00",
+        lambda sim: sim.request(
+            WINDOW_ID, ALARM_CLOCK, "alarm clock", local(MONDAY, time(8, 0))
+        ),
+    )
+    return simulation
+
+
+ALARM_CLOCK: Final = 60
+"""The position the alarm clock of ``request_below_sleep_mode`` asks for."""
+
+
+def request_that_expires(seed: int = 1) -> Simulation:
+    """Return a request for 40 from 10:00 to 11:00; then the day position again."""
+    simulation = _requesting(seed)
+    simulation.at(
+        local(MONDAY, time(10, 0)),
+        "an automation requests 40 for an hour",
+        lambda sim: sim.request(
+            WINDOW_ID, REQUESTED, "scene", local(MONDAY, time(11, 0))
+        ),
+    )
+    return simulation
+
+
+def request_that_is_cleared(seed: int = 1) -> Simulation:
+    """Return a request for 40 at 10:00 without an expiry, cleared at 10:30."""
+    simulation = _requesting(seed)
+    simulation.at(
+        local(MONDAY, time(10, 0)),
+        "an automation requests 40 until it clears it",
+        lambda sim: sim.request(WINDOW_ID, REQUESTED, "scene"),
+    )
+    simulation.at(
+        local(MONDAY, time(10, 30)),
+        "the automation clears its request",
+        lambda sim: sim.clear_request(WINDOW_ID),
+    )
+    return simulation
+
+
+def request_in_dry_run(seed: int = 1) -> Simulation:
+    """Return a request for 40 at 10:00 in dry-run: would send 40, sends nothing."""
+    simulation = _requesting(seed, controls=DRY_RUN)
+    simulation.at(
+        local(MONDAY, time(10, 0)),
+        "an automation requests 40",
+        lambda sim: sim.request(
+            WINDOW_ID, REQUESTED, "scene", local(MONDAY, time(11, 0))
+        ),
+    )
+    return simulation
+
+
 @dataclass(frozen=True, slots=True)
 class Scenario:
     """A named scenario: what it shows, how it is built, how long it runs."""
@@ -719,21 +1093,76 @@ SCENARIOS: Final[Mapping[str, Scenario]] = {
         dry_run_next_to_another_controller,
     ),
     "fire-automatic": Scenario(
-        "the stub fire trigger in the mode automatic",
+        "the fire alarm in the mode automatic",
         partial(fire_in_mode, OperatingMode.AUTOMATIC),
     ),
     "fire-protection-only": Scenario(
-        "the stub fire trigger in the mode protection only",
+        "the fire alarm in the mode protection only",
         partial(fire_in_mode, OperatingMode.PROTECTION_ONLY),
     ),
     "fire-off": Scenario(
-        "the stub fire trigger in the mode off",
+        "situation 3: the fire alarm in the mode off",
         partial(fire_in_mode, OperatingMode.OFF),
     ),
     "fire-locked": Scenario(
-        "the stub fire trigger under the maintenance lock", partial(fire_in_mode, None)
+        "situation 1: the fire alarm under the maintenance lock",
+        partial(fire_in_mode, None),
     ),
-    "fire-dry-run": Scenario("the stub fire trigger in dry-run", fire_in_dry_run),
+    "fire-dry-run": Scenario("situation 2: the fire alarm in dry-run", fire_in_dry_run),
+    "fire-unacknowledged": Scenario(
+        "situation 3a: a false alarm, a shutter closed by hand, acknowledged later",
+        fire_unacknowledged,
+        timedelta(hours=12),
+    ),
+    "storm-door-open": Scenario(
+        "situation 4: a storm while the terrace door is open (lockout stand-in)",
+        partial(storm_with_the_door, tamper=False),
+        timedelta(hours=6),
+    ),
+    "storm-door-tamper": Scenario(
+        "situation 5: the same with the tamper contact active (lockout stand-in)",
+        partial(storm_with_the_door, tamper=True),
+        timedelta(hours=6),
+    ),
+    "hail-sleep-exception": Scenario(
+        "situation 6: hail in a room marked for the sleep-room exception",
+        hail_in_a_sleeping_room,
+        timedelta(hours=6),
+    ),
+    "storm-return": Scenario(
+        "situations 8 and 9: an override, a storm, the return to the person's 40",
+        partial(storm_after_an_override, override_minutes=None),
+        timedelta(hours=6),
+    ),
+    "storm-twice": Scenario(
+        "a hand movement in the waiting time is remembered at the next storm",
+        storm_twice,
+        timedelta(hours=6),
+    ),
+    "storm-override-expired": Scenario(
+        "situation 10: the override expires during the storm; recomputed after it",
+        partial(storm_after_an_override, override_minutes=60),
+        timedelta(hours=6),
+    ),
+    "storm-source-away": Scenario(
+        "situation 14: the storm source is away; the event holds, blind after an hour",
+        storm_with_a_source_that_drops_out,
+        timedelta(hours=8),
+    ),
+    "storm-stuck": Scenario(
+        "the watchdog releases a stuck storm source and re-arms after one 'off'",
+        storm_stuck,
+    ),
+    "storm-and-hail": Scenario(
+        "two events at once: hail ranks above the storm",
+        storm_and_hail,
+        timedelta(hours=6),
+    ),
+    "fire-during-storm": Scenario(
+        "fire wins over a storm; after the acknowledgement the storm applies again",
+        fire_during_a_storm,
+        timedelta(hours=6),
+    ),
     "maintenance-lock": Scenario("a locked window over a whole day", maintenance_lock),
     "storm": Scenario(
         "a storm in the afternoon: never an intermediate position", storm
@@ -788,9 +1217,29 @@ SCENARIOS: Final[Mapping[str, Scenario]] = {
         timedelta(hours=5),
     ),
     "person-at-window": Scenario(
-        "a person opens the window during a storm; the storm lasts beyond the dam",
+        "situation 7: a person opens the window during a storm beyond the dam",
         partial(person_at_window, time(15, 0)),
         timedelta(hours=3),
+    ),
+    "request-below-sleep": Scenario(
+        "a request while sleep mode is on is accepted and moves nothing (stand-in)",
+        request_below_sleep_mode,
+        timedelta(hours=5),
+    ),
+    "request-expires": Scenario(
+        "a request of an automation for an hour, then the schedule again",
+        request_that_expires,
+        timedelta(hours=4),
+    ),
+    "request-cleared": Scenario(
+        "a request of an automation until the automation clears it",
+        request_that_is_cleared,
+        timedelta(hours=4),
+    ),
+    "request-dry-run": Scenario(
+        "a request for a window in dry-run: would have sent, sent nothing",
+        request_in_dry_run,
+        timedelta(hours=4),
     ),
     "dry-run-day": Scenario(
         "a window in dry-run next to a second controller for a whole day",

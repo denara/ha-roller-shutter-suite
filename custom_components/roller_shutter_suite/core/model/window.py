@@ -24,6 +24,14 @@ from .geometry import (
     ShadingGeometrySettings,
     member_glass_for,
 )
+from .protection import (
+    DEFAULT_SOURCE_BLIND_AFTER,
+    MAX_SOURCE_BLIND_AFTER,
+    MIN_SOURCE_BLIND_AFTER,
+    ProtectionEvents,
+    validate_protection_events,
+    validate_sleep_exception,
+)
 from .schedule import (
     TRIGGER_FIELDS,
     DayTriggers,
@@ -642,6 +650,21 @@ class WindowConfig:
       :data:`BLIND_SOURCE`: configured, but faulty, which pauses, as a
       source without a value does. The core only carries it; the Home
       Assistant layer reads it into the controls.
+    - ``fire_source``: the fire alarm of the house, an on/off source (D3).
+      ``None``: no fire layer. :data:`BLIND_SOURCE`: configured, but faulty;
+      the held state of the alarm applies, as for a source without a value.
+    - ``protection_events``: the protection events (D1, D2, D8), a list of
+      the house, each a ``ProtectionEventConfig``; or
+      :data:`EVENTS_UNREADABLE`, configured, but unreadable (the fault value).
+      Identifiers and valid ranks are unique.
+    - ``protection_sleep_exception``: the identifiers of the events that must
+      not open this window while sleep mode is active (D4). An identifier of
+      an event that does not exist has no effect.
+    - ``source_blind_after``: how long a source may be without a value before
+      it is reported as blind (default one hour): the trigger sources of the
+      protection events, the fire source, and the external pause entity of
+      the Home Assistant layer. One setting for every kind of source
+      (ruling of the project owner of 2026-09-29).
     - ``schedule_enabled`` and the other ``schedule_*`` fields: the settings of
       the schedule, one field per setting; :attr:`schedule` is the view over
       them and describes them. Per day type (workday, weekend, holiday) and
@@ -688,6 +711,10 @@ class WindowConfig:
     person_at_window_duration: timedelta = DEFAULT_PERSON_AT_WINDOW
     comfort_movements_threshold: int = DEFAULT_COMFORT_MOVEMENTS_THRESHOLD
     pause_source: str | BlindSource | None = None
+    fire_source: str | BlindSource | None = None
+    protection_events: ProtectionEvents = ()
+    protection_sleep_exception: tuple[str, ...] = ()
+    source_blind_after: timedelta = DEFAULT_SOURCE_BLIND_AFTER
     schedule_enabled: bool = _SCHEDULE_ENABLED
     schedule_workday_morning_kind: TriggerKind = _MORNING_KIND
     schedule_workday_morning_time: time = _MORNING_TIME_WORKDAY
@@ -791,6 +818,7 @@ class WindowConfig:
         _require_threshold(self.comfort_movements_threshold)
         if self.pause_source is not None and self.pause_source is not BLIND_SOURCE:
             require_identifier(self.pause_source, "the external pause entity")
+        self._validate_protection()
         given: object = self.disabled_functions
         if isinstance(given, str):
             raise TypeError("the disabled functions must be a set of identifiers")
@@ -808,6 +836,20 @@ class WindowConfig:
         refused = self._refused_combination()
         if refused is not None:
             raise refused
+
+    def _validate_protection(self) -> None:
+        """Validate the fire source, the protection events and the blind time."""
+        if self.fire_source is not None and self.fire_source is not BLIND_SOURCE:
+            require_identifier(self.fire_source, "the fire source")
+        validate_protection_events(self.protection_events)
+        validate_sleep_exception(self.protection_sleep_exception)
+        require_type(self.source_blind_after, timedelta, "the time of a blind source")
+        if not (
+            MIN_SOURCE_BLIND_AFTER <= self.source_blind_after <= MAX_SOURCE_BLIND_AFTER
+        ):
+            raise ValueError(
+                "the time of a blind source must lie within one minute and one week"
+            )
 
     def _refused_combination(self) -> SettingsCombinationError | None:
         """Build the views that have rules over several settings; return a refusal.

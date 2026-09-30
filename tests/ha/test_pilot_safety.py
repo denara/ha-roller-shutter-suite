@@ -138,7 +138,8 @@ async def _early_monday(hass: HomeAssistant, freezer: Any) -> None:
 def fire_alarm(monkeypatch: pytest.MonkeyPatch) -> FireAlarm:
     """Give every controller a stub fire layer and the real gate rules.
 
-    The integration has no fire layer yet. Every controller builds its
+    The fire layer of the integration reads a fire source that block H08
+    wires; until then the stub takes its place. Every controller builds its
     engine with ``build_arbiter`` when it is created, also after a reload
     or a restart, so the stub is put there and reaches each new controller.
     """
@@ -147,7 +148,7 @@ def fire_alarm(monkeypatch: pytest.MonkeyPatch) -> FireAlarm:
     def with_fire() -> Arbiter:
         return build_arbiter(
             [
-                *FEATURE_LAYERS,
+                *(entry for entry in FEATURE_LAYERS if entry.layer is not Layer.FIRE),
                 LayerRegistration(Layer.FIRE, alarm.layer, FunctionId.FIRE),
             ]
         )

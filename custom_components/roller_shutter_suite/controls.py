@@ -27,10 +27,12 @@ level. An entity that is unavailable or unknown, or whose state is neither
 ``on`` nor ``off``, **pauses** its level (ruling 4 of block H06): a pause holds
 back comfort only, so this is the cautious side, as with a blind protection
 source. A faulty stored reference is "configured, but blind" and pauses too.
-After :data:`~.const.PAUSE_SOURCE_BLIND_AFTER` without a value, a repair issue
-names the level that configured the entity and the entity; it disappears by
-itself when the entity has a value again. An inherited entity is reported once,
-at the level that configured it.
+After the house's time before a source is reported as blind
+(``source_blind_after``, default one hour; one setting of the house for every
+kind of source, ruling of the project owner of 2026-09-29) without a value, a
+repair issue names the level that configured the entity and the entity; it
+disappears by itself when the entity has a value again. An inherited entity
+is reported once, at the level that configured it.
 
 **A group reference that cannot be read** leaves it unknown which group's
 controls apply. The window then takes the most restrictive combination of
@@ -43,7 +45,7 @@ blind, and the window level is paused as well.
 import logging
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Final
 
 from homeassistant.config_entries import ConfigEntry
@@ -62,7 +64,7 @@ from homeassistant.helpers.event import (
 from homeassistant.util import dt as dt_util
 from homeassistant.util.hass_dict import HassKey
 
-from .const import DOMAIN, PAUSE_SOURCE_BLIND_AFTER, SUBENTRY_GROUP
+from .const import DOMAIN, SUBENTRY_GROUP
 from .core.arbiter import MODE_TABLE, effective_controls
 from .core.model import (
     BLIND_SOURCE,
@@ -83,6 +85,9 @@ _LOGGER = logging.getLogger(__name__)
 
 PAUSE_SOURCE: Final = "pause_source"
 """The key of the external pause entity in the registry of the core."""
+
+SOURCE_BLIND_AFTER: Final = "source_blind_after"
+"""The key of the time before a source without a value is reported as blind."""
 
 ISSUE_PAUSE_SOURCE_BLIND: Final = "pause_source_blind"
 """Repair issue: an external pause entity has had no value for too long."""
@@ -161,6 +166,28 @@ def own_reference(settings: PartialSettings) -> Reference:
     return value if isinstance(value, str) else None
 
 
+def blind_after_of(settings: PartialSettings) -> timedelta:
+    """Return how long an external entity may be without a value before the issue.
+
+    The house's own ``source_blind_after``: the same setting the core reads
+    for the sources of protection. Its default when the house does not set
+    it; its fault value (the same hour) when the stored value or the whole
+    level cannot be read.
+    """
+    (definition,) = (
+        entry
+        for entry in WINDOW_SETTINGS.definitions
+        if entry.key == SOURCE_BLIND_AFTER
+    )
+    if settings.unreadable or any(
+        fault.key == SOURCE_BLIND_AFTER for fault in settings.faults
+    ):
+        value: object = definition.fault_value
+    else:
+        value = settings.get(SOURCE_BLIND_AFTER)
+    return value if isinstance(value, timedelta) else definition.default
+
+
 def _read(hass: HomeAssistant, reference: str) -> AnySourceValue:
     parsed = SourceReference.parse(reference)
     return SourceValue.unavailable() if parsed is None else read_source(hass, parsed)
@@ -220,7 +247,10 @@ class ControlBoard:
         """Ask the controller of a window for a recompute; the runtime sets it."""
 
         registry = WINDOW_SETTINGS
-        self.house_reference = own_reference(level_settings(entry.data, registry))
+        house_settings = level_settings(entry.data, registry)
+        self.house_reference = own_reference(house_settings)
+        self.blind_after = blind_after_of(house_settings)
+        """When a blind external entity is reported: the setting of the house."""
         self.group_references: dict[str, Reference] = {
             group_id: own_reference(
                 level_settings(entry.subentries[group_id].data, registry)
@@ -489,7 +519,7 @@ class ControlBoard:
         known = memory.get(item.issue_id)
         if known is None or known.reference != item.reference:
             known = memory[item.issue_id] = BlindSince(item.reference, now)
-        due = known.since + PAUSE_SOURCE_BLIND_AFTER
+        due = known.since + self.blind_after
         if now >= due:
             self._report(item)
             return
@@ -508,7 +538,7 @@ class ControlBoard:
         _LOGGER.debug(
             "The external pause entity of %s has had no value for %s",
             item.name,
-            PAUSE_SOURCE_BLIND_AFTER,
+            self.blind_after,
         )
         ir.async_create_issue(
             self.hass,

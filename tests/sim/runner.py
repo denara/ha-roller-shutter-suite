@@ -37,7 +37,10 @@ from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime, timedelta
 
-from custom_components.roller_shutter_suite.core.arbiter import LayerRegistration
+from custom_components.roller_shutter_suite.core.arbiter import (
+    ConstraintRegistration,
+    LayerRegistration,
+)
 from custom_components.roller_shutter_suite.core.engine import Engine, build_arbiter
 from custom_components.roller_shutter_suite.core.model import (
     Controls,
@@ -46,6 +49,7 @@ from custom_components.roller_shutter_suite.core.model import (
     GateKind,
     MemberObservation,
     Observation,
+    Position,
     SunAlmanac,
     TrackerEvent,
     Transition,
@@ -62,7 +66,6 @@ from custom_components.roller_shutter_suite.core.schedule import (
 )
 
 from .record import Entry, EntryKind, Record, decision_summary
-from .stubs import DEFAULT_LAYERS
 from .world import World
 
 type Action = Callable[["Simulation"], None]
@@ -132,12 +135,20 @@ class Simulation:
         self,
         world: World,
         *,
-        layers: Iterable[LayerRegistration] = DEFAULT_LAYERS,
+        layers: Iterable[LayerRegistration] | None = None,
+        constraints: Iterable[ConstraintRegistration] = (),
     ) -> None:
-        """Start with a world and the layers the arbiter of every window gets."""
+        """Start with a world and what the arbiter of every window gets.
+
+        Without ``layers`` the arbiter has the layers of the integration
+        (``build_arbiter()``): the real fire, protection and schedule layers.
+        ``constraints`` are added to the built-in ones; the scenarios of block
+        C07 hand in the stand-in for lockout protection of block C08 there.
+        """
         self.world = world
         self.record = Record(world.clock.zone)
-        self._layers = tuple(layers)
+        self._layers = None if layers is None else tuple(layers)
+        self._constraints = tuple(constraints)
         self._windows: dict[str, SimWindow] = {}
         self._injected: list[_Injected] = []
         self._injected_count = 0
@@ -229,6 +240,42 @@ class Simulation:
         window = self._windows[window_id]
         self._note(EntryKind.EVENT, "resume automation", window_id=window_id)
         self._apply(window, window.engine.resume(window.state))
+        self._recompute(window)
+
+    def request(
+        self,
+        window_id: str,
+        position: int,
+        reason: str,
+        expires: datetime | None = None,
+    ) -> None:
+        """Let an automation request a position for a window (the action of H07)."""
+        window = self._windows[window_id]
+        self._note(
+            EntryKind.EVENT,
+            f"an automation requests {position} ({reason})",
+            window_id=window_id,
+        )
+        self._apply(
+            window,
+            window.engine.request(
+                window.state, Position(position), reason, expires, now=self.now
+            ),
+        )
+        self._recompute(window)
+
+    def clear_request(self, window_id: str) -> None:
+        """Let an automation clear its request for a window."""
+        window = self._windows[window_id]
+        self._note(EntryKind.EVENT, "the request is cleared", window_id=window_id)
+        self._apply(window, window.engine.clear_request(window.state))
+        self._recompute(window)
+
+    def acknowledge_fire(self, window_id: str) -> None:
+        """Acknowledge the fire alarm for a window (the action and the button)."""
+        window = self._windows[window_id]
+        self._note(EntryKind.EVENT, "fire alarm acknowledged", window_id=window_id)
+        self._apply(window, window.engine.acknowledge_fire(window.state))
         self._recompute(window)
 
     def sleep_mode_switched_on(self, window_id: str) -> None:
@@ -431,7 +478,9 @@ class Simulation:
     # --- One recompute -------------------------------------------------------------------
 
     def _engine(self, config: WindowConfig) -> Engine:
-        return Engine(config, build_arbiter(self._layers))
+        return Engine(
+            config, build_arbiter(self._layers, constraints=self._constraints)
+        )
 
     def _load(self, window: SimWindow) -> None:
         data = self.world.storage.load_window_state(window.window_id)
@@ -596,6 +645,10 @@ class Simulation:
 def _event_text(event: TrackerEvent) -> str:
     """Return one readable line for an event of the tracker or the dams."""
     parts = [event.code.value]
+    if event.event_id is not None:
+        parts.append(f"[{event.event_id}]")
+    if event.source is not None:
+        parts.append(f"(source {event.source})")
     if event.position is not None:
         parts.append(f"at {event.position.value}")
     if event.count is not None:

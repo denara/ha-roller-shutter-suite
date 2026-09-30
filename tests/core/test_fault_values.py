@@ -65,6 +65,7 @@ from custom_components.roller_shutter_suite.core.settings import (
 from tests.core.arbiter_kit import LEFT, day
 from tests.core.fault_value_situations import (
     FAULT_CASES,
+    FIRE_SOURCE,
     READ_OUTSIDE_THE_ARBITER,
     SITUATIONS,
     Situation,
@@ -151,6 +152,8 @@ def test_every_function_with_settings_that_fall_back_has_a_situation() -> None:
     """A later block that registers such a setting fails here until it adds one."""
     assert not missing_situations(), "\n".join(missing_situations())
     assert {definition.function for definition in CAUTIOUS} == {
+        FunctionId.FIRE,
+        FunctionId.PROTECTION_EVENTS,
         FunctionId.FROST,
         FunctionId.MOTOR_PROTECTION,
         FunctionId.COMMAND_VERIFICATION,
@@ -289,7 +292,8 @@ PERSON_CHOSE_PROTECTION = dataclasses.replace(
 BURNING_TOO = dataclasses.replace(
     PERSON_CHOSE_PROTECTION,
     name="the same window while the fire alarm is active",
-    sources={**PERSON_CHOSE_PROTECTION.sources, "fire_alarm": SourceValue.of(True)},
+    sources={**PERSON_CHOSE_PROTECTION.sources, FIRE_SOURCE: SourceValue.of(True)},
+    settings={**PERSON_CHOSE_PROTECTION.settings, "fire_source": FIRE_SOURCE},
 )
 
 

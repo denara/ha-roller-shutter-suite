@@ -172,6 +172,7 @@ def test_no_function_of_a_constraint_or_a_gate_rule_can_be_paused() -> None:
         entry.function for entry in build_arbiter().gate_rules if entry.function
     } | {entry.function for entry in build_arbiter().constraints if entry.function}
     assert declared == {
+        FunctionId.PROTECTION_EVENTS,
         FunctionId.FROST,
         FunctionId.MOTOR_PROTECTION,
         FunctionId.MANUAL_OVERRIDE,
@@ -183,6 +184,8 @@ def test_every_function_with_settings_has_a_listener() -> None:
     """For the arbiter of the integration and the settings that are registered."""
     check_listeners(build_arbiter(), functions_with_settings(), NOT_BUILT_YET)
     assert functions_with_settings() >= {
+        FunctionId.FIRE,
+        FunctionId.PROTECTION_EVENTS,
         FunctionId.FROST,
         FunctionId.MOTOR_PROTECTION,
         FunctionId.PAUSE,

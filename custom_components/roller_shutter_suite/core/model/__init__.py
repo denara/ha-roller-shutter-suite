@@ -19,7 +19,9 @@ also uses ``controls`` and ``almanac``. ``schedule`` (the settings of the
 schedule as values) depends on ``_validation`` and ``values`` and is used by
 ``window``; ``almanac`` depends on ``_validation`` and ``_data``. ``geometry``
 (the measurements of shading as values) depends on ``_validation`` and
-``values`` and is used by ``window``.
+``values`` and is used by ``window``. ``protection`` (the protection events of
+the house as values) depends on ``_validation`` and ``values`` and is used by
+``window``.
 
 Conventions that hold for the whole package:
 
@@ -53,6 +55,7 @@ from .decision import (
     Wish,
     WishClass,
     WishKind,
+    WishSubject,
 )
 from .functions import FaultBehavior, FunctionId
 from .geometry import (
@@ -84,6 +87,24 @@ from .observation import (
     TravelDirection,
     WindowObservation,
 )
+from .protection import (
+    DEFAULT_MAX_DURATION,
+    DEFAULT_SOURCE_BLIND_AFTER,
+    DEFAULT_WAITING_TIME,
+    EVENTS_UNREADABLE,
+    MAX_MAX_DURATION,
+    MAX_RANK,
+    MAX_SOURCE_BLIND_AFTER,
+    MAX_WAITING_TIME,
+    MIN_RANK,
+    MIN_SOURCE_BLIND_AFTER,
+    EventDirection,
+    ProtectionEventConfig,
+    ProtectionEvents,
+    ProtectionTrigger,
+    TriggerType,
+    UnreadableEvents,
+)
 from .schedule import (
     MAX_RANDOM_OFFSET,
     MAX_SUN_OFFSET_MINUTES,
@@ -100,6 +121,7 @@ from .schedule import (
 from .snapshot import WorldSnapshot
 from .state import (
     WINDOW_STATE_SCHEMA_VERSION,
+    BlindClock,
     ComfortMovementCount,
     DayType,
     ExternalRequest,
@@ -119,6 +141,7 @@ from .state import (
     WindowState,
 )
 from .tracking import (
+    EVENT_CODES_OF_OTHER_GROUPS,
     SELF_MEASUREMENT_SAMPLES,
     MemberTracking,
     SampleStatistic,
@@ -183,13 +206,18 @@ __all__ = [
     "BLIND_SOURCE",
     "CONSTRAINT_REASONS",
     "DEFAULT_COMFORT_MOVEMENTS_THRESHOLD",
+    "DEFAULT_MAX_DURATION",
     "DEFAULT_OVERRIDE_MINUTES",
     "DEFAULT_PERSON_AT_WINDOW",
     "DEFAULT_ROOM_EMPTY_AFTER",
+    "DEFAULT_SOURCE_BLIND_AFTER",
     "DEFAULT_STAGGER_GAP",
     "DEFAULT_TOLERANCE_CALCULATED",
     "DEFAULT_TOLERANCE_MEASURED",
     "DEFAULT_TRAVEL_TIME",
+    "DEFAULT_WAITING_TIME",
+    "EVENTS_UNREADABLE",
+    "EVENT_CODES_OF_OTHER_GROUPS",
     "FULLY_CLOSED",
     "FULLY_OPEN",
     "GATE_RULE_REASONS",
@@ -198,18 +226,24 @@ __all__ = [
     "MAX_AMPLIFICATION_CAP",
     "MAX_COMFORT_MOVEMENTS_THRESHOLD",
     "MAX_DAM_DURATION",
+    "MAX_MAX_DURATION",
     "MAX_MEASURED_LENGTH",
     "MAX_RANDOM_OFFSET",
+    "MAX_RANK",
     "MAX_REPORTING_TIME",
+    "MAX_SOURCE_BLIND_AFTER",
     "MAX_STAGGER_GAP",
     "MAX_STATED_TOLERANCE",
     "MAX_SUN_OFFSET_MINUTES",
     "MAX_TOLERANCE",
     "MAX_TRAVEL_TIME",
     "MAX_TRIGGER_ELEVATION",
+    "MAX_WAITING_TIME",
     "MEMBER_MEASUREMENT_FIELDS",
     "MIN_CALIBRATION_SPAN",
     "MIN_DAM_DURATION",
+    "MIN_RANK",
+    "MIN_SOURCE_BLIND_AFTER",
     "MIN_TOLERANCE",
     "MIN_TRAVEL_TIME",
     "NO_CALIBRATION",
@@ -220,6 +254,7 @@ __all__ = [
     "TRIGGER_FIELDS",
     "WINDOW_STATE_SCHEMA_VERSION",
     "AnySourceValue",
+    "BlindClock",
     "BlindSource",
     "CapabilityProfile",
     "CapabilityState",
@@ -237,6 +272,7 @@ __all__ = [
     "ElevationPassage",
     "EvaluationFault",
     "EvaluationStage",
+    "EventDirection",
     "ExternalRequest",
     "FaultBehavior",
     "FrostSettings",
@@ -278,8 +314,11 @@ __all__ = [
     "PositionReference",
     "PositionSource",
     "PositionUpdates",
+    "ProtectionEventConfig",
     "ProtectionEventState",
     "ProtectionEventStatus",
+    "ProtectionEvents",
+    "ProtectionTrigger",
     "ReportingKind",
     "SampleStatistic",
     "ScheduleProfile",
@@ -306,6 +345,8 @@ __all__ = [
     "TravelDirection",
     "Trigger",
     "TriggerKind",
+    "TriggerType",
+    "UnreadableEvents",
     "WindowCapabilities",
     "WindowCapabilityStates",
     "WindowConfig",
@@ -314,6 +355,7 @@ __all__ = [
     "Wish",
     "WishClass",
     "WishKind",
+    "WishSubject",
     "WorldSnapshot",
     "member_glass_for",
 ]

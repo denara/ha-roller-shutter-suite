@@ -9,6 +9,7 @@ writes the reports a cover of that profile would write.
 Time is controlled by the ``freezer`` fixture; no test sleeps.
 """
 
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -18,6 +19,7 @@ from homeassistant.core import Context, Event, HomeAssistant, callback
 from homeassistant.util.hass_dict import HassKey
 
 from custom_components.roller_shutter_suite.const import EVENT_REASON
+from custom_components.roller_shutter_suite.controller import WAKE_UP_TRACKER, WakeUp
 from custom_components.roller_shutter_suite.core.arbiter import member_expectation_end
 from custom_components.roller_shutter_suite.core.model import (
     MemberState,
@@ -604,3 +606,229 @@ async def test_an_expectation_whose_deadline_passed_before_the_start_is_a_gap(
     # Before the first decision nobody knows whether protection wins: the
     # person-at-the-window dam (ruling of the project owner for block C06).
     assert (controller_of(entry).state.person_at_window is not None) is dammed
+
+
+# ---------------------------------------------------------------------------
+# The real fire layer of block C07 on the wired tracker
+# ---------------------------------------------------------------------------
+
+SMOKE = "binary_sensor.example_smoke"
+"""The fire source of the house, the one source of block C07 the runtime reads."""
+
+WITH_SMOKE_DETECTOR: dict[str, Any] = {**FIXED_ROUTINE, "fire_source": SMOKE}
+
+
+REPORTING_TIME = timedelta(minutes=5)
+"""The reporting time of a cover whose reports may come five minutes late."""
+
+
+async def closed_in_the_evening(
+    hass: HomeAssistant, freezer: Any, data: dict[str, Any] | None = None
+) -> Any:
+    """Set an armed window up at 20:30, its cover closed where the evening wants it.
+
+    ``data`` is the stored data of the window (``window_data``); by default
+    its cover is stated as event-driven, reporting at once.
+    """
+    freezer.move_to(local(20, 30))
+    hass.states.async_set(SMOKE, STATE_OFF)
+    set_cover(hass, COVER, position=0, state="closed")
+    entry = await setup_window(
+        hass, data, house=WITH_SMOKE_DETECTOR, covers_present=False, freezer=freezer
+    )
+    assert commands_sent(entry) == []
+    codes(entry)
+    return entry
+
+
+def winning_reason(entry: Any) -> ReasonCode | None:
+    """Return the reason of the winning wish of the last decision."""
+    decision = controller_of(entry).status.decision
+    assert decision is not None
+    return None if decision.winning_wish is None else decision.winning_wish.reason
+
+
+async def test_fire_passes_an_armed_override_and_its_movement_is_the_own_one(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The fire bypass on a live override, and the tracker follows the fire command.
+
+    A person opened the shutter to 40, so the override holds the window. The
+    alarm opens it at once all the same (the bypass skips the dam), and the
+    travel of the fire command is the integration's own movement: no event
+    of a movement by hand, no dam. Its expectation ends at the one deadline
+    of the core, and the timer of the controller is armed for that instant
+    as its next wake-up, one of the tracker.
+    """
+    entry = await closed_in_the_evening(hass, freezer)
+    set_cover(hass, COVER, position=0, state="opening")
+    await settle(hass, freezer)
+    set_cover(hass, COVER, position=40, state="open")
+    await settle(hass, freezer, seconds=5)
+    assert ReasonCode.OVERRIDE_STARTED in codes(entry)
+    controller = controller_of(entry)
+    assert controller.state.manual_override is not None
+
+    hass.states.async_set(SMOKE, STATE_ON)
+    await settle(hass, freezer)
+
+    assert [call.target.value for call in commands_sent(entry)] == [100]
+    member = controller.state.member_state(COVER)
+    command = member.last_own_command
+    assert command is not None
+    assert command.wish_class is WishClass.FIRE
+    assert member.tracking.phase is TrackerPhase.EXPECTING
+    deadline = member_expectation_end(controller.config.members[0], command)
+    assert controller.status.wake_up == WakeUp(deadline, WAKE_UP_TRACKER)
+
+    for state, position in (("opening", 60), ("open", 100)):
+        freezer.tick(timedelta(seconds=10))
+        set_cover(hass, COVER, position=position, state=state)
+        await settle(hass, freezer)
+    await settle(hass, freezer, seconds=5)
+
+    assert codes(entry) == []
+    assert controller.state.member_state(COVER).tracking == MemberTracking()
+    assert controller.state.person_at_window is None
+    assert len(commands_sent(entry)) == 1
+    assert winning_reason(entry) is ReasonCode.FIRE_ALARM
+
+
+async def test_a_fire_command_nobody_answers_is_sent_again_at_its_deadline(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """Section 2.4: fire is sent again at once when its expectation window closed.
+
+    The window is the one deadline of the core (``member_expectation_end``),
+    and the stated reporting time of the cover, five minutes, is part of it.
+    A recompute shortly before that deadline, long after the window of a
+    cover that reports at once would have closed, repeats nothing: the
+    command is still pending. At the deadline the tracker reads "no
+    reaction" once, no dam is armed, and fire sends again.
+    """
+    late = {
+        COVER: {
+            "reporting_kind": "event_driven",
+            "reporting_time": int(REPORTING_TIME.total_seconds()),
+        }
+    }
+    entry = await closed_in_the_evening(hass, freezer, window_data(members=late))
+    hass.states.async_set(SMOKE, STATE_ON)
+    await settle(hass, freezer)
+    controller = controller_of(entry)
+    command = controller.state.member_state(COVER).last_own_command
+    assert command is not None
+    member = controller.config.members[0]
+    deadline = member_expectation_end(member, command)
+    at_once = replace(
+        member, capabilities=replace(member.capabilities, reporting_time=timedelta(0))
+    )
+    assert deadline == member_expectation_end(at_once, command) + REPORTING_TIME
+
+    await advance(hass, freezer, deadline - timedelta(seconds=30))
+    controller.async_request_recompute()
+    await settle(hass, freezer)
+    decision = controller.status.decision
+    assert controller.status.last_recompute == controller.clock.now()
+    assert decision is not None
+    assert decision.gate is not None
+    assert decision.gate.reason is ReasonCode.DUPLICATE_COMMAND
+    assert len(commands_sent(entry)) == 1
+    assert codes(entry) == []
+
+    await advance(hass, freezer, deadline + timedelta(seconds=1))
+    assert [call.target.value for call in commands_sent(entry)] == [100, 100]
+    assert codes(entry) == [ReasonCode.ACTUATOR_NO_REACTION]
+    assert controller.state.manual_override is None
+    assert controller.state.person_at_window is None
+
+
+async def test_after_the_alarm_a_hand_movement_arms_the_override_and_nothing_reopens(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """Section 2.4: the unacknowledged alarm leaves alone and never fights a person.
+
+    The alarm opened the shutter and ended. A person closes it again: the
+    tracker takes that for a movement by hand and arms the manual override
+    (no protection wish wins), and nothing reopens the shutter.
+    """
+    entry = await closed_in_the_evening(hass, freezer)
+    hass.states.async_set(SMOKE, STATE_ON)
+    await settle(hass, freezer)
+    set_cover(hass, COVER, position=100, state="open")
+    await settle(hass, freezer, seconds=5)
+    hass.states.async_set(SMOKE, STATE_OFF)
+    await settle(hass, freezer)
+    assert winning_reason(entry) is ReasonCode.FIRE_UNACKNOWLEDGED
+    assert codes(entry) == []
+
+    set_cover(hass, COVER, position=100, state="closing")
+    await settle(hass, freezer)
+    assert codes(entry) == [
+        ReasonCode.MANUAL_DETECTED,
+        ReasonCode.MANUAL_DETECTED_MEMBER,
+        ReasonCode.OVERRIDE_STARTED,
+    ]
+    set_cover(hass, COVER, position=0, state="closed")
+    await settle(hass, freezer, seconds=5)
+    await advance(hass, freezer, local(20, 45))
+
+    state = controller_of(entry).state
+    assert state.manual_override is not None
+    assert state.manual_override.remembered_position == Position(0)
+    assert state.person_at_window is None
+    assert state.owner is PositionOwner.USER
+    assert state.fire_unacknowledged
+    assert winning_reason(entry) is ReasonCode.FIRE_UNACKNOWLEDGED
+    assert len(commands_sent(entry)) == 1
+
+
+async def test_a_stale_fire_expectation_is_dropped_and_the_alarm_still_holds(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The leftover of an old fire command next to an unacknowledged alarm.
+
+    The deadline of the fire command passed long before the start, and the
+    cover still stands where it was last seen, short of the target: judged,
+    the expectation would read "no reaction". The clean-up drops it instead:
+    the member is idle, nothing is raised, no dam is armed. It leaves the
+    state of the alarm alone, so the unacknowledged alarm still holds the
+    day back, which would open the closed shutter.
+    """
+    command = OwnCommand(
+        command_id="old-fire",
+        target=Position(100),
+        direction=TravelDirection.UP,
+        time=local(9, 0),
+        wish_class=WishClass.FIRE,
+        reason=ReasonCode.FIRE_ALARM,
+    )
+    stored = WindowState(
+        fire_unacknowledged=True,
+        members=(
+            MemberState(
+                COVER,
+                last_own_command=command,
+                last_observation=Observation(MovementState.RESTING, Position(0)),
+                tracking=MemberTracking(
+                    phase=TrackerPhase.EXPECTING, command_id=command.command_id
+                ),
+            ),
+        ),
+    )
+    storage_of(hass).save_window_state(WINDOW_ID, stored.to_data())
+    hass.states.async_set(SMOKE, STATE_OFF)
+    set_cover(hass, COVER, position=0, state="closed")
+    entry = await setup_window(
+        hass, house=WITH_SMOKE_DETECTOR, covers_present=False, freezer=freezer
+    )
+    await advance(hass, freezer, local(10, 5))
+
+    state = controller_of(entry).state
+    assert codes(entry) == []
+    assert state.member_state(COVER).tracking.phase is TrackerPhase.IDLE
+    assert state.manual_override is None
+    assert state.person_at_window is None
+    assert state.fire_unacknowledged
+    assert winning_reason(entry) is ReasonCode.FIRE_UNACKNOWLEDGED
+    assert commands_sent(entry) == []

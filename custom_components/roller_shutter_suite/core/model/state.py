@@ -398,6 +398,48 @@ class ComfortMovementCount:
 
 
 @dataclass(frozen=True, slots=True)
+class BlindClock:
+    """The clock of a source without a value (section 10.1, "a blind protection").
+
+    ``missing_since`` is the time since which the source has had no value
+    without interruption; ``reported`` says that it has been reported as
+    blind in this blind phase already, so the event is raised once per
+    phase. The clock is dropped as soon as the source has a value again. One
+    shape for every kind of source: the trigger of a protection event and the
+    fire source (block C07), and from block C08 the blocking contact of
+    lockout protection.
+    """
+
+    missing_since: datetime
+    reported: bool = False
+
+    def __post_init__(self) -> None:
+        """Validate the types and reject a naive datetime."""
+        object.__setattr__(
+            self,
+            "missing_since",
+            to_utc(self.missing_since, "the start of a blind phase"),
+        )
+        require_type(self.reported, bool, "the flag 'reported' of a blind clock")
+
+    def to_data(self) -> JsonObject:
+        """Return plain data for persistence."""
+        return {
+            "missing_since": datetime_data(self.missing_since),
+            "reported": self.reported,
+        }
+
+    @classmethod
+    def from_data(cls, data: JsonValue) -> Self:
+        """Rebuild the clock from plain data."""
+        content = as_object(data, "missing_since", "reported")
+        return cls(
+            missing_since=read(content, "missing_since", as_datetime),
+            reported=read(content, "reported", as_bool),
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class ProtectionEventState:
     """What is persisted per protection event.
 
@@ -417,7 +459,12 @@ class ProtectionEventState:
     otherwise the end.
 
     The remembered position and owner are those the window had when the event
-    started; a position that was not known is ``None``.
+    started; a position that was not known is ``None``. ``override_armed_at``
+    is when the manual override that was armed at the start had been armed
+    (``None`` without one): the return after the event restores the
+    remembered position only while that same override is still armed
+    (decision 4). ``blind`` is the clock of the trigger source while it has
+    no value. The last two keys are optional within schema version 1.
     """
 
     event_id: str
@@ -427,6 +474,8 @@ class ProtectionEventState:
     released_at: datetime | None = None
     remembered_position: Position | None = None
     remembered_owner: PositionOwner | None = None
+    override_armed_at: datetime | None = None
+    blind: BlindClock | None = None
 
     def __post_init__(self) -> None:
         """Validate the types and reject naive datetimes."""
@@ -458,6 +507,12 @@ class ProtectionEventState:
             require_type(self.remembered_position, Position, "the remembered position")
         if self.remembered_owner is not None:
             require_type(self.remembered_owner, PositionOwner, "the remembered owner")
+        object.__setattr__(
+            self,
+            "override_armed_at",
+            to_utc_or_none(self.override_armed_at, "the arming of the override"),
+        )
+        require_optional_type(self.blind, BlindClock, "the blind clock of an event")
 
     @property
     def released(self) -> bool:
@@ -485,6 +540,8 @@ class ProtectionEventState:
             "remembered_owner": (
                 None if self.remembered_owner is None else self.remembered_owner.value
             ),
+            "override_armed_at": datetime_data(self.override_armed_at),
+            "blind": None if self.blind is None else self.blind.to_data(),
         }
 
     @classmethod
@@ -499,6 +556,8 @@ class ProtectionEventState:
             "released_at",
             "remembered_position",
             "remembered_owner",
+            "override_armed_at",
+            "blind",
         )
         return cls(
             event_id=read(content, "event_id", as_str),
@@ -512,6 +571,10 @@ class ProtectionEventState:
             remembered_owner=read(
                 content, "remembered_owner", optional(as_enum(PositionOwner))
             ),
+            override_armed_at=read_optional(
+                content, "override_armed_at", optional(as_datetime), None
+            ),
+            blind=read_optional(content, "blind", optional(BlindClock.from_data), None),
         )
 
 
@@ -592,11 +655,18 @@ class ExternalRequest:
     ``reason`` is the text the caller gave with the request. It is a subject
     attribute for status and events; a decision carries the reason code
     ``external_request`` and never this text.
+
+    ``requested_at`` is when the request arrived: the trigger of its wish, so
+    a request is a fresh wish for the minimum interval of motor protection
+    (block C07). The key is optional within schema version 1. A request
+    expires after it arrives; ``expires_at`` of ``None`` lasts until it is
+    cleared.
     """
 
     position: Position
     reason: str
     expires_at: datetime | None = None
+    requested_at: datetime | None = None
 
     def __post_init__(self) -> None:
         """Validate the types and reject a naive datetime."""
@@ -607,6 +677,17 @@ class ExternalRequest:
             "expires_at",
             to_utc_or_none(self.expires_at, "the expiry of a request"),
         )
+        object.__setattr__(
+            self,
+            "requested_at",
+            to_utc_or_none(self.requested_at, "the arrival of a request"),
+        )
+        if (
+            self.expires_at is not None
+            and self.requested_at is not None
+            and self.expires_at <= self.requested_at
+        ):
+            raise ValueError("a request expires after it arrives")
 
     def to_data(self) -> JsonObject:
         """Return plain data for persistence."""
@@ -614,16 +695,20 @@ class ExternalRequest:
             "position": self.position.value,
             "reason": self.reason,
             "expires_at": datetime_data(self.expires_at),
+            "requested_at": datetime_data(self.requested_at),
         }
 
     @classmethod
     def from_data(cls, data: JsonValue) -> Self:
         """Rebuild the request from plain data."""
-        content = as_object(data, "position", "reason", "expires_at")
+        content = as_object(data, "position", "reason", "expires_at", "requested_at")
         return cls(
             position=read(content, "position", _as_position),
             reason=read(content, "reason", as_str),
             expires_at=read(content, "expires_at", optional(as_datetime)),
+            requested_at=read_optional(
+                content, "requested_at", optional(as_datetime), None
+            ),
         )
 
 
@@ -765,6 +850,14 @@ class WindowState:
     ``comfort_movements`` is the count of own comfort movements of the
     current local day (:class:`ComfortMovementCount`); the key is optional
     within schema version 1.
+
+    The fire alarm (block C07): ``fire_alarm_active`` is the held state of the
+    fire source, the state the alarm had at its last value, so a source that
+    drops out changes nothing (D6); ``fire_unacknowledged`` is set at every
+    activation and cleared by the acknowledgement; ``fire_blind`` is the
+    clock of the fire source while it has no value. The keys
+    ``fire_alarm_active`` and ``fire_blind`` are optional within schema
+    version 1.
     """
 
     owner: PositionOwner = PositionOwner.UNKNOWN
@@ -785,6 +878,8 @@ class WindowState:
     brightness_below_since: datetime | None = None
     evening_brightness_at: datetime | None = None
     comfort_movements: ComfortMovementCount | None = None
+    fire_alarm_active: bool = False
+    fire_blind: BlindClock | None = None
 
     def __post_init__(self) -> None:
         """Validate the lists and reject naive datetimes."""
@@ -805,6 +900,7 @@ class WindowState:
             "the protection events of a window state",
         )
         require_type(self.fire_unacknowledged, bool, "the fire flag")
+        require_type(self.fire_alarm_active, bool, "the held state of the fire alarm")
         for name, expected in (
             ("manual_override", ManualOverrideDam),
             ("person_at_window", PersonAtWindowDam),
@@ -815,6 +911,7 @@ class WindowState:
             ("held_season", HeldInput),
             ("simulated", SimulatedState),
             ("comfort_movements", ComfortMovementCount),
+            ("fire_blind", BlindClock),
         ):
             require_optional_type(getattr(self, name), expected, f"the field {name!r}")
         for latch in self.latched_day_types:
@@ -943,6 +1040,10 @@ class WindowState:
                 if self.comfort_movements is None
                 else self.comfort_movements.to_data()
             ),
+            "fire_alarm_active": self.fire_alarm_active,
+            "fire_blind": None
+            if self.fire_blind is None
+            else self.fire_blind.to_data(),
         }
 
     @classmethod
@@ -973,6 +1074,8 @@ class WindowState:
             "brightness_below_since",
             "evening_brightness_at",
             "comfort_movements",
+            "fire_alarm_active",
+            "fire_blind",
         )
         version = read(content, "schema_version", as_int)
         if version != WINDOW_STATE_SCHEMA_VERSION:
@@ -1027,6 +1130,12 @@ class WindowState:
                 "comfort_movements",
                 optional(ComfortMovementCount.from_data),
                 None,
+            ),
+            fire_alarm_active=read_optional(
+                content, "fire_alarm_active", as_bool, False
+            ),
+            fire_blind=read_optional(
+                content, "fire_blind", optional(BlindClock.from_data), None
             ),
         )
 

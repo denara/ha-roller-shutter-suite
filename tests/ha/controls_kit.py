@@ -116,7 +116,13 @@ def install_alarms(monkeypatch: pytest.MonkeyPatch) -> Alarms:
     def with_alarms() -> Arbiter:
         return build_arbiter(
             [
-                *FEATURE_LAYERS,
+                # The real fire and protection layers read sources that block
+                # H08 wires; the stubs take their place here.
+                *(
+                    entry
+                    for entry in FEATURE_LAYERS
+                    if entry.layer not in (Layer.FIRE, Layer.PROTECTION)
+                ),
                 LayerRegistration(
                     Layer.PROTECTION, stub.protection, FunctionId.PROTECTION_EVENTS
                 ),
