@@ -13,7 +13,7 @@
       }),
     ]),
     'entry': dict({
-      'minor_version': 2,
+      'minor_version': 3,
       'version': 1,
     }),
     'windows': list([
@@ -77,7 +77,8 @@
                 'capabilities_known': True,
                 'position_source': 'calculated',
                 'position_updates': 'end_only',
-                'report_delay': 0.0,
+                'reporting_kind': 'event_driven',
+                'reporting_time': 0.0,
                 'reports_position': True,
                 'reports_transit_states': 'unknown',
                 'stated_tolerance': None,
@@ -1042,6 +1043,7 @@
                 'before_gap': None,
                 'command_id': None,
                 'detected': False,
+                'ended_in_gap': False,
                 'external': False,
                 'moved_at': None,
                 'phase': 'idle',

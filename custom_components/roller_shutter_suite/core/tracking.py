@@ -55,9 +55,12 @@ overrules a person, so the rules are those of section 8.3:
   members without position feedback keep ``referenced``. The flag changes no
   decision.
 - **Self-measurement:** for every own movement that came to rest on a member
-  whose position is reported event-driven (report delay zero): the latency
-  to the first report, the time to the report of rest and the deviation from
-  the target.
+  whose platform reports event-driven: the latency to the first report, the
+  time to the report of rest and the deviation from the target.
+
+A member whose reporting time the user has not stated is not tracked
+either: the tracker keeps its observations and judges nothing, the answer
+"unknown" of decision 15, never a guess of zero.
 
 A member without position feedback has no tracking and no manual detection
 (section 8.1). The glass calibration never enters the comparison: commanded
@@ -71,7 +74,11 @@ from datetime import datetime, timedelta
 from typing import Final
 
 from .arbiter import member_expectation_end, settle_time
-from .arbiter.capabilities import has_no_position_feedback
+from .arbiter.capabilities import (
+    has_no_position_feedback,
+    is_tracked,
+    reporting_time_bound,
+)
 from .dams import (
     arm_after_external_movement,
     armed_since,
@@ -90,6 +97,7 @@ from .model import (
     Observation,
     Position,
     PositionReference,
+    ReportingKind,
     TrackerEvent,
     TrackerPhase,
     Transition,
@@ -180,9 +188,14 @@ def _idle_keeping_the_gap(tracking: MemberTracking) -> MemberTracking:
     A deadline that passes while the member is unavailable ends the
     expectation, but not the gap: the observation before it is what the
     return is compared with, so a movement during the gap still reads
-    ``moved_during_downtime`` (section 8.3, "Unavailable gap").
+    ``moved_during_downtime`` (section 8.3, "Unavailable gap"). The gap
+    remembers that a deadline ended the expectation in it: only then may a
+    return at the target of the command be the own movement.
     """
-    return MemberTracking(before_gap=tracking.before_gap)
+    return MemberTracking(
+        before_gap=tracking.before_gap,
+        ended_in_gap=tracking.before_gap is not None,
+    )
 
 
 def _without_position(events: tuple[TrackerEvent, ...]) -> tuple[TrackerEvent, ...]:
@@ -205,14 +218,17 @@ def _measured(
 ) -> MemberState:
     """Return the member with one more sample of its self-measurement, if it is measured.
 
-    Only a member whose position is reported event-driven is measured: a
-    polled one reports up to a minute late, and its numbers would say nothing
-    about the cover (ruling of the project owner for block C06).
+    Only a member whose platform reports event-driven is measured: a polled
+    one reports on its grid, and its numbers would say nothing about the
+    cover (ruling of the project owner for block C06). An event-driven
+    member with a report delay is measured: its latency is how a user finds
+    the reporting time to state (reporting kind and time separated by the
+    project owner on 2026-10-01).
     """
     command = member.last_own_command
     tracking = member.tracking
     if (
-        context.member.capabilities.report_delay != timedelta(0)
+        context.member.capabilities.reporting_kind is not ReportingKind.EVENT_DRIVEN
         or command is None
         or tracking.moved_at is None
         or tracking.rested_at is None
@@ -290,7 +306,7 @@ def _detected(
         others_moving
         or (
             started is not None
-            and armed_at >= started - context.member.capabilities.report_delay
+            and armed_at >= started - reporting_time_bound(context.member.capabilities)
         )
     ):
         return Transition(update_remembered_position(state, at), (member_event,))
@@ -492,26 +508,31 @@ def _report_while_external(
 
 
 def _returned(
-    context: _Context,
-    state: WindowState,
-    member: MemberState,
-    before: Observation,
-    observation: Observation,
+    context: _Context, state: WindowState, member: MemberState, observation: Observation
 ) -> Transition | None:
     """Judge the return of an idle member from an unavailable gap; ``None``: go on.
 
-    The same observation is nothing. So is a return at the target of the
-    last own command, as in the restart reconciliation (section 11): an own
-    movement whose deadline passed during the gap may have finished in it.
-    Another position is ``moved_during_downtime``: the movement counts as
-    external, and the position may be inaccurate. A member that returns
-    moving is judged like any movement that starts in ``idle``.
+    ``member`` still carries the gap (``before_gap``, ``ended_in_gap``); the
+    state that comes back has it closed. The same observation is nothing. So is a return at the target of the
+    last own command, as in the restart reconciliation (section 11), but
+    only if a deadline ended the expectation of that command during the gap
+    (``ended_in_gap``): the own movement may have finished in it. A gap that
+    began after the own movement was judged has no own movement in it, and
+    a return at the old target is somebody's. Another position is
+    ``moved_during_downtime``: the movement counts as external, and the
+    position may be inaccurate. A member that returns moving is judged like
+    any movement that starts in ``idle``.
     """
     if observation.moving:
         return None
+    before = member.tracking.before_gap
+    ended_in_gap = member.tracking.ended_in_gap
+    assert before is not None  # noqa: S101 - only a gap returns
+    member = replace(member, tracking=_IDLE)
     command = member.last_own_command
     if not _differs(before.position, observation.position, context.tolerance) or (
-        command is not None
+        ended_in_gap
+        and command is not None
         and _near(observation.position, command.target, context.tolerance)
     ):
         return Transition(state.with_member(member))
@@ -545,13 +566,15 @@ def _report(
     """Follow a report of an available member, after the gap it may return from."""
     tracking = member.tracking
     if tracking.before_gap is not None:
-        before = tracking.before_gap
-        member = replace(member, tracking=replace(tracking, before_gap=None))
-        previous = before
-        if member.tracking.phase is TrackerPhase.IDLE:
-            returned = _returned(context, state, member, before, observation)
+        if tracking.phase is TrackerPhase.IDLE:
+            returned = _returned(context, state, member, observation)
             if returned is not None:
                 return returned
+        previous = tracking.before_gap
+        member = replace(
+            member,
+            tracking=replace(tracking, before_gap=None, ended_in_gap=False),
+        )
     elif previous is not None and not previous.available:
         # Back from a gap that began before anything was seen of the member.
         return Transition(state.with_member(member))
@@ -589,8 +612,10 @@ def observe(  # noqa: PLR0913 - the observation, its member, the time and the fa
     if member_config is None or observation == previous:
         return Transition(state)
     member = replace(member, last_observation=observation)
-    if has_no_position_feedback(member_config.capabilities):
-        return Transition(state.with_member(member))
+    if not is_tracked(member_config.capabilities):
+        # No position feedback, or a reporting time nobody stated: the
+        # observation is kept, and nothing is judged ("unknown").
+        return Transition(state.with_member(replace(member, tracking=_IDLE)))
     if not observation.available:
         tracking = member.tracking
         if previous is not None and previous.available and tracking.before_gap is None:
@@ -701,7 +726,7 @@ def elapse(
     events: list[TrackerEvent] = []
     for member_config in config.members:
         member = state.member_state(member_config.member_id)
-        if member.tracking.phase is TrackerPhase.IDLE or has_no_position_feedback(
+        if member.tracking.phase is TrackerPhase.IDLE or not is_tracked(
             member_config.capabilities
         ):
             continue

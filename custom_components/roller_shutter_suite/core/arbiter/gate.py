@@ -34,7 +34,11 @@ from custom_components.roller_shutter_suite.core.model import (
 )
 from custom_components.roller_shutter_suite.core.reasons import ReasonCode
 
-from .capabilities import cannot_execute, has_no_position_feedback
+from .capabilities import (
+    cannot_execute,
+    has_no_position_feedback,
+    reporting_time_bound,
+)
 from .controls import MODE_TABLE
 from .registry import ALL_CLASSES, GateInput, GateRuleRegistration, outranks
 
@@ -369,6 +373,12 @@ def member_expectation_end(member: MemberConfig, command: OwnCommand) -> datetim
     movement that ends in an end stop, and a fixed allowance alone would
     raise a false "did not react" on a polled platform.
 
+    The report delay is the reporting time of the capability profile: the
+    delay of an event-driven platform or the poll interval of a polled one.
+    While the user has stated none, the largest reporting time a user can
+    state counts (``reporting_time_bound``), never zero; the tracker does not
+    judge such a member at all, so only the gate and the timers read it.
+
     This is the one deadline: the gate reads it through
     ``expectation_window_end`` (a command counts as pending until then), the
     tracker judges "no reaction" and "not finished" at it, and the runtime
@@ -383,7 +393,7 @@ def member_expectation_end(member: MemberConfig, command: OwnCommand) -> datetim
     )
     return (
         command.time
-        + profile.report_delay
+        + reporting_time_bound(profile)
         + START_ALLOWANCE
         + travel_time * (command.share_of_travel * TRAVEL_SLACK)
         + END_ALLOWANCE
@@ -405,7 +415,7 @@ def settle_time(member: MemberConfig, tracking: MemberTracking) -> timedelta:
     so a person's movement on a polled platform is judged once, at its end.
     """
     if tracking.external and not tracking.transit_seen:
-        return SETTLE_TIME + member.capabilities.report_delay
+        return SETTLE_TIME + reporting_time_bound(member.capabilities)
     return SETTLE_TIME
 
 

@@ -83,7 +83,7 @@ from .actuator import (
     WindowActuator,
     fire_passed_failed_dry_run,
 )
-from .capabilities import member_config
+from .capabilities import keeping_stated, member_config
 from .const import (
     COALESCE_SECONDS,
     MIN_WAKE_UP_DISTANCE,
@@ -469,7 +469,10 @@ class WindowController:
             learned = member_config(self.hass, member.member_id)
             if not learned.capabilities.capabilities_known:
                 continue
-            members[index] = replace(member, capabilities=learned.capabilities)
+            members[index] = replace(
+                member,
+                capabilities=keeping_stated(member.capabilities, learned.capabilities),
+            )
             changed = True
         if changed:
             self.config = replace(self.config, members=tuple(members))
@@ -767,8 +770,15 @@ class WindowController:
                 != seen
             ):
                 before_gap = seen
+            # The expectation ended in that gap, so a return at the target of
+            # the command may be the own movement that finished meanwhile.
             state = state.with_member(
-                replace(member_state, tracking=MemberTracking(before_gap=before_gap))
+                replace(
+                    member_state,
+                    tracking=MemberTracking(
+                        before_gap=before_gap, ended_in_gap=before_gap is not None
+                    ),
+                )
             )
         return state
 

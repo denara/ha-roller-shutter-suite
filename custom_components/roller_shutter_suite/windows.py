@@ -21,7 +21,7 @@ from homeassistant.config_entries import ConfigEntry, ConfigSubentry
 from homeassistant.core import HomeAssistant
 
 from . import const
-from .capabilities import member_configs
+from .capabilities import member_configs, reporting_facts, with_stated
 from .const import SUBENTRY_GROUP, SUBENTRY_WINDOW
 from .core.model import MemberConfig
 from .core.settings import (
@@ -37,7 +37,11 @@ from .core.settings import (
 )
 from .flow.model import PROBE_MEMBER, PROBE_WINDOW_ID, Catalog
 from .issues import Issue
-from .stored import level_settings, read_window_identity
+from .stored import (
+    level_settings,
+    member_capability_settings,
+    read_window_identity,
+)
 
 _UNREADABLE_REFERENCE: Final = "unreadable_reference"
 
@@ -46,6 +50,7 @@ ISSUE_GROUP_MISSING: Final = "group_missing"
 ISSUE_GROUP_REFERENCE_UNREADABLE: Final = "group_reference_unreadable"
 ISSUE_DRY_RUN_UNREADABLE: Final = "dry_run_unreadable"
 ISSUE_ARMED_WITHOUT_DETECTION: Final = "armed_without_movement_detection"
+ISSUE_ARMED_WITHOUT_REPORTING: Final = "armed_without_reporting"
 ISSUE_OPTION_UNAVAILABLE: Final = "option_unavailable"
 ISSUE_SETTING_FAULT: Final = "setting_fault"
 ISSUE_COMBINATION: Final = "setting_combination"
@@ -185,17 +190,47 @@ def _report_faults(
         )
 
 
-def _runs_in_dry_run(stored_dry_run: bool) -> bool:
-    """Return whether a window runs in dry-run, given what its stored data says.
+def _runs_in_dry_run(
+    stored_dry_run: bool,
+    members: tuple[MemberConfig, ...],
+    result: EntryResolution,
+    subentry: ConfigSubentry,
+) -> bool:
+    """Return whether a window runs in dry-run, and report why a stored arming is held.
 
-    While the runtime does not notice a movement by hand
-    (``const.MOVEMENT_DETECTION_WIRED``), every window runs in dry-run, as the
-    page of the checks refuses to arm one: a fact of the version holds in the
-    form and in operation alike. The stored value is not rewritten. Loading
-    never writes, which would reload the entry once more, and the window the
-    user armed in a later version is armed again when that version runs.
+    The facts that refuse arming on the page of the checks hold in operation
+    alike (fail closed). While the runtime does not notice a movement by hand
+    (``const.MOVEMENT_DETECTION_WIRED``), every window runs in dry-run. A
+    window whose covers are not all event-driven with a known reporting time
+    runs in dry-run too, with an issue that names the covers (rulings of the
+    project owner, 2026-09-29 and 2026-10-01). The stored value is not
+    rewritten. Loading never writes, which would reload the entry once more,
+    and a window armed on purpose is armed again once its covers allow it.
     """
-    return stored_dry_run or not const.MOVEMENT_DETECTION_WIRED
+    if stored_dry_run:
+        return True
+    window_id = subentry.subentry_id
+    placeholders = {"window": subentry.title}
+    if not const.MOVEMENT_DETECTION_WIRED:
+        result.report(
+            Issue(
+                f"{ISSUE_ARMED_WITHOUT_DETECTION}_{window_id}",
+                ISSUE_ARMED_WITHOUT_DETECTION,
+                placeholders,
+            )
+        )
+        return True
+    facts = reporting_facts(members)
+    if facts.armable:
+        return False
+    result.report(
+        Issue(
+            f"{ISSUE_ARMED_WITHOUT_REPORTING}_{window_id}",
+            ISSUE_ARMED_WITHOUT_REPORTING,
+            placeholders | {"covers": ", ".join((*facts.not_stated, *facts.polled))},
+        )
+    )
+    return True
 
 
 def _resolve_window(
@@ -227,19 +262,6 @@ def _resolve_window(
                 placeholders,
             )
         )
-    # This version cannot arm (maintenance item X10): a window stored as armed,
-    # after a downgrade or by a test, runs in dry-run until block H10 sets the
-    # fact. The stored data is left as it is; see ``_runs_in_dry_run``.
-    dry_run = _runs_in_dry_run(identity.dry_run)
-    if dry_run and not identity.dry_run:
-        result.report(
-            Issue(
-                f"{ISSUE_ARMED_WITHOUT_DETECTION}_{window_id}",
-                ISSUE_ARMED_WITHOUT_DETECTION,
-                placeholders,
-            )
-        )
-
     group: GroupLevel | None = None
     if not identity.group_readable:
         group = GroupLevel(_UNREADABLE_REFERENCE, PartialSettings(unreadable=True))
@@ -253,7 +275,13 @@ def _resolve_window(
     elif identity.group_id is not None:
         group = GroupLevel(identity.group_id, levels.groups.get(identity.group_id))
 
-    members: tuple[MemberConfig, ...] = member_configs(hass, identity.covers)
+    members: tuple[MemberConfig, ...] = with_stated(
+        member_configs(hass, identity.covers),
+        member_capability_settings(subentry.data),
+    )
+    # A window stored as armed runs in dry-run while it cannot be armed: the
+    # stored data is left as it is; see ``_runs_in_dry_run``.
+    dry_run = _runs_in_dry_run(identity.dry_run, members, result, subentry)
     resolution = catalog.resolve(
         window_id=window_id,
         members=members,

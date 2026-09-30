@@ -121,20 +121,13 @@ def example_catalog(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.fixture
-def movement_detection(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Let windows be armed, as block H10 will once movements by hand are noticed.
-
-    This version refuses to arm (maintenance item X10): the form refuses, and
-    a window stored as armed runs in dry-run. The tests of what an armed window
-    does request this fixture; the flow and the set-up read the fact each time
-    they need it.
-    """
-    monkeypatch.setattr(const, "MOVEMENT_DETECTION_WIRED", True)
-
-
-@pytest.fixture
 def no_movement_detection(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Refuse arming as this version does, whatever the fact says later."""
+    """Refuse arming as a version that does not notice a movement by hand would.
+
+    Since block H10 the fact ships true; the guard of maintenance item X10
+    stays in place for a version that has to switch the detection off, and
+    this fixture proves that it still holds in the form and in operation.
+    """
     monkeypatch.setattr(const, "MOVEMENT_DETECTION_WIRED", False)
 
 

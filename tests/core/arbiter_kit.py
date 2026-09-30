@@ -45,6 +45,7 @@ from custom_components.roller_shutter_suite.core.model import (
     MovementState,
     Observation,
     Position,
+    ReportingKind,
     SourceValue,
     SunPosition,
     WindowConfig,
@@ -76,6 +77,9 @@ def profile(**changes: Any) -> CapabilityProfile:
         "reports_position": True,
         "travel_time_up": timedelta(seconds=20),
         "travel_time_down": timedelta(seconds=18),
+        # Stated as the user would for a platform that pushes its state.
+        "reporting_kind": ReportingKind.EVENT_DRIVEN,
+        "reporting_time": timedelta(0),
     }
     return CapabilityProfile(**(arguments | changes))
 

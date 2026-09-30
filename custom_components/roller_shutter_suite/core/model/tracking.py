@@ -33,6 +33,7 @@ from ._data import (
     datetime_data,
     optional,
     read,
+    read_optional,
     tuple_of,
 )
 from ._validation import (
@@ -83,6 +84,10 @@ class MemberTracking:
     - ``rested_at``: the report of rest that started the settle time.
     - ``before_gap``: the last available observation before the member became
       unavailable; its return is compared with it.
+    - ``ended_in_gap``: a deadline ended an expectation of an own command
+      while the member was away (``before_gap`` is set); only then may a
+      return at the target of that command be the own movement that
+      finished during the gap. Set with ``before_gap`` only.
     - ``user_hint``: a user identifier seen in the context of a report at the
       start of a foreign movement; a hint for the diagnostics that never
       decides (guardrail 6).
@@ -99,14 +104,17 @@ class MemberTracking:
     rested_at: datetime | None = None
     before_gap: Observation | None = None
     user_hint: str | None = None
+    ended_in_gap: bool = False
 
     def __post_init__(self) -> None:
         """Validate the types and the combinations of the phase."""
         require_type(self.phase, TrackerPhase, "the phase of the tracker")
         if self.command_id is not None:
             require_identifier(self.command_id, "the command of the tracker")
-        for name in ("external", "detected", "transit_seen"):
+        for name in ("external", "detected", "transit_seen", "ended_in_gap"):
             require_type(getattr(self, name), bool, f"the flag {name!r}")
+        if self.ended_in_gap and self.before_gap is None:
+            raise ValueError("only a gap can have ended an expectation")
         object.__setattr__(
             self, "moved_at", to_utc_or_none(self.moved_at, "the start of a movement")
         )
@@ -169,11 +177,16 @@ class MemberTracking:
             if self.before_gap is None
             else self.before_gap.to_data(),
             "user_hint": self.user_hint,
+            "ended_in_gap": self.ended_in_gap,
         }
 
     @classmethod
     def from_data(cls, data: JsonValue) -> Self:
-        """Rebuild the tracking of a member from plain data."""
+        """Rebuild the tracking of a member from plain data.
+
+        ``ended_in_gap`` came with block H10 within schema version 1 and is
+        optional; data without it has no expectation ended in a gap.
+        """
         content = as_object(
             data,
             "phase",
@@ -185,6 +198,7 @@ class MemberTracking:
             "rested_at",
             "before_gap",
             "user_hint",
+            "ended_in_gap",
         )
         return cls(
             phase=read(content, "phase", as_enum(TrackerPhase)),
@@ -196,6 +210,7 @@ class MemberTracking:
             rested_at=read(content, "rested_at", optional(as_datetime)),
             before_gap=read(content, "before_gap", optional(Observation.from_data)),
             user_hint=read(content, "user_hint", optional(as_str)),
+            ended_in_gap=read_optional(content, "ended_in_gap", as_bool, default=False),
         )
 
 

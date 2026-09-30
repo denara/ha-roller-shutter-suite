@@ -7,10 +7,10 @@ the window "Control window" is armed, which is the proof that the test would
 notice a call: it does move. The control window is armed the way a user arms
 it: through the page "dry-run or armed" of its reconfigure flow and the page
 of the checks that follows; the update listener reloads the entry once, as
-after every change, and the window starts armed with a clean state. This
-version refuses to arm (maintenance item X10) until block H10 lets the runtime
-notice a movement by hand; the tests arm the control window as that block
-will allow it, with the fact set for the form and the runtime of every test.
+after every change, and the window starts armed with a clean state. Nothing
+here sets a fact of the version: the runtime notices a movement by hand
+(``MOVEMENT_DETECTION_WIRED`` ships true since block H10), and the page of
+each cover states it as event-driven, as arming requires.
 
 No cover platform is loaded. The three cover actions are stand-ins that
 record every call (``runtime_kit.register_cover_services``), and the covers
@@ -37,7 +37,13 @@ from homeassistant.config_entries import (
     SubentryFlowContext,
 )
 from homeassistant.const import STATE_OFF, STATE_ON, STATE_UNAVAILABLE
-from homeassistant.core import Event, EventStateChangedData, HomeAssistant, callback
+from homeassistant.core import (
+    Context,
+    Event,
+    EventStateChangedData,
+    HomeAssistant,
+    callback,
+)
 from homeassistant.data_entry_flow import FlowResultType
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
@@ -107,12 +113,18 @@ TUESDAY = date(2026, 9, 22)
 EVENING_POSITION = 20
 """The evening position the reconfigure gives the window in dry-run."""
 
-# This version refuses to arm, in the form and in operation, until block H10
-# lets the runtime notice a movement by hand (maintenance item X10). The
-# control window is armed as it will be once H10 sets the fact, so the fact is
-# set for every test here, for the form and the runtime. The window in dry-run
-# does not depend on it: it is stored in dry-run.
-pytestmark = pytest.mark.usefixtures("movement_detection")
+EVENT_DRIVEN_PAGE: dict[str, Any] = {
+    "position_source": "calculated",
+    "reporting_kind": "event_driven",
+    "reporting_time": 0,
+}
+"""The page of the cover as a user fills it for a cover that reports at once.
+
+Both windows state it, so the movement tracker follows the window in dry-run
+as well: every movement of the other controller is observed there, and still
+nothing is sent. Arming requires it (rulings of the project owner,
+2026-09-29 and 2026-10-01).
+"""
 
 
 @pytest.fixture(autouse=True)
@@ -219,6 +231,7 @@ async def _install(hass: HomeAssistant, freezer: Any) -> ConfigEntry:
             [
                 {"name": name, "covers": [cover], "group_id": group_id},
                 *routine_inherit(),
+                EVENT_DRIVEN_PAGE,
             ],
         )
         assert created["type"] is FlowResultType.CREATE_ENTRY, created
@@ -229,8 +242,6 @@ async def _install(hass: HomeAssistant, freezer: Any) -> ConfigEntry:
             assert subentry.data[CONF_DRY_RUN] is True
 
     # Arm the control window through its form: dry-run or armed, then the checks.
-    # The fact that movements by hand are noticed is set for this whole module
-    # (``pytestmark``), for the form and the runtime alike, as block H10 will.
     control_id = _subentry_id(entry, "Control window")
     armed = await _subentry_flow(
         hass,
@@ -239,6 +250,7 @@ async def _install(hass: HomeAssistant, freezer: Any) -> ConfigEntry:
         [
             {"name": "Control window", "covers": [CONTROL_COVER], "group_id": group_id},
             *routine_inherit(),
+            EVENT_DRIVEN_PAGE,
             {"operation": "armed"},
             dict.fromkeys(ARMING_CHECKS, True),
         ],
@@ -434,6 +446,7 @@ async def test_a_window_in_dry_run_moves_nothing_through_a_whole_pilot_day(  # n
         [
             {"name": "Example window", "covers": [DRY_COVER], "group_id": group_id},
             *routine_inherit({"schedule_evening_position": float(EVENING_POSITION)}),
+            EVENT_DRIVEN_PAGE,
             {"operation": "dry_run"},
         ],
         reconfigure=dry,
@@ -513,6 +526,63 @@ async def test_a_window_in_dry_run_moves_nothing_through_a_whole_pilot_day(  # n
     assert all(e["reason"] != "manual_override" for e in fired)
     assert all(e["dry_run"] is True for e in fired if e["subentry_id"] == dry)
     _clean_state(_controller(entry, "Example window").state)
+
+
+async def test_every_movement_by_hand_of_the_dry_run_window_causes_no_call(
+    hass: HomeAssistant, freezer: Any, hass_admin_user: Any
+) -> None:
+    """The tracker follows the window in dry-run; still not one call reaches its cover.
+
+    Every movement by hand the test can make: a movement with transit states
+    in both directions, a stop in mid-travel, a reversal, a jump without a
+    transit state, a movement from a dashboard with a user in its context,
+    an unavailable gap that returns elsewhere, and all of it around the
+    morning, when the window would have sent a command. In dry-run nothing
+    arms a dam, nobody owns the position, and no real command is recorded.
+    """
+    entry = await _install(hass, freezer)
+    dry = _controller(entry, "Example window")
+
+    def by_hand(state: str, position: int, **kwargs: Any) -> None:
+        hass.states.async_set(
+            DRY_COVER,
+            state,
+            {"supported_features": 15, "current_position": position},
+            **kwargs,
+        )
+
+    moves: list[tuple[str, int]] = [
+        ("opening", 0),
+        ("opening", 40),
+        ("open", 70),
+        ("closing", 70),
+        ("opening", 60),
+        ("open", 80),
+        ("open", 20),
+        ("closing", 20),
+        ("closed", 0),
+    ]
+    for when in (local(6, 30), local(7, 0, second=1), local(12, 0)):
+        freezer.move_to(when)
+        for state, position in moves:
+            by_hand(state, position)
+            await settle(hass, freezer, seconds=3)
+        by_hand("opening", 0, context=Context(user_id=hass_admin_user.id))
+        await settle(hass, freezer, seconds=3)
+        by_hand("open", 100)
+        await settle(hass, freezer, seconds=3)
+        hass.states.async_set(DRY_COVER, STATE_UNAVAILABLE)
+        await settle(hass, freezer, seconds=3)
+        by_hand("open", 30)
+        await settle(hass, freezer, seconds=10)
+        await _obey(hass, freezer)
+
+    assert _calls_to(hass, DRY_COVER) == []
+    assert {c.member_id for c in cover_calls(hass)} <= {CONTROL_COVER}
+    assert dry.config.members[0].capabilities.movement_detection_known is True
+    _clean_state(dry.state)
+    assert dry.state.members[0].position_reference.value == "referenced"
+    assert state_of(hass, OVERRIDE).state == STATE_OFF
 
 
 async def test_after_a_restart_in_the_night_the_decision_is_the_same(

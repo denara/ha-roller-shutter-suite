@@ -157,13 +157,21 @@ async def _subentry_walk(
         basics["covers"] = [COVER if reconfigure else NEW_COVER]
     # The reconfigure flow of a window ends with "dry-run or armed".
     last = [KEEP_DRY_RUN] if reconfigure and flow == SUBENTRY_WINDOW else []
+    # The page of its one cover follows the feature pages of a window.
+    cover = [MEMBER_AS_SHOWN] if flow == SUBENTRY_WINDOW else []
     return Walk(
         flow,
         result,
         hass.config_entries.subentries.async_configure,
-        [basics, *routine_inherit(), *last],
+        [basics, *routine_inherit(), *cover, *last],
     )
 
+
+MEMBER_AS_SHOWN: dict[str, Any] = {
+    "position_source": "calculated",
+    "reporting_kind": "not_stated",
+}
+"""The page of a cover that states nothing, as a browser sends it unchanged."""
 
 WALKS = [
     "house setup",
@@ -233,9 +241,8 @@ async def test_every_page_but_the_last_says_next(
     else:
         assert [last for _, last in seen] == [False] * (len(seen) - 1) + [True]
 
-    assert seen[-1][0] == (
-        "operation" if name == "window reconfigure" else "feature_operation_pause"
-    )
+    last_page = {"window reconfigure": "operation", "window setup": "member"}
+    assert seen[-1][0] == last_page.get(name, "feature_operation_pause")
     assert counters == {
         "feature_daily_routine_workday": ("1", "3"),
         "feature_daily_routine_weekend": ("2", "3"),

@@ -47,7 +47,6 @@ from tests.ha.runtime_kit import (
 )
 
 _monday_morning = pytest.fixture(autouse=True)(monday_morning)
-pytestmark = pytest.mark.usefixtures("movement_detection")
 
 LEFT = "cover.example_left"
 RIGHT = "cover.example_right"

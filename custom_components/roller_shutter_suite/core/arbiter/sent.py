@@ -42,7 +42,7 @@ from custom_components.roller_shutter_suite.core.model import (
     WorldSnapshot,
 )
 
-from .capabilities import has_no_position_feedback
+from .capabilities import is_tracked
 from .dry_run import direction_of
 from .registry import reported_positions
 
@@ -152,10 +152,11 @@ def _expecting(
 
     It expects the command, as a whole: whatever it followed before is
     replaced. A member without position feedback has no tracking at all
-    (section 8.1).
+    (section 8.1), and neither has a member whose reporting time is unknown:
+    the tracker answers "unknown" for it.
     """
     members = {member.member_id: member for member in config.members}
-    if has_no_position_feedback(members[member_id].capabilities):
+    if not is_tracked(members[member_id].capabilities):
         return MemberTracking()
     return MemberTracking(phase=TrackerPhase.EXPECTING, command_id=command.command_id)
 

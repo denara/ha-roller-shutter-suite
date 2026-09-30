@@ -13,6 +13,7 @@ import dataclasses
 from collections.abc import Mapping
 from typing import Any
 
+import probatio
 from homeassistant.components.cover import CoverEntityFeature
 from homeassistant.config_entries import SOURCE_USER, ConfigSubentry
 from homeassistant.core import HomeAssistant
@@ -50,6 +51,9 @@ from custom_components.roller_shutter_suite.core.settings import (
 )
 from custom_components.roller_shutter_suite.features.daily_routine import (
     DAILY_ROUTINE,
+)
+from custom_components.roller_shutter_suite.flow.member_page import (
+    FIELDS as MEMBER_FIELDS,
 )
 from custom_components.roller_shutter_suite.flow.model import (
     Catalog,
@@ -342,7 +346,18 @@ async def start_subentry_flow(
 async def configure_subentry_flow(
     hass: HomeAssistant, result: Mapping[str, Any], user_input: dict[str, Any]
 ) -> dict[str, Any]:
-    """Submit one step of a subentry flow."""
+    """Submit one step of a subentry flow.
+
+    An input that is not meant for the page of a cover of a window, while
+    the flow stands on one, first leaves the pages of the covers as they are
+    shown: the tests of other pages need not know them.
+    """
+    if (
+        result.get("step_id") == MEMBER_PAGE
+        and result.get("type") is FlowResultType.FORM
+        and not set(user_input) & set(MEMBER_FIELDS)
+    ):
+        result = await leave_member_pages(hass, result)
     assert result["type"] in (FlowResultType.FORM, FlowResultType.MENU), result
     following = await hass.config_entries.subentries.async_configure(
         result["flow_id"], user_input
@@ -354,10 +369,48 @@ async def configure_subentry_flow(
 async def submit_steps(
     hass: HomeAssistant, result: Mapping[str, Any], inputs: list[dict[str, Any]]
 ) -> dict[str, Any]:
-    """Submit several steps of a subentry flow, one input per step."""
+    """Submit several steps of a subentry flow, one input per step.
+
+    Like ``run_subentry_flow``, the pages of the covers of a window that
+    follow the last input are left as they are shown.
+    """
     following = dict(result)
     for user_input in inputs:
         following = await configure_subentry_flow(hass, following, user_input)
+    return await leave_member_pages(hass, following)
+
+
+MEMBER_PAGE = "member"
+"""The step of the page of one cover of a window."""
+
+
+def page_as_shown(result: Mapping[str, Any]) -> dict[str, Any]:
+    """Return what a browser sends for a page that is submitted as it is shown.
+
+    Every field with a default sends it, every field with a suggested value
+    sends that, and an empty field sends nothing.
+    """
+    sent: dict[str, Any] = {}
+    for marker in schema_of(result):
+        if marker.default is not probatio.UNDEFINED:
+            sent[str(marker)] = marker.default()
+        elif (value := suggested_value(marker)) is not None:
+            sent[str(marker)] = value
+    return sent
+
+
+async def leave_member_pages(
+    hass: HomeAssistant, result: Mapping[str, Any]
+) -> dict[str, Any]:
+    """Submit the page of every cover as it is shown, like a user who changes nothing."""
+    following = dict(result)
+    while (
+        following.get("type") is FlowResultType.FORM
+        and following.get("step_id") == MEMBER_PAGE
+    ):
+        following = await configure_subentry_flow(
+            hass, following, page_as_shown(following)
+        )
     return following
 
 
@@ -368,11 +421,16 @@ async def run_subentry_flow(
     inputs: list[dict[str, Any]],
     reconfigure: str | None = None,
 ) -> dict[str, Any]:
-    """Start a subentry flow, feed it one input per step, return the last result."""
+    """Start a subentry flow, feed it one input per step, return the last result.
+
+    When the inputs are used up on the page of a cover of a window, the pages
+    of the covers are left as they are shown (``leave_member_pages``): the
+    tests of those pages submit their inputs explicitly.
+    """
     result = await start_subentry_flow(hass, entry, subentry_type, reconfigure)
     for user_input in inputs:
         result = await configure_subentry_flow(hass, result, user_input)
-    return result
+    return await leave_member_pages(hass, result)
 
 
 def subentry_named(entry: MockConfigEntry, title: str) -> ConfigSubentry:

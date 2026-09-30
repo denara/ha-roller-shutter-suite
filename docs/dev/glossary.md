@@ -54,7 +54,13 @@ The German texts address the reader informally, as the German interface of Home 
 | Reconfigure | Neu konfigurieren | The menu entry of Home Assistant that opens the settings of the house again, as the repair issues quote it. | issues, pages |
 | protection | Schutz | Movements that protect people or the shutters, such as from storm or hail; later versions add them. | status, pages |
 | fire alarm, acknowledge | Feueralarm, quittieren | The fire alarm and the confirmation that it is over; later versions add them. | status, pages |
-| manual operation | Bedienung von Hand | Moving a shutter by hand: with a wall switch, a remote or an app. Later versions notice it. | status, pages |
+| page of a cover | Seite eines Rollladens | The page of the window's form for one of its covers ("Cover 1 of 2" / "Rollladen 1 von 2"), with what no entity can report about it. | forms, pages |
+| position source; calculated, measured | Herkunft der Position; berechnet, gemessen | Where the position of a cover comes from: calculated from the running time by the actuator, or measured by the drive. | forms, pages |
+| tolerance | Toleranz | How far a reported position may lie from the target and still count as reached. | forms, pages |
+| how the cover reports; event-driven, polled | wie der Rollladen meldet; ereignisgesteuert, abgefragt | Whether the cover tells Home Assistant about every change by itself, possibly late, or is asked on a schedule. Stated by you; "not stated" / "nicht angegeben" until then. | forms, issues, pages |
+| reporting time | Meldezeit | How late the reports of an event-driven cover arrive at most, or how often a polled cover is asked. | forms, issues, pages |
+| travel time up, travel time down | Fahrzeit nach oben, Fahrzeit nach unten | How long a shutter takes from fully closed to fully open, and back. | forms, pages |
+| manual operation | Bedienung von Hand | Moving a shutter by hand: with a wall switch, a remote or an app. Roller Shutter Suite notices it on a cover that reports its position. | status, pages |
 | manual override | Handbetrieb | The time after a manual operation during which automatic movements wait. Also the name of a status entity. | status, pages |
 | pause | Pause, pausiert | Holds back comfort movements of a window, a group or the house on purpose; protection and the fire alarm still move the shutter. Also the name of a switch. | forms, status, pages |
 | pause entity | Pausen-Entität | An entity of your own that pauses the house, a group or a window while it is on; one without a state pauses as well. | forms, issues, pages |

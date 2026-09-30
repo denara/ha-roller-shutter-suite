@@ -25,6 +25,7 @@ from custom_components.roller_shutter_suite.core.model import (
     Position,
     PositionOwner,
     PositionReference,
+    ReportingKind,
     SourceValue,
     TrackerPhase,
     TransitReporting,
@@ -404,7 +405,7 @@ def test_a_small_change_in_idle_within_the_tolerance_is_nothing() -> None:
 def test_on_a_member_with_a_report_delay_a_foreign_movement_settles_longer() -> None:
     """The next report can come a report delay later; the movement is judged once."""
     delay = timedelta(seconds=60)
-    subject = driver(profiles={LEFT: profile(report_delay=delay)})
+    subject = driver(profiles={LEFT: profile(reporting_time=delay)})
     subject.report(resting(100))
     subject.at(60).report(resting(70))
     subject.at(70).recompute()
@@ -636,7 +637,7 @@ def test_a_gap_that_spans_the_deadline_still_sees_a_movement_by_hand(
     assert _tracking(subject).phase is phase
     deadline = _gap_spanning_the_deadline(subject, 3)
     assert deadline_event in codes(subject.events)
-    assert _tracking(subject) == MemberTracking(before_gap=before)
+    assert _tracking(subject) == MemberTracking(before_gap=before, ended_in_gap=True)
 
     raised = subject.at(deadline + 60).report(resting(40))
 
@@ -682,6 +683,45 @@ def test_a_return_at_the_own_target_after_the_deadline_is_nothing(
     assert subject.events == before
     assert subject.state.manual_override is None
     assert subject.state.owner is PositionOwner.ENGINE
+
+
+def test_a_return_at_the_old_target_after_a_gap_without_a_deadline_is_a_person() -> (
+    None
+):
+    """The rule of the own target holds only for a gap in which a deadline ended.
+
+    Carry-over from the review of C06: the own movement was judged before
+    the gap, a person lowered the shutter, and during the gap somebody raised
+    it to where the last own command had sent it. Nothing of the integration
+    moved in the gap, so the return is somebody's movement.
+    """
+    subject = driver()
+    _opening(subject)
+    subject.at(0.7).report(moving_up(4))
+    subject.at(20).report(resting(100))
+    _settle(subject, 20)
+    assert _tracking(subject) == MemberTracking()
+    subject.at(100).report(moving_down(100))
+    subject.at(110).report(resting(40))
+    _settle(subject, 110)
+    subject.at(200).report(UNAVAILABLE)
+    assert _tracking(subject) == MemberTracking(before_gap=resting(40))
+
+    raised = subject.at(300).report(resting(100))
+
+    assert ReasonCode.MOVED_DURING_DOWNTIME in codes(raised)
+    assert subject.state.owner is PositionOwner.USER
+
+
+def test_the_flag_of_a_deadline_in_a_gap_needs_a_gap_and_survives_the_storage() -> None:
+    """``ended_in_gap`` stands next to ``before_gap`` only; older data has none."""
+    with pytest.raises(ValueError, match="only a gap"):
+        MemberTracking(ended_in_gap=True)
+    tracking = MemberTracking(before_gap=resting(40), ended_in_gap=True)
+    assert MemberTracking.from_data(tracking.to_data()) == tracking
+    older = tracking.to_data()
+    del older["ended_in_gap"]
+    assert MemberTracking.from_data(older) == MemberTracking(before_gap=resting(40))
 
 
 def test_a_gap_that_starts_in_idle_is_unchanged_by_a_deadline() -> None:
@@ -815,9 +855,12 @@ def test_the_blocks_that_know_of_frost_can_make_a_position_uncertain_once() -> N
 # --- The self-measurement ---------------------------------------------------------------
 
 
-def test_a_member_with_a_report_delay_is_not_measured() -> None:
-    """A polled member reports up to a minute late; its numbers say nothing."""
-    subject = driver(profiles={LEFT: profile(report_delay=timedelta(seconds=8))})
+def test_a_polled_member_is_not_measured() -> None:
+    """A polled member reports on its grid; its numbers say nothing."""
+    polled = profile(
+        reporting_kind=ReportingKind.POLLED, reporting_time=timedelta(seconds=8)
+    )
+    subject = driver(profiles={LEFT: polled})
     _opening(subject)
     subject.at(8.7).report(moving_up(4))
     subject.at(28).report(resting(100))
@@ -825,6 +868,38 @@ def test_a_member_with_a_report_delay_is_not_measured() -> None:
 
     assert subject.events == []
     assert subject.state.member_state(LEFT).self_measurement.latency_ms == ()
+
+
+def test_an_event_driven_member_with_a_report_delay_is_measured() -> None:
+    """Its latency is how a user finds the reporting time to state (2026-10-01)."""
+    subject = driver(profiles={LEFT: profile(reporting_time=timedelta(seconds=8))})
+    _opening(subject)
+    subject.at(8.7).report(moving_up(4))
+    subject.at(28).report(resting(100))
+    _settle(subject, 28)
+
+    assert subject.events == []
+    assert subject.state.member_state(LEFT).self_measurement.latency_ms == (8700,)
+
+
+def test_a_member_with_an_unknown_reporting_time_is_not_judged() -> None:
+    """Unknown, never a guess of zero: no expectation, no event, no dam."""
+    unknown = profile(reporting_kind=None, reporting_time=None)
+    subject = driver(profiles={LEFT: unknown})
+    subject.report(resting(0))
+    assert subject.recompute().addressed == (LEFT,)
+    assert subject.state.member_state(LEFT).last_own_command is not None
+    assert subject.state.member_state(LEFT).tracking == MemberTracking()
+    subject.at(200).recompute()
+    assert subject.events == []
+
+    # A movement nobody commanded is not judged either.
+    subject.at(300).report(moving_down(100))
+    subject.at(320).report(resting(40))
+    _settle(subject, 320)
+    assert subject.events == []
+    assert subject.state.manual_override is None
+    assert subject.state.member_state(LEFT).last_observation == resting(40)
 
 
 def test_the_self_measurement_survives_as_persisted_data() -> None:
@@ -922,7 +997,7 @@ def test_a_report_of_a_polled_member_later_in_the_same_movement_arms_nothing_aga
 ):
     """On a member with a report delay the movement may have begun that long before."""
     delay = timedelta(seconds=60)
-    subject = driver(LEFT, RIGHT, profiles={RIGHT: profile(report_delay=delay)})
+    subject = driver(LEFT, RIGHT, profiles={RIGHT: profile(reporting_time=delay)})
     subject.report(resting(100), LEFT)
     subject.report(resting(100), RIGHT)
     subject.recompute()

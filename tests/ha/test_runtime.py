@@ -67,10 +67,6 @@ from tests.ha.runtime_kit import (
 BURST = 10
 
 _monday_morning = pytest.fixture(autouse=True)(monday_morning)
-# These tests watch armed windows at work. This version runs every window in
-# dry-run until block H10 notices movements by hand (maintenance item X10);
-# the fixture sets that fact as H10 will.
-pytestmark = pytest.mark.usefixtures("movement_detection")
 
 
 @dataclass

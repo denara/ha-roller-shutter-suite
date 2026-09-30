@@ -72,6 +72,34 @@ async def test_entry_of_version_1_1_gets_the_settings_mapping(
     assert set(entry.runtime_data.windows) == {"w1"}
 
 
+async def test_entry_of_version_1_2_is_the_layout_of_1_3_without_member_values(
+    hass: HomeAssistant,
+) -> None:
+    """1.3 only adds the optional mapping of the covers; 1.2 data needs nothing."""
+    set_cover(hass, "cover.example_window")
+    window = {
+        CONF_COVERS: ["cover.example_window"],
+        CONF_DRY_RUN: True,
+        CONF_SETTINGS: {},
+    }
+    entry = _entry(
+        1,
+        2,
+        data={CONF_SETTINGS: {}},
+        subentries_data=[subentry_data(SUBENTRY_WINDOW, "Kitchen", window, "w1")],
+    )
+    entry.add_to_hass(hass)
+
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert entry.state is ConfigEntryState.LOADED
+    assert (entry.version, entry.minor_version) == (1, 3)
+    assert entry.subentries["w1"].data == window
+    members = entry.runtime_data.windows["w1"].resolution.config.members
+    assert members[0].capabilities.reporting_kind is None
+
+
 async def test_newer_minor_version_is_accepted_unchanged(hass: HomeAssistant) -> None:
     """After a downgrade the data stays as it is; unknown keys are reported at set-up."""
     data = {CONF_SETTINGS: {"example_from_the_future": 1}}

@@ -16,7 +16,7 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import issue_registry as ir
 
 from custom_components.roller_shutter_suite import windows as windows_module
-from custom_components.roller_shutter_suite.capabilities import member_configs
+from custom_components.roller_shutter_suite.capabilities import with_stated
 from custom_components.roller_shutter_suite.const import DOMAIN
 from custom_components.roller_shutter_suite.controller import (
     WAKE_UP_DEFERRED,
@@ -76,10 +76,6 @@ from tests.ha.runtime_kit import (
 )
 
 _monday_morning = pytest.fixture(autouse=True)(monday_morning)
-# These tests watch armed windows at work. This version runs every window in
-# dry-run until block H10 notices movements by hand (maintenance item X10);
-# the fixture sets that fact as H10 will.
-pytestmark = pytest.mark.usefixtures("movement_detection")
 
 REPORT_DELAY = timedelta(seconds=60)
 WORKDAY_SOURCE = "binary_sensor.example_workday"
@@ -106,18 +102,18 @@ def _reason(entry: Any) -> ReasonCode | None:
 
 @pytest.fixture
 def slow_reports() -> Any:
-    """Give every member a report delay of 60 seconds."""
+    """Give every member a reporting time of 60 seconds, as a user states it."""
 
-    def delayed(hass: HomeAssistant, entity_ids: tuple[str, ...]) -> Any:
+    def delayed(members: Any, stated: Any) -> Any:
         return tuple(
             replace(
                 member,
-                capabilities=replace(member.capabilities, report_delay=REPORT_DELAY),
+                capabilities=replace(member.capabilities, reporting_time=REPORT_DELAY),
             )
-            for member in member_configs(hass, entity_ids)
+            for member in with_stated(members, stated)
         )
 
-    with patch.object(windows_module, "member_configs", delayed):
+    with patch.object(windows_module, "with_stated", delayed):
         yield
 
 
@@ -176,7 +172,7 @@ async def test_the_wake_up_after_a_send_is_the_deadline_of_the_core(
     assert command is not None
     deadline = member_expectation_end(member, command)
     without_delay = replace(
-        member, capabilities=replace(member.capabilities, report_delay=timedelta(0))
+        member, capabilities=replace(member.capabilities, reporting_time=timedelta(0))
     )
     assert deadline == member_expectation_end(without_delay, command) + REPORT_DELAY
 

@@ -21,6 +21,7 @@ from custom_components.roller_shutter_suite.core.model import (
     Position,
     PositionOwner,
     PositionReference,
+    ReportingKind,
 )
 from custom_components.roller_shutter_suite.core.reasons import ReasonCode
 from tests.sim import runner as runner_module
@@ -97,7 +98,9 @@ def test_an_own_command_is_the_integrations_movement_and_arms_no_dam(
     assert state.person_at_window is None
     assert state.members[0].position_reference is PositionReference.REFERENCED
     measured = state.members[0].self_measurement
-    event_driven = PROFILES[profile].report_delay_for_the_core == timedelta(0)
+    event_driven = (
+        PROFILES[profile].reporting_kind_for_the_core is ReportingKind.EVENT_DRIVEN
+    )
     assert len(measured.latency_ms) == (1 if event_driven else 0)
 
 
