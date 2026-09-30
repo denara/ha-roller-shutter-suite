@@ -24,7 +24,7 @@ These steps follow the HACS documentation on [custom repositories](https://www.h
 2. Select the three dots in the top right corner and choose **Custom repositories**.
 3. Enter `https://github.com/denara/ha-roller-shutter-suite` as the repository, choose **Integration** as the type, and select **Add**.
 4. Search for **Roller Shutter Suite** in HACS and open it.
-5. Select **Download**. HACS downloads the newest release by default; pause, maintenance lock and operating mode need version 0.2.0 or newer. To pick a version, open **Need a different version?** in the same dialog, choose it and confirm.
+5. Select **Download**. HACS downloads the newest release by default; pause, maintenance lock and operating mode need version 0.2.0 or newer, and noticing a movement by hand and arming a window need version 0.3.0 or newer. To pick a version, open **Need a different version?** in the same dialog, choose it and confirm.
 6. Restart Home Assistant: HACS marks the repository as "pending restart" until you do.
 
 ## 2. Add the house

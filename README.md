@@ -4,22 +4,25 @@ A custom integration that becomes the single authority over roller shutters: sch
 
 ## Status
 
-**Pilot, dry-run only.** Version 0.2.0 can be installed next to the control you use today. It decides what it would do with a shutter, shows it and writes it down, and moves nothing: every window is in dry-run. The arming step exists in the window's form, but it refuses to arm in this version, because the integration cannot yet notice when you move a shutter by hand; a later version lifts this. The [pilot guide](docs/pilot.md) takes you through installing it, adding one window, comparing its decisions with your existing control, and removing it again.
+**Pilot.** Version 0.3.0 can be installed next to the control you use today. Every window starts in dry-run: it decides what it would do with a shutter, shows it and writes it down, and moves nothing. Once you trust a window, you arm it in its settings, and from then on it moves its shutter. It notices when you move a shutter by hand and leaves it where you put it. The [pilot guide](docs/pilot.md) takes you through installing it, adding one window, comparing its decisions with your existing control, arming it, and removing it again.
 
 What works:
 
 - the forms for the house, groups and windows, with values inherited from the house to groups to windows;
 - the daily routine: morning and evening on workdays, weekends and public holidays, fixed times or the sun with "not before" and "not after", a separate summer evening position, an outdoor brightness sensor, a random offset;
 - the settings of movement: minimum change, minimum interval, the gap between motors;
+- a page for every cover of a window: where its position comes from, a tolerance for a shutter that settles a little off, how the cover reports its movements and how late, and its travel times;
+- noticing a movement by hand, the manual override that then leaves the shutter alone until the next change between day and night, and the button Resume automation that ends it;
+- arming a window after a page of checks, for covers that report their movements by themselves;
 - pause, maintenance lock and operating mode for the house, every group and every window, and an external pause entity per level; the strictest of the three levels wins, and they survive a restart;
-- for every window: the entities Reason, Target position, Next planned action, Manual override and Dry-run, the event `roller_shutter_suite_reason`, logbook entries and a diagnostics download;
+- for every window: the entities Reason, Target position, Next planned action, Manual override and Dry-run, the button Resume automation, the event `roller_shutter_suite_reason`, logbook entries and a diagnostics download;
 - every text of the forms, the status and the logbook in English and German, written in plain language.
 
 What does not work yet:
 
-- arming a window, so that it really moves its shutter;
-- shading, storm and hail, the fire alarm, sleep mode, reactions to open windows and doors, and the detection of a movement by hand in operation;
-- remembering the state of a window across a restart of Home Assistant; the decisions do not depend on it, see the [pilot guide](docs/pilot.md#7-after-a-restart-of-home-assistant).
+- shading, storm and hail, the fire alarm, sleep mode, reactions to open windows and doors;
+- a check of every command an armed window sends; until it exists, a window with a cover that Home Assistant only asks for its state on a schedule (polled) cannot be armed;
+- remembering the state of a window across a restart of Home Assistant: a restart ends a manual override, see the [pilot guide](docs/pilot.md#7-after-a-restart-of-home-assistant).
 
 Requires Home Assistant 2026.9 or newer.
 
@@ -30,7 +33,7 @@ The integration is installed through [HACS](https://hacs.xyz) as a custom reposi
 1. Open HACS in Home Assistant.
 2. Open the menu in the top right corner and choose **Custom repositories**.
 3. Enter `https://github.com/denara/ha-roller-shutter-suite` as the repository, choose **Integration** as the type and select **Add**.
-4. Search for **Roller Shutter Suite** in HACS, open it and select **Download**; choose the version **0.2.0** in the dialog.
+4. Search for **Roller Shutter Suite** in HACS, open it and select **Download**; choose the version **0.3.0** in the dialog.
 5. Restart Home Assistant.
 6. Go to **Settings** > **Devices & services** > **Add integration** and choose **Roller Shutter Suite**.
 
@@ -38,7 +41,7 @@ The integration can be set up only once per Home Assistant installation.
 
 ## Documentation
 
-- [Pilot guide](docs/pilot.md): one window in dry-run, step by step
+- [Pilot guide](docs/pilot.md): one window from dry-run to armed, step by step
 - [Documentation](docs/index.md)
 - [Project brief](docs/project-brief.md): what is being built and why
 
