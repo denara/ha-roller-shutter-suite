@@ -279,6 +279,20 @@ def test_without_a_fire_source_an_unacknowledged_alarm_still_holds() -> None:
     assert transition.state.fire_blind is None
 
 
+def test_the_watchdog_never_releases_the_fire_alarm() -> None:
+    """Decision 10: not for fire. An alarm active for days still opens."""
+    machine = engine()
+    burning = machine.elapse(world(with_(fire=ON)), None)
+    days_later = world(with_(fire=ON), state=burning.state, at=NOW + timedelta(days=3))
+
+    transition = machine.elapse(days_later, None)
+    decision = machine.recompute(replace(days_later, state=transition.state))
+
+    assert transition.events == ()
+    assert reasons(decision) == (ReasonCode.FIRE_ALARM, ReasonCode.SENT)
+    assert machine.wake_ups(transition.state, days_later.time, dry_run=False) == ()
+
+
 def test_an_inactive_fire_alarm_says_so() -> None:
     """The fire layer steps aside with ``inactive`` and names its source."""
     decision = decide(engine(), with_())

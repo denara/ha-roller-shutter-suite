@@ -210,6 +210,48 @@ async def test_the_fire_event_fires_at_once_under_maintenance_lock_and_sends_not
     assert len(fired) == 1
 
 
+SMOKE = "binary_sensor.example_smoke"
+"""The fire source of the house in the tests with the real fire layer."""
+
+
+@pytest.mark.parametrize("lock", [True, False], ids=["maintenance lock", "dry-run"])
+async def test_the_real_fire_layer_fires_its_event_at_once_and_sends_nothing(
+    hass: HomeAssistant, freezer: Any, lock: bool
+) -> None:
+    """Block C07: the fire layer of the core, read from the fire source of the house.
+
+    The decision names the fire wish as the winner under a maintenance lock
+    and in dry-run, so the event is fired at once; nothing moves.
+    """
+    fired = collect_reason_events(hass)
+    hass.states.async_set(SMOKE, "off")
+    set_cover(hass, COVER, position=0, state="closed")
+    entry = await setup_window(
+        hass,
+        window_data(dry_run=not lock),
+        house={"fire_source": SMOKE},
+        covers_present=False,
+        freezer=freezer,
+    )
+    controller = controller_of(entry)
+    if lock:
+        controller.controls = lambda: controls(maintenance_lock=True)
+    # In the evening the closed shutter is where the routine wants it.
+    await advance(hass, freezer, local(20, 0, second=1))
+    before = len(commands_sent(entry))
+    fired.clear()
+
+    hass.states.async_set(SMOKE, "on")
+    await settle(hass, freezer)
+
+    gate = ReasonCode.MAINTENANCE_LOCK if lock else ReasonCode.DRY_RUN
+    assert [(e["layer"], e["reason"], e["target"]) for e in fired] == [
+        ("fire", gate, 100)
+    ]
+    assert fired[0]["wish_reason"] == ReasonCode.FIRE_ALARM
+    assert len(commands_sent(entry)) == before
+
+
 async def test_the_memory_of_the_last_outcome_survives_a_reload(
     hass: HomeAssistant, freezer: Any
 ) -> None:
