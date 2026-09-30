@@ -35,7 +35,6 @@ from custom_components.roller_shutter_suite.core.model import (
     AnySourceValue,
     FunctionId,
     Layer,
-    ProtectionTrigger,
     TrackerEvent,
     Transition,
     WindowConfig,
@@ -47,32 +46,46 @@ from custom_components.roller_shutter_suite.core.model import (
 from custom_components.roller_shutter_suite.core.reasons import ReasonCode
 
 from .blind import advance_blind_clock, blind_wake_up, is_blind
-from .trigger import Reading, missing_reason, read_trigger
+from .trigger import Reading, missing_reason
 
 
 def _reading(
     config: WindowConfig, snapshot: WorldSnapshot
 ) -> tuple[Reading, AnySourceValue | None]:
+    """Return what the fire source says: an on/off source, never inverted.
+
+    The rule of a binary trigger (``read_trigger``), read without building a
+    trigger at every recompute: on is active, off inactive, everything else
+    unknown.
+    """
     source = config.fire_source
     if not isinstance(source, str):
         return Reading.UNKNOWN, None
     value = snapshot.sources.get(source)
-    return read_trigger(ProtectionTrigger(source), value), value
+    if value is None or not value.has_value or not isinstance(value.value, bool):
+        return Reading.UNKNOWN, value
+    return (Reading.ACTIVE if value.value else Reading.INACTIVE), value
+
+
+def _active(reading: Reading, state: WindowState) -> bool:
+    if reading is Reading.UNKNOWN:
+        return state.fire_alarm_active
+    return reading is Reading.ACTIVE
 
 
 def fire_alarm_active(config: WindowConfig, snapshot: WorldSnapshot) -> bool:
     """Return whether the fire alarm is active now; a silent source holds its state."""
     reading, _ = _reading(config, snapshot)
-    if reading is Reading.ACTIVE:
-        return True
-    if reading is Reading.INACTIVE:
-        return False
-    return snapshot.state.fire_alarm_active
+    return _active(reading, snapshot.state)
 
 
-def _subject(config: WindowConfig, snapshot: WorldSnapshot) -> WishSubject:
+def _subject(
+    config: WindowConfig,
+    snapshot: WorldSnapshot,
+    reading: Reading,
+    value: AnySourceValue | None,
+) -> WishSubject:
     source = config.fire_source
-    reading, value = _reading(config, snapshot)
     if not isinstance(source, str):
         return WishSubject(held=ReasonCode.INPUT_HELD_LAST_KNOWN)
     held = None
@@ -93,8 +106,9 @@ def fire_layer(config: WindowConfig, snapshot: WorldSnapshot) -> Wish:
         if unacknowledged:
             return Wish.leave_alone(Layer.FIRE, ReasonCode.FIRE_UNACKNOWLEDGED)
         return Wish.no_opinion(Layer.FIRE, ReasonCode.NOT_CONFIGURED)
-    subject = _subject(config, snapshot)
-    if fire_alarm_active(config, snapshot):
+    reading, value = _reading(config, snapshot)
+    subject = _subject(config, snapshot, reading, value)
+    if _active(reading, snapshot.state):
         return Wish.target(Layer.FIRE, ReasonCode.FIRE_ALARM, FULLY_OPEN).about(subject)
     if unacknowledged:
         return Wish.leave_alone(Layer.FIRE, ReasonCode.FIRE_UNACKNOWLEDGED).about(
@@ -116,8 +130,8 @@ def fire_after(config: WindowConfig, snapshot: WorldSnapshot) -> Transition:
     source = config.fire_source
     events: list[TrackerEvent] = []
     clock = None
+    reading, _ = _reading(config, snapshot)
     if isinstance(source, str):
-        reading, _ = _reading(config, snapshot)
         clock, due = advance_blind_clock(
             state.fire_blind,
             has_value=reading.has_value,
@@ -128,20 +142,22 @@ def fire_after(config: WindowConfig, snapshot: WorldSnapshot) -> Transition:
             events.append(
                 TrackerEvent(ReasonCode.PROTECTION_SOURCE_BLIND, source=source)
             )
-    active = (
-        state.fire_alarm_active
-        if source is None
-        else fire_alarm_active(config, snapshot)
+    active = _active(reading, state)
+    unacknowledged = state.fire_unacknowledged or (
+        active and not state.fire_alarm_active
     )
+    if (active, unacknowledged, clock) == (
+        state.fire_alarm_active,
+        state.fire_unacknowledged,
+        state.fire_blind,
+    ):
+        return Transition(state, tuple(events))
     after = replace(
         state,
         fire_alarm_active=active,
-        fire_unacknowledged=state.fire_unacknowledged
-        or (active and not state.fire_alarm_active),
+        fire_unacknowledged=unacknowledged,
         fire_blind=clock,
     )
-    if after == state:
-        return Transition(state, tuple(events))
     return Transition(after, tuple(events))
 
 

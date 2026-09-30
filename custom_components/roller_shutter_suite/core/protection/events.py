@@ -33,9 +33,10 @@ Every function is pure; :func:`protection_after` is the protection part of
 ``Engine.elapse`` and returns the state and the events it raised.
 """
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
+from functools import cache
 
 from custom_components.roller_shutter_suite.core.arbiter import (
     override_ended_by_condition,
@@ -74,6 +75,10 @@ class Remembered:
 
 NOTHING_REMEMBERED = Remembered(None, PositionOwner.UNKNOWN, None)
 """For an evaluation that judges an event without starting it for real."""
+
+
+def _nothing() -> Remembered:
+    return NOTHING_REMEMBERED
 
 
 def in_order_of_rank(
@@ -134,13 +139,14 @@ def advance_event(  # noqa: PLR0913 - the event, its state, the source, the mome
     now: datetime,
     *,
     blind_after: timedelta,
-    remembered: Remembered,
+    remember: Callable[[], Remembered],
 ) -> tuple[ProtectionEventState, tuple[TrackerEvent, ...]]:
     """Return the state of one event after this moment, and the events it raised.
 
     The watchdog is judged first, on the state as it was persisted, so a
     release that fell due before a late evaluation (after a restart) keeps
-    its instant and its order before the end of the trigger.
+    its instant and its order before the end of the trigger. ``remember``
+    says what an event that starts now remembers; it is asked only then.
     """
     state = persisted if persisted is not None else ProtectionEventState(event.event_id)
     source = source_of(event)
@@ -161,6 +167,7 @@ def advance_event(  # noqa: PLR0913 - the event, its state, the source, the mome
         )
     if reading is Reading.ACTIVE and state.status is ProtectionEventStatus.INACTIVE:
         keep = state.return_clock_start is not None
+        remembered = NOTHING_REMEMBERED if keep else remember()
         state = ProtectionEventState(
             event_id=event.event_id,
             status=ProtectionEventStatus.ACTIVE,
@@ -319,7 +326,7 @@ def live_states(
             value_of(event, snapshot.sources),
             snapshot.time,
             blind_after=config.source_blind_after,
-            remembered=NOTHING_REMEMBERED,
+            remember=_nothing,
         )
         result.append((event, state))
     return tuple(result)
@@ -342,7 +349,11 @@ def protection_after(config: WindowConfig, snapshot: WorldSnapshot) -> Transitio
         return _unreadable_after(snapshot)
     ranked = in_order_of_rank(events)
     persisted = {item.event_id: item for item in state.protection_events}
-    remembered = _remembered_at_start(config, snapshot, ranked)
+
+    @cache
+    def remember() -> Remembered:
+        return _remembered_at_start(config, snapshot, ranked)
+
     by_id: dict[str, ProtectionEventState] = {}
     raised: list[TrackerEvent] = []
     for event in ranked:
@@ -352,7 +363,7 @@ def protection_after(config: WindowConfig, snapshot: WorldSnapshot) -> Transitio
             value_of(event, snapshot.sources),
             snapshot.time,
             blind_after=config.source_blind_after,
-            remembered=remembered,
+            remember=remember,
         )
         raised.extend(event_raised)
         by_id[event.event_id] = after
@@ -458,7 +469,7 @@ def judge_event(
             value_of(event, snapshot.sources),
             snapshot.time,
             blind_after=config.source_blind_after,
-            remembered=_remembered_at_start(config, snapshot, ranked),
+            remember=lambda: _remembered_at_start(config, snapshot, ranked),
         )
         return state
     return None
