@@ -26,7 +26,7 @@ The core receives observations, never states: the runtime reduces a state of Hom
 
 **The runtime computes no time of its own**, and neither does the time-lapse simulation: every timer comes from `wake_ups`, and at each the caller calls `elapse` and recomputes. The deadline is the one of section 8.3 (`member_expectation_end`: report delay + 10 s + travel time × share of the travel × 1.5 + 5 s); the settle time is 2 s, and for a foreign movement on a member that shows no transit state it grows by the member's report delay, so a person's movement on a polled platform is judged once, at its end.
 
-In this block the runtime controller of the Home Assistant layer does not call `observe`, `elapse` or `after_send` yet; block H10 wires them, together with the forms and the events. The simulation runner calls them already (`tests/sim/runner.py`).
+The runtime controller of the Home Assistant layer calls them as the simulation runner does (`tests/sim/runner.py`); [The runtime](runtime.md#the-movement-tracker-in-the-runtime) says when, and how it treats an expectation that is left over from before a start.
 
 ## The state machine
 

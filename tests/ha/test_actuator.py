@@ -123,6 +123,10 @@ class Scripted:
             replace(snapshot, sources=self.sources), decision
         )
 
+    def __getattr__(self, name: str) -> Any:
+        """Hand everything else to the real engine: the tracker, the send, the timers."""
+        return getattr(self.engine, name)
+
 
 def script(controller: WindowController, sources: dict[str, AnySourceValue]) -> None:
     """Let the controller decide with the stub layers and these sources."""
@@ -274,7 +278,8 @@ async def test_a_window_in_dry_run_calls_nothing_and_records_the_would_be_comman
     (would_be,) = simulated.commands
     assert would_be.command.target == Position(target)
     assert would_be.command.reason is reason
-    assert controller.state.members == ()
+    # The real state knows what the tracker saw, and no own command.
+    assert all(m.last_own_command is None for m in controller.state.members)
 
 
 @pytest.mark.parametrize(
@@ -878,7 +883,9 @@ async def test_a_member_at_its_target_is_not_commanded(
 
     assert [c.member_id for c in cover_calls(hass)] == [right]
     controller = controller_of(entry)
-    assert [m.member_id for m in controller.state.members] == [right]
+    assert [
+        m.member_id for m in controller.state.members if m.last_own_command is not None
+    ] == [right]
 
     # While the right member travels, a recompute sends nothing again.
     set_cover(hass, right, position=60, state="opening")

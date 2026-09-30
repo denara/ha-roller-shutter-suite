@@ -1019,6 +1019,37 @@
           ]),
           'manual_override': None,
           'members': list([
+            dict({
+              'command_attempts': 0,
+              'last_attempt_at': None,
+              'last_observation': dict({
+                'position': 50,
+                'state': 'resting',
+              }),
+              'last_own_command': None,
+              'member_id': 'cover.example_window',
+              'missed_command': None,
+              'position_reference': 'referenced',
+              'self_measurement': dict({
+                'deviation': list([
+                ]),
+                'latency_ms': list([
+                ]),
+                'rest_ms': list([
+                ]),
+              }),
+              'tracking': dict({
+                'before_gap': None,
+                'command_id': None,
+                'detected': False,
+                'external': False,
+                'moved_at': None,
+                'phase': 'idle',
+                'rested_at': None,
+                'transit_seen': False,
+                'user_hint': None,
+              }),
+            }),
           ]),
           'owner': 'unknown',
           'person_at_window': None,
@@ -1210,7 +1241,7 @@
           ]),
           'wake_up': dict({
             'at': '2026-09-21T08:01:01.500000+00:00',
-            'reason': 'expectation_window_end',
+            'reason': 'movement_tracking',
           }),
         }),
         'subentry_id': 'w1',

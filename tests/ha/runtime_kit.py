@@ -37,6 +37,7 @@ from custom_components.roller_shutter_suite.const import (
     SUBENTRY_WINDOW,
 )
 from custom_components.roller_shutter_suite.controller import Phase, WindowController
+from custom_components.roller_shutter_suite.core.engine import Engine, build_arbiter
 from custom_components.roller_shutter_suite.core.model import Position, SunPosition
 from custom_components.roller_shutter_suite.core.schedule import ScheduleResult
 from custom_components.roller_shutter_suite.runtime import SuiteRuntime
@@ -198,6 +199,29 @@ async def setup_window(
     if freezer is not None:
         await settle(hass, freezer)
     return entry
+
+
+class EngineDouble:
+    """The base of a test double of the engine that decides by itself.
+
+    A double writes ``recompute`` (and ``state_after``) of its own; the
+    movement tracker, the recorder of a send and the timers are those of the
+    real engine of the window, which :func:`use_engine` hands it.
+    """
+
+    real: Engine
+
+    def __getattr__(self, name: str) -> Any:
+        """Hand what the double does not write itself to the real engine."""
+        if name == "real":
+            raise AttributeError(name)
+        return getattr(self.real, name)
+
+
+def use_engine(controller: WindowController, double: EngineDouble) -> None:
+    """Let a controller decide with a test double of the engine."""
+    double.real = Engine(controller.config, build_arbiter())
+    controller.engine = double  # type: ignore[assignment]
 
 
 def runtime_of(entry: MockConfigEntry) -> SuiteRuntime:

@@ -407,13 +407,13 @@ def _issue_ids(hass: HomeAssistant) -> set[str]:
 
 
 async def _window_stored_as_armed(hass: HomeAssistant, freezer: Any) -> MockConfigEntry:
-    """Return the entry with the window stored as armed, half open at 07:00."""
-    entry = await setup_window(hass, window_data(dry_run=False), freezer=freezer)
+    """Return the entry with the window stored as armed, half open in the day."""
     hass.states.async_set(
         COVER, "open", {"supported_features": 15, "current_position": 50}
     )
-    await settle(hass, freezer)
-    return entry
+    return await setup_window(
+        hass, window_data(dry_run=False), covers_present=False, freezer=freezer
+    )
 
 
 @pytest.mark.usefixtures("no_movement_detection")

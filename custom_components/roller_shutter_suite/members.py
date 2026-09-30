@@ -16,9 +16,10 @@ reports one. This module reads both from the state of a cover entity:
   a boolean, text or a float (some platforms write ``50.0``) is not a
   position and is never rounded into one.
 
-This is the input side only. Reducing reports to observations that carry new
-information (dropping duplicate writes), the tracker per member and manual
-detection belong to the block that builds the tracking.
+This is the input side only. The controller hands every observation to the
+movement tracker of the core (``Engine.observe``), which drops one that
+carries no new information (a duplicate write) and tells an own movement
+from somebody else's.
 """
 
 from homeassistant.components.cover import ATTR_CURRENT_POSITION, CoverState
@@ -50,11 +51,14 @@ def _position_of(state: State) -> Position | None:
     return Position(raw)
 
 
-def observe_member(hass: HomeAssistant, member: MemberConfig) -> MemberObservation:
-    """Return the observation of one member from the state of its cover."""
-    state = hass.states.get(member.member_id)
+def observation_of(state: State | None, member: MemberConfig) -> Observation:
+    """Return the observation of one member from a state of its cover.
+
+    ``state`` is the state as Home Assistant has it now, or the new state a
+    state change carries; ``None`` is a cover without a state.
+    """
     if state is None or state.state == STATE_UNAVAILABLE:
-        return MemberObservation(member.member_id, UNAVAILABLE_MEMBER)
+        return UNAVAILABLE_MEMBER
     if state.state == CoverState.OPENING:
         movement = MovementState.MOVING_UP
     elif state.state == CoverState.CLOSING:
@@ -63,7 +67,14 @@ def observe_member(hass: HomeAssistant, member: MemberConfig) -> MemberObservati
         movement = MovementState.RESTING
     feedback = member.capabilities.capability_state("reports_position")
     position = None if feedback is CapabilityState.MISSING else _position_of(state)
-    return MemberObservation(member.member_id, Observation(movement, position))
+    return Observation(movement, position)
+
+
+def observe_member(hass: HomeAssistant, member: MemberConfig) -> MemberObservation:
+    """Return the observation of one member from the state of its cover."""
+    return MemberObservation(
+        member.member_id, observation_of(hass.states.get(member.member_id), member)
+    )
 
 
 def observe_window(hass: HomeAssistant, config: WindowConfig) -> WindowObservation:

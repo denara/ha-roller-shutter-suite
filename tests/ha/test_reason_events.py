@@ -127,31 +127,27 @@ async def test_a_would_be_command_in_dry_run_fires_once(
 async def test_reaching_the_target_ends_the_outcome(
     hass: HomeAssistant, freezer: Any
 ) -> None:
-    """After the target is reached, the same wish later is a new movement and fires."""
+    """After the target is reached, the same wish later is a new movement and fires.
+
+    In dry-run, where another control moves the cover: an armed window would
+    take the lowering for a movement by hand and hold still.
+    """
     fired = collect_reason_events(hass)
     set_cover(hass, COVER, position=50)
-    entry = await setup_window(hass, covers_present=False, freezer=freezer)
-    assert [e["reason"] for e in fired] == [ReasonCode.SENT]
+    entry = await setup_window(
+        hass, window_data(dry_run=True), covers_present=False, freezer=freezer
+    )
+    assert [e["reason"] for e in fired] == [ReasonCode.DRY_RUN]
     set_cover(hass, COVER, position=100)
     await settle(hass, freezer)
 
-    # Lowered again: the day position is wanted again, first after the
-    # minimum time between two movements.
+    # Lowered again: the day position is wanted again, a new outcome. (The
+    # would-be command stood at its target and does not count against itself,
+    # so no minimum interval applies in dry-run.)
     set_cover(hass, COVER, position=50)
-    for _ in range(20):
-        await _tick(hass, freezer, times=1, minutes=1)
-        if [e["reason"] for e in fired].count(ReasonCode.SENT) == 2:  # noqa: PLR2004
-            set_cover(hass, COVER, position=100)
-            break
     await _tick(hass, freezer, times=4, minutes=5)
-    assert [e["reason"] for e in fired] == [
-        ReasonCode.SENT,
-        ReasonCode.MIN_INTERVAL,
-        ReasonCode.SENT,
-    ]
-    assert fired[1]["gate"] == "defer"
-    assert fired[1]["until"] is not None
-    assert len(commands_sent(entry)) == 2  # noqa: PLR2004 - two movements
+    assert [e["reason"] for e in fired] == [ReasonCode.DRY_RUN, ReasonCode.DRY_RUN]
+    assert commands_sent(entry) == []
 
 
 async def test_the_fire_event_fires_at_once_in_dry_run_and_sends_nothing(

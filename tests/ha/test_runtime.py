@@ -48,6 +48,7 @@ from tests.ha.helpers import set_cover, setup_entry
 from tests.ha.runtime_kit import (
     COVER,
     FIXED_ROUTINE,
+    EngineDouble,
     advance,
     commands_sent,
     controller_of,
@@ -58,6 +59,7 @@ from tests.ha.runtime_kit import (
     runtime_of,
     settle,
     setup_window,
+    use_engine,
     window_data,
     window_subentry,
 )
@@ -562,7 +564,7 @@ async def test_a_core_that_keeps_asking_for_now_cannot_spin(
     """A wake-up at "now" is refused, moved by the minimum distance, and logged once."""
     entry = await setup_window(hass, freezer=freezer)
     controller = controller_of(entry)
-    controller.engine = WakeMeAtOnce()  # type: ignore[assignment]
+    use_engine(controller, WakeMeAtOnce())
     before = controller.status.recomputes
     controller.async_request_recompute()
     await settle(hass, freezer)
@@ -585,7 +587,7 @@ async def test_a_core_that_keeps_asking_for_now_cannot_spin(
     assert controller.status.wake_up.at > controller.status.last_recompute
 
 
-class WakeMeAtOnce:
+class WakeMeAtOnce(EngineDouble):
     """An engine whose every decision asks to be re-evaluated no later than now."""
 
     def recompute(self, snapshot: WorldSnapshot) -> Decision:
