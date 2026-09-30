@@ -9,6 +9,7 @@ writes the reports a cover of that profile would write.
 Time is controlled by the ``freezer`` fixture; no test sleeps.
 """
 
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -18,6 +19,7 @@ from homeassistant.core import Context, Event, HomeAssistant, callback
 from homeassistant.util.hass_dict import HassKey
 
 from custom_components.roller_shutter_suite.const import EVENT_REASON
+from custom_components.roller_shutter_suite.controller import WAKE_UP_TRACKER, WakeUp
 from custom_components.roller_shutter_suite.core.arbiter import member_expectation_end
 from custom_components.roller_shutter_suite.core.model import (
     MemberState,
@@ -616,13 +618,23 @@ SMOKE = "binary_sensor.example_smoke"
 WITH_SMOKE_DETECTOR: dict[str, Any] = {**FIXED_ROUTINE, "fire_source": SMOKE}
 
 
-async def closed_in_the_evening(hass: HomeAssistant, freezer: Any) -> Any:
-    """Set an armed window up at 20:30, its cover closed where the evening wants it."""
+REPORTING_TIME = timedelta(minutes=5)
+"""The reporting time of a cover whose reports may come five minutes late."""
+
+
+async def closed_in_the_evening(
+    hass: HomeAssistant, freezer: Any, data: dict[str, Any] | None = None
+) -> Any:
+    """Set an armed window up at 20:30, its cover closed where the evening wants it.
+
+    ``data`` is the stored data of the window (``window_data``); by default
+    its cover is stated as event-driven, reporting at once.
+    """
     freezer.move_to(local(20, 30))
     hass.states.async_set(SMOKE, STATE_OFF)
     set_cover(hass, COVER, position=0, state="closed")
     entry = await setup_window(
-        hass, house=WITH_SMOKE_DETECTOR, covers_present=False, freezer=freezer
+        hass, data, house=WITH_SMOKE_DETECTOR, covers_present=False, freezer=freezer
     )
     assert commands_sent(entry) == []
     codes(entry)
@@ -645,7 +657,8 @@ async def test_fire_passes_an_armed_override_and_its_movement_is_the_own_one(
     alarm opens it at once all the same (the bypass skips the dam), and the
     travel of the fire command is the integration's own movement: no event
     of a movement by hand, no dam. Its expectation ends at the one deadline
-    of the core, which the timer of the controller is armed for.
+    of the core, and the timer of the controller is armed for that instant
+    as its next wake-up, one of the tracker.
     """
     entry = await closed_in_the_evening(hass, freezer)
     set_cover(hass, COVER, position=0, state="opening")
@@ -666,8 +679,7 @@ async def test_fire_passes_an_armed_override_and_its_movement_is_the_own_one(
     assert command.wish_class is WishClass.FIRE
     assert member.tracking.phase is TrackerPhase.EXPECTING
     deadline = member_expectation_end(controller.config.members[0], command)
-    now = controller.clock.now()
-    assert deadline in controller.engine.wake_ups(controller.state, now, dry_run=False)
+    assert controller.status.wake_up == WakeUp(deadline, WAKE_UP_TRACKER)
 
     for state, position in (("opening", 60), ("open", 100)):
         freezer.tick(timedelta(seconds=10))
@@ -687,20 +699,40 @@ async def test_a_fire_command_nobody_answers_is_sent_again_at_its_deadline(
 ) -> None:
     """Section 2.4: fire is sent again at once when its expectation window closed.
 
-    The window is the one deadline of the core (``member_expectation_end``,
-    with the stated reporting time of the member); before it the command is
-    pending and not repeated. At it the tracker reads "no reaction" once, no
-    dam is armed, and fire sends again.
+    The window is the one deadline of the core (``member_expectation_end``),
+    and the stated reporting time of the cover, five minutes, is part of it.
+    A recompute shortly before that deadline, long after the window of a
+    cover that reports at once would have closed, repeats nothing: the
+    command is still pending. At the deadline the tracker reads "no
+    reaction" once, no dam is armed, and fire sends again.
     """
-    entry = await closed_in_the_evening(hass, freezer)
+    late = {
+        COVER: {
+            "reporting_kind": "event_driven",
+            "reporting_time": int(REPORTING_TIME.total_seconds()),
+        }
+    }
+    entry = await closed_in_the_evening(hass, freezer, window_data(members=late))
     hass.states.async_set(SMOKE, STATE_ON)
     await settle(hass, freezer)
     controller = controller_of(entry)
     command = controller.state.member_state(COVER).last_own_command
     assert command is not None
-    deadline = member_expectation_end(controller.config.members[0], command)
+    member = controller.config.members[0]
+    deadline = member_expectation_end(member, command)
+    at_once = replace(
+        member, capabilities=replace(member.capabilities, reporting_time=timedelta(0))
+    )
+    assert deadline == member_expectation_end(at_once, command) + REPORTING_TIME
 
-    await advance(hass, freezer, deadline - timedelta(seconds=5))
+    await advance(hass, freezer, deadline - timedelta(seconds=30))
+    controller.async_request_recompute()
+    await settle(hass, freezer)
+    decision = controller.status.decision
+    assert controller.status.last_recompute == controller.clock.now()
+    assert decision is not None
+    assert decision.gate is not None
+    assert decision.gate.reason is ReasonCode.DUPLICATE_COMMAND
     assert len(commands_sent(entry)) == 1
     assert codes(entry) == []
 
@@ -757,9 +789,11 @@ async def test_a_stale_fire_expectation_is_dropped_and_the_alarm_still_holds(
     """The leftover of an old fire command next to an unacknowledged alarm.
 
     The deadline of the fire command passed long before the start, and the
-    cover stands at its target: the member is idle, nothing is judged, no
-    dam is armed. The clean-up of the expectation leaves the state of the
-    alarm alone, so the unacknowledged alarm still holds the evening back.
+    cover still stands where it was last seen, short of the target: judged,
+    the expectation would read "no reaction". The clean-up drops it instead:
+    the member is idle, nothing is raised, no dam is armed. It leaves the
+    state of the alarm alone, so the unacknowledged alarm still holds the
+    day back, which would open the closed shutter.
     """
     command = OwnCommand(
         command_id="old-fire",
@@ -783,13 +817,12 @@ async def test_a_stale_fire_expectation_is_dropped_and_the_alarm_still_holds(
         ),
     )
     storage_of(hass).save_window_state(WINDOW_ID, stored.to_data())
-    freezer.move_to(local(20, 30))
     hass.states.async_set(SMOKE, STATE_OFF)
-    set_cover(hass, COVER, position=100, state="open")
+    set_cover(hass, COVER, position=0, state="closed")
     entry = await setup_window(
         hass, house=WITH_SMOKE_DETECTOR, covers_present=False, freezer=freezer
     )
-    await advance(hass, freezer, local(20, 35))
+    await advance(hass, freezer, local(10, 5))
 
     state = controller_of(entry).state
     assert codes(entry) == []

@@ -193,7 +193,12 @@ def test_a_key_that_does_not_belong_to_the_kind_is_reported_and_changes_nothing(
 
 
 def test_a_rank_that_two_events_state_is_faulty_on_both() -> None:
-    """The registry refuses a duplicate rank with a fault, never at runtime."""
+    """A duplicate rank is read leniently (ruling of the project owner, 2026-10-01).
+
+    Both events that state it lose their rank and name ``rank`` among their
+    faulty fields; the rest of the list stays valid. A duplicate never
+    reaches the arbiter.
+    """
     gale = {**STORM, "event_id": "gale"}
     hail = {**STORM, "event_id": "hail", "rank": 20, "direction": "open"}
 
