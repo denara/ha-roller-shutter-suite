@@ -22,9 +22,14 @@ from typing import Any
 
 from homeassistant.core import split_entity_id, valid_entity_id
 
-from .const import CONF_COVERS, CONF_DRY_RUN, CONF_GROUP_ID, CONF_SETTINGS
+from .const import CONF_COVERS, CONF_DRY_RUN, CONF_GROUP_ID, CONF_MEMBERS, CONF_SETTINGS
 from .core.model import JsonValue
-from .core.settings import PartialSettings, SettingsRegistry, settings_from_stored
+from .core.settings import (
+    CAPABILITY_SETTINGS,
+    PartialSettings,
+    SettingsRegistry,
+    settings_from_stored,
+)
 
 COVER_DOMAIN = "cover"
 
@@ -54,6 +59,35 @@ def sound_own_values(
     if not isinstance(stored, Mapping):
         return {}
     sound = settings_from_stored(stored, registry).values
+    return {key: stored[key] for key in sound}
+
+
+def member_capability_settings(data: Mapping[str, Any]) -> dict[str, object]:
+    """Return what the user stated per member of a window, by member ID.
+
+    Read tolerantly: a mapping that is absent or no mapping states nothing,
+    and so does an entry whose key is no text. The values of each member are
+    judged by the core when the profile is built (``stated_capabilities``),
+    where a faulty value is read as unknown or as the default.
+    """
+    stored = data.get(CONF_MEMBERS)
+    if not isinstance(stored, Mapping):
+        return {}
+    return {key: value for key, value in stored.items() if isinstance(key, str)}
+
+
+def sound_member_values(
+    data: Mapping[str, Any], member_id: str
+) -> dict[str, JsonValue]:
+    """Return what one member states that the core can read, as stored.
+
+    The member page starts from it; saving the page therefore drops a faulty
+    value and an unknown key, as saving any form does.
+    """
+    stored = member_capability_settings(data).get(member_id)
+    if not isinstance(stored, Mapping):
+        return {}
+    sound = settings_from_stored(stored, CAPABILITY_SETTINGS).values
     return {key: stored[key] for key in sound}
 
 

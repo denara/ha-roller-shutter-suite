@@ -35,6 +35,8 @@ from .core.model import (
     GateOutcome,
     MemberTarget,
     Position,
+    TrackerEvent,
+    WindowState,
     WishKind,
 )
 from .core.reasons import ReasonCode
@@ -208,6 +210,21 @@ def member_targets(targets: tuple[MemberTarget, ...]) -> list[dict[str, Any]]:
     ]
 
 
+OUTCOME_KEYS: Final = (
+    "layer",
+    "wish_class",
+    "wish_reason",
+    "target",
+    "gate",
+    "gate_rule",
+    "until",
+)
+"""The keys of a reason event that only an outcome of a decision fills."""
+
+TRACKER_EVENT_KEYS: Final = ("member_id", "position", "count", "threshold", "user_id")
+"""The keys of a reason event that only an event of the tracker fills."""
+
+
 @dataclass(frozen=True, slots=True)
 class ReasonOutcome:
     """What a reason event says about one decision.
@@ -240,8 +257,13 @@ class ReasonOutcome:
         )
 
     def as_event_data(self) -> dict[str, Any]:
-        """Return the part of the event data that describes the outcome."""
+        """Return the part of the event data that describes the outcome.
+
+        The keys of an event of the tracker (``tracker_event_data``) are
+        there too, ``None``, so every reason event has the same keys.
+        """
         return {
+            **dict.fromkeys(TRACKER_EVENT_KEYS),
             "reason": self.reason.value,
             "layer": self.layer,
             "wish_class": self.wish_class,
@@ -314,6 +336,67 @@ def reason_outcome(
         dry_run=dry_run,
         until=None if gate is None else _iso(gate.until),
     )
+
+
+def tracker_event_data(event: TrackerEvent) -> dict[str, Any]:
+    """Return the part of a reason event that describes an event of the tracker.
+
+    ``reason`` is the code of the event (``manual_detected``,
+    ``override_ended``, ``comfort_movements_threshold`` …); the member, the
+    position, the count, the threshold and the user of a dashboard are
+    ``None`` where the event does not carry them. Every reason event has the
+    same keys: those of an outcome (``ReasonOutcome.as_event_data``) are
+    ``None`` here, as these are ``None`` in an outcome.
+    """
+    return {
+        **dict.fromkeys(OUTCOME_KEYS),
+        "reason": event.code.value,
+        "member_id": event.member_id,
+        "position": None if event.position is None else event.position.value,
+        "count": event.count,
+        "threshold": event.threshold,
+        "user_id": event.user_id,
+    }
+
+
+def dam_attributes(state: WindowState) -> dict[str, Any]:
+    """Return the dams of a window as attributes: when each ends, what it remembers.
+
+    ``manual_override`` and ``person_at_window`` are ``None`` while the dam
+    is not armed. An override without an end at an instant (it ends at a
+    condition, an empty room for example) has ``ends_at`` ``None``. Nothing
+    here moves with the clock, so an unchanged dam writes no new state.
+    """
+    override = state.manual_override
+    person = state.person_at_window
+    return {
+        "manual_override": (
+            None
+            if override is None
+            else {
+                "armed_at": _iso(override.armed_at),
+                "end_rule": override.end_rule.value,
+                "ends_at": _iso(override.ends_at),
+                "remembered_position": (
+                    None
+                    if override.remembered_position is None
+                    else override.remembered_position.value
+                ),
+            }
+        ),
+        "person_at_window": (
+            None
+            if person is None
+            else {
+                "ends_at": _iso(person.ends_at),
+                "remembered_position": (
+                    None
+                    if person.remembered_position is None
+                    else person.remembered_position.value
+                ),
+            }
+        ),
+    }
 
 
 def plain(value: object) -> object:

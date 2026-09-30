@@ -16,12 +16,12 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import issue_registry as ir
 
 from custom_components.roller_shutter_suite import windows as windows_module
-from custom_components.roller_shutter_suite.capabilities import member_configs
+from custom_components.roller_shutter_suite.capabilities import with_stated
 from custom_components.roller_shutter_suite.const import DOMAIN
 from custom_components.roller_shutter_suite.controller import (
     WAKE_UP_DEFERRED,
-    WAKE_UP_EXPECTATION_END,
     WAKE_UP_RECHECK,
+    WAKE_UP_TRACKER,
     Phase,
     WakeUp,
 )
@@ -61,6 +61,7 @@ from tests.ha.runtime_kit import (
     MONDAY,
     WINDOW_ID,
     ZONE_NAME,
+    EngineDouble,
     advance,
     commands_sent,
     controller_of,
@@ -70,14 +71,11 @@ from tests.ha.runtime_kit import (
     schedule_of,
     settle,
     setup_window,
+    use_engine,
     window_data,
 )
 
 _monday_morning = pytest.fixture(autouse=True)(monday_morning)
-# These tests watch armed windows at work. This version runs every window in
-# dry-run until block H10 notices movements by hand (maintenance item X10);
-# the fixture sets that fact as H10 will.
-pytestmark = pytest.mark.usefixtures("movement_detection")
 
 REPORT_DELAY = timedelta(seconds=60)
 WORKDAY_SOURCE = "binary_sensor.example_workday"
@@ -104,18 +102,18 @@ def _reason(entry: Any) -> ReasonCode | None:
 
 @pytest.fixture
 def slow_reports() -> Any:
-    """Give every member a report delay of 60 seconds."""
+    """Give every member a reporting time of 60 seconds, as a user states it."""
 
-    def delayed(hass: HomeAssistant, entity_ids: tuple[str, ...]) -> Any:
+    def delayed(members: Any, stated: Any) -> Any:
         return tuple(
             replace(
                 member,
-                capabilities=replace(member.capabilities, report_delay=REPORT_DELAY),
+                capabilities=replace(member.capabilities, reporting_time=REPORT_DELAY),
             )
-            for member in member_configs(hass, entity_ids)
+            for member in with_stated(members, stated)
         )
 
-    with patch.object(windows_module, "member_configs", delayed):
+    with patch.object(windows_module, "with_stated", delayed):
         yield
 
 
@@ -148,7 +146,7 @@ async def test_reload_during_a_movement_sends_no_duplicate_and_detects_no_manual
     # The reloaded window waits for the same deadline the gate reads.
     assert controller.status.wake_up == WakeUp(
         member_expectation_end(controller.config.members[0], commanded),
-        WAKE_UP_EXPECTATION_END,
+        WAKE_UP_TRACKER,
     )
 
     # The end report arrives long after the reload, inside the report delay.
@@ -174,11 +172,11 @@ async def test_the_wake_up_after_a_send_is_the_deadline_of_the_core(
     assert command is not None
     deadline = member_expectation_end(member, command)
     without_delay = replace(
-        member, capabilities=replace(member.capabilities, report_delay=timedelta(0))
+        member, capabilities=replace(member.capabilities, reporting_time=timedelta(0))
     )
     assert deadline == member_expectation_end(without_delay, command) + REPORT_DELAY
 
-    assert controller.status.wake_up == WakeUp(deadline, WAKE_UP_EXPECTATION_END)
+    assert controller.status.wake_up == WakeUp(deadline, WAKE_UP_TRACKER)
 
     # The timer fires at the deadline: the window is recomputed then, long
     # before the safety tick, and the expired command no longer sets a wake-up.
@@ -189,7 +187,7 @@ async def test_the_wake_up_after_a_send_is_the_deadline_of_the_core(
     assert last is not None
     assert last >= deadline
     wake_up = controller.status.wake_up
-    assert wake_up is None or wake_up.reason != WAKE_UP_EXPECTATION_END
+    assert wake_up is None or wake_up.reason != WAKE_UP_TRACKER
 
 
 async def test_a_send_is_recorded_as_the_core_records_it(
@@ -238,7 +236,7 @@ async def test_a_send_is_recorded_as_the_core_records_it(
     )
 
 
-class AddressesOneMember:
+class AddressesOneMember(EngineDouble):
     """An engine whose send has a target for two members and addresses one of them."""
 
     def __init__(self, addressed: str) -> None:
@@ -287,7 +285,7 @@ async def test_the_controller_commands_the_members_the_decision_addresses(
         m.member_id: m.last_own_command for m in controller.state.members
     }
 
-    controller.engine = AddressesOneMember(right)  # type: ignore[assignment]
+    use_engine(controller, AddressesOneMember(right))
     controller.async_request_recompute()
     await settle(hass, freezer)
 
@@ -344,8 +342,15 @@ async def test_stored_state_that_cannot_be_read_starts_fresh_and_is_logged(
 
     assert phase_of(controller_of(entry)) is Phase.RUNNING
     state = controller_of(entry).state
-    # Fresh apart from what the first recompute latched.
-    assert state == replace(WindowState(), latched_day_types=state.latched_day_types)
+    # Fresh apart from what the first recompute latched and the tracker saw.
+    assert state == replace(
+        WindowState(),
+        latched_day_types=state.latched_day_types,
+        members=state.members,
+    )
+    assert [
+        (m.last_own_command, m.last_observation is not None) for m in state.members
+    ] == [(None, True)]
     logged = [
         r for r in caplog.records if "stored state cannot be read" in r.getMessage()
     ]
@@ -458,7 +463,7 @@ async def test_fixed_times_stay_on_the_clock_across_a_clock_change(
     # waits for the morning.
     wake_up = controller.status.wake_up
     assert wake_up is not None
-    assert wake_up.reason == WAKE_UP_EXPECTATION_END
+    assert wake_up.reason == WAKE_UP_TRACKER
     set_cover(hass, COVER, position=commands_sent(entry)[-1].target.value)
     await settle(hass, freezer)
     await advance(hass, freezer, wake_up.at)
@@ -753,7 +758,7 @@ async def test_a_command_is_recorded_per_member_when_the_actuator_raises(
 # ---------------------------------------------------------------------------
 
 
-class Faulty:
+class Faulty(EngineDouble):
     """An engine whose decisions carry a fault of the frost constraint."""
 
     def __init__(self, faults: tuple[EvaluationFault, ...]) -> None:
@@ -799,7 +804,7 @@ async def test_faults_of_the_safety_net_are_logged_once_per_change_and_are_facts
     entry = await setup_window(hass, freezer=freezer)
     controller = controller_of(entry)
     engine = Faulty((_fault(TypeError("a value with cover.example_secret")),))
-    controller.engine = engine  # type: ignore[assignment]
+    use_engine(controller, engine)
     caplog.set_level(logging.INFO, logger="custom_components.roller_shutter_suite")
 
     for _ in range(3):
@@ -847,7 +852,7 @@ async def test_disabled_functions_reach_the_arbiter_and_the_status(
     assert (Layer.SCHEDULE, ReasonCode.FUNCTION_DISABLED_BY_FAULT) in reasons
 
 
-class FireThroughFailedDryRun:
+class FireThroughFailedDryRun(EngineDouble):
     """An engine that sends a fire wish because the dry-run rule itself raised."""
 
     def recompute(self, snapshot: WorldSnapshot) -> Decision:
@@ -882,7 +887,7 @@ async def test_second_dry_run_check_lets_a_fire_command_through_only_with_the_ru
     controller = controller_of(entry)
     assert commands_sent(entry) == []
 
-    controller.engine = FireThroughFailedDryRun()  # type: ignore[assignment]
+    use_engine(controller, FireThroughFailedDryRun())
     controller.async_request_recompute()
     await settle(hass, freezer)
     assert [c.target.value for c in commands_sent(entry)] == [100]
@@ -905,7 +910,7 @@ async def test_second_dry_run_check_lets_a_fire_command_through_only_with_the_ru
                 faults=(),
             )
 
-    controller.engine = ComfortSend()  # type: ignore[assignment]
+    use_engine(controller, ComfortSend())
     controller.async_request_recompute()
     await settle(hass, freezer)
     assert len(commands_sent(entry)) == 1
@@ -919,11 +924,11 @@ async def test_an_exception_of_the_recompute_itself_is_logged_and_the_window_goe
     entry = await setup_window(hass, freezer=freezer)
     controller = controller_of(entry)
 
-    class Broken:
+    class Broken(EngineDouble):
         def recompute(self, snapshot: WorldSnapshot) -> Decision:
             raise KeyError("cover.example_secret")
 
-    controller.engine = Broken()  # type: ignore[assignment]
+    use_engine(controller, Broken())
     for _ in range(2):
         controller.async_request_recompute()
         await settle(hass, freezer)

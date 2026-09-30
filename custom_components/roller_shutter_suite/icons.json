@@ -52,6 +52,11 @@
         }
       }
     },
+    "button": {
+      "resume_automation": {
+        "default": "mdi:play-circle-outline"
+      }
+    },
     "select": {
       "operating_mode": {
         "default": "mdi:cog-outline",

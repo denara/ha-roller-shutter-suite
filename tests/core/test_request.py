@@ -19,6 +19,7 @@ from custom_components.roller_shutter_suite.core.model import (
     FunctionId,
     GateKind,
     Layer,
+    PersonAtWindowDam,
     Position,
     SourceValue,
     WindowState,
@@ -34,7 +35,7 @@ from custom_components.roller_shutter_suite.core.request import (
     standing_request,
 )
 from tests.core.arbiter_kit import NOW, STUB_LAYERS, day, window
-from tests.core.protection_kit import world
+from tests.core.protection_kit import override, world
 from tests.sim.stand_ins import SLEEP_SOURCE, SLEEP_STAND_IN
 
 MINUTE = timedelta(minutes=1)
@@ -156,6 +157,30 @@ def test_a_protection_event_and_fire_rank_above_a_request() -> None:
     assert stormy.winning_wish.reason is ReasonCode.PROTECTION_EVENT
     assert burning.winning_wish is not None
     assert burning.winning_wish.reason is ReasonCode.FIRE_ALARM
+
+
+@pytest.mark.parametrize("person", [False, True], ids=["manual override", "person"])
+def test_both_dams_hold_a_request_back(*, person: bool) -> None:
+    """Section 12a: every rule of a comfort wish applies, the two dams included.
+
+    A person moved the window by hand, so the request of an automation wins
+    the decision and is held back; it moves nothing until the dam ends.
+    """
+    requested = _requested(70)
+    state = (
+        replace(requested, person_at_window=PersonAtWindowDam(ends_at=LATER))
+        if person
+        else replace(requested, manual_override=override())
+    )
+
+    decision = _decide(engine(), state)
+
+    assert decision.winning_wish is not None
+    assert decision.winning_wish.reason is ReasonCode.EXTERNAL_REQUEST
+    assert decision.gate is not None
+    held_by = ReasonCode.PERSON_AT_WINDOW if person else ReasonCode.MANUAL_OVERRIDE
+    assert decision.gate.reason is held_by
+    assert decision.gate.kind is not GateKind.SEND
 
 
 def test_clearing_removes_the_request_and_the_schedule_acts_again() -> None:

@@ -409,7 +409,7 @@ def test_the_runner_wakes_a_window_up_at_the_deadline_of_the_gate() -> None:
     assert command is not None
     deadline = member_expectation_end(member, command)
 
-    assert member.capabilities.report_delay == REPORT_DELAY
+    assert member.capabilities.reporting_time == REPORT_DELAY
     assert command.share_of_travel == 1.0
     assert deadline == (
         command.time

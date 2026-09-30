@@ -25,8 +25,8 @@ from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Any, Final, Protocol
 
-from custom_components.roller_shutter_suite.const import PROVISIONAL_TRAVEL_TIME
 from custom_components.roller_shutter_suite.core.model import (
+    DEFAULT_TRAVEL_TIME,
     CapabilityProfile,
     JsonValue,
     MemberConfig,
@@ -309,8 +309,8 @@ PROBE_MEMBER: Final = MemberConfig(
         supports_set_position=False,
         supports_stop=False,
         reports_position=False,
-        travel_time_up=PROVISIONAL_TRAVEL_TIME,
-        travel_time_down=PROVISIONAL_TRAVEL_TIME,
+        travel_time_up=DEFAULT_TRAVEL_TIME,
+        travel_time_down=DEFAULT_TRAVEL_TIME,
         capabilities_known=False,
     ),
 )

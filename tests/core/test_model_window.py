@@ -12,7 +12,11 @@ from custom_components.roller_shutter_suite.core.model import (
     BLIND_SOURCE,
     DEFAULT_TOLERANCE_CALCULATED,
     DEFAULT_TOLERANCE_MEASURED,
+    DEFAULT_TRAVEL_TIME,
+    MAX_REPORTING_TIME,
+    MAX_TRAVEL_TIME,
     MIN_TOLERANCE,
+    MIN_TRAVEL_TIME,
     CapabilityProfile,
     CapabilityState,
     Controls,
@@ -30,6 +34,7 @@ from custom_components.roller_shutter_suite.core.model import (
     PositionReference,
     PositionSource,
     PositionUpdates,
+    ReportingKind,
     ScheduleProfile,
     SourceValue,
     SunPosition,
@@ -69,11 +74,13 @@ def _profile(**changes: Any) -> CapabilityProfile:
 
 
 def test_capability_profile_defaults_follow_the_architecture() -> None:
-    """Calculated position, no report delay, transit states unknown until seen."""
+    """Calculated position, reporting unknown, transit states unknown until seen."""
     profile = _profile()
 
     assert profile.position_source is PositionSource.CALCULATED
-    assert profile.report_delay == timedelta(0)
+    assert profile.reporting_kind is None
+    assert profile.reporting_time is None
+    assert profile.movement_detection_known is False
     assert profile.reports_transit_states is TransitReporting.UNKNOWN
     assert profile.position_updates is PositionUpdates.END_ONLY
     assert profile.travel_time_up != profile.travel_time_down
@@ -85,13 +92,29 @@ def test_capability_profile_of_a_polled_platform_with_a_measuring_drive() -> Non
         position_source=PositionSource.MEASURED,
         reports_transit_states=TransitReporting.NO,
         position_updates=PositionUpdates.LIVE,
-        report_delay=timedelta(seconds=60),
+        reporting_kind=ReportingKind.POLLED,
+        reporting_time=timedelta(seconds=60),
     )
 
     assert profile.position_source is PositionSource.MEASURED
-    assert profile.report_delay == timedelta(seconds=60)
+    assert profile.reporting_kind is ReportingKind.POLLED
+    assert profile.reporting_time == timedelta(seconds=60)
+    assert profile.movement_detection_known is True
     assert profile.reports_transit_states is TransitReporting.NO
     assert profile.position_updates is PositionUpdates.LIVE
+
+
+def test_the_reporting_time_reaches_from_zero_to_ten_minutes() -> None:
+    """Zero is a known time like any other; the bound is the largest one."""
+    assert _profile(reporting_time=timedelta(0)).movement_detection_known
+    assert _profile(reporting_time=MAX_REPORTING_TIME).reporting_time == timedelta(
+        minutes=10
+    )
+    assert (
+        timedelta(seconds=60),
+        timedelta(seconds=1),
+        timedelta(minutes=10),
+    ) == (DEFAULT_TRAVEL_TIME, MIN_TRAVEL_TIME, MAX_TRAVEL_TIME)
 
 
 def test_tolerance_defaults_follow_the_position_source() -> None:
@@ -135,8 +158,10 @@ def test_a_cover_without_position_feedback_is_a_valid_profile() -> None:
         ({"travel_time_up": timedelta(0)}, ValueError, "longer than zero"),
         ({"travel_time_down": timedelta(seconds=-1)}, ValueError, "longer than zero"),
         ({"travel_time_up": 24}, TypeError, "travel_time_up"),
-        ({"report_delay": timedelta(seconds=-1)}, ValueError, "not be negative"),
-        ({"report_delay": 60}, TypeError, "report delay"),
+        ({"reporting_time": timedelta(seconds=-1)}, ValueError, "within zero"),
+        ({"reporting_time": timedelta(seconds=601)}, ValueError, "within zero"),
+        ({"reporting_time": 60}, TypeError, "reporting time"),
+        ({"reporting_kind": "polled"}, TypeError, "reporting kind"),
         ({"supports_stop": 1}, TypeError, "supports_stop"),
         ({"reports_position": None}, TypeError, "reports_position"),
         ({"position_source": "measured"}, TypeError, "position source"),

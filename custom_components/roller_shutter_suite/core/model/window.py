@@ -85,6 +85,24 @@ Wide enough for a cover that settles several percent off its target; any
 wider, and a movement by hand of that size would pass as the integration's
 own.
 """
+DEFAULT_TRAVEL_TIME: Final = timedelta(seconds=60)
+"""The full travel time of a member in each direction while the user states none.
+
+Decided by the project owner with block H10. A wrong value makes the
+integration wait too long or too short before it judges a movement; the
+self-measurement in the diagnostics shows the right one.
+"""
+MIN_TRAVEL_TIME: Final = timedelta(seconds=1)
+MAX_TRAVEL_TIME: Final = timedelta(minutes=10)
+"""The range of a stated travel time: one second to ten minutes."""
+MAX_REPORTING_TIME: Final = timedelta(minutes=10)
+"""The largest reporting time a user can state: a report delay or a poll interval.
+
+While the reporting time of a member is not known, the deadline of its own
+commands counts with this bound (``member_expectation_end``), so a command
+counts as pending rather longer than shorter; the tracker does not judge
+such a member at all.
+"""
 _DEFAULT_FROST_POSITION: Final = Position(90)
 _DEFAULT_REEVALUATE_AFTER: Final = timedelta(minutes=5)
 _DEFAULT_MIN_INTERVAL: Final = timedelta(minutes=10)
@@ -150,6 +168,22 @@ class PositionUpdates(StrEnum):
 
 
 @unique
+class ReportingKind(StrEnum):
+    """How the platform of a member tells Home Assistant about it; stated by the user.
+
+    Home Assistant does not reveal it reliably, so it has no default: a
+    member whose user stated none has an unknown reporting kind. Decided by
+    the project owner on 2026-10-01 with block H10.
+    """
+
+    EVENT_DRIVEN = "event_driven"
+    """The platform pushes every change of state, direction and position, possibly late."""
+    POLLED = "polled"
+    """Home Assistant asks the platform on a schedule: no transit states, and
+    nothing that happens between two polls is ever seen."""
+
+
+@unique
 class CapabilityState(StrEnum):
     """Whether the members of a window have a capability.
 
@@ -196,6 +230,17 @@ class CapabilityProfile:
     A member that merely cannot be reached at present is **not** unknown: its
     last known capabilities apply, and whoever builds the profile hands them
     in as known.
+
+    ``reporting_kind`` and ``reporting_time`` are what the user states about
+    how the platform reports (section 8.1): event-driven or polled, and the
+    report delay of an event-driven platform or the poll interval of a
+    polled one. Both are ``None`` while the user stated none: unknown, never
+    a guess. The two are separate properties: a delay is normal and enters
+    the deadline, polling hides what happens between two polls. While the
+    reporting time is unknown the tracker does not judge the member
+    (``movement_detection_known``); arming requires every member to be
+    event-driven with a known time (decided by the project owner on
+    2026-10-01 with block H10).
     """
 
     supports_open_close: bool
@@ -207,7 +252,8 @@ class CapabilityProfile:
     position_source: PositionSource = PositionSource.CALCULATED
     reports_transit_states: TransitReporting = TransitReporting.UNKNOWN
     position_updates: PositionUpdates = PositionUpdates.END_ONLY
-    report_delay: timedelta = timedelta(0)
+    reporting_kind: ReportingKind | None = None
+    reporting_time: timedelta | None = None
     stated_tolerance: int | None = None
     capabilities_known: bool = True
 
@@ -232,9 +278,15 @@ class CapabilityProfile:
             require_type(travel_time, timedelta, f"the {name!r}")
             if travel_time <= timedelta(0):
                 raise ValueError(f"the {name!r} must be longer than zero")
-        require_type(self.report_delay, timedelta, "the report delay")
-        if self.report_delay < timedelta(0):
-            raise ValueError("the report delay must not be negative")
+        if self.reporting_kind is not None:
+            require_type(self.reporting_kind, ReportingKind, "the reporting kind")
+        if self.reporting_time is not None:
+            require_type(self.reporting_time, timedelta, "the reporting time")
+            if not timedelta(0) <= self.reporting_time <= MAX_REPORTING_TIME:
+                raise ValueError(
+                    "the reporting time must lie within zero and "
+                    f"{MAX_REPORTING_TIME.total_seconds():g} seconds"
+                )
         if self.stated_tolerance is not None:
             if isinstance(self.stated_tolerance, bool) or not isinstance(
                 self.stated_tolerance, int
@@ -245,6 +297,18 @@ class CapabilityProfile:
                     f"the tolerance must be within {MIN_TOLERANCE} and "
                     f"{MAX_STATED_TOLERANCE}"
                 )
+
+    @property
+    def movement_detection_known(self) -> bool:
+        """Return whether the tracker can judge the movements of this member.
+
+        Only with a known reporting time: without one no deadline and no
+        settle time can be trusted, and the tracker answers "unknown" for
+        the member, as it does before the start-up grace has passed, rather
+        than guess a time of zero. Whether the member reports a position at
+        all is a question of its own (``has_no_position_feedback``).
+        """
+        return self.reporting_time is not None
 
     @property
     def tolerance(self) -> int:

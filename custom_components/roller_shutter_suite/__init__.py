@@ -51,7 +51,13 @@ from .runtime import SuiteRuntime
 from .storage import forget_storage, storage_of
 from .windows import WindowRuntime, resolve_entry
 
-PLATFORMS = (Platform.BINARY_SENSOR, Platform.SELECT, Platform.SENSOR, Platform.SWITCH)
+PLATFORMS = (
+    Platform.BINARY_SENSOR,
+    Platform.BUTTON,
+    Platform.SELECT,
+    Platform.SENSOR,
+    Platform.SWITCH,
+)
 
 TRANSLATIONS_FOR_THE_LOGBOOK = ("entity", "common")
 """The categories the logbook reads from the cache of translations; see logbook.py."""

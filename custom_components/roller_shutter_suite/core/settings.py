@@ -55,6 +55,7 @@ from .model import (
     DEFAULT_PERSON_AT_WINDOW,
     DEFAULT_ROOM_EMPTY_AFTER,
     DEFAULT_SOURCE_BLIND_AFTER,
+    DEFAULT_TRAVEL_TIME,
     DEFAULT_WAITING_TIME,
     EVENTS_UNREADABLE,
     FULLY_CLOSED,
@@ -66,11 +67,13 @@ from .model import (
     MAX_MAX_DURATION,
     MAX_RANDOM_OFFSET,
     MAX_RANK,
+    MAX_REPORTING_TIME,
     MAX_SOURCE_BLIND_AFTER,
     MAX_STAGGER_GAP,
     MAX_STATED_TOLERANCE,
     MAX_SUN_OFFSET_MINUTES,
     MAX_TOLERANCE,
+    MAX_TRAVEL_TIME,
     MAX_TRIGGER_ELEVATION,
     MAX_WAITING_TIME,
     MEMBER_MEASUREMENT_FIELDS,
@@ -78,6 +81,7 @@ from .model import (
     MIN_RANK,
     MIN_SOURCE_BLIND_AFTER,
     MIN_TOLERANCE,
+    MIN_TRAVEL_TIME,
     SCHEDULE_DAY_TYPES,
     SCHEDULE_EDGES,
     TRIGGER_FIELDS,
@@ -98,6 +102,7 @@ from .model import (
     ProtectionEventConfig,
     ProtectionEvents,
     ProtectionTrigger,
+    ReportingKind,
     ScheduleProfile,
     SettingsCombinationError,
     TemperatureTier,
@@ -2309,6 +2314,42 @@ CAPABILITY_SETTINGS: Final = SettingsRegistry(
             value_range=ValueRange(MIN_TOLERANCE, MAX_STATED_TOLERANCE),
             unit=PERCENT,
         ),
+        SettingDefinition[ReportingKind | None](
+            key="reporting_kind",
+            kind=SettingKind.ENUMERATION,
+            # Home Assistant does not reveal it reliably, so it has no
+            # default: unset, it is unknown (ruling of the project owner,
+            # 2026-10-01).
+            function=None,
+            default=None,
+            parse=as_enum(ReportingKind),
+            inheritable=False,
+        ),
+        SettingDefinition[timedelta | None](
+            key="reporting_time",
+            kind=SettingKind.DURATION,
+            # The report delay of an event-driven platform or the poll
+            # interval of a polled one. No default either: unset, unknown.
+            function=None,
+            default=None,
+            parse=as_duration,
+            inheritable=False,
+            value_range=ValueRange(0, MAX_REPORTING_TIME.total_seconds()),
+        ),
+        *(
+            SettingDefinition(
+                key=key,
+                kind=SettingKind.DURATION,
+                function=None,
+                default=DEFAULT_TRAVEL_TIME,
+                parse=as_duration,
+                inheritable=False,
+                value_range=ValueRange(
+                    MIN_TRAVEL_TIME.total_seconds(), MAX_TRAVEL_TIME.total_seconds()
+                ),
+            )
+            for key in ("travel_time_up", "travel_time_down")
+        ),
     )
 )
 """What a user states about one member that no entity can report (section 8.1).
@@ -2318,15 +2359,24 @@ time) cannot be detected, so the user states it per member; the default is
 ``calculated``. The tolerance compares a reported position with a target; a
 user widens it for a cover that settles off its target. Unset, it follows
 the position source: 2 for a calculated, 3 for a measured position. A stated
-tolerance lies within 1 and 20 percent (``MAX_STATED_TOLERANCE``). Block H10
-builds the per-member form from this registry and hands the values into
-``CapabilityProfile``.
+tolerance lies within 1 and 20 percent (``MAX_STATED_TOLERANCE``).
 
-Neither has a fault value (ruling 4 of block C06). A faulty stored position
-source is read as ``calculated`` (:func:`position_source_from_stored`), and a
+The reporting kind (``event_driven`` or ``polled``) and the reporting time
+(the report delay of an event-driven platform, the poll interval of a
+polled one, 0 to 600 seconds) have no default: unset, they are unknown
+(ruling of the project owner, 2026-10-01). The travel times upwards and
+downwards are configuration values, never learned, 1 to 600 seconds,
+default 60 seconds each (ruling of the project owner, 2026-09-30). The Home
+Assistant side builds the per-member form from this registry and hands the
+values into ``CapabilityProfile`` (:func:`stated_capabilities`).
+
+None has a fault value (ruling 4 of block C06). A faulty stored position
+source is read as ``calculated`` (:func:`position_source_from_stored`), a
 faulty stored tolerance as none stated (:func:`stated_tolerance_from_stored`),
 so the default of the position source applies: a smaller tolerance never
-lets a movement by hand pass as the integration's own.
+lets a movement by hand pass as the integration's own. A faulty reporting
+kind or time is read as unknown, never as a value nobody entered, and a
+faulty travel time as the default.
 """
 
 
@@ -2367,6 +2417,54 @@ def tolerance_from_stored(data: object) -> int:
     if stated is not None:
         return stated
     return CapabilityProfile.default_tolerance(position_source_from_stored(data))
+
+
+def reporting_kind_from_stored(data: object) -> ReportingKind | None:
+    """Return the reporting kind the user stated for one member, or ``None``.
+
+    What is absent, faulty or unreadable is unknown: there is no default.
+    """
+    value = settings_from_stored(data, CAPABILITY_SETTINGS).get("reporting_kind")
+    return value if isinstance(value, ReportingKind) else None
+
+
+def reporting_time_from_stored(data: object) -> timedelta | None:
+    """Return the reporting time the user stated for one member, or ``None``.
+
+    What is absent, faulty, outside 0 to 600 seconds or unreadable is
+    unknown, never zero.
+    """
+    value = settings_from_stored(data, CAPABILITY_SETTINGS).get("reporting_time")
+    return value if isinstance(value, timedelta) else None
+
+
+def travel_time_from_stored(data: object, key: str) -> timedelta:
+    """Return a travel time of one member (``travel_time_up`` or ``_down``).
+
+    What is absent, faulty or unreadable is the default of the registry,
+    ``DEFAULT_TRAVEL_TIME``.
+    """
+    value = settings_from_stored(data, CAPABILITY_SETTINGS).get(key)
+    return value if isinstance(value, timedelta) else DEFAULT_TRAVEL_TIME
+
+
+def stated_capabilities(profile: CapabilityProfile, data: object) -> CapabilityProfile:
+    """Return the capability profile with what the user stated for the member.
+
+    ``profile`` is what Home Assistant knows about the cover; ``data`` the
+    stored mapping of the member's capability settings (``None`` when the
+    user stated nothing). Every value is read with its own tolerant rule
+    above, so no stored value can make the profile invalid.
+    """
+    return dataclasses.replace(
+        profile,
+        position_source=position_source_from_stored(data),
+        stated_tolerance=stated_tolerance_from_stored(data),
+        reporting_kind=reporting_kind_from_stored(data),
+        reporting_time=reporting_time_from_stored(data),
+        travel_time_up=travel_time_from_stored(data, "travel_time_up"),
+        travel_time_down=travel_time_from_stored(data, "travel_time_down"),
+    )
 
 
 _UNKNOWN_MEMBER_FAULT: Final = "the window has no member with this identifier"

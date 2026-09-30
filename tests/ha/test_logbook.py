@@ -26,10 +26,6 @@ from tests.ha.runtime_kit import (
 from tests.ha.status_kit import REASON, collect_reason_events, controls
 
 _monday_morning = pytest.fixture(autouse=True)(monday_morning)
-# These tests watch armed windows at work. This version runs every window in
-# dry-run until block H10 notices movements by hand (maintenance item X10);
-# the fixture sets that fact as H10 will.
-pytestmark = pytest.mark.usefixtures("movement_detection")
 
 type Describe = Callable[[logbook.LogbookEvent], dict[str, Any]]
 
@@ -157,6 +153,59 @@ async def test_the_messages_follow_the_language_of_the_installation(
     assert describe(Event(EVENT_REASON, fired[0]))["message"] == (
         "sent (schedule_night)"
     )
+
+
+TRACKER_LINES = [
+    ({"reason": "manual_detected"}, "Moved by hand.", "Von Hand bewegt."),
+    (
+        {"reason": "manual_detected", "position": 40},
+        "Moved by hand, at 40 %.",
+        "Von Hand bewegt, bei 40 %.",
+    ),
+    (
+        {"reason": "manual_detected_member", "member_id": COVER},
+        f"One cover of the window was moved by hand: {COVER}.",
+        f"Ein Rollladen des Fensters wurde von Hand bewegt: {COVER}.",
+    ),
+    (
+        {"reason": "manual_detected_member", "member_id": COVER, "position": 40},
+        f"One cover of the window was moved by hand: {COVER}, at 40 %.",
+        f"Ein Rollladen des Fensters wurde von Hand bewegt: {COVER}, bei 40 %.",
+    ),
+    (
+        {"reason": "comfort_movements_threshold", "count": 41, "threshold": 40},
+        "More comfort movements today than the threshold: 41 today, threshold 40.",
+        "Heute mehr Komfortfahrten als der Schwellwert: heute 41, Schwellwert 40.",
+    ),
+]
+
+
+@pytest.mark.parametrize(("data", "english", "german"), TRACKER_LINES)
+async def test_an_event_of_the_tracker_is_one_line_in_both_languages(
+    hass: HomeAssistant,
+    freezer: Any,
+    data: dict[str, Any],
+    english: str,
+    german: str,
+) -> None:
+    """The words of the reason sensor, with the cover, the position or the count."""
+    await setup_window(hass, freezer=freezer)
+    event = {"subentry_id": WINDOW_ID, "name": "Example window", "layer": None} | data
+    describe = _describer(hass)
+    described = describe(Event(EVENT_REASON, event))
+    assert described["message"] == english
+    assert described["entity_id"] == REASON
+
+    hass.config.language = "de"
+    for category in ("entity", "common"):
+        await async_get_translations(hass, "de", category, {DOMAIN})
+    assert describe(Event(EVENT_REASON, event))["message"] == german
+
+
+def test_an_event_of_the_tracker_without_a_text_is_named_by_its_code() -> None:
+    """A missing sentence never fails the logbook; the code stands in."""
+    message = logbook.describe({"reason": "override_ended"}, {}, {})
+    assert message == "override_ended"
 
 
 def test_a_reason_without_a_text_is_named_by_its_code() -> None:

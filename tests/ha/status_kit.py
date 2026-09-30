@@ -82,6 +82,16 @@ def collect_reason_events(hass: HomeAssistant) -> list[dict[str, Any]]:
     return fired
 
 
+def outcomes(fired: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Return the reason events about decisions, without those of the tracker.
+
+    An outcome names the layer whose wish it reports; an event of the
+    tracker or the dams (a movement by hand, "the cover did not react")
+    names none.
+    """
+    return [event for event in fired if event["layer"] is not None]
+
+
 def state_of(hass: HomeAssistant, entity_id: str) -> State:
     """Return the state of an entity; fail if it has none."""
     state = hass.states.get(entity_id)

@@ -8,15 +8,20 @@ stored tolerance as none stated, so the default of the source applies. A
 smaller tolerance never lets a movement by hand pass as the integration's own.
 """
 
+from dataclasses import replace
+from datetime import timedelta
+
 import pytest
 
 from custom_components.roller_shutter_suite.core.model import (
     DEFAULT_TOLERANCE_CALCULATED,
     DEFAULT_TOLERANCE_MEASURED,
+    DEFAULT_TRAVEL_TIME,
     MAX_STATED_TOLERANCE,
     MIN_TOLERANCE,
     PositionOwner,
     PositionSource,
+    ReportingKind,
 )
 from custom_components.roller_shutter_suite.core.reasons import ReasonCode
 from custom_components.roller_shutter_suite.core.settings import (
@@ -25,19 +30,130 @@ from custom_components.roller_shutter_suite.core.settings import (
     SettingKind,
     ValueRange,
     position_source_from_stored,
+    reporting_kind_from_stored,
+    reporting_time_from_stored,
+    stated_capabilities,
     stated_tolerance_from_stored,
     tolerance_from_stored,
+    travel_time_from_stored,
 )
 from tests.core.arbiter_kit import LEFT, profile
 from tests.core.tracking_kit import codes, driver, moving_up, resting
 
 
-def test_the_registry_holds_the_position_source_and_the_tolerance() -> None:
-    """The two values of the capability profile a user states."""
+def test_the_registry_holds_what_a_user_states_about_a_member() -> None:
+    """The values of the capability profile a user states (section 8.1)."""
     assert [d.key for d in CAPABILITY_SETTINGS.definitions] == [
         "position_source",
         "tolerance",
+        "reporting_kind",
+        "reporting_time",
+        "travel_time_up",
+        "travel_time_down",
     ]
+    for definition in CAPABILITY_SETTINGS.definitions:
+        assert definition.function is None
+        assert definition.inheritable is False
+        assert not definition.has_fault_value
+
+
+def test_the_reporting_kind_and_time_have_no_default() -> None:
+    """Ruling of the project owner, 2026-10-01: a value that is not set is unknown."""
+    kind, time = CAPABILITY_SETTINGS.definitions[2:4]
+
+    assert (kind.key, kind.kind, kind.default) == (
+        "reporting_kind",
+        SettingKind.ENUMERATION,
+        None,
+    )
+    assert (time.key, time.kind, time.default) == (
+        "reporting_time",
+        SettingKind.DURATION,
+        None,
+    )
+    assert time.value_range == ValueRange(0, 600)
+
+
+def test_the_travel_times_default_to_sixty_seconds() -> None:
+    """Ruling 1 of the project owner for block H10: 60 s in each direction."""
+    for definition in CAPABILITY_SETTINGS.definitions[4:]:
+        assert definition.kind is SettingKind.DURATION
+        assert definition.default == DEFAULT_TRAVEL_TIME == timedelta(seconds=60)
+        assert definition.value_range == ValueRange(1, 600)
+
+
+@pytest.mark.parametrize(
+    ("stored", "kind", "time"),
+    [
+        ({"reporting_kind": "event_driven", "reporting_time": 30}, "event_driven", 30),
+        ({"reporting_kind": "polled", "reporting_time": 60}, "polled", 60),
+        ({"reporting_kind": "event_driven", "reporting_time": 0}, "event_driven", 0),
+        ({}, None, None),
+        ({"reporting_kind": "pushed", "reporting_time": -1}, None, None),
+        ({"reporting_kind": None, "reporting_time": 601}, None, None),
+        ({"reporting_kind": True, "reporting_time": "soon"}, None, None),
+        ("not a mapping", None, None),
+    ],
+    ids=["event-driven", "polled", "at-once", "absent", "faulty", "null", "text", "x"],
+)
+def test_a_faulty_stored_reporting_kind_or_time_is_unknown(
+    stored: object, kind: str | None, time: int | None
+) -> None:
+    """Never a value nobody entered: absent or faulty is unknown, never zero."""
+    assert reporting_kind_from_stored(stored) == (
+        None if kind is None else ReportingKind(kind)
+    )
+    assert reporting_time_from_stored(stored) == (
+        None if time is None else timedelta(seconds=time)
+    )
+
+
+@pytest.mark.parametrize(
+    ("stored", "up", "down"),
+    [
+        ({"travel_time_up": 25, "travel_time_down": 22}, 25, 22),
+        ({}, 60, 60),
+        ({"travel_time_up": 0, "travel_time_down": 601}, 60, 60),
+        ({"travel_time_up": "long"}, 60, 60),
+    ],
+    ids=["stated", "absent", "out-of-range", "text"],
+)
+def test_a_travel_time_is_the_stated_one_or_the_default(
+    stored: object, up: int, down: int
+) -> None:
+    """A faulty travel time is the default of 60 seconds."""
+    assert travel_time_from_stored(stored, "travel_time_up") == timedelta(seconds=up)
+    assert travel_time_from_stored(stored, "travel_time_down") == timedelta(
+        seconds=down
+    )
+
+
+def test_the_profile_takes_what_the_user_stated() -> None:
+    """``stated_capabilities`` hands every value into the capability profile."""
+    base = profile(reporting_kind=None, reporting_time=None)
+    stated = stated_capabilities(
+        base,
+        {
+            "position_source": "measured",
+            "tolerance": 4,
+            "reporting_kind": "event_driven",
+            "reporting_time": 45,
+            "travel_time_up": 30,
+            "travel_time_down": 28,
+        },
+    )
+
+    assert stated.position_source is PositionSource.MEASURED
+    assert stated.stated_tolerance == 4  # noqa: PLR2004
+    assert stated.reporting_kind is ReportingKind.EVENT_DRIVEN
+    assert stated.reporting_time == timedelta(seconds=45)
+    assert (stated.travel_time_up, stated.travel_time_down) == (
+        timedelta(seconds=30),
+        timedelta(seconds=28),
+    )
+    assert stated_capabilities(base, None) == replace(
+        base, travel_time_up=DEFAULT_TRAVEL_TIME, travel_time_down=DEFAULT_TRAVEL_TIME
+    )
 
 
 def test_the_position_source_is_a_setting_of_one_member_without_a_fault_value() -> None:

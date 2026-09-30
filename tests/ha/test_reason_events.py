@@ -28,13 +28,14 @@ from tests.ha.runtime_kit import (
     setup_window,
     window_data,
 )
-from tests.ha.status_kit import FireAlarm, collect_reason_events, controls
+from tests.ha.status_kit import (
+    FireAlarm,
+    collect_reason_events,
+    controls,
+    outcomes,
+)
 
 _monday_morning = pytest.fixture(autouse=True)(monday_morning)
-# These tests watch armed windows at work. This version runs every window in
-# dry-run until block H10 notices movements by hand (maintenance item X10);
-# the fixture sets that fact as H10 will.
-pytestmark = pytest.mark.usefixtures("movement_detection")
 
 
 async def _tick(hass: HomeAssistant, freezer: Any, times: int, minutes: int) -> None:
@@ -72,6 +73,12 @@ async def test_a_sent_command_fires_one_event_with_the_window_and_the_reason(
             "gate_rule": None,
             "dry_run": False,
             "until": None,
+            # Filled by the events of the tracker only; every event has them.
+            "member_id": None,
+            "position": None,
+            "count": None,
+            "threshold": None,
+            "user_id": None,
         }
     ]
 
@@ -127,31 +134,30 @@ async def test_a_would_be_command_in_dry_run_fires_once(
 async def test_reaching_the_target_ends_the_outcome(
     hass: HomeAssistant, freezer: Any
 ) -> None:
-    """After the target is reached, the same wish later is a new movement and fires."""
+    """After the target is reached, the same wish later is a new movement and fires.
+
+    In dry-run, where another control moves the cover: an armed window would
+    take the lowering for a movement by hand and hold still.
+    """
     fired = collect_reason_events(hass)
     set_cover(hass, COVER, position=50)
-    entry = await setup_window(hass, covers_present=False, freezer=freezer)
-    assert [e["reason"] for e in fired] == [ReasonCode.SENT]
+    entry = await setup_window(
+        hass, window_data(dry_run=True), covers_present=False, freezer=freezer
+    )
+    assert [e["reason"] for e in fired] == [ReasonCode.DRY_RUN]
     set_cover(hass, COVER, position=100)
     await settle(hass, freezer)
 
-    # Lowered again: the day position is wanted again, first after the
-    # minimum time between two movements.
+    # Lowered again: the day position is wanted again, a new outcome. (The
+    # would-be command stood at its target and does not count against itself,
+    # so no minimum interval applies in dry-run.)
     set_cover(hass, COVER, position=50)
-    for _ in range(20):
-        await _tick(hass, freezer, times=1, minutes=1)
-        if [e["reason"] for e in fired].count(ReasonCode.SENT) == 2:  # noqa: PLR2004
-            set_cover(hass, COVER, position=100)
-            break
     await _tick(hass, freezer, times=4, minutes=5)
-    assert [e["reason"] for e in fired] == [
-        ReasonCode.SENT,
-        ReasonCode.MIN_INTERVAL,
-        ReasonCode.SENT,
+    assert [e["reason"] for e in outcomes(fired)] == [
+        ReasonCode.DRY_RUN,
+        ReasonCode.DRY_RUN,
     ]
-    assert fired[1]["gate"] == "defer"
-    assert fired[1]["until"] is not None
-    assert len(commands_sent(entry)) == 2  # noqa: PLR2004 - two movements
+    assert commands_sent(entry) == []
 
 
 async def test_the_fire_event_fires_at_once_in_dry_run_and_sends_nothing(
@@ -200,14 +206,14 @@ async def test_the_fire_event_fires_at_once_under_maintenance_lock_and_sends_not
     alarm.active = True
     controller.async_request_recompute()
     await settle(hass, freezer)
-    assert [(e["layer"], e["reason"], e["gate"]) for e in fired] == [
+    assert [(e["layer"], e["reason"], e["gate"]) for e in outcomes(fired)] == [
         ("fire", ReasonCode.MAINTENANCE_LOCK, "suppress")
     ]
-    assert fired[0]["target"] == 100  # noqa: PLR2004 - fully open
+    assert outcomes(fired)[0]["target"] == 100  # noqa: PLR2004 - fully open
     assert len(commands_sent(entry)) == before
 
     await _tick(hass, freezer, times=3, minutes=5)
-    assert len(fired) == 1
+    assert len(outcomes(fired)) == 1
 
 
 SMOKE = "binary_sensor.example_smoke"

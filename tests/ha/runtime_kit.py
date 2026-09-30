@@ -33,10 +33,12 @@ from pytest_homeassistant_custom_component.common import (
 from custom_components.roller_shutter_suite.const import (
     CONF_COVERS,
     CONF_DRY_RUN,
+    CONF_MEMBERS,
     CONF_SETTINGS,
     SUBENTRY_WINDOW,
 )
 from custom_components.roller_shutter_suite.controller import Phase, WindowController
+from custom_components.roller_shutter_suite.core.engine import Engine, build_arbiter
 from custom_components.roller_shutter_suite.core.model import Position, SunPosition
 from custom_components.roller_shutter_suite.core.schedule import ScheduleResult
 from custom_components.roller_shutter_suite.runtime import SuiteRuntime
@@ -146,18 +148,40 @@ class SunFactory:
         return port
 
 
+EVENT_DRIVEN_AT_ONCE: dict[str, Any] = {
+    "reporting_kind": "event_driven",
+    "reporting_time": 0,
+}
+"""What a user states on the page of a cover that reports every change at once."""
+
+
 def window_data(
     covers: list[str] | None = None,
     settings: dict[str, Any] | None = None,
     *,
     dry_run: bool = False,
+    members: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Return the stored data of a window subentry."""
-    return {
-        CONF_COVERS: [COVER] if covers is None else covers,
+    """Return the stored data of a window subentry.
+
+    ``members`` is what the user states per cover; by default every cover is
+    stated as event-driven and reporting at once, so an armed window of the
+    tests moves (arming requires it).
+    """
+    covers = [COVER] if covers is None else covers
+    data = {
+        CONF_COVERS: covers,
         CONF_DRY_RUN: dry_run,
         CONF_SETTINGS: {} if settings is None else settings,
+        CONF_MEMBERS: (
+            {cover: dict(EVENT_DRIVEN_AT_ONCE) for cover in covers}
+            if members is None
+            else members
+        ),
     }
+    if not data[CONF_MEMBERS]:
+        del data[CONF_MEMBERS]
+    return data
 
 
 def window_subentry(
@@ -198,6 +222,29 @@ async def setup_window(
     if freezer is not None:
         await settle(hass, freezer)
     return entry
+
+
+class EngineDouble:
+    """The base of a test double of the engine that decides by itself.
+
+    A double writes ``recompute`` (and ``state_after``) of its own; the
+    movement tracker, the recorder of a send and the timers are those of the
+    real engine of the window, which :func:`use_engine` hands it.
+    """
+
+    real: Engine
+
+    def __getattr__(self, name: str) -> Any:
+        """Hand what the double does not write itself to the real engine."""
+        if name == "real":
+            raise AttributeError(name)
+        return getattr(self.real, name)
+
+
+def use_engine(controller: WindowController, double: EngineDouble) -> None:
+    """Let a controller decide with a test double of the engine."""
+    double.real = Engine(controller.config, build_arbiter())
+    controller.engine = double  # type: ignore[assignment]
 
 
 def runtime_of(entry: MockConfigEntry) -> SuiteRuntime:

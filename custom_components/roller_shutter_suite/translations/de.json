@@ -574,10 +574,30 @@
         },
         "degraded": {
           "title": "Rollläden, die nur öffnen und schließen",
-          "description": "Diese Rollläden können keine Position anfahren oder melden keine: {covers}\n\nDu kannst sie trotzdem verwenden. Sie werden immer nur ganz geöffnet oder ganz geschlossen, nie auf eine Position dazwischen gefahren.",
+          "description": "Diese Rollläden können keine Position anfahren oder melden keine: {covers}\n\nDu kannst sie trotzdem verwenden. Sie werden immer nur ganz geöffnet oder ganz geschlossen, nie auf eine Position dazwischen gefahren. Ein Rollladen, der keine Position meldet, kann Roller Shutter Suite nicht verraten, dass du ihn von Hand bewegt hast; bei ihm hält eine Bedienung von Hand die automatischen Bewegungen deshalb nicht zurück.",
           "menu_options": {
             "degraded_accept": "Mit diesen Abdeckungen fortfahren",
             "basics": "Andere Abdeckungen wählen"
+          }
+        },
+        "member": {
+          "title": "Rollladen {member_number} von {member_count}: {member}",
+          "description": "Was Roller Shutter Suite von diesem Rollladen nicht ablesen kann. Mit diesen Angaben unterscheidet es seine eigenen Bewegungen von deinen. Lässt du eine Zahl leer, gilt, was ihr Hilfetext nennt.",
+          "data": {
+            "position_source": "Herkunft der Position",
+            "tolerance": "Toleranz",
+            "reporting_kind": "Wie der Rollladen meldet",
+            "reporting_time": "Meldezeit",
+            "travel_time_up": "Fahrzeit nach oben",
+            "travel_time_down": "Fahrzeit nach unten"
+          },
+          "data_description": {
+            "position_source": "Woher die Position dieses Rollladens stammt. Die meisten Aktoren für einen einfachen Auf-Ab-Motor berechnen sie aus der Laufzeit; manche Antriebe messen sie selbst.",
+            "tolerance": "Wie weit die gemeldete Position vom Ziel abweichen darf und trotzdem als erreicht gilt. Erhöhe sie für einen Rollladen, der etwas neben seinem Ziel stehen bleibt, und halte sie so klein wie nötig: Eine Bedienung von Hand, die kleiner ist als die Toleranz, hält Roller Shutter Suite für eine automatische. Leer: {tolerance_calculated} bei berechneter Position, {tolerance_measured} bei gemessener.",
+            "reporting_kind": "Ereignisgesteuert: Der Rollladen teilt Home Assistant jede Änderung von sich aus mit, vielleicht etwas verspätet; viele Funkaktoren melden so, manche bis zu einer Minute später. Abgefragt: Home Assistant fragt den Rollladen in festen Abständen ab, bei einem über eine HomeKit-Bridge eingebundenen Rollladen etwa alle 60 Sekunden, und sieht nichts, was zwischen zwei Abfragen passiert. Home Assistant kann das nicht selbst erkennen, deshalb gibst du es an. Scharf schalten lässt sich ein Fenster nur, wenn jeder seiner Rollläden ereignisgesteuert ist und eine Meldezeit hat.",
+            "reporting_time": "Bei einem ereignisgesteuerten Rollladen: wie spät seine Meldungen höchstens eintreffen, 0 bei sofort. Bei einem abgefragten: wie oft Home Assistant ihn abfragt. Leer: nicht bekannt; dann werden Bewegungen dieses Rollladens nicht beurteilt, und das Fenster lässt sich nicht scharf schalten. Bist du unsicher, gib die größte Verzögerung an, die du gesehen hast, zum Beispiel 60 s: Roller Shutter Suite misst die Verzögerung nur bei eigenen Bewegungen, also erst wenn das Fenster scharf ist, und die Diagnose zeigt sie dann.",
+            "travel_time_up": "Wie lange der Rollladen von ganz geschlossen bis ganz offen braucht. Ein falscher Wert lässt Roller Shutter Suite zu lange oder zu kurz warten, bevor es eine Bewegung beurteilt; die Diagnose zeigt die gemessene Zeit. Leer: {travel_time_up_default}.",
+            "travel_time_down": "Wie lange der Rollladen von ganz offen bis ganz geschlossen braucht. Ein falscher Wert lässt Roller Shutter Suite zu lange oder zu kurz warten, bevor es eine Bewegung beurteilt; die Diagnose zeigt die gemessene Zeit. Leer: {travel_time_down_default}."
           }
         },
         "operation": {
@@ -595,7 +615,6 @@
             "old_control_off": "Ich habe die bisherige Steuerung ausgeschaltet und geprüft, dass sie den Rollladen nicht mehr bewegt.",
             "compared": "Ich habe die letzten Tage verglichen: Nach jeder Bewegung der bisherigen Steuerung stand als Grund „Steht bereits richtig“, oder ich verstehe jeden Unterschied.",
             "controls_checked": "Ich habe mir Betriebsart, Pause und Wartungssperre des Hauses, der Gruppe und dieses Fensters angesehen.",
-            "reports_at_once": "Jeder Rollladen dieses Fensters meldet seine Bewegungen sofort, nicht nur in festen Abständen: Während er fährt, ändern sich Zustand und Position in Home Assistant, nicht erst eine Minute später. Bis eine spätere Version jeden Befehl überprüft, könnte eine Bedienung von Hand zwischen zwei Meldungen rückgängig gemacht werden.",
             "fresh_start": "Ich weiß, dass das Fenster frisch beginnt: Was es im Probelauf gesendet hätte, gilt als nie gesendet. Steht der Rollladen nicht dort, wo der Tagesablauf ihn haben will, fährt er wenige Sekunden nach dem Speichern los.",
             "way_back": "Ich kenne den Weg zurück: Mit der Wartungssperre sendet das Fenster keinen Befehl mehr, und dieses Formular schaltet es zurück in den Probelauf."
           }
@@ -834,7 +853,12 @@
         "cover_in_use": "{cover} gehört bereits zum Fenster „{window}“. Eine Abdeckung kann nur zu einem Fenster gehören.",
         "confirm_every_check": "Bestätige jeden Punkt. Trifft einer noch nicht zu, schließe diesen Dialog: Das Fenster bleibt im Probelauf.",
         "no_movement_detection": "Diese Version kann noch kein Fenster scharf schalten: Sie bemerkt nicht, wenn du einen Rollladen von Hand bewegst, und ein scharfes Fenster würde ihn nach wenigen Sekunden zurückfahren. Das bringt eine spätere Version. Diese Seite speichert nichts: Schließe diesen Dialog, und das Fenster bleibt, wie es war. Um deine anderen Änderungen zu speichern, wähle erneut „Neu konfigurieren“ und auf der Seite „Betrieb“ den Probelauf.",
-        "report_delay": "Diese Rollläden melden ihre Bewegungen verzögert, nicht sofort: {covers}. Bis eine spätere Version jeden Befehl überprüft, lässt sich ein Fenster mit einem solchen Rollladen nicht scharf schalten, denn eine Bedienung von Hand zwischen zwei Meldungen könnte rückgängig gemacht werden. Diese Seite speichert nichts: Schließe diesen Dialog, und das Fenster bleibt, wie es war. Um deine anderen Änderungen zu speichern, wähle erneut „Neu konfigurieren“ und auf der Seite „Betrieb“ den Probelauf.",
+        "reporting_not_stated": "Für diese Rollläden ist nicht angegeben, wie sie melden oder wie spät: {covers}. Trage beides auf der Seite jedes Rollladens ein; sie folgt in diesem Formular auf die Seiten der Funktionen. Diese Seite speichert nichts: Schließe diesen Dialog, und das Fenster bleibt, wie es war. Um deine anderen Änderungen zu speichern, wähle erneut „Neu konfigurieren“ und auf der Seite „Betrieb“ den Probelauf.",
+        "reporting_polled": "Diese Rollläden werden abgefragt: {covers}. Bis eine spätere Version jeden Befehl überprüft, lässt sich ein Fenster mit einem abgefragten Rollladen nicht scharf schalten, denn eine Bedienung von Hand zwischen zwei Abfragen könnte rückgängig gemacht werden. Diese Seite speichert nichts: Schließe diesen Dialog, und das Fenster bleibt, wie es war. Um deine anderen Änderungen zu speichern, wähle erneut „Neu konfigurieren“ und auf der Seite „Betrieb“ den Probelauf.",
+        "out_of_range_tolerance": "Gib einen Wert von {tolerance_minimum} bis {tolerance_maximum} ein.",
+        "out_of_range_reporting_time": "Gib einen Wert von {reporting_time_minimum} bis {reporting_time_maximum} ein.",
+        "out_of_range_travel_time_up": "Gib einen Wert von {travel_time_up_minimum} bis {travel_time_up_maximum} ein.",
+        "out_of_range_travel_time_down": "Gib einen Wert von {travel_time_down_minimum} bis {travel_time_down_maximum} ein.",
         "invalid_value": "Dieser Wert ist hier nicht möglich.",
         "fraction_not_allowed": "Gib eine ganze Zahl ein.",
         "invalid_day_of_year": "Gib den Tag als Monat und Tag mit je zwei Ziffern ein, zum Beispiel 05-01.",
@@ -893,6 +917,19 @@
         "armed": "Scharf: die Rollläden bewegen"
       }
     },
+    "position_source": {
+      "options": {
+        "calculated": "Aus der Laufzeit berechnet",
+        "measured": "Vom Antrieb gemessen"
+      }
+    },
+    "reporting_kind": {
+      "options": {
+        "not_stated": "Nicht angegeben",
+        "event_driven": "Ereignisgesteuert: meldet jede Änderung von sich aus",
+        "polled": "Abgefragt: wird in festen Abständen abgefragt"
+      }
+    },
     "schedule_trigger_kind": {
       "options": {
         "inherit": "Vom Haus oder von der Gruppe übernehmen",
@@ -922,6 +959,10 @@
     "armed_without_movement_detection": {
       "title": "Fenster „{window}“ läuft im Probelauf",
       "description": "Laut den gespeicherten Einstellungen ist das Fenster „{window}“ scharf geschaltet. Diese Version bemerkt aber noch nicht, wenn du einen Rollladen von Hand bewegst, und ein scharfes Fenster würde ihn nach wenigen Sekunden zurückfahren. Deshalb läuft das Fenster im Probelauf: Es entscheidet und hält fest, was es tun würde, bewegt aber nichts, bis eine spätere Version eine Bedienung von Hand bemerkt. Um diesen Hinweis zu entfernen, öffne das Fenster, wähle „Neu konfigurieren“ und auf der Seite „Betrieb“ den Probelauf."
+    },
+    "armed_without_reporting": {
+      "title": "Fenster „{window}“ läuft im Probelauf",
+      "description": "Laut den gespeicherten Einstellungen ist das Fenster „{window}“ scharf geschaltet, aber für diese Rollläden ist nicht angegeben, dass sie ereignisgesteuert melden und mit welcher Meldezeit: {covers}. Ohne diese Angabe könnte eine Bedienung von Hand unbemerkt bleiben und rückgängig gemacht werden. Deshalb läuft das Fenster im Probelauf: Es entscheidet und hält fest, was es tun würde, bewegt aber nichts. Zum Beheben öffne das Fenster, wähle „Neu konfigurieren“ und gib auf der Seite jedes Rollladens an, wie er meldet; oder wähle auf der Seite „Betrieb“ den Probelauf."
     },
     "option_unavailable": {
       "title": "Fenster „{window}“ kann die Einstellung „{key}“ nicht nutzen",
@@ -1226,6 +1267,11 @@
         "name": "Probelauf"
       }
     },
+    "button": {
+      "resume_automation": {
+        "name": "Automatik fortsetzen"
+      }
+    },
     "select": {
       "operating_mode": {
         "name": "Betriebsart",
@@ -1251,6 +1297,11 @@
     "logbook_dry_run": "Probelauf, nichts bewegt: wäre auf {target} % gefahren. Grund: {cause}.",
     "logbook_dry_run_no_target": "Probelauf, nichts bewegt: wäre gefahren. Grund: {cause}.",
     "logbook_held_back": "Bewegung auf {target} % zurückgehalten: {held}. Grund für die Bewegung: {cause}.",
-    "logbook_held_back_no_target": "Bewegung zurückgehalten: {held}. Grund für die Bewegung: {cause}."
+    "logbook_held_back_no_target": "Bewegung zurückgehalten: {held}. Grund für die Bewegung: {cause}.",
+    "logbook_event": "{event}.",
+    "logbook_event_position": "{event}, bei {position} %.",
+    "logbook_event_member": "{event}: {member}.",
+    "logbook_event_member_position": "{event}: {member}, bei {position} %.",
+    "logbook_event_count": "{event}: heute {count}, Schwellwert {threshold}."
   }
 }
