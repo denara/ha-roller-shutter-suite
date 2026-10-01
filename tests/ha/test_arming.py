@@ -37,6 +37,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from custom_components.roller_shutter_suite import const
 from custom_components.roller_shutter_suite.const import (
     CONF_DRY_RUN,
+    CONF_MEMBERS,
     DOMAIN,
     SUBENTRY_WINDOW,
 )
@@ -493,6 +494,15 @@ REPORTING_ISSUE = f"armed_without_reporting_{WINDOW_ID}"
         {COVER: {"reporting_time": 30}},
         {COVER: POLLED},
         {COVER: {"reporting_kind": "polled"}},
+        # Today a decimal number is unknown, even a whole one such as 300.0.
+        # This changes with maintenance item X07 of TASKS.md: a decimal number
+        # with a whole value will be read as that whole number, so the case
+        # 300.0 then arms; a fraction such as 30.5 stays unknown. A stored 0.0
+        # is not among the cases: its repair by entering 0 does not work today,
+        # because Home Assistant compares 0.0 and 0 as equal and writes
+        # nothing. X07 resolves that too.
+        {COVER: {"reporting_kind": "event_driven", "reporting_time": 300.0}},
+        {COVER: {"reporting_kind": "event_driven", "reporting_time": 30.5}},
     ],
     ids=[
         "nothing-stated",
@@ -500,6 +510,8 @@ REPORTING_ISSUE = f"armed_without_reporting_{WINDOW_ID}"
         "kind-not-stated",
         "polled",
         "polled-without-time",
+        "time-a-decimal-number",
+        "time-a-fraction",
     ],
 )
 async def test_a_stored_armed_window_with_a_cover_it_cannot_trust_runs_in_dry_run(
@@ -509,6 +521,11 @@ async def test_a_stored_armed_window_with_a_cover_it_cannot_trust_runs_in_dry_ru
     hass.states.async_set(
         COVER, "open", {"supported_features": 15, "current_position": 50}
     )
+    # Compared as JSON text, so a decimal number has to stay one: in Python
+    # 300.0 == 300, and a rewrite to the whole number would pass unnoticed.
+    # Taken before the set-up, because the stored data is this very object
+    # and a rewrite in place would change the expectation with it.
+    stored_members = json.dumps(members)
     entry = await setup_window(
         hass,
         window_data(dry_run=False, members=members),
@@ -517,6 +534,10 @@ async def test_a_stored_armed_window_with_a_cover_it_cannot_trust_runs_in_dry_ru
     )
 
     assert entry.subentries[WINDOW_ID].data[CONF_DRY_RUN] is False
+    assert (
+        json.dumps(entry.subentries[WINDOW_ID].data.get(CONF_MEMBERS, {}))
+        == stored_members
+    )
     assert entry.runtime_data.windows[WINDOW_ID].dry_run is True
     assert state_of(hass, DRY_RUN).state == STATE_ON
     assert cover_calls(hass) == []
