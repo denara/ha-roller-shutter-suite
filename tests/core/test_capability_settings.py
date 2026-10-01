@@ -93,13 +93,55 @@ def test_the_travel_times_default_to_sixty_seconds() -> None:
         ({"reporting_kind": None, "reporting_time": 601}, None, None),
         ({"reporting_kind": True, "reporting_time": "soon"}, None, None),
         ("not a mapping", None, None),
+        # Today a decimal number is unknown, even a whole one such as 300.0.
+        # This changes with maintenance item X07 of TASKS.md: a decimal number
+        # with a whole value will be read as that whole number; a fraction
+        # such as 30.5 stays unknown. A boolean is no number of seconds.
+        (
+            {"reporting_kind": "event_driven", "reporting_time": 300.0},
+            "event_driven",
+            None,
+        ),
+        (
+            {"reporting_kind": "event_driven", "reporting_time": 0.0},
+            "event_driven",
+            None,
+        ),
+        (
+            {"reporting_kind": "event_driven", "reporting_time": 30.5},
+            "event_driven",
+            None,
+        ),
+        (
+            {"reporting_kind": "event_driven", "reporting_time": True},
+            "event_driven",
+            None,
+        ),
     ],
-    ids=["event-driven", "polled", "at-once", "absent", "faulty", "null", "text", "x"],
+    ids=[
+        "event-driven",
+        "polled",
+        "at-once",
+        "absent",
+        "faulty",
+        "null",
+        "text",
+        "x",
+        "time-a-decimal-number",
+        "time-zero-as-a-decimal-number",
+        "time-a-fraction",
+        "time-a-boolean",
+    ],
 )
 def test_a_faulty_stored_reporting_kind_or_time_is_unknown(
     stored: object, kind: str | None, time: int | None
 ) -> None:
-    """Never a value nobody entered: absent or faulty is unknown, never zero."""
+    """Never a value nobody entered: absent or faulty is unknown, never zero.
+
+    The time is a whole number of seconds. The form never stores a decimal
+    number or a boolean, so only data stored from elsewhere can carry one;
+    today both are unknown (the comment at the cases names what X07 changes).
+    """
     assert reporting_kind_from_stored(stored) == (
         None if kind is None else ReportingKind(kind)
     )

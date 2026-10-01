@@ -37,6 +37,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from custom_components.roller_shutter_suite import const
 from custom_components.roller_shutter_suite.const import (
     CONF_DRY_RUN,
+    CONF_MEMBERS,
     DOMAIN,
     SUBENTRY_WINDOW,
 )
@@ -493,6 +494,12 @@ REPORTING_ISSUE = f"armed_without_reporting_{WINDOW_ID}"
         {COVER: {"reporting_time": 30}},
         {COVER: POLLED},
         {COVER: {"reporting_kind": "polled"}},
+        # Today a decimal number is unknown, even a whole one such as 300.0.
+        # This changes with maintenance item X07 of TASKS.md: a decimal number
+        # with a whole value will be read as that whole number, so the case
+        # 300.0 then arms; a fraction such as 30.5 stays unknown.
+        {COVER: {"reporting_kind": "event_driven", "reporting_time": 300.0}},
+        {COVER: {"reporting_kind": "event_driven", "reporting_time": 30.5}},
     ],
     ids=[
         "nothing-stated",
@@ -500,6 +507,8 @@ REPORTING_ISSUE = f"armed_without_reporting_{WINDOW_ID}"
         "kind-not-stated",
         "polled",
         "polled-without-time",
+        "time-a-decimal-number",
+        "time-a-fraction",
     ],
 )
 async def test_a_stored_armed_window_with_a_cover_it_cannot_trust_runs_in_dry_run(
@@ -517,6 +526,11 @@ async def test_a_stored_armed_window_with_a_cover_it_cannot_trust_runs_in_dry_ru
     )
 
     assert entry.subentries[WINDOW_ID].data[CONF_DRY_RUN] is False
+    # Compared as JSON text, so a decimal number has to stay one: in Python
+    # 300.0 == 300, and a rewrite to the whole number would pass unnoticed.
+    assert json.dumps(entry.subentries[WINDOW_ID].data.get(CONF_MEMBERS, {})) == (
+        json.dumps(members)
+    )
     assert entry.runtime_data.windows[WINDOW_ID].dry_run is True
     assert state_of(hass, DRY_RUN).state == STATE_ON
     assert cover_calls(hass) == []
