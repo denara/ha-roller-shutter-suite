@@ -232,3 +232,109 @@ def test_trigger_filter_on_the_validators_is_found() -> None:
 
     assert status_problems("validate.yml", text) == []
     assert status_problems("validate.yml", filtered) != []
+
+
+# The test runs of the required job "Tests and coverage", in their order. pytest
+# refuses a misspelt mark in the code, but not a misspelt -m expression: "not
+# yeer" selects every test and puts the year back under coverage, "yeer" selects
+# none. A missing year step lowers no coverage either. Only this list notices.
+TEST_JOB = "Tests and coverage"
+TEST_RUNS = [
+    'uv run --no-sync pytest tests/core -m "not year" --cov --cov-report=',
+    "uv run --no-sync pytest tests/scripts",
+    "uv run --no-sync pytest tests/ha --cov --cov-append --cov-report=",
+    "uv run --no-sync pytest tests/core -m year -rP",
+]
+YEAR_STEP = "name: The year of the time-lapse simulation, without coverage"
+# What would let the year step be skipped, tolerated or measured.
+YEAR_STEP_REFUSED = ("if:", "continue-on-error:")
+PYTEST_WORD = re.compile(r"\bpytest\b")
+NEXT_JOB = re.compile(r" {2}\S")
+
+
+def _job(text: str, name: str) -> str:
+    """Return the lines of the job with this name, up to the next job."""
+    lines = text.splitlines()
+    if f"    name: {name}" not in lines:
+        return ""
+    start = lines.index(f"    name: {name}")
+    end = next(
+        (
+            position
+            for position in range(start + 1, len(lines))
+            if NEXT_JOB.match(lines[position])
+        ),
+        len(lines),
+    )
+    return "\n".join(lines[start:end])
+
+
+def _steps(job: str) -> list[list[str]]:
+    """Split the code lines of a job into its steps; a step starts with ``- ``."""
+    steps: list[list[str]] = []
+    for line in _code(job):
+        if line.startswith("- "):
+            steps.append([line.removeprefix("- ")])
+        elif steps:
+            steps[-1].append(line)
+    return steps
+
+
+def problems_of_the_test_job(text: str) -> list[str]:
+    """Return every way in which the test job differs from its pinned test runs."""
+    job = _job(text, TEST_JOB)
+    if not job:
+        return [f"no job named {TEST_JOB}"]
+    problems: list[str] = []
+    runs = [line for line in _commands(job) if PYTEST_WORD.search(line)]
+    if runs != TEST_RUNS:
+        problems.append(f"the test runs are {runs}, expected {TEST_RUNS}")
+    year_steps = [step for step in _steps(job) if YEAR_STEP in step]
+    if len(year_steps) != 1:
+        problems.append(f"the year step appears {len(year_steps)} time(s)")
+    problems += [
+        f"the year step must not carry: {line}"
+        for step in year_steps
+        for line in step
+        if line.startswith(YEAR_STEP_REFUSED) or "--cov" in line
+    ]
+    return problems
+
+
+def test_the_test_job_runs_exactly_the_pinned_test_runs() -> None:
+    """The core without the year under coverage, the year alone without it."""
+    text = (REPOSITORY_ROOT / ".github" / "workflows" / GUARD_WORKFLOW).read_text(
+        encoding="utf-8"
+    )
+
+    assert problems_of_the_test_job(text) == []
+
+
+CORE_RUN = 'run: uv run --no-sync pytest tests/core -m "not year" --cov --cov-report='
+YEAR_RUN = "run: uv run --no-sync pytest tests/core -m year -rP"
+YEAR_STEP_LINES = f"      - {YEAR_STEP}\n        {YEAR_RUN}\n"
+
+
+@pytest.mark.parametrize(
+    ("old", "new"),
+    [
+        (YEAR_STEP_LINES, ""),
+        (CORE_RUN, CORE_RUN.replace("not year", "not yeer")),
+        (YEAR_RUN, YEAR_RUN.replace("-m year", "-m yeer")),
+        (CORE_RUN, CORE_RUN.replace(' -m "not year"', "")),
+        (YEAR_RUN, f"{YEAR_RUN} --cov"),
+        (YEAR_RUN, f"{YEAR_RUN} --cov --cov-append --cov-report="),
+        (YEAR_RUN, f"if: always()\n        {YEAR_RUN}"),
+        (YEAR_RUN, f"{YEAR_RUN}\n        continue-on-error: true"),
+        (YEAR_STEP_LINES, f"{YEAR_STEP_LINES}{YEAR_STEP_LINES}"),
+        ("    name: Tests and coverage\n", "    name: Tests\n"),
+    ],
+)
+def test_every_change_to_the_test_runs_is_found(old: str, new: str) -> None:
+    """Each change is made to the real workflow and has to be seen."""
+    text = (REPOSITORY_ROOT / ".github" / "workflows" / GUARD_WORKFLOW).read_text(
+        encoding="utf-8"
+    )
+    assert text.count(old) == 1
+
+    assert problems_of_the_test_job(text.replace(old, new)) != []

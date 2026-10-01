@@ -98,16 +98,23 @@ jobs:
       - name: Install the locked environment
         run: uv sync --locked
 
-      # Separate steps, so a failure is attributable. The core run is also the
+      # Separate steps, so a failure is attributable. The core runs are also the
       # proof that the core works without Home Assistant.
       - name: Tests of the domain core
-        run: uv run --no-sync pytest tests/core --cov --cov-report=
+        run: uv run --no-sync pytest tests/core -m "not year" --cov --cov-report=
 
       - name: Tests of the guard scripts
         run: uv run --no-sync pytest tests/scripts
 
       - name: Tests of the Home Assistant layer
         run: uv run --no-sync pytest tests/ha --cov --cov-append --cov-report=
+
+      # The year scenario of the time-lapse simulation has a limit of a minute
+      # on the wall clock, so it runs here on its own and without coverage; the
+      # core run above leaves it out. -rP prints the measured time, and the test
+      # also writes it to the summary page of the run.
+      - name: The year of the time-lapse simulation, without coverage
+        run: uv run --no-sync pytest tests/core -m year -rP
 
       - name: Coverage thresholds
         run: |

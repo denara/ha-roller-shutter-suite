@@ -19,7 +19,7 @@ may change them, nobody else.
 
 The script reads the JSON report of coverage.py:
 
-    uv run pytest tests/core --cov --cov-report=
+    uv run pytest tests/core -m "not year" --cov --cov-report=
     uv run pytest tests/ha --cov --cov-append --cov-report=
     uv run coverage json -o coverage.json
     python scripts/check_coverage.py coverage.json

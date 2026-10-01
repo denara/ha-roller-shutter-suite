@@ -34,13 +34,20 @@ uv run pytest                 # everything
 
 On Windows only the first two commands work natively; see [Running the Home Assistant tests on Windows](#running-the-home-assistant-tests-on-windows).
 
+The year scenario of the time-lapse simulation, `tests/core/test_sim_year.py`, takes most of the time of `tests/core`. Its tests carry the marker `year`, which selects them or leaves them out:
+
+```sh
+uv run pytest tests/core -m "not year"   # the core tests without the year
+uv run pytest tests/core -m year -rP     # only the year; -rP prints its measured time
+```
+
 To measure coverage, add `--cov`:
 
 ```sh
 uv run pytest --cov
 ```
 
-Coverage is measured for `custom_components/roller_shutter_suite` with branch coverage. CI enforces a minimum for each part of the code; [Contributing](contributing.md#coverage) has the values and the commands.
+Coverage is measured for `custom_components/roller_shutter_suite` with branch coverage. CI enforces a minimum for each part of the code; [Contributing](contributing.md#coverage) has the values and the commands. CI measures the core without the year and runs the year in a step of its own, without coverage, because its time has a limit of a minute on the wall clock; see [The year in the tests](simulation.md#the-year-in-the-tests).
 
 ## What makes a test fail besides its assertions
 
@@ -88,7 +95,7 @@ For the movement tracker and the dams, `tests/core/tracking_kit.py` has a driver
 
 For the fire and protection layers, `tests/core/protection_kit.py` has the events of a house, the worlds they are judged in and an engine with the real layers; `engine(stand_ins=True)` adds the test-only stand-ins for lockout protection and sleep mode of `tests/sim/stand_ins.py`; see [Protection](protection.md#testing).
 
-For a whole day or a whole year of one or several windows against a synthetic world (scripted sources, simulated covers with behaviour profiles, restarts, injected events), the time-lapse simulation under `tests/sim/` is the harness; its scenario tests stand in `tests/core/test_sim_scenarios.py`, `test_sim_tracking.py` and `test_sim_protection.py`, and [The time-lapse simulation](simulation.md) explains how to write a scenario and how to read its timeline.
+For a whole day or a whole year of one or several windows against a synthetic world (scripted sources, simulated covers with behaviour profiles, restarts, injected events), the time-lapse simulation under `tests/sim/` is the harness; its scenario tests stand in `tests/core/test_sim_scenarios.py`, `test_sim_tracking.py` and `test_sim_protection.py`, the year in `test_sim_year.py`, and [The time-lapse simulation](simulation.md) explains how to write a scenario and how to read its timeline.
 
 For behavior of the Home Assistant layer:
 
