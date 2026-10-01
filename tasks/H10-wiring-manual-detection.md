@@ -17,7 +17,7 @@ Block C06 built the tracker, the two dams, the daily count and the tolerance in 
 - `docs/dev/tracking.md` in full: what the runtime feeds in and what comes back (`Engine.observe`, `elapse`, `after_send`, `on_command_result`, `resume`, `wake_ups`), the state machine, the dams, the count, the self-measurement
 - `docs/dev/runtime.md`: "The recompute, step by step", "Moving covers", "What the runtime does not do yet", "Controls", "Testing the runtime"
 - `docs/dev/config-flow.md`: adding settings to an existing feature, ranges in the registry, the arming pages and the guard of X10 (`MOVEMENT_DETECTION_WIRED`, the confirmation page, the repair issue for a window stored as armed)
-- `docs/architecture.md`: sections 2.3 (gate rules 3, 7, 8, 9), 3, 8 (all subsections; 8.1 for the capability profile and the report delay "stated by the user, with a default per platform type where one is known"), 9, 11
+- `docs/architecture.md`: sections 2.3 (gate rules 3, 7, 8, 9), 3, 8 (all subsections; 8.1 for the capability profile with the reporting kind and the reporting time, both stated by the user without a default), 9, 11
 - `tasks/C06-movement-tracking-and-dams.md` (the rulings), `tasks/H06-control-entities.md` ("The pilot after this block", the rulings), the rows H10, X10, H15 and C06a of `TASKS.md`
 - `docs/pilot.md` section 8, `docs/features/dry-run.md`, `docs/features/controls.md`, `docs/features/status-and-events.md`, `docs/dev/glossary.md`
 - `docs/project-brief.md`: E1, E2, E3, E10, guardrails 6 and 8, section 6 "Home Assistant specifics" (late position feedback, `for:` durations after a restart)
@@ -45,7 +45,7 @@ Block C06 built the tracker, the two dams, the daily count and the tolerance in 
 
 ## Deliverables
 
-The wiring in `controller.py` and `runtime.py`, the events and logbook lines, the per-member form page with its translations, the settings in the registry, the button, the constant flipped, tests, `docs/dev/runtime.md` (the wiring, the leftover, "what the runtime does not do yet" shortened), `docs/dev/config-flow.md` (the member page, the guard lifted, the fact of the report delay), `docs/features/manual-operation.md`, `docs/pilot.md` section 8, `docs/features/dry-run.md` and `docs/features/controls.md` where they say a later version notices movements by hand, `docs/features/status-and-events.md` (the new events and attributes), the glossary.
+The wiring in `controller.py` and `runtime.py`, the events and logbook lines, the per-member form page with its translations, the settings in the registry, the button, the constant flipped, tests, `docs/dev/runtime.md` (the wiring, the leftover, "what the runtime does not do yet" shortened), `docs/dev/config-flow.md` (the member page, the guard lifted, the fact of the reporting kind and time), `docs/features/manual-operation.md`, `docs/pilot.md` section 8, `docs/features/dry-run.md` and `docs/features/controls.md` where they say a later version notices movements by hand, `docs/features/status-and-events.md` (the new events and attributes), the glossary.
 
 ## Acceptance criteria
 
@@ -53,9 +53,9 @@ The wiring in `controller.py` and `runtime.py`, the events and logbook lines, th
 - An own command is followed to its end without any event of a movement by hand, on a live platform and on a platform that reports the position only at the end; a stop in mid-travel raises `position_may_be_inaccurate` once.
 - The first recompute of a window whose state carries a stale `expecting` phase raises no event and arms no dam.
 - The wake-ups of the tracker are armed by the controller's timer and fire `elapse`: a member that never reports after a command reads `actuator_no_reaction` at its deadline, exactly once, and no dam is armed.
-- The per-member page stores position source, tolerance, report delay and travel times; the capability profile and the deadline read them; the provisional 60 seconds are gone from the code.
+- The per-member page stores position source, tolerance, reporting kind, reporting time and travel times; the capability profile and the deadline read them; the provisional 60 seconds are gone from the code.
 - The daily count appears in the diagnostics; above the threshold the event fires once per day.
-- With every member's report delay at zero the arming step works as H06 built it; with one member's report delay above zero the confirmation page refuses and names the member; the checkbox `reports_at_once` no longer exists; the marker test binds section 8 and the page.
+- With every member event-driven and its reporting time known the arming step works as H06 built it, whatever the reporting time; with one member polled, or with its reporting kind or time not stated, the confirmation page refuses and names the member; the checkbox `reports_at_once` no longer exists; the marker test binds section 8 and the page.
 - `MOVEMENT_DETECTION_WIRED` is `True`; the repair issue for a window stored as armed is gone; the pilot safety test runs without a monkeypatch of the fact, and its dry-run window still causes zero calls with every movement by hand the test can make.
 - The resume button ends an armed override and recomputes.
 - No code outside `actuator.py` calls a cover action; both translations complete; coverage of `flow/` 100 %, the Home Assistant side at its threshold; no deprecation.
