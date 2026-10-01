@@ -60,12 +60,15 @@ uv run python scripts/build_translations.py --check
 Tests:
 
 ```sh
-uv run pytest tests/core --cov --cov-report=
+uv run pytest tests/core -m "not year" --cov --cov-report=
 uv run pytest tests/scripts
 uv run pytest tests/ha --cov --cov-append --cov-report=    # not on native Windows
+uv run pytest tests/core -m year -rP
 ```
 
-Give pytest one test folder at a time, as above, or none at all (`uv run pytest` runs everything, not on native Windows). Coverage thresholds (after the two test runs with `--cov` above):
+Give pytest one test folder at a time, as above, or none at all (`uv run pytest` runs everything, not on native Windows). The year scenario of the time-lapse simulation (`tests/core/test_sim_year.py`, marker `year`) has a limit of a minute on the wall clock, so it runs on its own and without coverage: the first command leaves it out with `-m "not year"`, the last one runs only the year, and `-rP` prints the measured time. In CI it is the step "The year of the time-lapse simulation, without coverage" of the job "Tests and coverage", which is a required check; the time also appears on the summary page of the run. Coverage is measured without the year: the other core tests reach every line and branch that the year reaches, and code that only the year would reach needs a targeted test of its own, never a pragma. [The time-lapse simulation](simulation.md#the-year-in-the-tests) says more.
+
+Coverage thresholds (after the two test runs with `--cov` above):
 
 ```sh
 uv run coverage json -q -o coverage.json

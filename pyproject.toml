@@ -97,6 +97,12 @@ testpaths = ["tests"]
 pythonpath = ["."]
 addopts = ["--import-mode=importlib", "--strict-markers", "--strict-config"]
 asyncio_mode = "auto"
+# The year scenario of the time-lapse simulation (tests/core/test_sim_year.py).
+# CI runs it with `-m year` in a step of its own without coverage and leaves it
+# out of the run with coverage with `-m "not year"`; see docs/dev/testing.md.
+markers = [
+  "year: the year scenario of the time-lapse simulation, which CI runs without coverage in a step of its own",
+]
 # Every warning is an error, and this list stays exactly like this. The only
 # way to exempt a warning of another package is tests/foreign_warnings.toml,
 # which tests/conftest.py turns into filters; scripts/check_log_guard.py fails

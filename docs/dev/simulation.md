@@ -17,7 +17,7 @@ The domain core can run a whole day or a whole year against a synthetic world in
 | `scenarios.py` | the named scenarios and the profiles they use |
 | `__main__.py` | the command-line entry point |
 
-The scenario tests stand under `tests/core/` (`test_sim_scenarios.py`), where the purity proof of the core tests also covers the harness; the unit tests of the cover, the assertions, the small ports and the command line stand next to them (`test_sim_cover.py`, `test_sim_assertions.py`, `test_sim_world.py`, `test_sim_cli.py`).
+The scenario tests stand under `tests/core/` (`test_sim_scenarios.py`, and the year in `test_sim_year.py`; see [The year in the tests](#the-year-in-the-tests)), where the purity proof of the core tests also covers the harness; the unit tests of the cover, the assertions, the small ports and the command line stand next to them (`test_sim_cover.py`, `test_sim_assertions.py`, `test_sim_world.py`, `test_sim_cli.py`).
 
 ## Running a scenario
 
@@ -27,9 +27,26 @@ uv run python -m tests.sim workday
 uv run python -m tests.sim year --seed 3 --window window_4 --kinds decision,command
 ```
 
-The command prints the timeline of the run and one line of numbers: recomputes, entries, restarts, seconds. It is a development tool and is not shipped. The year for ten windows takes about half a minute on a developer machine.
+The command prints the timeline of the run and one line of numbers: recomputes, entries, restarts, seconds. It is a development tool and is not shipped. The year for ten windows takes about forty seconds on a developer machine.
 
 **How the simulation imports the core and the sun port.** The harness imports `custom_components.roller_shutter_suite.core` and `custom_components.roller_shutter_suite.sun_astral`. Importing anything through the integration package would execute the package's `__init__`, which belongs to the Home Assistant layer, imports Home Assistant, and does not even import on native Windows. The simulation therefore relies on the same stand-in as the core tests: an empty package registered under the integration's name, so that its modules are found without executing that file. Under pytest `tests/core/conftest.py` installs it, which is why the simulation's tests live under `tests/core`; the command-line entry point installs the same stand-in itself before it imports anything of the harness. A harness that accepted the Home Assistant import instead would lose the purity proof for everything it runs and would not run natively on Windows.
+
+## The year in the tests
+
+`tests/core/test_sim_year.py` runs the year scenario once, in a fixture with the scope of the module, and its tests judge that one run: at most two movements a day, the clamps of the schedule, no command loop, both clock changes, one override a day after the movement by hand at noon, every behaviour profile in use. Every test that reads the year belongs in this file: the fixture is visible nowhere else, and the marker `year` applies to every test of the module.
+
+The fixture measures the run of the year on the wall clock; building the scenario is not part of the measurement. `test_a_year_for_ten_windows_runs_well_under_a_minute` fails at a full minute. It reports the time in two places:
+
+- It prints `a year for ten windows took <seconds> s`. pytest captures the line: `-rP` shows it in the section of passed tests, `-s` while the test runs, and a failed test shows it anyway.
+- In a GitHub workflow it also appends the line, with the limit, to the summary page of the run, before it judges the time, so a year over the limit shows its time there as well. GitHub names the file of that page in the variable `GITHUB_STEP_SUMMARY`; outside GitHub the variable is not set and nothing is written.
+
+Under coverage the year runs slower, and its limit is time on the wall clock. CI therefore measures coverage without the year (`pytest tests/core -m "not year" --cov --cov-report=`) and runs the year in a step of its own, without coverage, in the job "Tests and coverage", which is a required check:
+
+```sh
+uv run pytest tests/core -m year -rP
+```
+
+Read the time in the output of the step "The year of the time-lapse simulation, without coverage", in the section of passed tests, or on the summary page of the run. [Contributing](contributing.md#run-every-check-locally) has the same two commands in the local sequence. A run of everything (`uv run pytest`, and the scheduled run against the newest Home Assistant release) contains the year as well, without coverage, and that run's summary page shows the line too.
 
 ## How the runner drives the core
 
@@ -92,7 +109,7 @@ record = simulation.run(start + timedelta(days=1))
 - **Controls** are the `Controls` of the core: `ARMED`, `DRY_RUN`, `LOCKED`, `PAUSED` and `mode(...)` stand in `scenarios.py`.
 - **Running** returns the record; `simulation.recomputes` and `simulation.restarts` count.
 
-Add the scenario to `SCENARIOS` in `scenarios.py` with a description and its length, so the command line and `test_every_named_scenario_runs` know it, and write its test in `tests/core/test_sim_scenarios.py`.
+Add the scenario to `SCENARIOS` in `scenarios.py` with a description and its length, so the command line and `test_every_named_scenario_runs` know it, and write its test in `tests/core/test_sim_scenarios.py`. A test that judges the year goes into `tests/core/test_sim_year.py`, where it reads the one run and carries the marker.
 
 ## The behaviour profiles of a cover
 

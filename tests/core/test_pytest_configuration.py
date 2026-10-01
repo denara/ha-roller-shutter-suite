@@ -27,7 +27,7 @@ PLUGIN_SWITCH = ["-p", "no:homeassistant"]
 SMALL_CONFIGURATIONS = ["tests/core/pytest.ini", "tests/scripts/pytest.ini"]
 ONLY_IN_THE_PROJECT_CONFIGURATION = {"testpaths"}
 # Keys that hold a list. In an ini file each line is one item.
-LIST_KEYS = {"filterwarnings", "pythonpath", "testpaths"}
+LIST_KEYS = {"filterwarnings", "markers", "pythonpath", "testpaths"}
 
 
 def _without_plugin_switch(arguments: list[str]) -> list[str]:
