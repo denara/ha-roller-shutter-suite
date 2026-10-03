@@ -41,7 +41,7 @@ jobs:
       # a thin wrapper: it runs the current hassfest container image, which
       # cannot be pinned through the action.
       - name: Validate with hassfest
-        uses: home-assistant/actions/hassfest@58bff37c8947f690ace498be413a9b78d6f30f93 # master, 2026-09-10
+        uses: home-assistant/actions/hassfest@06749dd8c0b54f350bc69c8752456cee498808a3 # master, 2026-09-10
 
   hacs:
     # This name is a required status check of the branch protection. A renamed
